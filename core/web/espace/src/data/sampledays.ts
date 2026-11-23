@@ -130,10 +130,10 @@ const dayView: SampleView = {
 // --- Investissements --------------------------------------------------------
 
 // The PEA's value over the last 30 days, ending today.
-const pea = [46120, 46380, 46210, 46540, 46900, 46710, 46650, 47020, 47310, 47180, 46890, 46970, 47250, 47480, 47390, 47610, 47820, 47560, 47400, 47690, 47930, 48010, 47780, 47660, 47890, 48120, 47990, 48060, 48190, 48230];
+export const pea = [46120, 46380, 46210, 46540, 46900, 46710, 46650, 47020, 47310, 47180, 46890, 46970, 47250, 47480, 47390, 47610, 47820, 47560, 47400, 47690, 47930, 48010, 47780, 47660, 47890, 48120, 47990, 48060, 48190, 48230];
 const peaSeries = pea.map((y, i) => ({ x: dayOf(i - pea.length + 1), y }));
 
-const investFigures: Authored = {
+export const investFigures: Authored = {
   name: "chiffres",
   components: [
     { id: "root", component: "Row", children: ["total", "pea", "av", "livret"] },
@@ -144,7 +144,7 @@ const investFigures: Authored = {
   ],
 };
 
-const investChart: Authored = {
+export const investChart: Authored = {
   name: "courbe",
   components: [
     { id: "root", component: "Column", children: ["h", "chart"] },
@@ -153,7 +153,7 @@ const investChart: Authored = {
   ],
 };
 
-const investTable: Authored = {
+export const investTable: Authored = {
   name: "lignes",
   components: [
     { id: "root", component: "Column", children: ["h", "table", "alloc"] },
@@ -192,7 +192,7 @@ const investTable: Authored = {
   },
 };
 
-const investQuote: Authored = {
+export const investQuote: Authored = {
   name: "a_lire",
   external: true,
   components: [

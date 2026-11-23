@@ -22,7 +22,7 @@ const todo = (prefix: string, source: string, path: string, group: string, empty
   },
 ];
 
-const mailBlock: Authored = {
+export const mailBlock: Authored = {
   name: "mails",
   external: true,
   sources: {
@@ -245,12 +245,12 @@ const mailBilan = (v: SampleView) => {
 
 // The words that matter most, quoted as written; and the
 // week in figures, at the foot.
-const samQuote: Authored = {
+export const samQuote: Authored = {
   name: "sam",
   external: true,
   components: [{ id: "root", component: "Quote", text: "Voici le devis pour la terrasse : 4 200 € posé, début possible lundi 7 décembre. Tu peux me dire avant vendredi si ça te va ?", from: "Sam <sam@example.org>", date: ago(95) }],
 };
-const weekFigures: Authored = {
+export const weekFigures: Authored = {
   name: "semaine",
   components: [
     { id: "root", component: "Column", children: ["h", "row"] },
