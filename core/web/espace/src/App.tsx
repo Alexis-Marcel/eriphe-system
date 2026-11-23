@@ -8,6 +8,7 @@ import { applyTheme, keep } from "./data/keep";
 import { applyNotes, openPage, restore, step, store, useGraph } from "./data/store";
 import { connect } from "./data/stream";
 import { Graph } from "./graph/Graph";
+import { setCentring, setForces } from "./graph/layout";
 import { List, useNarrow } from "./graph/List";
 import { Hud } from "./hud/Hud";
 import { Bar } from "./orb/Bar";
@@ -57,6 +58,12 @@ export function App({ boot, dev }: { boot: Boot; dev?: Dev }) {
   const theme = useGraph((s) => s.theme);
   const narrow = useNarrow();
   useEffect(() => applyTheme(theme), [theme]);
+  // The graph's forces and its centring, as set (hud/Settings.tsx) or kept:
+  // the graph, warmed, moves to them at once.
+  const forces = useGraph((s) => s.forces);
+  const centring = useGraph((s) => s.centring);
+  useEffect(() => setForces(forces), [forces]);
+  useEffect(() => setCentring(centring), [centring]);
 
   return (
     <ProposalsContext.Provider value={dev?.proposals ?? coreProposals}>

@@ -25,9 +25,9 @@
 // link away nearly all the way, two a little, HOP1 and HOP2) and the graph
 // stays warm. Dropped, nothing is pinned: the body and its cluster take up
 // the forces again from where they were let go, as if born there, so they
-// stay on the side the user chose while the centre keeps them in the disc. The node in focus (focus) can be the
-// centre: the centre force pulls to it and it stays where it is. Nothing
-// here knows a node by its name.
+// stay on the side the user chose while the centre keeps them in the disc.
+// The node in focus (focus) can be the centre: the centre force pulls to
+// it and it stays where it is. Nothing here knows a node by its name.
 
 export type Pt = [number, number];
 export type Pos = Record<string, Pt>;
@@ -37,8 +37,9 @@ export type Pos = Record<string, Pt>;
 // shape.
 export type LNode = { id: string; parent?: string; links: string[]; r: number; lw: number; lh: number; box?: Pt; tile?: Pt };
 
-// The four forces, the owner's to tune (the ?physique dev page). One
-// object shared by the simulations; setForces changes it and warms them.
+// The four forces, the user's to tune in the workspace's settings
+// (hud/Settings.tsx; eriphe-core keeps them, web_gestures.go). One object
+// shared by the simulations; setForces changes it and warms them.
 export type Forces = { centre: number; repulsion: number; link: number; distance: number };
 export const DEFAULT_FORCES: Readonly<Forces> = { centre: 0.1, repulsion: 2000, link: 0.8, distance: 30 };
 export const FORCES: Forces = { ...DEFAULT_FORCES };
@@ -58,7 +59,8 @@ export const T = {
   jam: 2, // two bodies overlapping less than this are apart (within their margins: never visible)
 };
 
-// FORCE_RANGES are the bounds a setting may give each force.
+// FORCE_RANGES are the bounds a setting may give each force; eriphe-core
+// keeps a force within the same (web_gestures.go, espaceForceRanges).
 export const FORCE_RANGES: Record<keyof Forces, { min: number; max: number; step: number }> = {
   centre: { min: 0, max: 0.4, step: 0.005 },
   repulsion: { min: 0, max: 6000, step: 50 },
@@ -87,8 +89,10 @@ const sims = new Set<WeakRef<Sim>>();
 const tuned = new Set<() => void>();
 
 // setForces changes the forces (some of them) and warms every graph; what
-// ticks one (Graph.tsx, onForces) is told, to wake.
+// ticks one (Graph.tsx, onForces) is told, to wake. The same forces again
+// change nothing.
 export function setForces(f: Partial<Forces>): void {
+  if ((Object.keys(f) as (keyof Forces)[]).every((k) => FORCES[k] === f[k])) return;
   Object.assign(FORCES, f);
   for (const r of sims) {
     const s = r.deref();
@@ -107,6 +111,7 @@ export const CENTRING = { focus: true };
 // setCentring turns it on or off; what ticks a graph is told, as for the
 // forces.
 export function setCentring(on: boolean): void {
+  if (CENTRING.focus === on) return;
   CENTRING.focus = on;
   for (const w of tuned) w();
 }

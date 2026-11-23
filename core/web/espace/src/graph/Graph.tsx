@@ -267,8 +267,8 @@ export function Graph({ live }: { live: boolean }) {
     rest.current = sim.positions();
     wake();
   }, [bodies]); // eslint-disable-line react-hooks/exhaustive-deps
-  // The forces tuned, or the centring turned on or off (the ?physique dev
-  // page): the graph, warmed, moves.
+  // The forces tuned, or the centring turned on or off (the settings,
+  // hud/Settings.tsx): the graph, warmed, moves.
   const wakeNow = useRef(wake);
   wakeNow.current = wake;
   const [centring, setCentring] = useState(CENTRING.focus);

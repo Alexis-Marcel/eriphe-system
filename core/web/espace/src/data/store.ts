@@ -1,13 +1,16 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
 import type { GraphNode, Moved, Note, OrbClosed, OrbFeed, OrbWords, ListRow, Theme, View, Waiting } from "./api";
+import { DEFAULT_FORCES, forcesFrom, type Forces } from "../graph/layout";
 
 // The workspace's state: the graph as eriphe-core streams it (stream.ts),
 // and what the user has open. The graph is core's: the page never changes a
 // node by itself, it shows what the stream says. What is open is the
 // page's: the pages open in the graph, and the one the bar talks to
-// (talk), the home when none; and the theme. eriphe-core keeps those too (web_gestures.go): the boot gives
-// them back (restore), on any of the user's screens.
+// (talk), the home when none; the theme, the graph's forces and whether
+// the open node is its centre (the settings, hud/Settings.tsx).
+// eriphe-core keeps those too (web_gestures.go): the boot gives them back
+// (restore), on any of the user's screens.
 //
 // Each event of the stream is a pure step (applyX), tested on its own;
 // the store only holds the result.
@@ -39,6 +42,8 @@ export type State = {
   live: boolean; // the stream is open
   theme: Theme; // "" follows the system
   closed: OrbClosed; // what the user closed of the orb's
+  forces: Forces; // the graph's forces (graph/layout.ts): the defaults and what the user changed
+  centring: boolean; // the open node becomes the graph's centre
 };
 
 export const empty = (): State => ({
@@ -59,12 +64,15 @@ export const empty = (): State => ({
   live: false,
   theme: "",
   closed: { answer: 0, seen: 0, wait: 0, failed: 0 },
+  forces: { ...DEFAULT_FORCES },
+  centring: true,
 });
 
 // restore is the workspace as the user left it: its pages open (kept when
 // their nodes come), the one the bar talked to, the last show taken
 // (one the user saw is not shown again), the theme, what the user closed
-// of the orb's (not shown again either).
+// of the orb's (not shown again either), the graph's forces (each within
+// its range, forcesFrom) and its centring.
 export function restore(s: State, v: View | undefined): State {
   const open = Array.isArray(v?.open) ? v.open.filter((id) => typeof id === "string") : [];
   const talk = v?.talk && open.includes(v.talk) ? v.talk : null;
@@ -72,11 +80,40 @@ export function restore(s: State, v: View | undefined): State {
   const shown = typeof v?.shown === "number" && v.shown > 0 ? v.shown : s.shown;
   const n = (k: keyof OrbClosed) => (typeof v?.orb?.[k] === "number" && v.orb[k] > 0 ? v.orb[k] : 0);
   const closed = { answer: n("answer"), seen: n("seen"), wait: n("wait"), failed: n("failed") };
-  return { ...s, open, talk, theme, shown, closed };
+  return { ...s, open, talk, theme, shown, closed, forces: forcesFrom(v?.forces), centring: v?.centring !== false };
 }
 
-// viewOf is what eriphe-core keeps of what is open.
-export const viewOf = (s: State): View => ({ open: s.open, talk: s.talk ?? undefined, shown: s.shown || undefined, theme: s.theme, orb: s.closed });
+// viewOf is what eriphe-core keeps of what is open, and of the settings:
+// only the forces the user changed, the centring only when it is off.
+export const viewOf = (s: State): View => ({
+  open: s.open,
+  talk: s.talk ?? undefined,
+  shown: s.shown || undefined,
+  theme: s.theme,
+  orb: s.closed,
+  forces: changedForces(s.forces),
+  centring: s.centring ? undefined : false,
+});
+
+const FORCE_NAMES = Object.keys(DEFAULT_FORCES) as (keyof Forces)[];
+
+// changedForces are the forces that are not the defaults; none when all are.
+function changedForces(f: Forces): Partial<Forces> | undefined {
+  const out = Object.fromEntries(FORCE_NAMES.filter((k) => f[k] !== DEFAULT_FORCES[k]).map((k) => [k, f[k]]));
+  return Object.keys(out).length ? out : undefined;
+}
+
+// setGraphForces sets the graph's forces (the settings' sliders), each
+// within its range.
+export function setGraphForces(s: State, f: Partial<Forces>): State {
+  const forces = forcesFrom({ ...s.forces, ...f });
+  return FORCE_NAMES.every((k) => forces[k] === s.forces[k]) ? s : { ...s, forces };
+}
+
+// setGraphCentring says whether the open node becomes the graph's centre.
+export function setGraphCentring(s: State, on: boolean): State {
+  return on === s.centring ? s : { ...s, centring: on };
+}
 
 export function setTheme(s: State, theme: Theme): State {
   return theme === s.theme ? s : { ...s, theme };

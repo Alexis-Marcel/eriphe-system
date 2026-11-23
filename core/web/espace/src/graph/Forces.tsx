@@ -7,8 +7,8 @@ import { DEFAULT_FORCES, FORCE_RANGES, type Forces } from "./layout";
 // and what the user changed), onChange gets the new ones at each move
 // (the caller sets them, setForces, and keeps them); centred, whether the
 // open node becomes the centre (layout.ts, CENTRING), told by onCentred
-// (no switch without it). On the dev server's
-// ?physique page for now; meant for the workspace's settings.
+// (no switch without it). The workspace's settings show it
+// (hud/Settings.tsx).
 
 const ORDER: (keyof Forces)[] = ["centre", "repulsion", "link", "distance"];
 

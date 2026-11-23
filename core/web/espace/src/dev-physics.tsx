@@ -1,15 +1,14 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { GraphNode } from "./data/api";
-import { applyNodes, closePage, openPage, step, store, talkTo, useGraph } from "./data/store";
+import { applyNodes, closePage, openPage, setGraphCentring, setGraphForces, step, store, talkTo, useGraph } from "./data/store";
 import { ForcesPanel } from "./graph/Forces";
-import { CENTRING, FORCES, forcesFrom, setCentring, setForces, type Forces } from "./graph/layout";
+import type { Forces } from "./graph/layout";
 import "./dev.css";
 
-// The dev server's ?physique page: the graph's four forces to tune by hand,
-// like Obsidian's « Forces » panel, on the owner's graph (three subjects,
-// each linked both ways to the view it follows, one alone) or on some
-// twenty-five nodes in a few clusters. Only on the dev server (dev.tsx),
-// never in the built app.
+// The dev server's ?physique page: the graph's four forces to tune by hand
+// on fixed graphs, a small one (three subjects, each linked both ways to
+// the view it follows, one alone) or some twenty-five nodes in a few
+// clusters. Only on the dev server (dev.tsx), never in the built app.
 
 const at = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
 const row = (id: string, title: string, more: Partial<GraphNode> = {}): GraphNode => ({
@@ -57,26 +56,15 @@ function scaleGraph(): GraphNode[] {
 
 export const physicsGraph = ownerGraph;
 
-const KEY = "eriphe.physique";
-
-// The forces kept on this browser (the product will keep them with the
-// user's settings), else the defaults.
-export function keptForces(): void {
-  let kept: unknown = null;
-  try {
-    kept = JSON.parse(localStorage.getItem(KEY) ?? "null");
-  } catch {
-    /* nothing kept */
-  }
-  setForces(forcesFrom(kept));
-}
-
+// PhysicsPanel sets the same forces as the workspace's settings (the
+// store's, hud/Settings.tsx), with the values to copy, and changes the
+// graph by hand: a fixture, pages open, a node or a link added.
 export function PhysicsPanel() {
   const nodes = useGraph((s) => s.nodes);
   const open = useGraph((s) => s.open);
   const talk = useGraph((s) => s.talk);
-  const [centred, setCentred] = useState(CENTRING.focus);
-  const [f, setF] = useState<Forces>({ ...FORCES });
+  const f = useGraph((s) => s.forces);
+  const centred = useGraph((s) => s.centring);
   const [copied, setCopied] = useState(false);
   const [linkTo, setLinkTo] = useState("");
   const [from, setFrom] = useState("");
@@ -85,16 +73,9 @@ export function PhysicsPanel() {
   const list = Object.values(nodes).sort((a, b) => a.created.localeCompare(b.created) || a.id.localeCompare(b.id));
   const first = list[0]?.id ?? "";
 
-  useEffect(() => {
-    localStorage.setItem(KEY, JSON.stringify(f));
-  }, [f]);
-
-  const tune = (next: Forces) => {
-    setForces(next);
-    setF({ ...FORCES });
-  };
+  const tune = (next: Forces) => step(store, setGraphForces, next);
   const copy = () => {
-    void navigator.clipboard?.writeText(JSON.stringify(FORCES, null, 2));
+    void navigator.clipboard?.writeText(JSON.stringify(f, null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   };
@@ -116,10 +97,7 @@ export function PhysicsPanel() {
     step(store, applyNodes, { nodes: [{ ...a, links: [...(a.links ?? []), b] }] });
   };
   const name = (x: GraphNode) => x.title ?? x.id;
-  const centre = (on: boolean) => {
-    setCentring(on);
-    setCentred(on);
-  };
+  const centre = (on: boolean) => step(store, setGraphCentring, on);
   // the focus goes to the next open page, in the order they opened
   const nextFocus = () => {
     if (open.length < 2) return;

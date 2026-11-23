@@ -4,7 +4,7 @@ import { galleryFixtures, sampleOrb, sampleProposals } from "./a2ui/fixtures";
 import { ProposalsContext, type Proposals } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
 import { BlocksGallery } from "./dev-blocks";
-import { keptForces, physicsGraph, PhysicsPanel } from "./dev-physics";
+import { physicsGraph, PhysicsPanel } from "./dev-physics";
 import { setReads, type Boot } from "./data/api";
 import { sample } from "./data/sample";
 import { onBump, sampleOpen } from "./data/samplecore";
@@ -44,7 +44,6 @@ export function dev(lang: Lang): Dev {
     Panel: physics ? PhysicsPanel : undefined,
     start() {
       if (physics) {
-        keptForces();
         step(store, applyNodes, { reset: true, nodes: physicsGraph() });
         return () => {};
       }
