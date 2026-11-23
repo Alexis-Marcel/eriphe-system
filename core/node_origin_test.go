@@ -97,8 +97,7 @@ func TestEventTurnOpensUnasked(t *testing.T) {
 // A skill's run opens its task's node, and what that task opens: the
 // skill and what started it, the sign on each.
 func TestSkillRunOpensUnasked(t *testing.T) {
-	c, now := skillCore(t)
-	openGraph(t, c)
+	c, now := skillCore(t, withGraph(t))
 	addTriggered(t, c, "---\nname: mails-rdv\ndescription: les rendez-vous des mails\nwhen: monitor.new\ntools: [monitor]\n---\nRepère les rendez-vous.\n")
 	c.emit(journalEvent{Kind: "monitor.new", Key: "perso", Source: "monitor:mails", At: *now, Payload: map[string]any{"subject": "RDV le 8"}})
 	c.tickSkills(context.Background(), now.Add(time.Minute))

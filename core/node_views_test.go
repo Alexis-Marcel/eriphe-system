@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -20,14 +19,7 @@ import (
 // viewCore is pollCore with a graph, a device and the skills listening.
 func viewCore(t *testing.T) (*core, *fakeMonitor, *time.Time) {
 	t.Helper()
-	c, fm, now := pollCore(t)
-	dir := t.TempDir()
-	s, _, err := nodestore.Open(filepath.Join(dir, "nodes"), filepath.Join(dir, "nodes.db"), nodestore.Options{Refuse: refuseSecret})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
-	c.nodes = s
+	c, fm, now := pollCore(t, withGraph(t))
 	c.store.registerDevice("pc", hashSecret("pc-secret"))
 	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	c.subscribeEvents(c.queueSkillEvent)

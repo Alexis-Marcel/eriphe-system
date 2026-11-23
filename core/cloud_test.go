@@ -324,7 +324,12 @@ func TestDriveRoundTrip(t *testing.T) {
 	_, _, h = tw.post("/settings/connections/google/connect", connectDrive, csrf)
 	state = g.authorize(t, h.Get("HX-Redirect"))
 	back = tw.srv.URL + "/oauth/callback?" + url.Values{"code": {"the-code"}, "state": {state}}.Encode()
-	if code, _, _ := tw.do("GET", "/oauth/callback?code=the-code&state="+url.QueryEscape(state[:len(state)-2]+"AA"), nil, nil); code != http.StatusBadRequest {
+	// A forged state: its last two characters changed, whatever they were.
+	forged := state[:len(state)-2] + "AA"
+	if forged == state {
+		forged = state[:len(state)-2] + "BB"
+	}
+	if code, _, _ := tw.do("GET", "/oauth/callback?code=the-code&state="+url.QueryEscape(forged), nil, nil); code != http.StatusBadRequest {
 		t.Fatalf("forged state: %d", code)
 	}
 	code, body, _ = tw.do("GET", strings.TrimPrefix(back, tw.srv.URL), nil, nil)

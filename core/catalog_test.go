@@ -26,7 +26,7 @@ type catalogCore struct {
 	dials map[string]int
 }
 
-func newDynamicCore(t *testing.T, mutate func(*Config)) *catalogCore {
+func newDynamicCore(t *testing.T, mutate func(*Config), before ...func(*core)) *catalogCore {
 	t.Helper()
 	dir := t.TempDir()
 	store, err := openStore(filepath.Join(dir, "core.db"))
@@ -49,10 +49,12 @@ func newDynamicCore(t *testing.T, mutate func(*Config)) *catalogCore {
 	if mutate != nil {
 		mutate(cfg)
 	}
-	return startDynamicCore(t, cfg, store)
+	return startDynamicCore(t, cfg, store, before...)
 }
 
-func startDynamicCore(t *testing.T, cfg *Config, store *Store) *catalogCore {
+// startDynamicCore runs the pool of a core on cfg, each of before done to
+// the core first (withGraph).
+func startDynamicCore(t *testing.T, cfg *Config, store *Store, before ...func(*core)) *catalogCore {
 	t.Helper()
 	cc := &catalogCore{core: newCore(cfg, store), dials: map[string]int{}}
 	cc.pool.dial = func(ctx context.Context, u *upstream) (mcp.Transport, error) {
@@ -68,6 +70,9 @@ func startDynamicCore(t *testing.T, cfg *Config, store *Store) *catalogCore {
 			return nil, err
 		}
 		return ct, nil
+	}
+	for _, f := range before {
+		f(cc.core)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

@@ -46,14 +46,14 @@ func noWait(c *core, name string) {
 	c.updateAssistant(name, func(st *AssistantStatus) { st.NextStart = 0 })
 }
 
-func brainCore(t *testing.T, b *BrainConfig) *catalogCore {
+func brainCore(t *testing.T, b *BrainConfig, before ...func(*core)) *catalogCore {
 	t.Helper()
 	secret := filepath.Join(t.TempDir(), "claude")
 	os.WriteFile(secret, []byte("tok"), 0o600)
 	c := newDynamicCore(t, func(cfg *Config) {
 		cfg.Brain = b
 		cfg.Providers["anthropic"] = Provider{Kind: "claude-subscription", Secret: secret}
-	})
+	}, before...)
 	c.store.registerDevice("pc", hashSecret("device-secret"))
 	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	// The catalog's servers start in the background: until they are ready
