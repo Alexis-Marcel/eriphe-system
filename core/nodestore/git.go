@@ -15,7 +15,9 @@ import (
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/filemode"
+	"github.com/go-git/go-git/v5/plumbing/format/index"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/storer"
 )
 
 // The graph's repository: go-git only, no git binary. Every write is one
@@ -47,6 +49,9 @@ func openRepo(dir string) (*git.Repository, error) {
 type change struct {
 	path string // slash-separated, from the repository's root
 	data []byte
+	// onDisk: the file holds data already (reconcile read it there),
+	// committed as it is, not written again.
+	onDisk bool
 }
 
 // stamp is a node version a commit makes.
@@ -62,23 +67,17 @@ func (s *Store) commit(subject, author string, at time.Time, changes []change, s
 	if err != nil {
 		return "", err
 	}
+	// A removal first, each on its own; then the files written, staged
+	// in one read and one write of git's index, however many they are.
 	for _, c := range changes {
-		full := filepath.Join(s.dir, filepath.FromSlash(c.path))
 		if c.data == nil {
 			if _, err := wt.Remove(c.path); err != nil {
 				return "", err
 			}
-			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
-			return "", err
-		}
-		if err := writeFile(full, c.data); err != nil {
-			return "", err
-		}
-		if err := wt.AddWithOptions(&git.AddOptions{Path: c.path, SkipStatus: true}); err != nil {
-			return "", err
-		}
+	}
+	if err := s.stage(changes); err != nil {
+		return "", err
 	}
 	var msg strings.Builder
 	msg.WriteString(subject)
@@ -94,6 +93,80 @@ func (s *Store) commit(subject, author string, at time.Time, changes []change, s
 		return "", err
 	}
 	return h.String(), nil
+}
+
+// stage writes the changes' files on disk, each whole, stores their
+// blobs and puts them in git's index, read once and written once: what
+// go-git's Add does for one file, for all of them. A change without data
+// (a removal) is left to the caller.
+func (s *Store) stage(changes []change) error {
+	var idx *index.Index
+	var entries map[string]*index.Entry
+	for _, c := range changes {
+		if c.data == nil {
+			continue
+		}
+		if idx == nil {
+			var err error
+			if idx, err = s.repo.Storer.Index(); err != nil {
+				return err
+			}
+			entries = make(map[string]*index.Entry, len(idx.Entries))
+			for _, e := range idx.Entries {
+				entries[e.Name] = e
+			}
+		}
+		full := filepath.Join(s.dir, filepath.FromSlash(c.path))
+		if !c.onDisk {
+			if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
+				return err
+			}
+			if err := writeFile(full, c.data); err != nil {
+				return err
+			}
+		}
+		h, err := s.storeBlob(c.data)
+		if err != nil {
+			return err
+		}
+		fi, err := os.Lstat(full)
+		if err != nil {
+			return err
+		}
+		mode, err := filemode.NewFromOSFileMode(fi.Mode())
+		if err != nil {
+			return err
+		}
+		e := entries[c.path]
+		if e == nil {
+			e = idx.Add(c.path)
+			entries[c.path] = e
+		}
+		e.Hash, e.Mode, e.ModifiedAt, e.Size = h, mode, fi.ModTime(), uint32(fi.Size())
+	}
+	if idx == nil {
+		return nil
+	}
+	return s.repo.Storer.SetIndex(idx)
+}
+
+// storeBlob stores data as a blob object and gives its hash.
+func (s *Store) storeBlob(data []byte) (plumbing.Hash, error) {
+	obj := s.repo.Storer.NewEncodedObject()
+	obj.SetType(plumbing.BlobObject)
+	obj.SetSize(int64(len(data)))
+	w, err := obj.Writer()
+	if err != nil {
+		return plumbing.ZeroHash, err
+	}
+	if _, err := w.Write(data); err != nil {
+		w.Close()
+		return plumbing.ZeroHash, err
+	}
+	if err := w.Close(); err != nil {
+		return plumbing.ZeroHash, err
+	}
+	return s.repo.Storer.SetEncodedObject(obj)
 }
 
 // authorEmail is the address a commit's author is given: git needs one.
@@ -239,6 +312,14 @@ func checkRepo(r *git.Repository) error {
 		return err
 	}
 	seen := map[plumbing.Hash]bool{}
+	// The loose objects there, listed once: a blob among them is there
+	// without opening its file; any other is asked of the storage.
+	loose := map[plumbing.Hash]bool{}
+	if ls, ok := r.Storer.(storer.LooseObjectStorer); ok {
+		if err := ls.ForEachObjectHash(func(h plumbing.Hash) error { loose[h] = true; return nil }); err != nil {
+			return err
+		}
+	}
 	return refs.ForEach(func(ref *plumbing.Reference) error {
 		if ref.Type() != plumbing.HashReference {
 			return nil
@@ -262,6 +343,10 @@ func checkRepo(r *git.Repository) error {
 						return err
 					}
 				case e.Mode.IsFile() && !seen[e.Hash]:
+					if loose[e.Hash] {
+						seen[e.Hash] = true
+						continue
+					}
 					if err := r.Storer.HasEncodedObject(e.Hash); err != nil {
 						return broken("blob", e.Hash, err)
 					}

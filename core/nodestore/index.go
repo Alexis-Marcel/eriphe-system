@@ -3,6 +3,7 @@ package nodestore
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -21,7 +22,7 @@ import (
 // schemaVersion is the schema nodes.db is at; meta.schema_version says
 // it. A file at another version is refused, never changed: delete it,
 // it is made again from the files.
-const schemaVersion = 4
+const schemaVersion = 5
 
 // refsSchema holds the [[links]] of the nodes' text: each name a node's
 // text links (its LinkKey) and the node it was resolved to, ” while no
@@ -48,7 +49,8 @@ const schema = `CREATE TABLE nodes (
 	  opened_by TEXT NOT NULL DEFAULT '', -- who wanted it (its opened_by's by), '' unknown
 	  version INTEGER NOT NULL,          -- the last version's n
 	  blob TEXT NOT NULL,                -- the file's git hash, to tell a change made outside
-	  title_key TEXT NOT NULL DEFAULT ''); -- its title as a [[link]] matches it (nodefile.LinkKey)
+	  title_key TEXT NOT NULL DEFAULT '', -- its title as a [[link]] matches it (nodefile.LinkKey)
+	  fts INTEGER NOT NULL DEFAULT 0);   -- its words' row in node_fts (rowid), so they are replaced without a scan
 	CREATE INDEX nodes_parent ON nodes (parent);
 	CREATE TABLE node_links (id TEXT NOT NULL, target TEXT NOT NULL, PRIMARY KEY (id, target));
 	CREATE INDEX node_links_target ON node_links (target);` + refsSchema + `
@@ -132,6 +134,58 @@ type querier interface {
 	QueryRow(query string, args ...any) *sql.Row
 }
 
+// cachedTx is a transaction that prepares each statement once, however
+// many nodes it indexes; its statements close with it.
+type cachedTx struct {
+	*sql.Tx
+	stmts map[string]*sql.Stmt
+}
+
+// begin starts a transaction that prepares each statement once.
+func begin(db *sql.DB) (*cachedTx, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	return &cachedTx{Tx: tx, stmts: map[string]*sql.Stmt{}}, nil
+}
+
+func (t *cachedTx) stmt(query string) (*sql.Stmt, error) {
+	if st, ok := t.stmts[query]; ok {
+		return st, nil
+	}
+	st, err := t.Tx.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
+	t.stmts[query] = st
+	return st, nil
+}
+
+func (t *cachedTx) Exec(query string, args ...any) (sql.Result, error) {
+	st, err := t.stmt(query)
+	if err != nil {
+		return nil, err
+	}
+	return st.Exec(args...)
+}
+
+func (t *cachedTx) Query(query string, args ...any) (*sql.Rows, error) {
+	st, err := t.stmt(query)
+	if err != nil {
+		return nil, err
+	}
+	return st.Query(args...)
+}
+
+func (t *cachedTx) QueryRow(query string, args ...any) *sql.Row {
+	st, err := t.stmt(query)
+	if err != nil {
+		return t.Tx.QueryRow(query, args...) // it fails the same way, its Scan says so
+	}
+	return st.QueryRow(args...)
+}
+
 // indexNode writes what the index keeps of a node's file: its row, links,
 // sources and words. The version is kept when the row is
 // there; version is the n of its last version. Its text's [[links]] keep
@@ -142,14 +196,32 @@ func indexNode(tx querier, n *nodefile.Node, file string, raw []byte, version in
 	if m.OpenedBy != nil {
 		by = m.OpenedBy.By
 	}
-	_, err := tx.Exec(`INSERT INTO nodes (id, file, title, parent, lifetime, created, updated, done, archived, external, title_trusted, opened_by, version, blob, title_key)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	// Its words replace those it had, found by their row, not by a scan
+	// of node_fts (its id is not indexed there).
+	var fts int64
+	if err := tx.QueryRow(`SELECT fts FROM nodes WHERE id = ?`, m.ID).Scan(&fts); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if fts != 0 {
+		if _, err := tx.Exec(`DELETE FROM node_fts WHERE rowid = ?`, fts); err != nil {
+			return err
+		}
+	}
+	res, err := tx.Exec(`INSERT INTO node_fts (rowid, id, title, body) VALUES (NULLIF(?, 0), ?, ?, ?)`, fts, m.ID, m.Title, searchText(n))
+	if err != nil {
+		return err
+	}
+	if fts, err = res.LastInsertId(); err != nil {
+		return err
+	}
+	_, err = tx.Exec(`INSERT INTO nodes (id, file, title, parent, lifetime, created, updated, done, archived, external, title_trusted, opened_by, version, blob, title_key, fts)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET file = excluded.file, title = excluded.title, parent = excluded.parent,
 		  lifetime = excluded.lifetime, updated = excluded.updated, done = excluded.done, archived = excluded.archived,
 		  external = excluded.external, title_trusted = excluded.title_trusted, opened_by = excluded.opened_by, version = excluded.version, blob = excluded.blob,
-		  title_key = excluded.title_key`,
+		  title_key = excluded.title_key, fts = excluded.fts`,
 		m.ID, file, m.Title, m.Parent, string(m.Lifetime), m.Created.Unix(), updated.Unix(),
-		unixOr0(m.Done), unixOr0(m.Archived), m.External, m.External && m.TitleTrusted, by, version, blobHash(raw), nodefile.LinkKey(m.Title))
+		unixOr0(m.Done), unixOr0(m.Archived), m.External, m.External && m.TitleTrusted, by, version, blobHash(raw), nodefile.LinkKey(m.Title), fts)
 	if err != nil {
 		return err
 	}
@@ -159,7 +231,7 @@ func indexNode(tx querier, n *nodefile.Node, file string, raw []byte, version in
 	if err := indexProps(tx, m); err != nil {
 		return err
 	}
-	for _, q := range []string{`DELETE FROM node_links WHERE id = ?`, `DELETE FROM node_sources WHERE id = ?`, `DELETE FROM node_fts WHERE id = ?`} {
+	for _, q := range []string{`DELETE FROM node_links WHERE id = ?`, `DELETE FROM node_sources WHERE id = ?`} {
 		if _, err := tx.Exec(q, m.ID); err != nil {
 			return err
 		}
@@ -177,15 +249,15 @@ func indexNode(tx querier, n *nodefile.Node, file string, raw []byte, version in
 			}
 		}
 	}
-	_, err = tx.Exec(`INSERT INTO node_fts (id, title, body) VALUES (?, ?, ?)`, m.ID, m.Title, searchText(n))
-	return err
+	return nil
 }
 
 // forget takes a node out of the index, its versions kept. The links to
 // it wait again for a node of their name (resolveRefs).
 func forget(tx execer, id string) error {
-	for _, q := range []string{`DELETE FROM nodes WHERE id = ?`, `DELETE FROM node_links WHERE id = ?`,
-		`DELETE FROM node_sources WHERE id = ?`, `DELETE FROM node_fts WHERE id = ?`,
+	// Its words first, by their row, while its row says which.
+	for _, q := range []string{`DELETE FROM node_fts WHERE rowid = (SELECT fts FROM nodes WHERE id = ?)`,
+		`DELETE FROM nodes WHERE id = ?`, `DELETE FROM node_links WHERE id = ?`, `DELETE FROM node_sources WHERE id = ?`,
 		`DELETE FROM node_refs WHERE id = ?`, `DELETE FROM node_props WHERE id = ?`, `UPDATE node_refs SET target = '' WHERE target = ?`} {
 		if _, err := tx.Exec(q, id); err != nil {
 			return err

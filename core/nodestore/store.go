@@ -597,7 +597,7 @@ func (s *Store) indexVersions(now time.Time, xs []indexed) error {
 	if len(xs) == 0 {
 		return nil
 	}
-	tx, err := s.db.Begin()
+	tx, err := begin(s.db)
 	if err != nil {
 		return err
 	}
