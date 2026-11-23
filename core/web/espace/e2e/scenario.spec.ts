@@ -345,8 +345,8 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(page.locator(".gr-node.standing", { has: page.locator('.gr-core[aria-label="Mes mails"]') })).toHaveCount(1);
   await expect(pageOf("Mes mails")).toBeVisible();
   // Opened beside the subject, the view's page takes free room next to
-  // it: the two never overlap, the new one is framed whole, its head on
-  // screen, and no page goes under the bar.
+  // it: the two never overlap, and the one the bar talks to, the graph's
+  // centre, is framed whole, its head on screen, above the bar.
   await still(pageOf("Mes mails"));
   await shot(page, "view-beside", false);
   await expectApart(page, [watch, pageOf("Mes mails")]);
@@ -356,18 +356,18 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(viewCard).toHaveCount(0);
   await expect(watch.getByRole("button", { name: "Oui" })).toHaveCount(0);
   // Its pages closed, the view's bubble, made on the subject, sits beside
-  // it. Dropped right on the view, the subject stays there and the view
-  // gives way.
+  // it. Dropped right on the view, nothing is pinned: the two are set
+  // apart and the graph settles again, no bubble on another.
   await home(page);
   const mine = page.locator(".gr-node:not(.external)", { has: page.locator('.gr-core[aria-label^="Mes mails"]') });
   const watching = page.locator(".gr-node:not(.external)", { has: page.locator('.gr-core[aria-label^="Garder un œil sur mes mails"]') });
   await settled(mine);
-  const onView = await settled(watching);
+  await settled(watching);
   await dragOnto(page, bubble("Mes mails"), bubble("Garder un œil sur mes mails"));
   const dropped = await settled(mine);
-  expect(Math.hypot(dropped[0] - onView[0], dropped[1] - onView[1])).toBeLessThan(40);
   const aside = await settled(watching);
-  expect(Math.hypot(aside[0] - onView[0], aside[1] - onView[1])).toBeGreaterThan(10);
+  expect(Math.hypot(aside[0] - dropped[0], aside[1] - dropped[1])).toBeGreaterThan(10);
+  await expectBubblesApart(page);
   await shot(page, "graph-apart");
 
   // 14b. The view's skill, woken once per mail, proposed to archive
@@ -671,7 +671,11 @@ async function home(page: Page) {
       .poll(async () => {
         if ((await pages.count()) < n) return (left = true);
         const order = [page.locator("article.pg.talking"), ...Array.from({ length: n }, (_, i) => pages.nth(i))];
-        for (const pg of order) if ((await pg.count()) && (await inView(pg.first().locator(".pg-x")))) return !!(x = pg.first().locator(".pg-x"));
+        for (const pg of order) if ((await pg.count()) && (await inView(pg.first().locator(".pg-x"))) && (await onTop(pg.first().locator(".pg-x")))) return !!(x = pg.first().locator(".pg-x"));
+        // Eriphe's words at the home may lie over the neighbours' heads
+        // (the page in focus is the centre, the others round it): closed.
+        const say = page.locator(".orb-say.on .orb-x");
+        if (await say.count()) await say.first().click();
         return false;
       })
       .toBe(true);
@@ -679,6 +683,16 @@ async function home(page: Page) {
     await x!.click();
     await expect(pages).toHaveCount(n - 1);
   }
+}
+
+// onTop tells whether nothing lies over an element's middle: a click there
+// lands on it.
+async function onTop(el: Locator): Promise<boolean> {
+  return el.evaluate((e) => {
+    const r = e.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return !!hit && e.contains(hit);
+  });
 }
 
 // inView tells whether an element is whole inside the viewport.
@@ -703,8 +717,9 @@ async function openMail(page: Page, id: string) {
 
 // expectApart checks open pages, once they are at rest (the layout's
 // soft collision and the camera's spring ease them into place): no two
-// overlap, the last one opened is whole on screen, its head in view, and
-// none goes under the bar.
+// overlap, and the one in focus (the bar talks to it: the graph's centre)
+// is whole on screen, its head in view, not under the bar; the others may
+// go past the screen's edge.
 async function expectApart(page: Page, pages: Locator[]): Promise<void> {
   await expect(async () => {
     for (const p of pages) await still(p);
@@ -718,16 +733,15 @@ async function expectApart(page: Page, pages: Locator[]): Promise<void> {
         expect(apart, `pages ${i} and ${j} overlap`).toBe(true);
       }
     }
-    const last = boxes.at(-1)!;
-    const head = (await pages.at(-1)!.locator(".pg-head").boundingBox())!;
+    const talking = await Promise.all(pages.map((p) => p.evaluate((el) => el.classList.contains("talking"))));
+    const f = talking.includes(true) ? talking.indexOf(true) : pages.length - 1; // none: the last opened
+    const focus = boxes[f];
+    const head = (await pages[f].locator(".pg-head").boundingBox())!;
     expect(head.y).toBeGreaterThanOrEqual(0);
-    expect(last.x).toBeGreaterThanOrEqual(0);
-    expect(last.x + last.width).toBeLessThanOrEqual(view.width);
-    // a page in view ends above the bar zone: its last line is not under it
-    for (const b of boxes) {
-      const seen = b.x + b.width > 0 && b.x < view.width;
-      if (seen && b.x < bar.x + bar.width && bar.x < b.x + b.width) expect(b.y + b.height, "a page under the bar").toBeLessThanOrEqual(bar.y + 0.5);
-    }
+    expect(focus.x).toBeGreaterThanOrEqual(0);
+    expect(focus.x + focus.width).toBeLessThanOrEqual(view.width);
+    // the page in focus ends above the bar zone: its last line is not under it
+    if (focus.x < bar.x + bar.width && bar.x < focus.x + focus.width) expect(focus.y + focus.height, "the page in focus under the bar").toBeLessThanOrEqual(bar.y + 0.5);
   }).toPass({ timeout: 15_000 });
 }
 

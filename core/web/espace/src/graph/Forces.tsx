@@ -26,7 +26,7 @@ export function ForcesPanel({ value, onChange, centred, onCentred }: { value: Fo
               {t(`espace.forces.${k}`)}
               <output>{value[k]}</output>
             </span>
-            <input type="range" min={r.min} max={r.max} step={r.step} value={value[k]} onChange={(e) => onChange({ ...value, [k]: Number(e.target.value) })} />
+            <input type="range" aria-label={t(`espace.forces.${k}`)} min={r.min} max={r.max} step={r.step} value={value[k]} onChange={(e) => onChange({ ...value, [k]: Number(e.target.value) })} />
           </label>
         );
       })}

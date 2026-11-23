@@ -962,7 +962,7 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 button.hud-icon { cursor: pointer; padding: 0; font: inherit; }
 .hud-count { position: absolute; top: -3px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; display: grid; place-items: center; border-radius: 999px;
   background: var(--fg2); color: var(--bg); font-size: 10px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
-.hud-archives { position: relative; }
+.hud-archives, .hud-settings { position: relative; }
 .hud-panel { position: absolute; top: 42px; right: 0; z-index: 40; width: 330px; display: grid; gap: 10px; padding: 12px; border-radius: 14px;
   background: var(--glass); border: 1px solid var(--glass-line); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--lift); }
 .hud-muted { margin: 0; font-size: 13px; color: var(--fg3); }

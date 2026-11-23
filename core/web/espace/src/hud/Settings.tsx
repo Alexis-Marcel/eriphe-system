@@ -17,7 +17,7 @@ export function Settings() {
   const forces = useGraph((s) => s.forces);
   const centring = useGraph((s) => s.centring);
   return (
-    <div className="hud-archives hud-settings">
+    <div className="hud-settings">
       <button
         type="button"
         className={`hud-icon${open ? " on" : ""}`}
