@@ -1159,7 +1159,7 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
 - **Status:** none in the store. A node's status (`running`, `waits`, `done`, `idle`) is computed
   by eriphe-core each time it is read (`node_status.go`, below).
 - **Archive:** `Archive(id, author)` archives the node and every node below it in one commit, each
-  a new version. Only the user archives (the tools of a later step).
+  a new version. Only the user archives (the tools of a later step). There is no delete.
 - **At start:** the files are compared to the index and the last commit. A file changed, added or
   removed outside Eriphe is committed as a version of its own (author `outside`), reindexed and
   logged; a file that does not read as a node is logged and left alone (a node's row is kept, its
@@ -1170,6 +1170,21 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   each blob present): a repository that lacks one does not open, and the log names the ref and the
   missing object (`nodes: repository …: the repository is broken: refs/heads/main reaches blob …`);
   the graph stays off until the repository is put back from a bundle.
+- **Never lost:** nodes are the user's notes. No code removes the repository, a node's file or
+  its trace, nor drops history (no gc, prune, repack, reset, clean or force; go-git only in
+  `nodestore`, git never run as a program); a node is only archived, by the user. The guard test
+  `nodes_guard_test.go` holds it: the store's few removals (the backup's own copies, a file's
+  removal by hand committed, a file written whole, a trace's oldest part past 2 MiB) are listed
+  there, each with its reason. The index (`nodes.db`) is not the truth: it may be rebuilt from the
+  files at any time.
+- **File format:** each file says its format, the front matter's `format` (absent: 1, the only
+  one today; [Format version](../docs/node-format.md#format-version)). A change of the format
+  adds its conversion to `nodefile` (from the format before, a pure function of the file's bytes)
+  and a test that reads the old format. At start, a file of an older format is converted, all of
+  them in one commit by `convert` (its words committed first as `outside` when changed by hand),
+  each node a version of its own, logged; an older version read from the history is converted
+  in memory. A file of a newer format stops the graph (the log names it), untouched: update
+  Eriphe.
 - **Nightly**, at the memory's hour (`memory.extract_at`), into its backup folder
   (`memory.backup_dir`, `memory.backup_keep` days): `nodes-<day>.bundle` (a git bundle of `main`
   and `HEAD`: `git clone` reads it and checks it out), `nodes-<day>.trace.tar` (the traces, each as

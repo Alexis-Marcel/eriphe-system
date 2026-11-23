@@ -1,6 +1,8 @@
 package nodestore
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,6 +22,12 @@ import (
 //     hand) is committed, author Outside: each node in it gets a version,
 //     and is reported.
 //   - A committed file the index does not hold as it is, is indexed.
+//   - A file of an older format is converted to today's, in one commit
+//     for all, author Convert, after its old bytes are committed if they
+//     were not: each node in it gets a version, and is reported. A file
+//     of a newer format stops the start before anything is written; one
+//     whose conversion fails is reported and left alone, converted at a
+//     later start once it reads.
 //   - A file that does not read as a node is reported and left alone.
 func (s *Store) reconcile(fresh bool) (Report, error) {
 	rep := Report{Rebuilt: fresh}
@@ -81,9 +89,9 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 		return rep, err
 	}
 	now := s.opts.Now()
-	var changes []change
-	var stamps []stamp
-	var outside, known []indexed
+	var changes, convChanges []change
+	var stamps, convStamps []stamp
+	var outside, converted, known []indexed
 	onDisk := map[string]bool{}
 	broken := map[string]bool{} // files on disk that do not read as a node
 	seen := map[string]string{} // id: its file
@@ -98,7 +106,21 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 		}
 		onDisk[name] = true
 		committed := head[name].String() == blobHash(raw)
-		n, err := nodefile.Parse(raw)
+		// A file of another format than today's: an older one is
+		// converted, a newer one stops the store before anything is
+		// written. One whose conversion does not give a node is
+		// reported and left alone, as any file that does not read.
+		conv := raw
+		if f, err := nodefile.FormatOf(raw); err == nil && f != s.format() {
+			if conv, err = s.upgrade(raw); errors.Is(err, nodefile.ErrNewerFormat) {
+				return rep, fmt.Errorf("%s: %w; the file is left as it is: update Eriphe", name, err)
+			} else if err != nil {
+				rep.Broken = append(rep.Broken, fmt.Sprintf("%s: format %d, not converted: %v", name, f, err))
+				broken[name] = true
+				continue
+			}
+		}
+		n, err := nodefile.Parse(conv)
 		if err != nil {
 			rep.Broken = append(rep.Broken, name+": "+err.Error())
 			broken[name] = true
@@ -118,6 +140,7 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 		if err != nil {
 			return rep, err
 		}
+		converting := !bytes.Equal(conv, raw)
 		if !committed || last == 0 {
 			changes = append(changes, change{path: name, data: raw})
 			stamps = append(stamps, stamp{id, last + 1})
@@ -125,6 +148,16 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 			if !committed {
 				rep.Changed = append(rep.Changed, id)
 			}
+			if !converting {
+				continue
+			}
+			last++ // its old bytes are a version, before the conversion's
+		}
+		if converting {
+			convChanges = append(convChanges, change{path: name, data: conv})
+			convStamps = append(convStamps, stamp{id, last + 1})
+			converted = append(converted, indexed{n, name, conv, Version{N: last + 1, Author: Convert, At: now}})
+			rep.Converted = append(rep.Converted, id)
 			continue
 		}
 		if r, ok := inIndex[id]; !ok || r.file != name || r.blob != blobHash(raw) || r.version != last {
@@ -159,6 +192,21 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 			outside[i].v.Hash = hash
 		}
 		if err := s.indexVersions(now, outside); err != nil {
+			return rep, err
+		}
+	}
+	// The conversions in one commit of their own, after the old bytes
+	// were committed: the old format stays in the history.
+	if len(convChanges) > 0 {
+		sort.Strings(rep.Converted)
+		hash, err := s.commit(fmt.Sprintf("convert: node files to format %d", s.format()), Convert, now, convChanges, convStamps)
+		if err != nil {
+			return rep, fmt.Errorf("commit: %w", err)
+		}
+		for i := range converted {
+			converted[i].v.Hash = hash
+		}
+		if err := s.indexVersions(now, converted); err != nil {
 			return rep, err
 		}
 	}

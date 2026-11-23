@@ -149,12 +149,12 @@ func (n *Node) AuthorText() (string, error) {
 // AuthorBytes is the node as its authors wrote it: its front matter and
 // body in their canonical form, without code's fields (a block's
 // external, the node's external, title_trusted and
-// opened_by, done and links). Two versions alike
+// opened_by, done, links and format). Two versions alike
 // there differ only by what code wrote: an author's write made on one
 // applies on the other.
 func (n *Node) AuthorBytes() ([]byte, error) {
 	m := n.Meta
-	m.External, m.TitleTrusted, m.Done, m.Links, m.OpenedBy = false, false, time.Time{}, nil, nil
+	m.Format, m.External, m.TitleTrusted, m.Done, m.Links, m.OpenedBy = 0, false, false, time.Time{}, nil, nil
 	front, err := encodeMeta(m)
 	if err != nil {
 		return nil, err
