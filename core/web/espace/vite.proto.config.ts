@@ -48,5 +48,6 @@ const media: Plugin = {
 
 export default defineConfig({
   plugins: [react(), media],
-  server: { port: 5318, strictPort: true },
+  // 127.0.0.1: the sibling prototype holds [::1]:5317; localhost:5318 still reaches this one
+  server: { host: "127.0.0.1", port: 5318, strictPort: true },
 });

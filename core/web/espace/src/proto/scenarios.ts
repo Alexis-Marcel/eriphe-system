@@ -304,14 +304,13 @@ const wardrobeScenario: Scenario = {
       components: [
         { id: "root", component: "Column", children: ["h", "g"] },
         { id: "h", component: "Text", variant: "subtitle", text: "La tenue de demain" },
-        { id: "g", component: "Grid", size: "small", children: outfit.map((_, i) => `o${i}`) },
-        ...outfit.flatMap((o, i) => [
-          { id: `o${i}`, component: "Card", child: `oc${i}` },
-          { id: `oc${i}`, component: "Column", children: [`oi${i}`, `ot${i}`] },
-          { id: `oi${i}`, component: "Image", url: o.photo, alt: o.title, fit: "cover" },
-          { id: `ot${i}`, component: "Text", variant: "caption", text: o.title },
-        ]),
+        { id: "g", component: "Grid", size: "small", children: { path: "/tenue", componentId: "c" } },
+        { id: "c", component: "Card", child: "cc" },
+        { id: "cc", component: "Column", children: ["img", "t"] },
+        { id: "img", component: "Image", url: { "@path": "photo" }, alt: { "@path": "title" }, fit: "cover" },
+        { id: "t", component: "Text", variant: "caption", text: { "@path": "title" } },
       ],
+      data: { tenue: outfit },
     },
     {
       name: "chiffres",

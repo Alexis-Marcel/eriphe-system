@@ -17,7 +17,8 @@ supplies the beauty, not the brain writing more.
 cd core/web/espace && npm ci && npx vite --config vite.proto.config.ts
 ```
 
-The server runs on port 5318. Its config fakes eriphe-core's `/espace/media`, so photos are local
+The server runs on 127.0.0.1, port 5318; `localhost:5318` reaches it too. The sibling prototype
+holds `[::1]:5317`. Its config fakes eriphe-core's `/espace/media`, so photos are local
 SVG placeholders and no outside host is contacted.
 
 | URL | What |
@@ -54,7 +55,7 @@ In « Nouveaux blocs », the Oui buttons and the gallery chips work.
 
 These scripts need the dev server running:
 
-- `node proto-shots/shoot.mjs` takes 61 screenshots, with reduced motion so the stills are
+- `node proto-shots/shoot.mjs` takes 60 screenshots, with reduced motion so the stills are
   deterministic.
 - `node proto-shots/check.mjs` plays every motion with motion on and checks where each one ends.
   All 11 checks pass.
@@ -132,13 +133,21 @@ nothing.
 
 ### Motion
 
-Every motion is shorter than 250 ms, none blocks, and all go to their end state at once under
-`prefers-reduced-motion` (Motion's `reducedMotion="user"`, or `?motion=0`).
+Each movement lasts 240 ms or less and none blocks. Two are sequences of short steps: a handled
+row is a check drawn in 220 ms, then the row folds in 200 ms, starting at 240 ms, so about 440 ms in
+all; a moved figure keeps a faint flash for 400 ms. Under `prefers-reduced-motion` (Motion's
+`reducedMotion="user"`, or `?motion=0`), everything goes to its end state at once.
+
+`proto-shots/motion/` holds short videos (`open-from-node`, `mails-handle`, `figures-tick`,
+`gallery-filter`, `timeline-step`, all `.webm`) and frames caught mid-animation
+(`open-60ms.png`, `open-120ms.png`, `row-leaving.png`). `node proto-shots/record.mjs` makes them
+again. The open-from-node morph scales the whole page with its content, which reads as a zoom; the
+text is not stretched, because the page keeps its proportions as it grows.
 
 - **Open from the node**: a shared element (`layoutId`). The node pill grows into the page and back,
   over 240 ms. The real graph already springs pages open, so this is the delta to keep: content
   fades in after the frame lands.
-- **Blocks in a soft stagger**: 160 ms each. The step is capped so the last block starts by 90 ms.
+- **Blocks in a soft stagger**: 160 ms each. The step is capped so the last block starts by 90 ms and lands by 250 ms.
   Rows inside a list are never staggered.
 - **A row handled**: its Oui turns into a drawn check, the row dims, then its height folds away
   (200 ms) and the rows below slide up.
@@ -156,20 +165,52 @@ estimate.
 
 | Page | Today | Prototype | Change | Components |
 |---|---|---|---|---|
-| Mes mails | 2 294 car. (≈ 655 tk) | 931 (≈ 266) | **−59 %** | 17 → 3 |
+| Mes mails | 2 294 chars (≈ 655 tk) | 931 (≈ 266) | **−59 %** | 17 → 3 |
 | Investissements | 3 789 (≈ 1 083) | 2 310 (≈ 660) | **−39 %** | 15 → 5 |
 | Cuisine | 1 819 (≈ 520) | 754 (≈ 215) | **−59 %** | 14 → 3 |
-| Garde-robe | 2 612 (≈ 746) | 919 (≈ 263) | **−65 %** | 31 → 3 |
+| Garde-robe | 2 030 (≈ 580) | 919 (≈ 263) | **−55 %** | 19 → 3 |
 | Terrasse | 1 454 (≈ 415) | 958 (≈ 274) | **−34 %** | 7 → 3 |
 | Mes lectures | 1 027 (≈ 293) | 300 (≈ 86) | **−71 %** | 7 → 1 |
-| **Total** | **12 995** | **6 172** | **−53 %** | **91 → 18** |
+| **Total** | **12 413** | **6 172** | **−50 %** | **79 → 18** |
 
-For the whole node body, text included: 14 423 → 7 600 characters (−47 %).
+For the whole node body, text included: 13 841 → 7 600 characters (−45 %).
+
+The same count, block by block (fences included):
+
+| Block | Today | Prototype | Change |
+|---|---|---|---|
+| mails: List + Item ×3 + Fold ×2 + filter paths → `Sections` | 1 388 | 291 | −79 % |
+| first-time view: the same → `Sections` | 1 027 | 300 | −71 % |
+| ask buttons: Row + Button ×2 → `Asks` | 428–434 | 135–138 | −68 % |
+| recipe gallery: Grid template, Card, Image, formatString → `Gallery` | 857 | 335 | −61 % |
+| wardrobe, all pieces → `Gallery` with `by` (and gains category chips) | 826 | 300 | −64 % |
+| wardrobe outfit, a Grid template over `data` → `Gallery` | 844 | 390 | −54 % |
+| 30-day curve: `{x,y}` points → `series` numbers + `end` | 1 152 | 324 | −72 % |
+| recipes table: columns written → inferred + `units` | 534 | 284 | −47 % |
+| positions table + allocation chart → `Table` + stacked `Chart` | 1 122 | 513 + 236 | −33 % |
+| figures: Row + Metric ×n → `Figures` | 360–1 052 | 229–879 | −16 to −40 % |
+| steps: Column + Progress + Timeline → `Timeline` | 741 | 555 | −25 % |
+| Quote, Person: only `id` and the list go | 276–463 | 262–329 | −5 to −29 % |
+
+For the wardrobe, the baseline is the cheapest form today's catalog allows (a Grid template over
+`data`, not one Card per photo).
 
 Investissements gains least because its literal data, the 30-day trends, stays. Terrasse gains
 least among the rest because its timeline items are data too. What disappears is the structure:
 ids, `children`, Column + Text titles, Row + Button + `action.event.context`, Card / Column / Image
 templates, `@path` bindings and filter paths.
+
+**The brain's prompt.** `brain-prompt.md` is at 34 984 runes against a limit of 35 000. Two parts
+of it would shrink:
+
+- The inline `reponses` example (456 runes) becomes
+  `{"components":{"component":"Asks","items":["Fais comme tu proposes","Écris-le pour des managers"]}}`,
+  about 120 runes.
+- The paragraph on a view's sections (768 runes) no longer has to say how to build « À traiter /
+  lot / Pour info ». « Un seul bloc `Sections` sur la source » and what the groups mean would fit in
+  about 350 runes.
+
+That frees about 750 runes.
 
 **The grammar it costs.** Today `catalog_read` returns 20 477 runes: 15 661 for the components and
 4 815 for `nodeGrammar`. The draft text for the new blocks (`src/proto/grammar.fr.md`) is 1 527
@@ -205,6 +246,24 @@ at every rewrite of that node.
    calm and cheap. Open-from-node only as the content fade after the existing spring.
 7. **`habille` now, separately.** The polish CSS needs no prompt change and can ship first.
 
+**Not prototyped**: these stay as today.
+
+- Opening an item in place.
+- Unticking rows of a batch.
+- The details of a card.
+
+The Oui in `apres` is a stand-in that only plays the motion. The real one is today's `InlineYes`
+and batch, restyled.
+
+**Regressions to fix if kept:**
+
+- The prototype's Quote shows only the host. The catalog says the URL is shown in clear, so the
+  full address must come back.
+- The stacked chart lost the legend's values (« 64 % → 60 % ») that today's has.
+- Table headers come from the keys. That works only when the keys are the user's words. The
+  Investissements saving comes partly from renaming its literal keys (`Ligne`, `Depuis janvier`).
+  Rows from a tool (`subject`, `from`) need a label override; see question 8.
+
 **Drop, or not worth it:**
 
 - Pairing blocks side by side by kind. It only helps on wide pages and can surprise; at least keep
@@ -232,6 +291,8 @@ at every rewrite of that node.
 6. **Chips for short Markdown lists**: is a renderer rewriting the brain's Markdown acceptable, or
    should it be an explicit block?
 7. **The `habille` CSS**: ship it on its own first, before any grammar change?
+8. **Table headers**: are they inferred from keys, with an optional `labels` {key: header}, or
+   always written? Inferred headers are cheap but only read well on data the brain wrote itself.
 
 ## Files
 
@@ -243,5 +304,6 @@ at every rewrite of that node.
 - `src/proto/Before.tsx`: today's page through the real `Doc`.
 - `src/proto/size.ts`, `main.tsx`: counting, and the shell.
 - `src/proto/grammar.fr.md`: the draft grammar for the new blocks, as `catalog_read` would give it.
-- `proto-shots/`: 61 PNGs, named `<page>-<avant|apres|habille>-<phone|desktop>-<light|dark>`, plus
-  `*-state-*`, `tailles.png` and `shell-mails-cote.png`; `shoot.mjs`, `check.mjs`.
+- `proto-shots/`: 60 PNGs, named `<page>-<avant|apres|habille>-<phone|desktop>-<light|dark>`, plus
+  `*-state-*`, `tailles.png` and `shell-mails-cote.png`; `motion/` (videos and mid-animation
+  frames); `shoot.mjs`, `check.mjs`, `record.mjs`.

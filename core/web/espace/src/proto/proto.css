@@ -101,7 +101,7 @@ body:has(.bv-stage) { overflow: auto; }
 .bv-figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
 .bv-fig { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 14px 16px 12px; background: var(--card); }
 .bv-fig-label { font-size: var(--fs-small); color: var(--fg3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bv-fig-value { font-size: 22px; font-weight: 600; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; line-height: 1.2; border-radius: 6px; transition: background-color 0.6s var(--bv-ease); }
+.bv-fig-value { font-size: 22px; font-weight: 600; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; line-height: 1.2; border-radius: 6px; transition: background-color 0.24s var(--bv-ease); }
 .bv-fig-value small { font-size: 0.62em; font-weight: 500; color: var(--fg3); letter-spacing: 0; }
 .bv-fig-value.text { font-size: 17px; letter-spacing: -0.015em; }
 .bv-fig-value.up, .bv-fig-value.down { background: color-mix(in oklab, var(--fg) 7%, transparent); transition: none; }

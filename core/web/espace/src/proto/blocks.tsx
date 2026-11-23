@@ -109,7 +109,7 @@ function Ticker({ value, unit, plain }: { value: number; unit?: string; plain?: 
     last.current = value;
     if (from === value || !ref.current) return;
     setMoved(value > from ? "up" : "down");
-    const t = setTimeout(() => setMoved(""), 900);
+    const t = setTimeout(() => setMoved(""), 400);
     if (reduce) {
       ref.current.textContent = fr.format(value);
       return () => clearTimeout(t);
@@ -205,7 +205,7 @@ function ItemRow({ r, feed, rich, onDone }: { r: Row; feed?: Feed; rich: boolean
   const when = typeof r.date === "string" ? relative("fr", r.date) : "";
   const yes = () => {
     setDone(true);
-    setTimeout(() => onDone?.([str(r.id)]), 420);
+    setTimeout(() => onDone?.([str(r.id)]), 240);
   };
   return (
     <div className={`bv-row${rich ? " rich" : ""}${done ? " done" : ""}`}>
@@ -288,7 +288,7 @@ function Fold({ g, feed, onDone }: { g: Group; feed?: Feed; onDone?: (ids: strin
   const [going, setGoing] = useState(false);
   const yes = () => {
     setGoing(true);
-    setTimeout(() => onDone?.(g.rows.map((r) => str(r.id))), 380);
+    setTimeout(() => onDone?.(g.rows.map((r) => str(r.id))), 240);
   };
   return (
     <motion.div className={`bv-fold ${g.kind}${going ? " going" : ""}`} layout="position" transition={{ duration: 0.2, ease: EASE }}>
