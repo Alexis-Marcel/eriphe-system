@@ -149,7 +149,16 @@ jobs:
       - run: test -z "$(gofmt -l .)"
       - run: GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null .
 
+  # Under the race detector: the pool, the brain and the graph run goroutines. It makes
+  # the main package's tests about 4 times slower (7 minutes on one runner), hence 4
+  # shards: shard n runs every 4th of its tests, shard 1 also the other packages, the
+  # build and vet.
   core:
+    name: core (${{ matrix.shard }}/4)
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -160,14 +169,25 @@ jobs:
         with:
           go-version-file: core/go.mod
           cache-dependency-path: core/go.sum
-      - run: go build ./...
-      - run: go vet ./...
-      # Under the race detector: the pool, the brain and the graph run goroutines.
+      - if: matrix.shard == 1
+        run: go build ./...
+      - if: matrix.shard == 1
+        run: go vet ./...
       # In memory: each test opens a SQLite database in t.TempDir(), whose every
       # migration syncs to disk.
-      - run: go test -race ./...
+      - name: go test -race (shard ${{ matrix.shard }}/4)
         env:
           TMPDIR: /dev/shm
+          SHARD: ${{ matrix.shard }}
+        run: |
+          # The list comes from the race build the tests then reuse.
+          tests=$(go test -race -list . . | grep '^Test' | awk -v s="$SHARD" 'NR % 4 == s % 4' | paste -sd '|' -)
+          [ -n "$tests" ] || { echo "::error::no test in shard $SHARD"; exit 1; }
+          go test -race -run "^($tests)\$" .
+          if [ "$SHARD" = 1 ]; then
+            # shellcheck disable=SC2046 # one argument per package
+            go test -race $(go list ./... | grep -v '/core$')
+          fi
 
   # The composed workspace's app (core/web/espace): its layout engine's tests, and its
   # build, committed under core/web/static/espace so Go needs no Node, is up to date.
