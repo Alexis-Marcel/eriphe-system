@@ -6,7 +6,7 @@
 // to every other by one collision (collide). The graph is a compact disc
 // around the centre, the subjects linked to nothing on its rim.
 //
-// Nothing is remembered: no place is kept, nothing orders the subjects.
+// Nothing outlives the page: no place is kept, nothing orders the subjects.
 // Like Obsidian's graph, it never goes cold: every body always keeps a
 // little energy (ambient), so the centre pull, the repulsion, the springs
 // and the collision always act and the graph is always a compact disc,
@@ -24,9 +24,10 @@
 // the links between them (HOP1, HOP2, beyond still), passing over what is
 // not theirs; nothing else moves. Dropped, it stays exactly there for the
 // session (a bubble by its subject; one dropped by its subject's open
-// page goes back on its springs) and wins every collision: what is
-// under it steps aside by the smallest move; its followers settle on
-// their springs, giving way to the bodies in place. A subject the graph
+// page goes back on its springs) and wins every collision (share): what
+// is under it steps aside by the smallest move; its followers settle on
+// their springs around where it was dropped, passing over the others
+// until they are back on them. A subject the graph
 // left far behind (loose past the disc's edge) is let go. Nothing here
 // knows a node by its name.
 
@@ -258,7 +259,7 @@ export class Sim {
   // drop lets go of the body held: it stays where it is (back at the
   // disc's edge if it was out in the void) for the session, and wins every
   // collision (the last dropped first). Its followers settle on their
-  // springs, giving way to the bodies in place.
+  // springs around it, passing over the others until they are back on them.
   drop(): void {
     const h = this.held;
     if (!h) return;
@@ -639,19 +640,15 @@ export class Sim {
         const fa = this.fixed.has(a.id), fb = this.fixed.has(b.id);
         // a follower of a drop passes over the others until it is back on its springs
         if ((this.passing.has(a.id) && !this.trail.has(b.id)) || (this.passing.has(b.id) && !this.trail.has(a.id))) if (!fa && !fb) continue;
-        const sb = b.parent === a.id ? 1 : a.parent === b.id ? 0 : fa !== fb ? (fa ? 1 : 0) : ra === rb ? 0.5 : rb > ra ? 1 : 0;
-        const sa = 1 - sb;
+        const sb = this.share(a, b, ra, rb), sa = 1 - sb;
         // touching: they press on each other
-        // a page is heavier than a bubble, not unmovable: what is caught
-        // between it and the others holds it back
-        const sv = !a.box === !b.box || fa || fb ? sb : a.box ? 0.9 : 0.1;
-        this.contacts.push({ a, b, sb: sv, gap: Math.max(0, -Math.min(ox, oy)), n: ox <= oy ? [Math.abs(dx) > 0.01 ? Math.sign(dx) : 1, 0] : [0, (tb + bb) / 2 >= (ta + ba) / 2 ? 1 : -1] });
+        this.contacts.push({ a, b, sb, gap: Math.max(0, -Math.min(ox, oy)), n: ox <= oy ? [Math.abs(dx) > 0.01 ? Math.sign(dx) : 1, 0] : [0, (tb + bb) / 2 >= (ta + ba) / 2 ? 1 : -1] });
         if (ox <= 0.01 || oy <= 0.01) continue;
         most = Math.max(most, Math.min(ox, oy));
-        const out = sb === 1 && !b.box && !this.trail.has(b.id) ? this.wayOut(b, a) : sa === 1 && !a.box && !this.trail.has(a.id) ? this.wayOut(a, b) : null;
+        const out = sb > 0.5 && !b.box && !this.trail.has(b.id) ? this.wayOut(b, a) : sa > 0.5 && !a.box && !this.trail.has(a.id) ? this.wayOut(a, b) : null;
         // a body just touching steps aside the least way, even onto another
         if (out && Math.min(ox, oy) > 2) {
-          this.shove(sb === 1 ? b : a, out[0] * strength, out[1] * strength);
+          this.shove(sb > 0.5 ? b : a, out[0] * strength, out[1] * strength);
           continue;
         }
         // a page dropped on another moves it by the smallest move; else
@@ -672,6 +669,20 @@ export class Sim {
         }
       }
     return most;
+  }
+
+  // share is the collision's one rule: how much of a meeting of a and b
+  // b takes (1: b gives way alone, 0: a does), as they press on each
+  // other and as they are pushed apart. The one the user dropped wins;
+  // a bubble gives way to its parent; else the higher rank gives way, two
+  // of a rank by half (a page is heavier than a bubble by its rank).
+  // Only a bubble caught with no way out shares a shove by half (collide).
+  private share(a: Body, b: Body, ra: number, rb: number): number {
+    const fa = this.fixed.has(a.id), fb = this.fixed.has(b.id);
+    if (b.parent === a.id) return 1;
+    if (a.parent === b.id) return 0;
+    if (fa !== fb) return fa ? 1 : 0;
+    return ra === rb ? 0.5 : rb > ra ? 1 : 0;
   }
 
   // shove moves a body and what is under it (during a drag, only what
