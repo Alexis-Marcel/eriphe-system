@@ -28,7 +28,10 @@ with the bridge's gateway address.
 At first start it makes what it lacks in the data directory, and reuses it after: the API token
 (`core-token`), the vault key (`vault.key`), the database (`core.db`, `memory.db`), the graph's
 nodes (`nodes/`, `nodes-trace/`, `nodes.db`), the memory's readable mirror (`memoire/`) and the
-workspace's self-signed certificate (`web-cert.pem`, `web-key.pem`). The API listens on
+workspace's self-signed certificate (`web-cert.pem`, `web-key.pem`). An existing `core.db` that
+lacks a column added by hand (`convertedColumns` in `store.go`: `messages.taint`,
+`access_asks.settled`) is refused at start, the error naming the pull request whose SQL adds it:
+eriphe-core never reads a missing taint as none. The API listens on
 `0.0.0.0:8800`, the workspace on `https://0.0.0.0:8443` (`ERIPHE_API_LISTEN` and `ERIPHE_WEB_LISTEN`,
 e.g. `0.0.0.0:9443`, move them, as `install.sh --api-port`, `--web-port` does on a Mac), and the
 brain is on, with no agent yet.
