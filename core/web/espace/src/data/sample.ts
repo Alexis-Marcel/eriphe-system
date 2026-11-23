@@ -54,8 +54,9 @@ const ALIVE: Record<string, { decided: string; sources: { name: string; what: st
   },
 };
 
-const page = (id: string): NodePage | null => {
-  const n = nodes.find((x) => x.id === id);
+// page is a node's page; n, the node when it is not one of these (the
+// ?physique dev page's fixtures).
+const page = (id: string, n = nodes.find((x) => x.id === id)): NodePage | null => {
   if (!n) return null;
   const base = golden as unknown as NodePage;
   const versions = Array.from({ length: n.version }, (_, i) => ({ n: i + 1, author: i ? "user" : "brain", at: at(60 - i * 10) }));
@@ -85,6 +86,7 @@ const page = (id: string): NodePage | null => {
 export const sample = {
   nodes,
   page: (id: string, _version = 0): NodePage | null => page(id),
+  pageOf: (n: GraphNode): NodePage | null => page(n.id, n),
   trace: (_id: string): TraceEntry[] => [
     { at: at(50), author: "brain", text: "Task lancée." },
     { at: at(20), author: "task:t1", text: "Trois articles lus." },

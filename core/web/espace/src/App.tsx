@@ -67,6 +67,7 @@ export function App({ boot, dev }: { boot: Boot; dev?: Dev }) {
             <Hud live={boot.live} />
             <Bar boot={boot} narrow={narrow} />
             <Sample live={boot.live} />
+            {dev?.Panel && <dev.Panel />}
           </div>
         </OrbProvider>
       </MotionConfig>

@@ -12,3 +12,17 @@
 .dev-blocks-json summary:hover { color: var(--fg); }
 .dev-blocks-json pre { margin: 8px 0 0; padding: 12px 14px; border-radius: var(--r-sm); background: var(--fill); font: 11.5px/1.55 var(--mono); color: var(--fg2); white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 560px) { .dev-blocks { padding: 28px 12px 60px; } .dev-blocks-page { padding: 16px 14px; } }
+
+/* The dev server's ?physique panel (dev-physics.tsx): the graph's forces
+   and the fixtures' controls, over the graph. */
+.dev-phys { position: absolute; top: 12px; left: 14px; z-index: 30; width: 280px; max-height: calc(100vh - 200px); overflow-y: auto; display: grid; gap: 10px; padding: 12px;
+  border-radius: 14px; background: var(--glass); border: 1px solid var(--glass-line); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--lift); font-size: 12.5px; color: var(--fg2); scrollbar-width: thin; }
+.dev-phys header { display: flex; justify-content: space-between; align-items: center; color: var(--fg); }
+.dev-phys header button { border: 0; background: none; color: var(--fg2); cursor: pointer; font-size: 13px; }
+.dev-phys-sec { margin-top: 4px; color: var(--fg); font-size: 12.5px; }
+.dev-phys-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.dev-phys-row button, .dev-phys-row select { font: inherit; padding: 4px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+.dev-phys-row select { max-width: 100%; flex: 1 1 100px; min-width: 0; }
+.dev-phys-row button:hover { border-color: var(--line-strong); }
+.dev-phys-pages { display: grid; gap: 2px; max-height: 180px; overflow-y: auto; }
+.dev-phys-pages label { display: flex; gap: 6px; align-items: center; cursor: pointer; }

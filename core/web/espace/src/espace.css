@@ -704,10 +704,26 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .gr-viewport.holding, .gr-viewport.holding * { cursor: grabbing !important; user-select: none; }
 .gr-world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
 .gr-links { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
-.gr-link { fill: none; stroke: var(--link); stroke-width: 1; vector-effect: non-scaling-stroke; transition: stroke 0.4s, opacity 0.4s; }
-.gr-link.on { stroke: var(--link-on); }
-.gr-link.far { opacity: 0.2; }
-.gr-link.rel { stroke: color-mix(in oklab, var(--warn) 55%, transparent); stroke-dasharray: 2 5; }
+/* One thin solid grey line per pair of linked nodes, under them; hovering
+   a node keeps it, its neighbours and their links sharp, the rest fades
+   (Graph.tsx, hoverOn: .hovering on the viewport, .near on what stays). */
+.gr-link { fill: none; stroke: var(--edge); stroke-width: 1; vector-effect: non-scaling-stroke; transition: stroke 0.2s, opacity 0.2s; }
+:root { --edge: color-mix(in oklab, var(--fg) 24%, transparent); --edge-on: color-mix(in oklab, var(--fg) 55%, transparent); }
+.gr-viewport.hovering .gr-link:not(.near) { opacity: 0.12; }
+.gr-viewport.hovering .gr-link.near { stroke: var(--edge-on); }
+.gr-node, .gr-page { transition: filter 0.2s; }
+
+/* The graph's forces as sliders (graph/Forces.tsx). */
+.forces { margin: 0; padding: 0; border: 0; display: grid; gap: 10px; min-width: 0; }
+.forces legend { padding: 0; margin-bottom: 8px; font-size: var(--fs-small); font-weight: 600; color: var(--fg); }
+.forces-row { display: grid; gap: 4px; font-size: var(--fs-small); color: var(--fg2); }
+.forces-row span { display: flex; justify-content: space-between; gap: 8px; }
+.forces-row output { font: var(--fs-tiny) var(--mono); color: var(--fg3); font-variant-numeric: tabular-nums; }
+.forces-row input { width: 100%; margin: 0; accent-color: var(--accent); }
+.forces-reset { justify-self: start; }
+.forces-reset:disabled { opacity: 0.45; cursor: default; }
+.gr-viewport.hovering .gr-node:not(.near) { filter: opacity(0.2); }
+.gr-viewport.hovering .gr-page:not(.near) { filter: opacity(0.4); }
 
 .gr-node { position: absolute; width: 0; height: 0; z-index: 2; }
 .gr-node > * { position: absolute; left: 0; top: 0; translate: -50% -50%; }

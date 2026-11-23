@@ -74,9 +74,10 @@ describe("the graph's frames", () => {
     for (let i = 0; i < 40; i++) frame();
     expect([bubble("c").style.left, bubble("c").style.top].join()).not.toBe(was);
     expect(vi.mocked(coreShape).mock.calls.length).toBe(drawn);
-    // The links follow too, straight on their elements.
-    expect(el.querySelector("line.gr-link")?.getAttribute("x1")).not.toBeNull();
-    expect(el.querySelector("path.gr-link")?.getAttribute("d")).toMatch(/^M/);
+    // The links follow too, straight on their elements: one line per pair.
+    expect(el.querySelectorAll("line.gr-link")).toHaveLength(4);
+    expect(el.querySelector("path.gr-link")).toBeNull();
+    for (const l of el.querySelectorAll("line.gr-link")) expect(l.getAttribute("x1")).not.toBeNull();
 
     act(() => root.unmount());
     el.remove();
