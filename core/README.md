@@ -1146,8 +1146,10 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   creation: a new title changes the front matter, never the file's name.
 - **Index:** `nodes.db` next to it, outside the repository: a pure index, made again from the files
   and the log when it is deleted, nothing lost: a node's status is not kept, it is computed
-  (`node_status.go`). SQLite, its schema version in `meta` (5); a file at another version is
-  refused, never migrated: delete it. Tables: `nodes` (file, title, parent, lifetime,
+  (`node_status.go`). SQLite, its schema version in `meta` (5); a file at an older version is
+  never migrated: at start it is deleted (`nodes.db`, its `-wal` and `-shm`, nothing else) and
+  made again from the files and the log, and the log says so (`nodes: index at schema 4, an older
+  one: made again from the files`); a file at a newer version is refused, left as it is. Tables: `nodes` (file, title, parent, lifetime,
   times, external, last version, the file's git hash, the title's link key, its words' row in
   `node_fts`, so a write replaces them without a scan), `node_links` (the front
   matter's), `node_refs` (each `[[name]]` of a node's text and the node it was resolved to, kept

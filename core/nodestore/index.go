@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"strings"
 	"time"
 	"unicode"
@@ -20,8 +22,8 @@ import (
 // waiting, done) is not kept at all: eriphe-core computes it.
 
 // schemaVersion is the schema nodes.db is at; meta.schema_version says
-// it. A file at another version is refused, never changed: delete it,
-// it is made again from the files.
+// it. A file at an older version is made again from the files and the
+// log (openIndex); one at a newer version is refused, never changed.
 const schemaVersion = 5
 
 // refsSchema holds the [[links]] of the nodes' text: each name a node's
@@ -77,49 +79,66 @@ const schema = `CREATE TABLE nodes (
 	  tokenize='unicode61 remove_diacritics 2');`
 
 // openIndex opens nodes.db; fresh tells whether it was made now (and must
-// be filled from the files).
-func openIndex(path string) (db *sql.DB, fresh bool, err error) {
+// be filled from the files). An index at an older schema holds nothing
+// the files and the log do not: it is deleted (its file, its -wal and
+// -shm, nothing else) and made again; old says the schema it was at. One
+// at a newer schema is refused, never changed.
+func openIndex(path string) (db *sql.DB, fresh bool, old int, err error) {
+	db, fresh, version, err := openIndexAt(path)
+	if err != nil || version == 0 || version == schemaVersion {
+		return db, fresh, 0, err
+	}
+	db.Close()
+	if version > schemaVersion {
+		return nil, false, 0, fmt.Errorf("nodes.db is at schema %d, newer than the %d this eriphe-core reads: update Eriphe", version, schemaVersion)
+	}
+	for _, f := range []string{path, path + "-wal", path + "-shm"} {
+		if err := os.Remove(f); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return nil, false, 0, fmt.Errorf("nodes.db at schema %d, not made again: %w", version, err)
+		}
+	}
+	db, fresh, _, err = openIndexAt(path)
+	return db, fresh, version, err
+}
+
+// openIndexAt opens nodes.db, made at today's schema when it is new; at
+// another schema, it gives the schema and the database as it is.
+func openIndexAt(path string) (db *sql.DB, fresh bool, version int, err error) {
 	db, err = sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=temp_store(memory)")
 	if err != nil {
-		return nil, false, err
+		return nil, false, 0, err
 	}
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`); err != nil {
 		db.Close()
-		return nil, false, err
+		return nil, false, 0, err
 	}
-	version := 0
 	var v string
 	if db.QueryRow(`SELECT value FROM meta WHERE key = 'schema_version'`).Scan(&v) == nil {
 		fmt.Sscan(v, &version)
 	}
-	switch version {
-	case schemaVersion:
-		return db, false, nil
-	case 0:
-	default:
-		db.Close()
-		return nil, false, fmt.Errorf("nodes.db is at schema %d, this eriphe-core reads %d: delete it, it is made again from the files", version, schemaVersion)
+	if version != 0 {
+		return db, false, version, nil
 	}
 	tx, err := db.Begin()
 	if err != nil {
 		db.Close()
-		return nil, false, err
+		return nil, false, 0, err
 	}
 	defer tx.Rollback()
 	if _, err := tx.Exec(schema); err != nil {
 		db.Close()
-		return nil, false, err
+		return nil, false, 0, err
 	}
 	if _, err := tx.Exec(`INSERT INTO meta (key, value) VALUES ('schema_version', ?)`, fmt.Sprint(schemaVersion)); err != nil {
 		db.Close()
-		return nil, false, err
+		return nil, false, 0, err
 	}
 	if err := tx.Commit(); err != nil {
 		db.Close()
-		return nil, false, err
+		return nil, false, 0, err
 	}
-	return db, true, nil
+	return db, true, 0, nil
 }
 
 // execer is a transaction or the database.

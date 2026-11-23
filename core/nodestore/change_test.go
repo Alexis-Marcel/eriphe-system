@@ -1,7 +1,6 @@
 package nodestore
 
 import (
-	"database/sql"
 	"fmt"
 	"os"
 	"strings"
@@ -218,22 +217,13 @@ func TestTitleTrust(t *testing.T) {
 		}
 	}
 
-	// An index at another schema is refused, never changed: deleted, it
-	// is made again from the files.
+	// An index at an older schema is made again from the files.
 	s.Close()
-	db, err := sql.Open("sqlite", e.index)
-	if err != nil {
-		t.Fatal(err)
+	setSchema(t, e.index, 1)
+	s, rep := e.open(t)
+	if !rep.Rebuilt || rep.OldSchema != 1 {
+		t.Fatalf("an old index: %+v", rep)
 	}
-	if _, err := db.Exec(`UPDATE meta SET value = '1' WHERE key = 'schema_version'`); err != nil {
-		t.Fatal(err)
-	}
-	db.Close()
-	if _, _, err := Open(e.dir, e.index, e.opts); err == nil || !strings.Contains(err.Error(), "delete it") {
-		t.Fatalf("an old index opened: %v", err)
-	}
-	os.Remove(e.index)
-	s, _ = e.open(t)
 	if sum, err := s.Get(view); err != nil || sum.TitleExternal() || sum.Title != "Mes mails" {
 		t.Fatalf("rebuilt: %+v %v", sum, err)
 	}

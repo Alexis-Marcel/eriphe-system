@@ -119,7 +119,7 @@ unread.
 - **A file of a newer format** than this Eriphe knows stops the graph at start, with an error that
   names it; nothing is written, the file is left as it is. Update Eriphe.
 - **The index** (`nodes.db`) holds nothing the files do not: it may be rebuilt from them at any
-  time, and is never converted.
+  time, and is never converted: one of an older schema is made again from the files at start.
 
 ## Links between nodes
 

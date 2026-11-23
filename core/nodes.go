@@ -40,7 +40,10 @@ func openNodes(cfg *Config) (*nodestore.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if rep.Rebuilt {
+	switch {
+	case rep.OldSchema != 0:
+		log.Printf("nodes: index at schema %d, an older one: made again from the files", rep.OldSchema)
+	case rep.Rebuilt:
 		log.Printf("nodes: index made from the files")
 	}
 	if len(rep.Changed) > 0 {

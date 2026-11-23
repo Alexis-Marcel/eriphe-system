@@ -1,9 +1,14 @@
 package nodestore
 
 import (
+	"database/sql"
+	"fmt"
+	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -131,4 +136,92 @@ func mustReadFile(t *testing.T, dir, name string) []byte {
 		t.Fatal(err)
 	}
 	return raw
+}
+
+// An index at an older schema is made again from the files and the log:
+// every node's file, and the repository, are left as they were; one at a
+// newer schema is refused, left as it is.
+func TestOldIndexSchemaRebuilt(t *testing.T) {
+	e := newEnv(t)
+	s, _ := e.open(t)
+	a := mustCreate(t, s, New{Title: "Garden", Body: "Tomatoes and basil."})
+	if _, err := write(s, a.Node.Meta.ID, "Courgettes.", a.Version.Hash, "brain"); err != nil {
+		t.Fatal(err)
+	}
+	mustCreate(t, s, New{Title: "Kitchen", Body: "See [[Garden]]."})
+	before := snapshot(t, e.dir)
+	head, _ := s.headHash()
+	s.Close()
+	setSchema(t, e.index, schemaVersion-1)
+	s, rep := e.open(t)
+	if !rep.Rebuilt || rep.OldSchema != schemaVersion-1 || len(rep.Changed) != 0 || rep.Converted != nil {
+		t.Fatalf("an old index: %+v", rep)
+	}
+	if now, _ := s.headHash(); now != head {
+		t.Errorf("the repository moved: %s, was %s", now, head)
+	}
+	if got := mustRead(t, s, a.Node.Meta.ID); got.Last != 2 || got.Version.Hash == "" {
+		t.Errorf("versions not read again from the log: %+v", got.Version)
+	}
+	if got, _ := s.Find("courgettes", false, 0); len(got) != 1 {
+		t.Errorf("words not indexed again: %+v", got)
+	}
+	if sum, _ := s.Get("n2"); !slices.Equal(sum.Links, []string{a.Node.Meta.ID}) {
+		t.Errorf("links not resolved again: %+v", sum.Links)
+	}
+	s.Close()
+	if after := snapshot(t, e.dir); !maps.Equal(before, after) {
+		t.Errorf("the repository's files changed")
+	}
+	setSchema(t, e.index, schemaVersion+1)
+	if _, _, err := Open(e.dir, e.index, e.opts); err == nil || !strings.Contains(err.Error(), "newer") {
+		t.Fatalf("a newer index opened: %v", err)
+	}
+	if v := schemaOf(t, e.index); v != schemaVersion+1 {
+		t.Errorf("a newer index was changed: schema %d", v)
+	}
+}
+
+func setSchema(t *testing.T, index string, v int) {
+	t.Helper()
+	db, err := sql.Open("sqlite", index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`UPDATE meta SET value = ? WHERE key = 'schema_version'`, fmt.Sprint(v)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func schemaOf(t *testing.T, index string) int {
+	t.Helper()
+	db, err := sql.Open("sqlite", index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var v int
+	if err := db.QueryRow(`SELECT value FROM meta WHERE key = 'schema_version'`).Scan(&v); err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+// snapshot is every file under dir, .git included: its bytes.
+func snapshot(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		raw, err := os.ReadFile(p)
+		out[p] = string(raw)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
 }
