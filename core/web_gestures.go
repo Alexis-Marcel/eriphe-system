@@ -133,9 +133,11 @@ type nodeAskIn struct {
 // handleNodeAsk is POST /api/nodes/{id}/ask: a block's button that asks
 // Eriphe. Its words are read again from the block as stored, never taken
 // from the page; they go as the user's message to the block's node (it
-// never decides a card). Refused for a block marked external (a button
-// someone else's words may have written, which the brain would read as
-// the user's), 403; 404 for no such button; 410 archived.
+// never decides a card). A block marked external (written after an
+// outside read, or reading a server not trusted) asks too, but its words
+// may echo what was read: the message carries the taint (addAsk), so the
+// turn it starts is tainted as the one that wrote it, and they never pass
+// for the user's own. 404 for no such button; 410 archived.
 func (w *web) handleNodeAsk(rw http.ResponseWriter, r *http.Request, _ *session) {
 	sum, ok := w.gestureNode(rw, r)
 	if !ok {
@@ -160,22 +162,36 @@ func (w *web) handleNodeAsk(rw http.ResponseWriter, r *http.Request, _ *session)
 		writeJSON(rw, http.StatusNotFound, map[string]string{"error": "no such block"})
 		return
 	}
-	if b.External {
-		writeJSON(rw, http.StatusForbidden, map[string]string{"error": "a block drawn from external content asks nothing"})
-		return
-	}
 	text, ok := a2ui.AskText(b.Components, in.Component)
 	if !ok || strings.TrimSpace(text) == "" {
 		writeJSON(rw, http.StatusNotFound, map[string]string{"error": "no such button"})
 		return
 	}
-	if _, err := c.store.addUserMessage(text, nil, sum.ID); err != nil {
+	if err := c.addAsk(text, sum.ID, b.Name, b.External); err != nil {
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	c.ping()
 	w.notify()
 	rw.WriteHeader(http.StatusNoContent)
+}
+
+// askTaintPrefix is the taint of the words of a button of a block marked
+// external: its node and block follow.
+const askTaintPrefix = "ask:"
+
+// addAsk adds a button's words as the user's message to node. From a
+// block marked external, the message is tainted as it is stored, in the
+// same statement: delivered, it taints the turn (brain.go), and it is
+// never taken for the user's own words (fromUntrusted).
+func (c *core) addAsk(text, node, block string, external bool) error {
+	why := ""
+	if external {
+		why = askTaintPrefix + node + "/" + block
+	}
+	_, err := c.store.db.Exec(`INSERT INTO messages (time, role, text, delivered, node, taint) VALUES (?, ?, ?, 0, ?, ?)`,
+		time.Now().Unix(), roleUser, text, node, why)
+	return err
 }
 
 // Archives.

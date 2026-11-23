@@ -141,7 +141,9 @@ archived with it.
 
 In a block, a button Eriphe wrote sends its words to Eriphe about that page, as if you had typed
 them (that is how you answer its questions: « Do as you propose » takes every default it wrote); it
-does nothing else, and does not work on an older version, nor in a block from outside (its quiet edge). No
+does nothing else, and does not work on an older version. A button in a block marked as from
+outside (its quiet edge) works too, but its words may echo what Eriphe read: Eriphe takes them as
+coming from outside, not as yours, so they unlock nothing your own words would. No
 button, box or mark in a page acts: what acts waits for your yes on a card.
 
 ## Ask for something
@@ -183,16 +185,13 @@ What you want to follow all the time ("keep an eye on my mail", "follow the prod
 "show me the pull requests to review") is a **view**: a standing bubble whose blocks Eriphe's core
 keeps up to date. It can come with a monitor that sees what arrives and a skill that works in the
 view when it does: the skill reads each new item, notes what you should know of it, and prepares
-what it asks of you (a draft and its card). Asked from the home, the subject opens first ("Keep an
-eye on my mail"), and Eriphe asks there before setting up anything that will run on its own: one
-message with the few questions that change it (which accounts, which senders or kinds of mail
-matter, whether and when to tell you, at night included, what to prepare for your yes and what
-only to note), each with what it will do if you say nothing, written in that page with buttons to
-answer in one click, one of them taking every default ("Do as you propose"). It skips what you
-already said or what it remembers, and asks once (twice only if an answer opens something
-essential). Then it proposes the whole view on **one card**, placed in that page under what you
-decided: its page, the monitor and the skill together, the card recalling your choices, and
-nothing exists before your yes. Your yes opens the view. Your day is a view like any other: Eriphe never makes one on its own. What you said matters
+what it asks of you (a draft and its card). Eriphe shows it first: asked for a page kept up to
+date ("can you follow and manage my days?", "keep an eye on my mail"), it proposes the whole view
+at once on **one card**, with sensible defaults (what it remembers refines them), no questions
+before: its page (your day as an agenda), the monitor and the skill together, the card recalling
+its choices, and nothing exists before your yes. Your yes opens the view. Its page says its
+choices in a line ("I only tell you at the brief, never at night") and offers the likely changes
+as buttons ("Add my mail"); you change them after, never through a questionnaire first. Your day is a view like any other: Eriphe never makes one on its own. What you said matters
 to you is remembered as a preference; when to tell you is a notification rule.
 
 What you want to see once ("open the production for me") is not a view: Eriphe opens a bubble

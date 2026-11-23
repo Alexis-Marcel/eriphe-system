@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -112,7 +113,7 @@ func TestNoGestureActs(t *testing.T) {
 
 // A block's button asks with the words its author wrote, read again from
 // the stored block, as the user's message to its node; a block drawn from
-// outside asks nothing.
+// outside asks too, its words marked as not the user's own.
 func TestNodeAsk(t *testing.T) {
 	tw, csrf := graphWeb(t)
 	c := tw.c
@@ -128,8 +129,27 @@ func TestNodeAsk(t *testing.T) {
 	if len(msgs) != 1 || msgs[0].Role != roleUser || msgs[0].Text != "Relance la sauvegarde" || msgs[0].Node != id {
 		t.Fatalf("messages: %+v", msgs)
 	}
-	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+ext+"/ask", nodeAskIn{Block: "go", Component: "root"}); code != http.StatusForbidden {
+	if c.fromUntrusted(msgs[0].Seq) || c.store.msgTaint(msgs[0].Seq) != "" {
+		t.Error("a clean block's ask is not the user's own words")
+	}
+	// An external block's button asks too, its words marked: the turn
+	// it starts is tainted, and they never pass for the user's own.
+	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+ext+"/ask", nodeAskIn{Block: "go", Component: "root"}); code != http.StatusNoContent {
 		t.Fatalf("an external block's button: %d", code)
+	}
+	msgs, _ = c.store.messagesAfter(msgs[0].Seq, 10)
+	if len(msgs) != 1 || msgs[0].Text != "Relance la sauvegarde" || msgs[0].Node != ext {
+		t.Fatalf("messages: %+v", msgs)
+	}
+	seq := msgs[0].Seq
+	if why := c.store.msgTaint(seq); why != askTaintPrefix+ext+"/go" || !c.fromUntrusted(seq) {
+		t.Errorf("an external block's ask: taint %q", why)
+	}
+	if _, owner := c.ownerMessage(fmt.Sprintf("msg:%d", seq)); owner {
+		t.Error("an external block's ask is cited as the user's own words")
+	}
+	if !strings.Contains(c.messageRef(msgs[0]), "bouton d'un bloc extérieur") {
+		t.Errorf("its ref: %q", c.messageRef(msgs[0]))
 	}
 	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/ask", nodeAskIn{Block: "go", Component: "nope"}); code != http.StatusNotFound {
 		t.Fatalf("no such button: %d", code)

@@ -102,8 +102,10 @@ func (c *core) transcript(from, to time.Time) ([]segment, error) {
 		if s.Who == "event" && strings.HasPrefix(why, taskTaintPrefix) {
 			continue
 		}
-		// Written in a tainted turn, the brain's words may repeat what it read.
-		if s.Who == "brain" && why != "" {
+		// Written in a tainted turn, the brain's words may repeat what it
+		// read; a message that may not be the user's words (fromUntrusted)
+		// is no more theirs here.
+		if s.Who == "brain" && why != "" || s.Who == "owner" && c.fromUntrusted(seqOf(s.Ref)) {
 			s.Trust = trustExternal
 		}
 		kept = append(kept, s)

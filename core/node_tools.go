@@ -158,19 +158,11 @@ func (c *core) brainNode(id string) (nodestore.Summary, error) {
 
 // brainNodeOpen is node_open, as the brain calls it: openNode in its turn,
 // tainted by it, its blocks' sources catalog servers or approved monitors.
-// The node opens in front of the user, unless aside. A subject opened at
-// the home, in answer to the user, after the turn read external content,
-// is titled by code from the user's request (requestTitle): their words,
-// never what the turn read, so its title is not marked external. One
-// subject per request: another opened in the same turn keeps its own
-// title, marked. The result says so (title_by), so the brain leaves it.
+// The node opens in front of the user, unless aside. Its title is the
+// brain's, a short name of what it is about, never replaced: opened
+// after the turn read external content, it is marked as such.
 func (c *core) brainNodeOpen(ctx context.Context, in brainNodeOpenIn) (map[string]any, error) {
 	by := nodeOpener{stepOpener: stepOpener{author: byBrain, tainted: c.turnTaint()}, origin: c.turnOrigin(), sourceOK: c.viewSourceOK("")}
-	if len(by.tainted) > 0 && strings.TrimSpace(in.Parent) == "" && !in.Aside && c.turnAnswersUser() && c.turn.talkNode() == "" && c.turn.requestTitled() {
-		if title, ok := c.requestTitle(c.turn.span()); ok {
-			in.Title, by.titleTrusted = title, true
-		}
-	}
 	parent := strings.TrimSpace(in.Parent)
 	d, steps, err := c.openNode(ctx, in.nodeOpenFields, parent, by)
 	if d == nil {
@@ -190,9 +182,6 @@ func (c *core) brainNodeOpen(ctx context.Context, in brainNodeOpenIn) (map[strin
 	if steps != nil {
 		out["steps"] = steps
 	}
-	if by.titleTrusted {
-		out["title_by"] = "the user's request: your turn read outside content, so code titled it in their words; keep it"
-	}
 	return out, err
 }
 
@@ -203,8 +192,6 @@ type nodeOpener struct {
 	stepOpener
 	origin   *nodefile.Origin            // who wanted it (node_origin.go)
 	sourceOK func(nodefile.Source) error // the sources its blocks may read (nodeGuard)
-	// titleTrusted: its title is the user's words, never marked external
-	titleTrusted bool
 }
 
 // openNode is node_open, for the brain and for a task alike: a work node
@@ -230,7 +217,7 @@ func (c *core) openNode(ctx context.Context, in nodeOpenFields, parent string, b
 		err = probe.AuthorBody(in.Body)
 	}
 	if err == nil {
-		_, err = c.nodeGuard(probe, blockNames(probe), tainted, by.sourceOK)
+		_, err = c.nodeGuard(probe, blockNames(probe), by.sourceOK)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -241,7 +228,7 @@ func (c *core) openNode(ctx context.Context, in nodeOpenFields, parent string, b
 		}
 	}
 	d, err := c.nodes.Create(nodestore.New{Title: title, Parent: parent, Lifetime: nodefile.Work, Goal: strings.TrimSpace(in.Goal),
-		Body: in.Body, External: tainted, TitleTrusted: by.titleTrusted, OpenedBy: by.origin, Author: by.author})
+		Body: in.Body, External: tainted, OpenedBy: by.origin, Author: by.author})
 	if err != nil {
 		return nil, nil, err
 	}

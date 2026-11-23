@@ -206,7 +206,6 @@ type brainTurn struct {
 	answer    int                  // its answer is the brain's messages past this seq; 0: no answer to file (node_net.go)
 	asked     bool                 // it answers messages of the user's, not events or a wake only (node_turn.go)
 	home      bool                 // the user.s message, said in a node, is not about it: the turn answers as at the home (node_turn.go)
-	titleFree bool                 // the user's request of this turn has titled no subject yet (requestTitled, node_tools.go)
 	namedRefs []string             // the entities my messages of the turn name (names.go)
 	keep      func(brainTurnState) // stores it, so a restart of eriphe-core does not forget it
 }
@@ -266,7 +265,6 @@ func (t *brainTurn) start(from, to, eventSeq int) {
 	t.from, t.to, t.eventSeq, t.tainted, t.node, t.talk, t.filed, t.namedRefs = from, to, eventSeq, nil, "", "", false, nil
 	t.answer = to // what it writes past the messages delivered answers them; none delivered, nothing to file
 	t.asked = from != 0
-	t.titleFree = from != 0
 	t.home = false
 	t.save()
 }
@@ -285,7 +283,6 @@ func (t *brainTurn) goOn(from, to, eventSeq int, carried []string) {
 	t.filed = false // a new answer: the net looks at it alone (node_net.go)
 	t.answer = to   // past what it was just given; given nothing, nothing to file
 	t.asked = false // events or a wake: no request of the user's to answer now
-	t.titleFree = false
 	t.home = false
 	for _, why := range carried {
 		if !containsStr(t.tainted, why) {
@@ -293,17 +290,6 @@ func (t *brainTurn) goOn(from, to, eventSeq int, carried []string) {
 		}
 	}
 	t.save()
-}
-
-// requestTitled takes the turn's request as a subject's title: once per
-// turn, and only in the turn that delivered it (never on events or a
-// wake that went on from it).
-func (t *brainTurn) requestTitled() bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	free := t.titleFree
-	t.titleFree = false
-	return free
 }
 
 // answersUser makes the turn gone on over events answer the user: one of
@@ -509,14 +495,16 @@ func externalLine(x *Memory) string {
 // task anything but believed reads. My own message of the same turn does
 // not lift this.
 
-// ownerMessage reads a message I wrote, from a source_ref "msg:N" (or "#N").
+// ownerMessage reads a message I wrote, from a source_ref "msg:N" (or "#N"):
+// never one that may not be my words (fromUntrusted: an untrusted
+// channel's, a button of a block marked external).
 func (c *core) ownerMessage(ref string) (*Message, bool) {
 	seq, ok := parseMsgRef(ref)
 	if !ok {
 		return nil, false
 	}
 	msgs, err := c.store.messagesAfter(seq-1, 1)
-	if err != nil || len(msgs) == 0 || msgs[0].Seq != seq || msgs[0].Role != roleUser {
+	if err != nil || len(msgs) == 0 || msgs[0].Seq != seq || msgs[0].Role != roleUser || c.fromUntrusted(seq) {
 		return nil, false
 	}
 	return &msgs[0], true

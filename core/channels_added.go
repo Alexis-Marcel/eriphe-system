@@ -236,8 +236,10 @@ func (c *core) channelOf(r *http.Request) (addedChannel, bool) {
 // channelTaint is the taint of a message from a channel not trusted.
 func channelTaint(name string) string { return channelTaintPrefx + name }
 
-// fromUntrusted tells whether message seq came through a channel the user
-// did not trust: maybe not their words.
+// fromUntrusted tells whether message seq may not be the user's words: it
+// came through a channel the user did not trust, or it is the words of a
+// button of a block marked external (addAsk).
 func (c *core) fromUntrusted(seq int) bool {
-	return strings.HasPrefix(c.store.msgTaint(seq), channelTaintPrefx)
+	why := c.store.msgTaint(seq)
+	return strings.HasPrefix(why, channelTaintPrefx) || strings.HasPrefix(why, askTaintPrefix)
 }

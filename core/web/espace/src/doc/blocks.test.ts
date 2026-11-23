@@ -40,7 +40,7 @@ describe("a node's page", () => {
     expect(pieces(ext)[1]).toEqual({ kind: "broken", name: "bad", error: "not JSON" });
   });
 
-  it("sends a block's one gesture, its ask, as eriphe-core takes it, never from an external block or another surface", () => {
+  it("sends a block's one gesture, its ask, as eriphe-core takes it, an external block's too, never another surface's", () => {
     const b = (name: string) => blockOf(page, name);
     const at = { timestamp: "", context: {} };
     const sid = surfaceOf("plan1", "titles");
@@ -51,6 +51,6 @@ describe("a node's page", () => {
     expect(toGesture({ ...at, name: "ask", surfaceId: surfaceOf("other", "titles"), sourceComponentId: "go" }, "plan1", b)).toBeNull();
     expect(toGesture({ ...at, name: "ask", surfaceId: surfaceOf("plan1", "gone"), sourceComponentId: "go" }, "plan1", b)).toBeNull();
     const ext = (name: string) => (name === "titles" ? { ...b(name)!, external: true } : undefined);
-    expect(toGesture({ ...at, name: "ask", surfaceId: sid, sourceComponentId: "go" }, "plan1", ext)).toBeNull();
+    expect(toGesture({ ...at, name: "ask", surfaceId: sid, sourceComponentId: "go" }, "plan1", ext)).toEqual({ kind: "ask", block: "titles", component: "go" });
   });
 });

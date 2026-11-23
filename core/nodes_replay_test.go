@@ -19,9 +19,9 @@ import (
 // run of the live bench (nodes_bench_live_test.go), recorded with what
 // each was given and what code answered, played again against the node
 // tools of the scenario's core without a model. Code's rules on what a
-// node may hold (the blocks' grammar, a card placed by its ref, nothing
-// asked after an external read) answer the same today, or the test says
-// which call changed.
+// node may hold (the blocks' grammar, a card placed by its ref, an ask in
+// its author's own words) answer the same today, or the test says which
+// call changed.
 //
 // The recording is testdata/nodes_replay.json, written by the live bench
 // with ERIPHE_LIVE_NODES_RECORD=testdata/nodes_replay.json. Ids, hashes
@@ -30,6 +30,13 @@ import (
 // those a recorded call opened, $c1… for its cards, $hash for the last
 // version, $stale for an older one), and a call that names a node code
 // opened ($x1…: a task's, a view's) is not played.
+//
+// Its last turn is the bench's last: « tu peux suivre et gérer mes
+// journées ? », asked at the home. The page is shown first: propose_view
+// in that turn, its Agenda on the card, its choices adjustable after (ask
+// buttons, in a tainted turn too), no questionnaire. Until a run records
+// it, it is written by hand after a real case: asked after a recall that
+// read a mail's fact, the turn tainted.
 
 // replayTools are the calls recorded: those that write a node or propose
 // what a node shows.
@@ -242,7 +249,7 @@ func TestNodesReplay(t *testing.T) {
 		t.Fatalf("%d calls played, %d refused: the recording should hold a run's writes, refusals among them", ran, refused)
 	}
 	// What the calls left holds to the rules whatever was played: a card
-	// block shows its card, no external block asks.
+	// block shows its card.
 	for _, sum := range liveSummaries(t, c) {
 		d, err := c.nodes.Read(sum.ID, 0)
 		if err != nil {
@@ -252,12 +259,86 @@ func TestNodesReplay(t *testing.T) {
 			if b.Card != "" && (b.External || !c.nodeHasCard(sum.ID, b.Card)) {
 				t.Errorf("%s: block %s places %s, which the page cannot draw", sum.Title, b.Name, b.Card)
 			}
-			if b.External && blockAsks(b.Components) {
-				t.Errorf("%s: external block %s asks", sum.Title, b.Name)
-			}
 		}
 	}
+	replayDay(t, c, calls)
 	t.Logf("%d calls played, %d refused as recorded", ran, refused)
+}
+
+// replayDay checks the recording's last turn, the day asked to be
+// followed: a view proposed in that very turn, no questionnaire written
+// before it; its yes makes a page whose Agenda reads the calendar and
+// whose buttons offer the changes, its taint marked.
+func replayDay(t *testing.T, c *core, calls []replayCall) {
+	t.Helper()
+	last := calls[len(calls)-1].Turn
+	proposed := false
+	for _, call := range calls {
+		if call.Turn != last {
+			continue
+		}
+		var args map[string]any
+		json.Unmarshal(call.Args, &args)
+		for _, k := range []string{"body", "text", "new"} {
+			if s, _ := args[k].(string); questionnaire(s) {
+				t.Errorf("the day's turn: %s writes a questionnaire:\n%s", call.Tool, s)
+			}
+		}
+		proposed = proposed || call.Tool == "propose_view" && call.OK
+	}
+	if !proposed {
+		t.Fatal("the day's turn proposes no view: the page is not shown first")
+	}
+	var id int64
+	var node string
+	if err := c.store.db.QueryRow(`SELECT id, node FROM view_proposals WHERE state = ? ORDER BY id DESC LIMIT 1`, viewProposed).Scan(&id, &node); err != nil {
+		t.Fatal(err)
+	}
+	xs, err := c.cardsWhere(`ref = ? AND state = ?`, proposalRef(cardViewKind, id), cardPending)
+	if err != nil || len(xs) != 1 {
+		t.Fatalf("the day's card: %v %v", xs, err)
+	}
+	if _, err := c.decideCard(context.Background(), xs[0].ID, true, "web"); err != nil {
+		t.Fatal(err)
+	}
+	d, err := c.nodes.Read(node, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agenda, asks := false, false
+	for _, b := range d.Node.Blocks() {
+		agenda = agenda || strings.Contains(string(b.Components), `"Agenda"`) && len(b.Sources) > 0
+		asks = asks || b.External && blockAsks(b.Components)
+	}
+	if !agenda || !asks || d.Node.Meta.Lifetime != "standing" {
+		t.Errorf("the day's view: agenda %v, asks marked %v:\n%s", agenda, asks, d.Raw)
+	}
+}
+
+// questionnaire tells a text that asks the user several things before
+// anything is shown: two lines or more that ask (a list item with a
+// question mark), or that say what happens without an answer.
+func questionnaire(text string) bool {
+	n := 0
+	for _, line := range strings.Split(text, "\n") {
+		l := strings.ToLower(strings.TrimSpace(line))
+		item := strings.HasPrefix(l, "- ") || strings.HasPrefix(l, "* ") ||
+			len(l) > 2 && l[0] >= '0' && l[0] <= '9' && (l[1] == '.' || l[1] == ')')
+		if item && strings.Contains(l, "?") || strings.Contains(l, "si tu ne dis rien") || strings.Contains(l, "sans réponse") {
+			n++
+		}
+	}
+	return n >= 2
+}
+
+// questionnaire tells the questions asked before anything is shown from
+// a page that says its choices in a line.
+func TestQuestionnaire(t *testing.T) {
+	asked := "Avant de mettre quoi que ce soit en place :\n\n1. Quels comptes ? *Si tu ne dis rien : tous.*\n2. Te prévenir quand ? Sans réponse : au brief.\n"
+	shown := "Ta journée, tenue à jour. Je ne te préviens qu'au brief ; dis-le pour changer.\n\n- Point produit à 11 h\n- Dentiste à 14 h 30\n"
+	if !questionnaire(asked) || questionnaire(shown) {
+		t.Errorf("asked %v, shown %v", questionnaire(asked), questionnaire(shown))
+	}
 }
 
 // callReplay calls a tool: its result, or the refusal's words.
