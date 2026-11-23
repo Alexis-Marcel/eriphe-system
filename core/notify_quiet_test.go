@@ -180,7 +180,7 @@ func TestMessageActivityLeavesUntrustedChannels(t *testing.T) {
 	}
 	c.store.addMessageVia(roleUser, "bonjour", "", false)
 	seq, _ := c.store.addMessageVia(roleUser, "allume", "Salon, Cuisine", false)
-	c.store.set(taintKey(int(seq)), channelTaint("Salon"))
+	c.store.setMsgTaint(int(seq), channelTaint("Salon"))
 	got, err := messageActivity(c, now.Add(-24*time.Hour))
 	if err != nil || len(got) != 1 {
 		t.Fatalf("activity %v, %v", got, err)
