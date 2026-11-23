@@ -23,7 +23,7 @@ const bodies: LNode[] = [
   { id: "mail", links: [], r: 30, lw: 160, lh: 44 },
 ];
 const at = { sub: [0, 0] as [number, number], mail: [400, 0] as [number, number] };
-const boot = { lang: "fr", name: "Eriphe", csrf: "", strings: {}, live: true } as Boot;
+const boot = { lang: "fr", name: "Eriphe", csrf: "", strings: {}, live: true, attach: { many: 3, size: 1000 } } as Boot;
 
 let reduce = false;
 let hidden = false;
@@ -299,6 +299,67 @@ describe("the bar", () => {
     await draw();
     expect([...el.querySelectorAll(".cs-wait-text")].map((l) => l.textContent)).toEqual(["Message 3", "Message 4", "Message 5"]);
     expect(el.querySelector(".cs-wait-more")?.textContent).toBe("+2 en attente");
+  });
+
+  it("attaches files, says those it cannot take, and sends them with the message", async () => {
+    const sent: FormData[] = [];
+    let refuse = "";
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit) => {
+      if (init?.body instanceof FormData) sent.push(init.body);
+      return refuse ? new Response(refuse, { status: 400 }) : new Response(null, { status: 204 });
+    });
+    let made = 0;
+    const revoked: string[] = [];
+    vi.stubGlobal("URL", Object.assign(Object.create(URL), { createObjectURL: () => `blob:${++made}`, revokeObjectURL: (u: string) => revoked.push(u) }));
+    await act(async () => store.setState({ talk: "sub" }));
+    await draw();
+    const picker = el.querySelector<HTMLInputElement>('input[type="file"]')!;
+    expect(picker.multiple).toBe(true);
+    expect(picker.accept).toContain("image/*");
+    expect(picker.accept).toContain("application/pdf");
+    const pick = (...files: File[]) =>
+      act(async () => {
+        Object.defineProperty(picker, "files", { configurable: true, value: files });
+        picker.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    const chips = () => [...el.querySelectorAll(".cs-file")].map((c) => c.querySelector(".cs-file-name")?.textContent);
+    const img = new File([new Uint8Array([137, 80, 78, 71])], "capture.png", { type: "image/png" });
+    await pick(img, new File(["une ligne"], "notes.txt", { type: "text/plain" }), new File(["x".repeat(2000)], "gros.pdf", { type: "application/pdf" }));
+    expect(chips()).toEqual(["capture.png", "notes.txt"]);
+    expect(el.querySelector(".cs-file img")?.getAttribute("src")).toBe("blob:1");
+    expect(el.querySelector('.cs-note[role="alert"]')?.textContent).toContain("« gros.pdf » dépasse");
+    // One more than it takes: said, not dropped silently.
+    await pick(new File(["a"], "a.md"), new File(["b"], "b.md"));
+    expect(chips()).toEqual(["capture.png", "notes.txt", "a.md"]);
+    expect(el.querySelector('.cs-note[role="alert"]')?.textContent).toBe("3 pièces jointes au plus par message.");
+    // One taken off.
+    await act(async () => el.querySelector<HTMLButtonElement>('button[aria-label="Retirer a.md"]')!.click());
+    expect(chips()).toEqual(["capture.png", "notes.txt"]);
+
+    // eriphe-core refuses: its words, the files kept.
+    refuse = "« notes.txt » n'est pas pris en charge.";
+    const submit = () => act(async () => el.querySelector("form.cs-bar")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    await submit();
+    expect(el.querySelector('.cs-note[role="alert"]')?.textContent).toBe(refuse);
+    expect(chips()).toEqual(["capture.png", "notes.txt"]);
+
+    // Files alone are a message: sent with the node, the chips gone.
+    refuse = "";
+    await submit();
+    const form = sent.at(-1)!;
+    expect(form.get("text")).toBe("");
+    expect(form.get("node")).toBe("sub");
+    expect(form.getAll("files").map((f) => (f as File).name)).toEqual(["capture.png", "notes.txt"]);
+    expect(chips()).toEqual([]);
+    expect(revoked).toContain("blob:1");
+  });
+
+  it("shows the names of the files of a message that waits", async () => {
+    await feed({ work: {}, waiting: [{ seq: 60, text: "Regarde ça.", files: ["capture.png", "notes.txt"] }, { seq: 61, text: "", files: ["seul.md"] }] });
+    await draw();
+    const lines = [...el.querySelectorAll(".cs-wait")];
+    expect(lines.map((l) => l.querySelector(".cs-wait-text")?.textContent ?? null)).toEqual(["Regarde ça.", null]);
+    expect(lines.map((l) => l.querySelector(".cs-wait-files")?.textContent)).toEqual(["capture.png, notes.txt", "seul.md"]);
   });
 
   it("is a simple line on the phone: the subject named, the words, no gliding", async () => {

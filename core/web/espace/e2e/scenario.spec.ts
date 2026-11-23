@@ -40,8 +40,8 @@ test("the steps of the scenario", async ({ page, request }) => {
   const words = page.locator(".orb-say.on, .orb-line");
   const said = words.locator(".orb-text");
   const orb = page.locator("button.orb");
-  // The bar's buttons: none (the cards no node holds aside).
-  const barButtons = page.locator(".cs-bar button");
+  // The bar's buttons: none but its paperclip (the cards no node holds aside).
+  const barButtons = page.locator(".cs-bar button:not(.cs-attach)");
   const say = async (text: string) => {
     const input = page.locator(".cs-bar input");
     await input.fill(text);

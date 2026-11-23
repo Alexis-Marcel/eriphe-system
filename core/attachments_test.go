@@ -61,12 +61,20 @@ type upload struct {
 	data []byte
 }
 
-// send posts a message with files, as the composer does.
+// send posts a message with files, as the bar does.
 func (tw *testWeb) send(csrf, text string, files ...upload) (int, string) {
+	tw.t.Helper()
+	return tw.sendForm(csrf, map[string]string{"text": text}, files...)
+}
+
+// sendForm posts a message's fields with files, as multipart.
+func (tw *testWeb) sendForm(csrf string, fields map[string]string, files ...upload) (int, string) {
 	tw.t.Helper()
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
-	mw.WriteField("text", text)
+	for k, v := range fields {
+		mw.WriteField(k, v)
+	}
 	for _, f := range files {
 		w, _ := mw.CreateFormFile("files", f.name)
 		w.Write(f.data)

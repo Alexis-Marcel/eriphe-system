@@ -27,7 +27,7 @@ export type Dev = { proposals: Proposals; start(): () => void; gallery: boolean;
 export function devBoot(): Boot {
   const asked = new URLSearchParams(location.search).get("lang");
   const lang: Lang = asked === "en" || (!asked && !navigator.language.startsWith("fr")) ? "en" : "fr";
-  return { lang, name: "Eriphe", csrf: "", strings: strings[lang], live: false };
+  return { lang, name: "Eriphe", csrf: "", strings: strings[lang], live: false, attach: { many: 5, size: 20 << 20 } };
 }
 
 export function dev(lang: Lang): Dev {

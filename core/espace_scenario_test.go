@@ -56,6 +56,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/finish/{key}", sc.handleFinish)
 	mux.HandleFunc("GET /e2e/tools", sc.handleTools)
 	mux.HandleFunc("GET /e2e/turns", sc.handleTurns)
+	mux.HandleFunc("GET /e2e/attachments", sc.handleAttachments)
 	mux.HandleFunc("POST /e2e/rows", sc.handleRows)
 	mux.HandleFunc("POST /e2e/review", sc.handleReview)
 	mux.HandleFunc("POST /e2e/sections", sc.handleSections)
@@ -97,6 +98,7 @@ type scenario struct {
 	tasks  map[string]string // each worker task's role: style, plan, research, check
 	finish map[string]chan struct{}
 	turns  [][]string // the user's lines of each of the brain's turns (waiting.spec.ts)
+	given  []string   // the whole of each of those turns (attach.spec.ts)
 	failed bool       // the live bench: the plan's first try has failed (liveWork)
 
 	// live, for the nodes' bench (nodes_bench_live_test.go): the brain is
@@ -742,6 +744,14 @@ func (sc *scenario) call(task, server, tool string, args map[string]any) (map[st
 // the canned calls, then its answer ends the turn, as the agent's would.
 func (sc *scenario) brainTurn(task, turn string) {
 	said, node := userLine(turn)
+	if strings.Contains(said, "Prends ton temps") {
+		// Each spec holds Eriphe anew (waiting.spec.ts, attach.spec.ts):
+		// a hold released before is not this one; armed before the turn is
+		// seen, so that a release that follows it finds it.
+		sc.mu.Lock()
+		sc.finish["hold"] = make(chan struct{})
+		sc.mu.Unlock()
+	}
 	if said != "" {
 		var lines []string
 		for _, m := range userLineRe.FindAllStringSubmatch(turn, -1) {
@@ -749,6 +759,7 @@ func (sc *scenario) brainTurn(task, turn string) {
 		}
 		sc.mu.Lock()
 		sc.turns = append(sc.turns, lines)
+		sc.given = append(sc.given, turn)
 		sc.mu.Unlock()
 	}
 	b := &brainPlay{sc: sc, task: task}
@@ -1233,6 +1244,44 @@ func (sc *scenario) handleTurns(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, http.StatusOK, map[string]any{"turns": slices.Clone(sc.turns)})
 }
 
+// handleAttachments is GET /e2e/attachments: the files eriphe-core kept
+// with the user's last message that has some, each with its size on disk
+// and whether a turn of the brain was told of it (attach.spec.ts).
+func (sc *scenario) handleAttachments(rw http.ResponseWriter, r *http.Request) {
+	type kept struct {
+		Name   string `json:"name"`
+		Type   string `json:"type"`
+		Size   int64  `json:"size"`
+		Stored int64  `json:"stored"` // its file's size, -1 when there is none
+		Told   bool   `json:"told"`   // a turn of the brain had its line
+	}
+	rows, err := sc.c.store.db.Query(`SELECT id, name, type, size FROM attachments WHERE seq = (SELECT MAX(seq) FROM attachments) ORDER BY rowid`)
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	sc.mu.Lock()
+	given := strings.Join(sc.given, "\n")
+	sc.mu.Unlock()
+	out := []kept{}
+	for rows.Next() {
+		var id string
+		var k kept
+		if err := rows.Scan(&id, &k.Name, &k.Type, &k.Size); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		k.Stored = -1
+		if fi, err := os.Stat(sc.c.store.attachmentPath(id)); err == nil {
+			k.Stored = fi.Size()
+		}
+		k.Told = strings.Contains(given, "[pièce jointe "+id)
+		out = append(out, k)
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"files": out})
+}
+
 // handleProposals is POST /e2e/proposals: the view « Mes mails »'s
 // skill, woken once per mail, proposed to archive three, one card each,
 // as an install made them before they folded: the next sync folds them
@@ -1498,7 +1547,11 @@ func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
 // last show already seen, so that no fresh show opens its page again.
 func (sc *scenario) handleView(rw http.ResponseWriter, r *http.Request) {
 	last, _ := sc.c.lastShown()
-	raw, _ := json.Marshal(espaceView{Open: []string{}, Shown: int(last.Seq)})
+	// Eriphe's words to the spec before seen and closed: an answer at the
+	// home stays until closed, and would greet the next spec.
+	var said int64
+	sc.c.store.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM messages`).Scan(&said)
+	raw, _ := json.Marshal(espaceView{Open: []string{}, Shown: int(last.Seq), Orb: &espaceOrbClose{Answer: said, Seen: said, Failed: said}})
 	if err := sc.c.store.set(espaceViewKey, string(raw)); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return

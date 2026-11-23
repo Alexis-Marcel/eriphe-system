@@ -214,7 +214,8 @@ export function applyOrb(s: State, x: OrbFeed): State {
   const work = x.work && typeof x.work === "object" ? { node: str(x.work.node), draft: str(x.work.draft) } : undefined;
   const failed = x.failed && typeof x.failed.seq === "number" ? { seq: x.failed.seq, node: str(x.failed.node) } : undefined;
   const cards = Array.isArray(x.cards) ? x.cards.filter((t) => typeof t === "string") : undefined;
-  const waiting = Array.isArray(x.waiting) ? x.waiting.filter((w): w is Waiting => !!words(w)) : undefined;
+  const names = (v: unknown) => (Array.isArray(v) ? v.filter((n): n is string => typeof n === "string") : undefined);
+  const waiting = Array.isArray(x.waiting) ? x.waiting.filter((w): w is Waiting => !!words(w)).map((w) => ({ ...w, files: names(w.files) })) : undefined;
   const orb: OrbFeed = { asked: typeof x.asked === "number" ? x.asked : undefined, work, answer: words(x.answer), failed, cards, waiting };
   return { ...s, orb, sent: landed(orb, s.sent) ? null : s.sent };
 }

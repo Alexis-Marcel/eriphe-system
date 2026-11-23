@@ -44,6 +44,9 @@ export type Boot = {
   // What Eriphe lacks to think: no AI yet (its wizard left for later), or
   // no brain on this server; absent once it can.
   setup?: "noai" | "nobrain";
+  // What the bar may attach to one message (attachments.go): how many
+  // files, and how large each, in bytes.
+  attach: { many: number; size: number };
 };
 
 const json = { Accept: "application/json" };
@@ -317,9 +320,10 @@ export async function putView(v: View, keepalive = false): Promise<boolean> {
 }
 
 // A message of the user's that waits for Eriphe (waitingLine,
-// messages_waiting.go): sent, not yet read; node: the node it was said
-// to, with its title; none: the home.
-export type Waiting = { seq: number; text: string; node?: string; title?: string };
+// messages_waiting.go): sent, not yet read; files: the names of the files
+// attached to it; node: the node it was said to, with its title; none:
+// the home.
+export type Waiting = { seq: number; text: string; files?: string[]; node?: string; title?: string };
 
 // Eriphe's words where they belong (orbWords, web_orb.go): node, none for
 // the home; a few plain lines (more: the subject's page says the rest),
@@ -345,11 +349,28 @@ export type OrbFeed = {
   waiting?: Waiting[];
 };
 
-// send writes to Eriphe, said to a node (it belongs to it) or to the home.
-export function send(text: string, node?: string | null): Promise<boolean> {
-  const body = new URLSearchParams({ text, from: "workspace" });
-  if (node) body.set("node", node);
-  return post("/messages", body);
+// Sending is what came of a message sent: ok, or why it could not go:
+// refused, eriphe-core's own words (a file it does not take, too large:
+// sendError, web_files.go); else none, it could not be reached.
+export type Sending = { ok: true } | { ok: false; refused?: string };
+
+// send writes to Eriphe, said to a node (it belongs to it) or to the home,
+// with the files attached to it (attachments.go): as a form when it has
+// none, as multipart when it has some.
+export async function send(text: string, node?: string | null, files: readonly File[] = []): Promise<Sending> {
+  const fields: Record<string, string> = { text, from: "workspace" };
+  if (node) fields.node = node;
+  let body: URLSearchParams | FormData = new URLSearchParams(fields);
+  if (files.length) {
+    const form = new FormData();
+    for (const [k, v] of Object.entries(fields)) form.set(k, v);
+    for (const f of files) form.append("files", f, f.name);
+    body = form;
+  }
+  const r = signedOut(await fetch("/messages", { method: "POST", credentials: "same-origin", headers: { "X-CSRF-Token": csrf }, body }));
+  if (r.ok) return { ok: true };
+  const refused = r.status === 400 || r.status === 413 ? (await r.text().catch(() => "")).trim() : "";
+  return refused ? { ok: false, refused } : { ok: false };
 }
 
 // withdraw takes back a message that waits for Eriphe: taken when Eriphe

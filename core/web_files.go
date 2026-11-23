@@ -12,8 +12,8 @@ import (
 	"time"
 )
 
-// The workspace's side of attachments (attachments.go): the composer's
-// files, and opening one from the conversation.
+// The workspace's side of attachments (attachments.go): the files the
+// bar sends with a message (web/espace/src/orb/Bar.tsx), and opening one.
 
 // messageFiles reads the files of a multipart message, if it is one.
 func (w *web) messageFiles(r *http.Request) ([]*multipart.FileHeader, error) {
@@ -50,7 +50,7 @@ func (w *web) sendError(rw http.ResponseWriter, r *http.Request, err error) {
 	}
 }
 
-// handleAttachment serves an attachment of the conversation, to open it.
+// handleAttachment serves an attachment of a message, to open it.
 // Its type is the one eriphe-core found when it was sent: an image, a PDF
 // or a text, never a page the browser would run.
 func (w *web) handleAttachment(rw http.ResponseWriter, r *http.Request, s *session) {
