@@ -645,7 +645,6 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-progress-label { font-size: 14px; font-weight: 500; }
 .a2-progress-count { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--fg3); }
 .a2-progress-step { min-width: 0; font-size: 12.5px; color: var(--fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.a2-progress-step::before { content: "·"; margin-right: 10px; color: var(--fg3); }
 .a2-tone-urgent .a2-progress-label { color: var(--hot-text); }
 .a2-tone-success .a2-progress-label { color: var(--ok-text); }
 .a2-tone-muted .a2-progress-label { color: var(--fg3); font-weight: 400; }
@@ -1131,7 +1130,16 @@ li:hover .a2-inline-no, .a2-inline-no:focus-visible { opacity: 1; }
 .a2-rowcard { flex-wrap: nowrap; gap: 10px; }
 /* A narrow page (a phone, a page made small): the Oui alone, its words in its tooltip. */
 .pg-doc { container-type: inline-size; }
-@container (max-width: 560px) { .a2-inline-what { display: none; } }
+@container (max-width: 560px) {
+  .a2-inline-what { display: none; }
+  /* A batch's line: its words whole, its Oui under them. */
+  .a2-fold-line { flex-wrap: wrap; }
+  .a2-fold-line > .a2-fold-head { flex-basis: 100%; }
+  .a2-fold-line > .a2-fold-card { margin: 0 0 6px auto; }
+  /* Figures two by two, no hairlines between them. */
+  .a2-row:has(> .a2-metric) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 18px; }
+  .a2-row > .a2-metric { padding: 0; border-left: 0; }
+}
 .a2-rowcard > .a2-inline { flex: 0 1 auto; min-width: 0; }
 .a2-inline-what { min-width: 0; max-width: 22em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--fg3); margin-right: 2px; }
 .a2-rowcard > :first-child { flex: 1 1 auto; min-width: 0; }

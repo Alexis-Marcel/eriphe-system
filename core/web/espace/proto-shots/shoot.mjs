@@ -6,7 +6,7 @@ import { chromium } from "@playwright/test";
 
 const [url, out, theme = "light", size = "desktop", sel = "", click = ""] = process.argv.slice(2);
 const b = await chromium.launch();
-const vp = size === "phone" ? { width: 390, height: 844 } : { width: 1280, height: Number(process.env.H ?? 900) };
+const vp = size === "phone" ? { width: 390, height: Number(process.env.H ?? 844) } : { width: 1280, height: Number(process.env.H ?? 900) };
 const p = await b.newPage({ locale: "fr-FR", viewport: vp, colorScheme: theme, deviceScaleFactor: 2, reducedMotion: "reduce" });
 p.on("pageerror", (e) => console.log("PAGEERR", e.message));
 p.on("console", (m) => m.type() === "error" && console.log("CONSOLE", m.text()));
@@ -27,7 +27,13 @@ if (sel === "article.pg") {
   await p.addStyleTag({ content: ".gr-page { height: auto !important; max-height: none !important; } .pg, .gr-page > .pg { max-height: none !important; height: auto !important; } .pg-body { overflow: visible !important; }" });
   await p.waitForTimeout(600);
 }
-if (sel) {
+// A phone page (the list's page, which scrolls): the whole of it, without
+// the bar over it.
+if (sel === "phone-page") {
+  await p.addStyleTag({ content: ".ls-page { position: static !important; overflow: visible !important; padding-bottom: 24px !important; } .cs, .espace-note { display: none !important; }" });
+  await p.waitForTimeout(400);
+  await p.locator(".ls-page article.pg").first().screenshot({ path: out });
+} else if (sel) {
   await p.locator(sel).first().screenshot({ path: out });
 } else {
   // a scrolling box (the gallery is fixed): grow the window to its height
