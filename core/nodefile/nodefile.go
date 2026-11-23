@@ -52,6 +52,9 @@ func IDOK(s string) bool { return idRe.MatchString(s) }
 
 // Meta is a node's front matter.
 type Meta struct {
+	// Format is code's: the format the file is written in (format.go); 1
+	// when the file does not say it, and never written while it is 1.
+	Format   int
 	ID       string
 	Title    string
 	Parent   string   // the parent's id, "" for a node at the top
@@ -114,7 +117,7 @@ type Field struct {
 }
 
 // known are the front matter's fields, in the order they are written.
-var known = []string{"id", "title", "parent", "links", "lifetime", "goal", "created", "done", "archived", "external", "title_trusted", "opened_by"}
+var known = []string{"format", "id", "title", "parent", "links", "lifetime", "goal", "created", "done", "archived", "external", "title_trusted", "opened_by"}
 
 // Node is a node's file, parsed.
 type Node struct {
@@ -353,6 +356,10 @@ func decodeMeta(yml []byte) (m Meta, err error) {
 		seen[k.Value] = true
 		var err error
 		switch k.Value {
+		case "format":
+			if err = v.Decode(&m.Format); err == nil && m.Format < 1 {
+				err = errors.New("a whole number, 1 or more")
+			}
 		case "id":
 			err = v.Decode(&m.ID)
 		case "title":
@@ -385,6 +392,9 @@ func decodeMeta(yml []byte) (m Meta, err error) {
 			return m, fmt.Errorf("front matter: %s: %w", k.Value, err)
 		}
 	}
+	if m.Format == 0 {
+		m.Format = 1
+	}
 	return m, nil
 }
 
@@ -406,6 +416,10 @@ func encodeMeta(m Meta) ([]byte, error) {
 	for _, key := range known {
 		var v any
 		switch key {
+		case "format":
+			if m.Format > 1 {
+				v = m.Format
+			}
 		case "id":
 			v = m.ID
 		case "title":
