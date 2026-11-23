@@ -339,9 +339,16 @@ func TestBrainCatalogPermission(t *testing.T) {
 	if items := inbox("b-2"); len(items) != 1 || items[0].Data["allow"] != false {
 		t.Fatalf("write: %+v", items)
 	}
+	// No message of its own asks it again (#750): it goes with the
+	// brain's message of the turn.
 	msgs, _ := c.store.messagesAfter(before, 10)
-	if cards, _ := c.cardsWhere(`kind = ? AND seq > 0`, cardAccess); len(msgs) != 1 || len(cards) != 1 || cards[0].Seq != msgs[0].Seq {
-		t.Fatalf("the user is not told: %+v, %+v", msgs, cards)
+	if cards, _ := c.cardsWhere(`kind = ? AND turn = 1`, cardAccess); len(msgs) != 0 || len(cards) != 1 {
+		t.Fatalf("the card does not wait for the turn's message: %+v, %+v", msgs, cards)
+	}
+	seq, _ := c.store.addMessage(roleBrain, "Je crée l'issue dès que tu dis oui.", true)
+	c.attachTurnCards(int(seq))
+	if cards, _ := c.cardsWhere(`kind = ? AND seq > 0`, cardAccess); len(cards) != 1 || cards[0].Seq != int(seq) {
+		t.Fatalf("the user is not told: %+v", cards)
 	}
 	if tasks, _ := c.store.tasks(true, 10); len(tasks) != 2 {
 		t.Fatalf("the brain waiting for the user is not listed: %+v", tasks)

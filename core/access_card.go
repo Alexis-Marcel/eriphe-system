@@ -242,6 +242,7 @@ type accessQuestion struct {
 	Batch      int64       // the calls card it is on, 0 when none
 	Labels     []itemLabel // the items it acts on, as its node listed them when it was kept (call_words.go)
 	source     string      // who raised it, when not its task: node:<id>
+	inTurn     bool        // asked by the brain in its turn: its card goes with the turn's message
 }
 
 func (c *core) accessAskOf(id int64) (accessQuestion, error) {
@@ -353,7 +354,7 @@ func (c *core) askBrainAccess(ctx context.Context, t *TaskRow, pid, tool string,
 	if c.store.db.QueryRow(`SELECT id FROM access_asks WHERE call LIKE ? AND input = ? AND state = ? AND batch = 0`, tool+" %", string(raw), startProposed).Scan(&id) != nil {
 		fields, _ := json.Marshal(cardFields(c.callContext(ctx, tool, input), input))
 		q := accessQuestion{TaskID: t.ID, Permission: pid, Need: c.callNeed(tool, input, c.pool.facts(tool, input)),
-			Call: tool + " " + string(fields), Input: string(raw), Tainted: strings.Join(c.turnTaintBut(pending), ", "), source: source}
+			Call: tool + " " + string(fields), Input: string(raw), Tainted: strings.Join(c.turnTaintBut(pending), ", "), source: source, inTurn: true}
 		// The items it names by their id, as a node's sources list them
 		// (the turn's node first): its card waits on their rows, and says
 		// them by their titles (call_words.go). It is that node's card.
@@ -540,9 +541,19 @@ func (c *core) newAccessAsk(a accessQuestion) int64 {
 		return 0
 	}
 	id, _ := res.LastInsertId()
-	// The question itself: what notifies the user of a question notifies them of this one.
-	// The card says what: the message does not say it twice.
-	c.cardNow(cardAccess, id, fmt.Sprintf(tr(c.userLang(), "access.ask.message"), a.Need.TargetIn(c.userLang())), cmpOr(a.source, "task:"+a.TaskID))
+	// The card is the question: no message asks it again (#750). Asked by
+	// the brain in its turn, it goes with the brain's message of the turn,
+	// as any proposal of its; asked by a task, the queue shows it at once.
+	source := cmpOr(a.source, "task:"+a.TaskID)
+	if a.inTurn {
+		inherit := c.turnAbout
+		if a.source != "" {
+			inherit = func() string { return c.sourceAbout(a.source) }
+		}
+		c.cardProposedBy(cardAccess, id, inherit, source)
+	} else {
+		c.cardNow(cardAccess, id, "", source)
+	}
 	a.ID = id
 	c.accessCardMoved(a) // on its items' rows (item_cards.go)
 	log.Printf("access: card %d for task %s: %s", id, a.TaskID, a.Need.Category)
@@ -830,7 +841,7 @@ func (c *core) releaseTools(id string, refs []string) (string, error) {
 	if len(asked) == 0 {
 		return "", errors.New("release: name the held tools to release")
 	}
-	c.releaseAsk(accessQuestion{TaskID: id, Refs: asked, Tainted: strings.Join(c.turnTaint(), ", ")})
+	c.releaseAsk(accessQuestion{TaskID: id, Refs: asked, Tainted: strings.Join(c.turnTaint(), ", "), inTurn: true})
 	return "asked " + c.conf().User + " on a card to release " + strings.Join(asked, ", ") + ": nothing is released until they answer; you will be told", nil
 }
 
