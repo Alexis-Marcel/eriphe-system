@@ -191,7 +191,8 @@ stale: it applies over it, code's fields kept.
 A block draws, reads and asks; it never acts. There are no block actions, no marks and no boxes to
 pick: a button only asks Eriphe (`ask`, the words its author wrote, sent as the user's message), and
 whatever asks the user's yes is a **card**, drawn by code: on an item's row when it waits on that
-item (its `_card`, below), at the foot of the page otherwise, or where a `card` block places it. A
+item (its `_card`, below), at the foot of the page otherwise, or where a `card` block places it (a
+ref alone, so never `external`: a turn that read external content places one too). A
 key `actions` or `marks` is an unknown field, refused like any other.
 
 A card is one thing proposed: the user says Oui, or ✕. Calls that do the same thing to several

@@ -11,8 +11,8 @@ import (
 
 // A card block places one of the node's cards in its document: it holds
 // the card's ref alone, and the page draws the card from the records,
-// pending, decided or gone. A card that is not the node's, or a block
-// someone else's words wrote, shows no card.
+// pending, decided or gone, placed in a tainted turn too. A card that is
+// not the node's, or a block marked external by hand, shows no card.
 func TestCardBlock(t *testing.T) {
 	tw, _ := graphWeb(t)
 	c, w := tw.c, tw.w
@@ -45,8 +45,13 @@ func TestCardBlock(t *testing.T) {
 	if err := write("inconnue", "view:999", false); err == nil {
 		t.Error("an unknown card placed")
 	}
-	if err := write("vue", mine, true); err == nil || !strings.Contains(err.Error(), "external content") {
-		t.Errorf("a card placed after reading external content: %v", err)
+	// Placed in a turn that read someone else's words, the block is a ref
+	// alone: it is not external, and its card shows where it stands.
+	if err := write("vue", mine, true); err != nil {
+		t.Fatalf("a card placed in a tainted turn: %v", err)
+	}
+	if d, _ := c.nodes.Read(subject, 0); d.Node.Block("vue").External || !d.Node.Meta.External {
+		t.Errorf("tainted: the card block external %v, the node external %v", d.Node.Block("vue").External, d.Node.Meta.External)
 	}
 	if err := write("vue", mine, false); err != nil {
 		t.Fatal(err)

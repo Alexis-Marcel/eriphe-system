@@ -717,7 +717,7 @@ whatever address it dials) and one client certificate per device.
 | `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)); returns the card's ref (`card`), to place in the subject's document |
 | `catalog_read`, `sources_read` | the whole grammar of a node's block (components, sources, items, sections, glance) and what a block may read ([The catalog tools](#the-catalog-tools-node_cataloggo)) |
 | `node_open` | open a work node: `title`, `parent` (a child of that node), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); written in a tainted turn, the node is external, and a subject opened at the home in answer to the user is titled from the user's request (`requestTitle`: their words, its title trusted); a standing node, a view, is made only by `propose_view`, on the user's yes; the same `openNode` as a task's `node_open`; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
-| `node_find` | find nodes by words of their title, goal, text or blocks, each with its `status`; with no words, those running or waiting, then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does) |
+| `node_find` | find nodes by words of their title, goal, text or blocks (any word of three letters or more is enough, the nodes that hold the most first), each with its `status`; with no words, those running or waiting, then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does) |
 | `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, `backlinks` (the live nodes that link it, by their text or code), done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
 | `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying `external` (code's field); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_set` | change a node's `title` or `goal`, move it under another node (`parent`, `""` for the top; never under itself or a node below it, never a step: `nodestore.SetParent`), or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
@@ -955,7 +955,8 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   `nodefile` reads it as a block of its own (`Block.Card`, `CardRe`: `kind:number`) and refuses
   anything else in it (components, data, sources: `validateCard`); it is written back as
   read. On a write, `nodeGuard` refuses a card that is not one of the node's (`nodeHasCard`: linked
-  by `node_cards`, waiting or not) and any card block on a tainted turn; a new node (`node_open`,
+  by `node_cards`, waiting or not); a tainted turn places one too: the block is a ref alone, never
+  marked external (a card drawn from external content carries its own badge); a new node (`node_open`,
   a view's body) holds no card yet. The block never carries what the card says: the page
   (`nodePageOf`, `placedCard`) draws the card from the records (pending, decided,
   `gone`), only for the node's own card and a block not external; anything else is sent without
@@ -3492,25 +3493,46 @@ cd core/web/espace
 npm run build && npx playwright install chromium && npx playwright test
 ```
 
-**The scenario on a real model** (`nodes_bench_live_test.go`, #634). The same world, the brain a
-real model: eriphe-core starts it as on an install (the built-in prompt, its tools and free reads),
-and the bench runs it with the local Claude Code CLI (`claude` signed in on the machine) in
+**The scenario on a real model** (`nodes_bench_live_test.go`, #634, #707). The same world, the
+brain a real model: eriphe-core starts it as on an install (the built-in prompt, its tools and free
+reads), and the bench runs it with the local Claude Code CLI (`claude` signed in on the machine) in
 stream-json as a device does, its MCP servers the test core's device API, its permissions asked
 through a test-only `approve` tool. The CLI runs in a temporary folder, without the machine's
-settings, `CLAUDE.md`, memory or MCP servers, and without the web. The workers are faked: any task
-writes a short result in its node and reports done, the first step held until the scenario lets it
-finish. It plays the user's turns of the 13 steps, says yes on the cards, and scores what the core
-holds: lost replies (an answer code's safety net had to file, a turn left unanswered, a question's
-answer written in no node), duplicate nodes (a node opened for a thing that already has one, two
-live nodes of one title), stuck steps, and views only shown (a standing node opened outside
-`propose_view`, a reply not proposed on a card). It fails on a lost reply or a duplicate node; the
-rest is logged.
+settings, `CLAUDE.md`, memory or MCP servers, and with no harness tool but the search for deferred
+tools (no web, no shell). A skill's run (the view's skill) is run by the same model the same way;
+the other workers are faked: a task writes a short result that fits its title in its node and
+reports done, the first step held until the scenario lets it finish, the plan's first try blocked
+once. It plays at most 15 turns of the user's and says yes on the cards; it measures behaviour,
+never words: each run is scored from what the core holds and from the brain's calls to its tools
+(seen by a receiving middleware on its MCP server), and printed as a Markdown table, one column per
+run: lost replies (an answer of the user's turn code's safety net had to file, a turn left
+unanswered, a question's answer written in no node), duplicate nodes (opened for a thing that has
+one, two live nodes of one title), refused writes (split: their grammar or the catalog, against
+taint or a stale version), the turn's node left with `turn_home`, the day's page written and shown,
+a step's failure settled with `node_settle`, a tainted turn (tainted, the title it opened marked,
+its `run_task` under the turn's node), the reply sent on its card, a child reused, an aside opened
+below its subject without being shown, `node_set parent`, `[[links]]` written and resolved, a
+glance, a mail watch asked before it is proposed (ask buttons on a clean turn), the view proposed
+with its card placed, approved and valid (its bilan lead, items in sections; its batch reported),
+the view's skill noting the new mail (`item_note`) and the cards on its rows. The test fails on a
+lost reply, a duplicate node, more than one write refused for its grammar or the catalog, a view
+that is not valid, or more than 15 turns; the rest is reported.
 
 ```sh
-ERIPHE_LIVE_NODES=1 ERIPHE_LIVE_NODES_RUNS=3 go test -run TestNodesBenchLive -timeout 0 -v .
+ERIPHE_LIVE_NODES=1 ERIPHE_LIVE_NODES_RUNS=2 go test -run TestNodesBenchLive -timeout 0 -v .
 ```
 
-`ERIPHE_LIVE_NODES_MODEL` chooses the model (`sonnet` by default), `ERIPHE_LIVE_NODES_CLI` the command.
+`ERIPHE_LIVE_NODES_MODEL` chooses the model (`sonnet` by default), `ERIPHE_LIVE_NODES_CLI` the
+command, `ERIPHE_LIVE_NODES_RECORD` a file the first run's node writes are recorded in.
+
+**The replay** (`nodes_replay_test.go`). The node writes a live run recorded
+(`testdata/nodes_replay.json`: `node_open`, `node_write`, `node_edit`, `node_set`, `propose_view`,
+`item_note`, each with whether its turn was tainted and what code answered) are played again on the
+scenario's core without a model, in CI: ids, hashes and card refs as placeholders, a call on a node
+code opened and a piece of text replaced (which depend on what workers wrote) left out. Each call
+must be taken or refused as it was, and what they leave must hold to the rules: a card block draws
+its card, no external block asks. Record it again with `ERIPHE_LIVE_NODES_RECORD=testdata/nodes_replay.json`
+when the rules change on purpose.
 
 **A full home** (#455). The workspace says the user is
 there (`data/presence.ts`): it tells eriphe-core when it comes in front or leaves

@@ -243,7 +243,9 @@ func TestFind(t *testing.T) {
 		"analyse":           {"n2"},
 		"timeouts":          {"n3"},
 		"prod":              {"n3"},
-		"article newsl":     {"n1"},
+		"article newsl":     {"n1", "n2"}, // n1 holds both words: first
+		"prod agenda zz":    {"n3"},       // a word no node holds hides nothing, a short one is left out
+		"de":                nil,          // only short words: they are the query
 		`"); DROP nodes --`: nil,
 		"":                  nil,
 	}
@@ -259,6 +261,9 @@ func TestFind(t *testing.T) {
 		if strings.Join(ids, ",") != strings.Join(want, ",") && !(len(want) == 2 && len(ids) == 2) {
 			t.Errorf("find %q: %v, want %v", q, ids, want)
 		}
+	}
+	if got, _ := s.Find("article newsl", false, 0); len(got) == 0 || got[0].ID != "n1" {
+		t.Errorf("the node that holds the most words is not first: %+v", got)
 	}
 }
 

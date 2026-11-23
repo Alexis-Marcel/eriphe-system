@@ -335,7 +335,7 @@ func (c *core) authorWrite(id, expect, author string, tainted bool, sourceOK fun
 			n.Meta.External = true
 		}
 		for _, name := range names {
-			if tainted || outside[name] {
+			if b := n.Block(name); (tainted || outside[name]) && b.Card == "" { // a card block holds no one's words
 				n.SetBlockExternal(name, true)
 			}
 		}
@@ -402,7 +402,7 @@ func (c *core) externalSources(d *nodestore.Doc, author string) error {
 }
 
 // nodeGuard checks the blocks an author wrote (names) in a node: a card
-// block places one of the node's own cards, never when tainted; the
+// block places one of the node's own cards, tainted or not; the
 // actions' grammar (an ask only), nothing asked when tainted, no Link to a
 // source's value, sources the author may give (sourceOK: those a task is
 // lent, lentTo). It tells the blocks that read a source of a server not
@@ -416,10 +416,9 @@ func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, sourceO
 			continue
 		}
 		if b.Card != "" {
-			switch {
-			case tainted:
-				problems = append(problems, fmt.Sprintf("block %s: a card placed after reading external content could be answered as something else: leave it out, its card waits at the foot of the page", name))
-			case !c.nodeHasCard(n.Meta.ID, b.Card):
+			// Only a ref: code draws the card from its records, tainted
+			// turn or not (a card drawn from external content says so).
+			if !c.nodeHasCard(n.Meta.ID, b.Card) {
 				problems = append(problems, fmt.Sprintf("block %s: %s is not one of this node's cards: place only a card proposed from this node, by the ref its tool gave (card)", name, b.Card))
 			}
 			continue

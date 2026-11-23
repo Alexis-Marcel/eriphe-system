@@ -237,17 +237,23 @@ func words(b *strings.Builder, v any) {
 var notWords = map[string]bool{"id": true, "component": true, "child": true, "children": true,
 	"path": true, "@path": true, "componentId": true, "list": true, "item": true, "kind": true}
 
-// ftsQuery turns free text into an FTS5 query: its words, each a prefix
-// when it has three letters or more, all of them needed. FTS syntax in
-// the input is not honoured.
+// ftsQuery turns free text into an FTS5 query: its words of three letters
+// or more, each a prefix (the shorter ones only when there is no other),
+// any of them enough: a word the node does not hold (« journée agenda
+// aujourd'hui » for « Ma journée ») never hides it, and the ranking puts
+// the nodes that hold the most words first. FTS syntax in the input is not
+// honoured.
 func ftsQuery(q string) string {
-	var terms []string
+	var long, short []string
 	for _, w := range strings.FieldsFunc(strings.ToLower(q), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
-		t := `"` + w + `"`
 		if utf8.RuneCountInString(w) >= 3 {
-			t += "*"
+			long = append(long, `"`+w+`"*`)
+		} else {
+			short = append(short, `"`+w+`"`)
 		}
-		terms = append(terms, t)
 	}
-	return strings.Join(terms, " ")
+	if len(long) == 0 {
+		long = short
+	}
+	return strings.Join(long, " OR ")
 }
