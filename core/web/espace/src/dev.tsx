@@ -7,8 +7,10 @@ import { BlocksGallery } from "./dev-blocks";
 import { physicsGraph, PhysicsPanel } from "./dev-physics";
 import { setReads, type Boot } from "./data/api";
 import { sample } from "./data/sample";
-import { onBump, sampleOpen } from "./data/samplecore";
-import { applyNodes, step, store } from "./data/store";
+import { onBump, onSource, sampleOpen, sampleRun } from "./data/samplecore";
+import { applyNodes, applySource, step, store } from "./data/store";
+import { setTickRunner } from "./a2ui/ticks";
+import { CochePanel, cocheStart } from "./dev-coche";
 import { useWords, type Lang } from "./i18n";
 import strings from "./strings.json";
 
@@ -41,7 +43,7 @@ export function dev(lang: Lang): Dev {
   return {
     proposals: sampleProposals(lang),
     gallery: ["gallery", "blocks"].some((k) => new URLSearchParams(location.search).has(k)),
-    Panel: physics ? PhysicsPanel : undefined,
+    Panel: physics ? PhysicsPanel : CochePanel,
     start() {
       if (physics) {
         step(store, applyNodes, { reset: true, nodes: physicsGraph() });
@@ -49,8 +51,17 @@ export function dev(lang: Lang): Dev {
       }
       step(store, applyNodes, { reset: true, nodes: sample.nodes });
       store.setState({ orb: sampleOrb(lang) });
+      // Prototype « Eriphe coche »: a row's ticks are done by the make-believe
+      // core, and its sources' new values come as eriphe-core's "source".
+      setTickRunner(sampleRun);
+      const offSource = onSource((ev) => step(store, applySource, ev));
+      cocheStart();
       // A view the make-believe core changed is read again, as eriphe-core's "doc" says.
-      return onBump((id) => store.setState((s) => ({ docs: { ...s.docs, [id]: (s.docs[id] ?? 0) + 1 } })));
+      const offBump = onBump((id) => store.setState((s) => ({ docs: { ...s.docs, [id]: (s.docs[id] ?? 0) + 1 } })));
+      return () => {
+        offSource();
+        offBump();
+      };
     },
   };
 }

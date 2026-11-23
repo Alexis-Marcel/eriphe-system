@@ -1245,3 +1245,45 @@ li:hover .a2-inline-no, .a2-inline-no:focus-visible { opacity: 1; }
 /* An event beside another: room for its time, its place left out. */
 .a2-clash > .a2-ev .a2-ev-sub .a2-ev-place { display: none; }
 @container (max-width: 560px) { .a2-clash > .a2-ev .a2-ev-sub .a2-ev-place { display: inline; } }
+
+/* Prototype « Eriphe coche, tu cliques » (a2ui/ticks.ts, doc/TickBar.tsx):
+   rows Eriphe ticked, each with its action and reason; the page's bar,
+   one button per action. */
+.tk-rows > li { display: flex; align-items: flex-start; gap: var(--sp-2); }
+.tk-gap { flex: none; width: 16px; }
+.tk-line { display: flex; align-items: flex-start; gap: var(--sp-3); }
+.tk-main { flex: 1 1 auto; min-width: 0; }
+.tk-why { flex: none; display: flex; align-items: baseline; gap: 6px; max-width: 46%; padding-top: calc(var(--sp-1) + 1px); font-size: var(--fs-small); }
+.tk-act { flex: none; padding: 1px 7px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg2); font: inherit; font-size: 12px; line-height: 1.5; cursor: pointer; }
+.tk-act:hover:not(:disabled) { border-color: var(--line-strong); color: var(--fg); }
+.tk-act:disabled { cursor: default; }
+.tk-a-archiver .tk-act { border-style: dashed; }
+.tk-reason { min-width: 0; color: var(--fg3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-rows > li.left .tk-main, .tk-rows > li.left .tk-why { opacity: 0.5; }
+.tk-rows > li.left .tk-reason { text-decoration: line-through; }
+.tk-rows > li.ticked .a2-item-title { color: var(--fg); }
+.tk-rows > li.tk-new { animation: tk-new 2.4s ease-out 1; border-radius: var(--r-sm); }
+@keyframes tk-new { from { background: color-mix(in oklab, var(--accent) 14%, transparent); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .tk-rows > li.tk-new { animation: none; background: color-mix(in oklab, var(--accent) 8%, transparent); } }
+@container (max-width: 520px) {
+  .tk-line { flex-direction: column; gap: 0; }
+  .tk-why { max-width: none; padding: 0 0 var(--sp-1); }
+}
+
+.tk-bar { position: sticky; bottom: calc(-1 * var(--sp-5)); z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); margin: var(--sp-4) calc(-1 * var(--pg-pad, 0px)) calc(-1 * var(--sp-5));
+  padding: var(--sp-3) var(--pg-pad, var(--sp-4)); border-top: 1px solid var(--line); background: var(--card); }
+.tk-result { margin: 0; flex: 1 1 auto; font-size: var(--fs-body); color: var(--fg); }
+.tk-result::before { content: "✓ "; color: var(--ok, var(--fg2)); }
+.tk-result.failed::before { content: ""; }
+.tk-left { font-size: var(--fs-small); color: var(--fg3); }
+.tk-acts { margin-left: auto; display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.tk-go { display: inline-flex; align-items: baseline; gap: 6px; }
+.tk-n { font-variant-numeric: tabular-nums; font-weight: 600; }
+.tk-n::before, .tk-acc::before { content: "·"; margin-right: 6px; font-weight: 400; opacity: 0.6; }
+.tk-acc { font-weight: 400; opacity: 0.8; }
+.ls-page .tk-bar { bottom: -148px; /* 92px over the screen's foot: the list's page keeps 240px under its pages */ margin-bottom: 0; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--lift); }
+.ls-page .tk-acts { margin-left: 0; width: 100%; }
+.ls-page .tk-go { flex: 1 1 0; justify-content: center; }
+/* overflow: clip, not hidden: the page clips its corners without being
+   the scroll box, so the bar sticks to the screen (the list's page scrolls). */
+.ls-page .pg { overflow: clip; }

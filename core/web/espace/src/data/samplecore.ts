@@ -1,4 +1,4 @@
-import { stillAsks, type ListRow, type Moved, type Opened, type PageBlock, type PagePart, type ProposalView, type SourceList } from "./api";
+import { stillAsks, type ListRow, type Moved, type Opened, type PageBlock, type PagePart, type ProposalView, type SourceList, type Tick, type TickAction } from "./api";
 
 // A small make-believe eriphe-core for the dev server (sample.ts): a few
 // view nodes kept as their author writes them in the node's file (text and
@@ -37,6 +37,10 @@ export type SampleView = {
   cards: SampleCard[];
   // the view's skill writing its bilan again, from what is left
   bilan?: (v: SampleView) => string;
+  // Prototype « Eriphe coche »: the rows Eriphe ticked, by item, and the
+  // actions its Lists name (list_rows.go would tell them, as it tells cards).
+  ticks?: Record<string, Tick>;
+  actions?: Record<string, TickAction>;
 };
 export type SampleCard = ProposalView & { items?: string[]; settled?: boolean };
 
@@ -109,15 +113,16 @@ function block(v: SampleView, b: Authored): PageBlock {
       if (base !== `/${name}/${src.items.path}`) continue;
       // code filters, the page draws the List over all the source's items
       c.children = { ...ch, path: base };
-      const carded = items.some((it) => it._card);
+      // a tick, like a card, makes the List one the page is told of
+      const carded = items.some((it) => it._card || tickOf(v, String(it[src.items.id]), it));
       if (!filters.length && !folded.has(String(c.id)) && !carded && !src.items.open) continue;
       const rows: ListRow[] = [];
       items.forEach((it, n) => {
         if (!keeps(it, filters)) return;
         const id = String(it[src.items.id]);
-        rows.push({ n, id, title: String(it[src.items.title] ?? ""), detail: src.items.detail ? String(it[src.items.detail] ?? "") : undefined, card: (it._card as string) || undefined });
+        rows.push({ n, id, title: String(it[src.items.title] ?? ""), detail: src.items.detail ? String(it[src.items.detail] ?? "") : undefined, card: (it._card as string) || undefined, tick: tickOf(v, id, it) });
       });
-      lists.push({ component: String(c.id), source: name, filtered: filters.length > 0, open: !!src.items.open, items: rows });
+      lists.push({ component: String(c.id), source: name, filtered: filters.length > 0, open: !!src.items.open, items: rows, actions: rows.some((r) => r.tick) ? v.actions : undefined });
     }
   }
   return { name: b.name, external: b.external, components: comps, data, lists };
@@ -208,4 +213,60 @@ export function sampleCards(): {
       return () => followers.delete(on);
     },
   };
+}
+
+// --- Prototype « Eriphe coche, tu cliques » (proto/eriphe-coche) ---------
+
+// tickOf is the tick Eriphe left on an item still there, code's: told of
+// the row (ListRow.tick), never put in the block's data.
+function tickOf(v: SampleView, id: string, it: Record<string, unknown>): Tick | undefined {
+  return it._state === "done" ? undefined : v.ticks?.[id];
+}
+
+export type SourceEv = { node: string; block: string; name: string; value: unknown; lists: SourceList[] };
+const sourcers = new Set<(ev: SourceEv) => void>();
+// onSource calls back with a source's new value and its Lists' rows, as
+// eriphe-core's "source" event: the page changes them in place.
+export function onSource(f: (ev: SourceEv) => void): () => void {
+  sourcers.add(f);
+  return () => sourcers.delete(f);
+}
+
+// pushSources sends every source of a view again (a new mail, a tick, a
+// run): the page draws them without being read again.
+export function pushSources(v: SampleView) {
+  for (const p of v.parts) {
+    if (typeof p === "string" || !p.sources) continue;
+    const b = block(v, p);
+    for (const name of Object.keys(p.sources)) {
+      const ev = { node: v.id, block: b.name, name, value: b.data?.[name], lists: (b.lists ?? []).filter((l) => l.source === name) };
+      sourcers.forEach((f) => f(ev));
+    }
+  }
+}
+
+// bumpView has a view read again (eriphe-core's "doc" event).
+export const bumpView = (id: string) => bump(id);
+// movedCards says cards moved (made, folded), as the stream does.
+export const movedCards = (refs: string[]) => moved(refs);
+
+// sampleRun is an action's calls, one per account: their items are done
+// (they leave the Lists that keep what is not), their ticks go; the
+// view's skill writes its bilan again a moment later.
+export async function sampleRun(node: string, _action: string, calls: { account: string; ids: string[] }[]): Promise<number> {
+  const v = viewOf(node);
+  if (!v?.ticks) return -1;
+  const ticks = v.ticks;
+  await new Promise((r) => setTimeout(r, 700));
+  let n = 0;
+  for (const c of calls)
+    for (const id of c.ids) {
+      if (!ticks[id]) continue;
+      v.notes[id] = { ...(v.notes[id] ?? {}), state: "done" };
+      delete ticks[id];
+      n++;
+    }
+  pushSources(v);
+  later(v);
+  return n;
 }

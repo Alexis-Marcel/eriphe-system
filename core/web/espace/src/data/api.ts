@@ -227,8 +227,18 @@ export type PageBlock = {
 // it shows, and card, the ref of the card that waits on this item
 // (item_cards.go): its Oui is drawn on the row, by the page, never by the
 // block. A filtered List shows its rows only, never the source's others.
-export type ListRow = { n: number; id: string; title?: string; detail?: string; card?: string };
-export type SourceList = { component: string; source: string; filtered?: boolean; open?: boolean; items: ListRow[] };
+export type ListRow = { n: number; id: string; title?: string; detail?: string; card?: string; tick?: Tick };
+export type SourceList = { component: string; source: string; filtered?: boolean; open?: boolean; items: ListRow[]; actions?: Record<string, TickAction> };
+
+// Prototype « Eriphe coche, tu cliques » (proto/eriphe-coche, PROTO.md):
+// what Eriphe proposes on a row instead of a card: the row comes
+// pre-ticked with its action (one of the List's actions) and a short
+// reason, and the account the call acts in. Code's, like card: told of
+// the row, never in the block's data. The List's actions say how the bar
+// names each (« Corbeille ») and what it says once done (« {n} à la
+// corbeille »). Only the dev server's make-believe core sends them.
+export type Tick = { action: string; reason: string; account?: string; at?: string };
+export type TickAction = { label: string; done: string };
 
 // What opening an item read (item_open.go): its common fields and the
 // whole as JSON, external when its server is not trusted, with the item's

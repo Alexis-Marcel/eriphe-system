@@ -28,3 +28,10 @@
 .dev-phys-row button:disabled { opacity: 0.45; cursor: default; }
 .dev-phys-pages { display: grid; gap: 2px; max-height: 180px; overflow-y: auto; }
 .dev-phys-pages label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+
+/* Prototype « Eriphe coche » (dev-coche.tsx): its panel, bottom left. */
+.dev-coche { top: auto; bottom: 96px; width: 300px; }
+.dev-coche-said { margin: 0; line-height: 1.45; }
+.dev-coche-said q { color: var(--fg); }
+.dev-coche a { color: var(--accent); font: inherit; }
+@media (max-width: 560px) { .dev-coche { bottom: auto; top: 8px; left: 8px; width: 240px; } }

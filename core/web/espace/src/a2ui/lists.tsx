@@ -3,6 +3,7 @@ import type { GraphNode, ListRow, Opened, SourceList } from "../data/api";
 import { useWords } from "../i18n";
 import { InlineYes, RowItem } from "./inline";
 import { Opener, type OpenState } from "./opener";
+import { actionOf, changeAction, toggleTick, useTicks } from "./ticks";
 
 // The Lists of a source's items eriphe-core tells the page of (list_rows.go,
 // list_sections.go): a List that filters the source's items (a section:
@@ -26,6 +27,9 @@ export type Lists = {
   // source's rows); openNode opens its page beside this one.
   node?: (id: string) => GraphNode | undefined;
   openNode?: (id: string) => void;
+  // home: the node whose page this is (prototype « Eriphe coche »: what
+  // the user unticked is kept by node, a2ui/ticks.ts).
+  home?: string;
 };
 
 export const ListsContext = createContext<Lists | null>(null);
@@ -89,6 +93,7 @@ export function SourceRows({ surface, list, lists, rows, direction }: { surface:
   const batch = useContext(BatchContext);
   const byN = new Map(list.items.map((it) => [it.n, it]));
   if (batch && batch.list === list.component) return <BatchRows surface={surface} list={list} lists={lists} rows={rows} direction={direction} batch={batch} />;
+  if (lists.home && list.items.some((it) => it.tick)) return <TickRows surface={surface} list={list} lists={lists} rows={rows} direction={direction} home={lists.home} />;
   return (
     <ul className={`a2-list a2-list-${direction}`}>
       {rows.map((r) => (
@@ -113,6 +118,52 @@ function BatchRows({ surface, list, lists, rows, direction, batch }: { surface: 
           <li key={row.n} className={on ? "ticked" : "left"}>
             {it && card && <input type="checkbox" className="a2-tick" checked={on} onChange={() => batch.toggle(it.id)} aria-label={t("espace.batch.keep", it.title || it.id)} />}
             <div className="a2-tickrow">{openable(surface, list, lists, row.node, it, !!card)}</div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+// Prototype « Eriphe coche, tu cliques » (a2ui/ticks.ts): a List some of
+// whose rows Eriphe ticked. Each such row has its box, ticked unless the
+// user unticked it, the action it is ticked for (a word: clicked, it moves
+// to the List's next action) and Eriphe's short reason. The yes is the
+// page's bar (doc/TickBar.tsx), one button per action: no Oui on a row.
+// Rows Eriphe did not tick show as they are, aligned.
+const FRESH_MS = 12_000;
+function TickRows({ surface, list, lists, rows, direction, home }: { surface: string; list: SourceList; lists: Lists; rows: Row[]; direction: string; home: string }) {
+  const { t } = useWords();
+  const ticks = useTicks(home);
+  const byN = new Map(list.items.map((it) => [it.n, it]));
+  const names = Object.keys(list.actions ?? {});
+  return (
+    <ul className={`a2-list a2-list-${direction} tk-rows`}>
+      {rows.map((row) => {
+        const it = byN.get(row.n);
+        if (!it?.tick)
+          return (
+            <li key={row.n} className="tk-plain">
+              <span className="tk-gap" aria-hidden="true" />
+              <div className="a2-tickrow">{openable(surface, list, lists, row.node, it)}</div>
+            </li>
+          );
+        const on = !ticks.left.has(it.id);
+        const action = actionOf(it, ticks);
+        const word = list.actions?.[action]?.label ?? action;
+        const fresh = !!it.tick.at && Date.now() - Date.parse(it.tick.at) < FRESH_MS;
+        return (
+          <li key={row.n} className={`${on ? "ticked" : "left"} tk-a-${action}${fresh ? " tk-new" : ""}`}>
+            <input type="checkbox" className="a2-tick" checked={on} onChange={() => toggleTick(home, it.id)} aria-label={t(on ? "espace.batch.keep" : "espace.tick.tick", it.title || it.id)} />
+            <div className="a2-tickrow tk-line">
+              <div className="tk-main">{openable(surface, list, lists, row.node, it, true)}</div>
+              <span className="tk-why">
+                <button type="button" className="tk-act" disabled={names.length < 2 || !on} title={names.length > 1 ? t("espace.tick.change") : undefined} onClick={() => changeAction(home, it.id, names, action)}>
+                  {word.toLowerCase()}
+                </button>
+                <span className="tk-reason">{it.tick.reason}</span>
+              </span>
+            </div>
           </li>
         );
       })}

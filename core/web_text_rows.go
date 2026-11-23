@@ -45,6 +45,15 @@ var rowStrings = map[string]map[string]string{
 		"espace.batch.keep": "Décocher « %s » : le garder",
 		"espace.batch.kept": "%d gardé(s)",
 
+		// Prototype « Eriphe coche, tu cliques » (proto/eriphe-coche).
+		"espace.tick.tick":     "Cocher « %s »",
+		"espace.tick.change":   "Changer d'action",
+		"espace.tick.bar":      "Ce qu'Eriphe a coché",
+		"espace.tick.accounts": "%d comptes",
+		"espace.tick.calls":    "Un appel par compte : %s",
+		"espace.tick.left":     "%d décoché(s), ils restent",
+		"espace.tick.failed":   "N'a pas pu se faire : rien n'a bougé.",
+
 		"espace.row.no":       "Non, pas ça",
 		"espace.row.done":     "Fait",
 		"espace.row.running":  "En cours…",
@@ -91,6 +100,15 @@ var rowStrings = map[string]map[string]string{
 
 		"espace.batch.keep": "Untick “%s”: keep it",
 		"espace.batch.kept": "%d kept",
+
+		// Prototype "Eriphe ticks, you click" (proto/eriphe-coche).
+		"espace.tick.tick":     "Tick “%s”",
+		"espace.tick.change":   "Change the action",
+		"espace.tick.bar":      "What Eriphe ticked",
+		"espace.tick.accounts": "%d accounts",
+		"espace.tick.calls":    "One call per account: %s",
+		"espace.tick.left":     "%d unticked, they stay",
+		"espace.tick.failed":   "Could not be done: nothing moved.",
 
 		"espace.row.no":       "No, not that",
 		"espace.row.done":     "Done",

@@ -8,6 +8,7 @@ import { sourceKey, store, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Cards } from "../page/Cards";
 import { Props } from "./Props";
+import { TickBar } from "./TickBar";
 import { blockOf, messages, pieces, sourceLists, sourceMessage, surfaceOf, toGesture, type Piece } from "./blocks";
 
 // Doc draws a node's page: its text as Markdown, by the page's own
@@ -92,8 +93,8 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
     });
   }, [latest, page]);
   const [opened] = useState<NonNullable<Lists["opened"]>>(() => new Map());
+  const told = useMemo(() => sourceLists(page, (block, component) => (latest ? rows[sourceKey(page.node.id, block, component)] : undefined)), [latest, page, rows]);
   const lists = useMemo<Lists>(() => {
-    const told = sourceLists(page, (block, component) => (latest ? rows[sourceKey(page.node.id, block, component)] : undefined));
     return {
       list: (surface, component) => told.get(surface)?.find((l) => l.component === component),
       // Only on the last version: an older one shows its rows.
@@ -102,8 +103,9 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
       marked: (surface) => page.parts.some((p) => !!p.block?.external && surfaceOf(page.node.id, p.block.name) === surface),
       node: (id) => nodes[id],
       openNode: onOpen,
+      home: latest ? page.node.id : undefined,
     };
-  }, [latest, page, rows, opened, nodes, onOpen]);
+  }, [latest, page, told, opened, nodes, onOpen]);
 
   const surfaces = useSyncExternalStore(adapter.subscribe, adapter.surfaces);
   if (ps.length === 0)
@@ -142,6 +144,7 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
           );
         })}
       </div>
+      {latest && <TickBar node={page.node.id} lists={[...told.values()].flat()} />}
     </ListsContext.Provider>
   );
 }
