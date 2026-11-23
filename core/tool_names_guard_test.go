@@ -33,6 +33,7 @@ var toolNameAllowed = map[string]string{
 	"github_app.go":       "GitHub's app, the provider of its connections: its permissions",
 	"repo_lend.go":        "git through GitHub, lending a repository: its permissions",
 	"about_key.go":        "the memory's keys: « mail » or « event » are kinds of items the brain must not take for a key, « agenda » a record; not tools",
+	"node_grammar.go":     "the brain's grammar: an example block reads mails, as an example; no code branches on it",
 }
 
 // commonWords are names of Eriphe's own tools that are also core's own
@@ -53,6 +54,10 @@ var namedTools = []string{
 // namedApps are apps' names core once branched on, found anywhere in a
 // string (a query's list of channels).
 var namedApps = []string{"home assistant"}
+
+// toolOfRe finds a tool of a server named in a text: mail/search_messages,
+// mail.move.
+var toolOfRe = regexp.MustCompile(`\b([a-z]+)[/.]([a-z_]{3,})\b`)
 
 // toolNameHits are the strings of a file that name a tool: words, a
 // name (the names of Eriphe's own tools and providers, as their data
@@ -88,7 +93,8 @@ func toolNameHits(t *testing.T, file string, words map[string]bool) []string {
 		if h, _, ok := strings.Cut(s, "."); ok && !strings.Contains(h, "/") && len(h) < len(head) {
 			head = h
 		}
-		hit := words[norm.ReplaceAllString(s, "")] || slices.Contains(namedTools, s) ||
+		embedded := slices.ContainsFunc(toolOfRe.FindAllStringSubmatch(s, -1), func(m []string) bool { return words[m[1]] })
+		hit := embedded || words[norm.ReplaceAllString(s, "")] || slices.Contains(namedTools, s) ||
 			slices.ContainsFunc(namedApps, func(a string) bool { return strings.Contains(s, a) }) ||
 			head != s && words[head] && regexp.MustCompile(`^[a-z]+[/.][a-z_]+$`).MatchString(s)
 		if hit {
@@ -149,10 +155,11 @@ func TestToolNameGuardCatches(t *testing.T) {
 // mail/search_messages, for instance.
 var a = map[string]string{"mail": "x", "agenda": "y", "via NOT IN ('Home Assistant')": "z"}
 var b = []string{"mail/search_messages", "pull_request_read", "pullNumber", " (agenda)"}
-var c = []string{"files", "mem.saved", "remote", "card.noun.item.one", "local"}
+var c = []string{"files", "mem.saved", "remote", "card.noun.item.one", "local", "a ref (box.move)"}
+var d = "a ref there (mail.move): asked"
 `), 0o600)
 	hits := toolNameHits(t, file, guardedWords(t))
-	if len(hits) != 7 {
+	if len(hits) != 8 {
 		t.Fatalf("hits %v", hits)
 	}
 }

@@ -157,6 +157,23 @@ func (m *fakeMonitor) server() *mcp.Server {
 		}) (*mcp.CallToolResult, map[string]any, error) {
 			return nil, map[string]any{"discarded": len(in.IDs)}, nil
 		})
+	// tag and flag declare a read for their card (card_context.go): tag the
+	// status, a free read; flag silence, a write, never run for a card.
+	reads := func(tool, with string) mcp.Meta {
+		return mcp.Meta{readsMetaKey: map[string]any{
+			"tools": []any{map[string]any{"tool": tool}}, "with": []any{with},
+			"show": []any{map[string]any{"field": "service", "name": map[string]any{"fr": "Service", "en": "Service"}}},
+		}}
+	}
+	for name, meta := range map[string]mcp.Meta{"tag": reads("status", "service"), "flag": reads("silence", "uid")} {
+		mcp.AddTool(s, &mcp.Tool{Name: name, Annotations: &mcp.ToolAnnotations{OpenWorldHint: closedWorld}, Meta: meta},
+			func(context.Context, *mcp.CallToolRequest, struct {
+				Service string `json:"service,omitempty"`
+				UID     string `json:"uid,omitempty"`
+			}) (*mcp.CallToolResult, map[string]any, error) {
+				return nil, map[string]any{"ok": true}, nil
+			})
+	}
 	// respond says its call itself, as the calendar server's respond_event
 	// does (call_says.go).
 	mcp.AddTool(s, &mcp.Tool{Name: "respond", Title: "Answer an invitation", Meta: mcp.Meta{saysMetaKey: map[string]any{

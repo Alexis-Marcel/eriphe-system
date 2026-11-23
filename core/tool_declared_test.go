@@ -82,3 +82,59 @@ func TestPresetDeclares(t *testing.T) {
 		t.Errorf("another server: %v", meta)
 	}
 }
+
+// A card reads what its call names with the read its tool declares, only
+// a free read: a write declared as one is never run for a card.
+func TestCardReadsOnlyFreeReads(t *testing.T) {
+	c, fm, _ := viewCore(t)
+	fs := c.callContext(t.Context(), "mcp__monitor__tag", map[string]any{"service": "api"})
+	if len(fs) != 1 || fs[0].Name != "Service" || fs[0].Value != "api" {
+		t.Errorf("a free read: %+v", fs)
+	}
+	if fs := c.callContext(t.Context(), "mcp__monitor__flag", map[string]any{"uid": "a1"}); fs != nil {
+		t.Errorf("a write read for a card: %+v", fs)
+	}
+	fm.mu.Lock()
+	defer fm.mu.Unlock()
+	if len(fm.silenced) != 0 {
+		t.Errorf("silence ran for a card: %v", fm.silenced)
+	}
+}
+
+// Every declaration core holds (its own tools', its presets') says its
+// words in French and English.
+func TestCoreDeclarationsInBothLanguages(t *testing.T) {
+	metas := map[string]mcp.Meta{"catalog_accept": {saysMetaKey: acceptSays}}
+	for _, p := range toolPresets {
+		for k, m := range p.Meta {
+			metas[p.ID+"/"+k] = m
+		}
+	}
+	both := func(m map[string]string) bool { return m["fr"] != "" && m["en"] != "" }
+	bothN := func(m map[string][]string) bool { return len(m) == 0 || len(m["fr"]) == 2 && len(m["en"]) == 2 }
+	for name, m := range metas {
+		if s := saysOf(m); s != nil && (!both(s.Text) || !bothN(s.Items) || !bothN(s.Done) || len(s.Item) > 0 && !both(s.Item)) {
+			t.Errorf("%s says in one language: %+v", name, s)
+		}
+		if r := readsOf(m); r != nil {
+			for _, f := range r.Show {
+				if !both(f.Name) {
+					t.Errorf("%s names %s in one language", name, f.Field)
+				}
+			}
+		}
+		if saysOf(m) == nil && readsOf(m) == nil {
+			t.Errorf("%s declares nothing that reads: %v", name, m)
+		}
+	}
+}
+
+// A number is said as written, however large: a pull request's #1234567.
+func TestSaysANumber(t *testing.T) {
+	if got := (&toolSays{}).argWords("n", 1234567.0, "fr", nil); got != "1234567" {
+		t.Errorf("%q", got)
+	}
+	if got := (&toolSays{}).argWords("n", 2.5, "fr", nil); got != "2.5" {
+		t.Errorf("%q", got)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"maps"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -271,7 +272,7 @@ func (s *toolSays) argWords(name string, v any, lang string, loc *time.Location)
 		}
 		return buttonText(strings.Join(parts, ", "), 60)
 	case float64:
-		return fmt.Sprint(x)
+		return strconv.FormatFloat(x, 'f', -1, 64) // 1234567, not 1.234567e+06
 	}
 	return ""
 }

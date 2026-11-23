@@ -127,7 +127,7 @@ func newMCPServer(c *core) *mcp.Server {
 		// Checks fix a misconfigured contract (contract.go).
 		Checks []taskCheck `json:"checks,omitempty" jsonschema:"to fix a misconfigured contract of an idle task: all its checks, replacing the contract's; they run when its next turn ends (reply optional)"`
 		// Release asks the user to release tools lent held back (access_card.go).
-		Release []string `json:"release,omitempty" jsonschema:"tools or accesses the task was lent held back (run_task resources with hold), as their ref there (mail.move): the user is asked on a card, and only their yes authorizes them"`
+		Release []string `json:"release,omitempty" jsonschema:"tools or accesses the task was lent held back (run_task resources with hold), as their ref there (server.tool): the user is asked on a card, and only their yes authorizes them"`
 	}
 	tool(s, "answer_task", "Answer what a task waits for: reply to its question; with checks, fix its contract's misconfigured checks; with release, ask the user on a card to release the tools it was lent held back.",
 		func(ctx context.Context, in answerIn) (map[string]string, error) {

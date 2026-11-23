@@ -27,7 +27,10 @@ import (
 //   - with are the call's arguments the read takes; a call that lacks one
 //     is not read.
 //   - tools are the reads, the first one the server has: called with the
-//     with arguments, and its own args.
+//     with arguments, and its own args; only a free read runs (freeCall:
+//     a read by its annotations, with an account, free under its policy,
+//     never a write nor a Never). What it says goes to the card alone,
+//     for the user's eyes, never to a model.
 //   - show are the fields of what it said (a JSON object) the card shows,
 //     in order, named in the user's language; the first must be there, or
 //     nothing is shown.
@@ -151,6 +154,9 @@ func (c *core) callContext(ctx context.Context, tool string, input map[string]an
 	}
 	return r.readContext(input, c.userLang(), func(name string) bool { return u.toolByClaudeName(name) != nil },
 		func(name string, args map[string]any) (string, error) {
+			if !c.freeCall(claudeToolName(u.name, name), args) {
+				return "", fmt.Errorf("%s is not a free read: not read for a card", name)
+			}
 			raw, err := json.Marshal(args)
 			if err != nil {
 				return "", err
