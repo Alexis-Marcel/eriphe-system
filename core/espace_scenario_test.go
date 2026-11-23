@@ -1207,9 +1207,8 @@ func (sc *scenario) handleTurns(rw http.ResponseWriter, r *http.Request) {
 // into one (call_fold.go).
 func (sc *scenario) handleProposals(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
-	found, _ := c.nodes.Find("Mes mails", false, 10)
 	node := ""
-	for _, s := range found {
+	for _, s := range liveSummaries(sc.t, c) {
 		if s.Title == "Mes mails" {
 			node = s.ID
 		}

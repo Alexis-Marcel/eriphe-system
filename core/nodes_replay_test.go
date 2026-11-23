@@ -177,8 +177,8 @@ func TestNodesReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	t.Cleanup(stop)
 	sc := newScenario(t, ctx)
+	t.Cleanup(stop) // run first: the core's loops stop before its folder goes
 	c := sc.c
 	mail, err := sc.mail()
 	if err != nil {
