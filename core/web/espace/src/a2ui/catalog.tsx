@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useContext, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createComponentImplementation, type ReactComponentImplementation } from "@a2ui/react";
 import { Catalog, CommonSchemas } from "@a2ui/web_core/v1_0";
 import { z } from "zod";
@@ -10,7 +10,8 @@ import { useNow } from "./now";
 import { functions, num, number, time, wall, when } from "./format";
 import { Icon as IconView, ICON_NAMES } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
-import { BatchContext, sharedCard, SourceRows, useList, type Row } from "./lists";
+import { BatchContext, ListsContext, sharedCard, SourceRows, useList, type Row } from "./lists";
+import { NodeTitle } from "../graph/Title";
 import { InlineYes } from "./inline";
 import { cleanTrend, Spark } from "./spark";
 import { useMoved, useProposals, type ProposalView } from "./proposals";
@@ -700,6 +701,7 @@ function change(lang: Lang, v: unknown): string {
 
 function cell(lang: Lang, kind: string | undefined, v: unknown): string {
   if (v === null || v === undefined) return "";
+  if (Array.isArray(v)) return v.map((x) => (typeof x === "object" ? "" : cell(lang, kind, x))).filter(Boolean).join(", ");
   if (kind === "change") return change(lang, v);
   if (kind === "number") {
     const n = num(v);
@@ -723,6 +725,7 @@ const Table = createComponentImplementation(
   },
   ({ props }) => {
     const { t, lang } = useWords();
+    const lists = useContext(ListsContext);
     const rows = (Array.isArray(props.rows) ? props.rows : []).filter((r): r is Record<string, unknown> => !!r && typeof r === "object");
     const cols = props.columns ?? [];
     if (!rows.length) return <p className="a2-empty">{str(props.emptyText) || t("espace.a2.table.empty")}</p>;
@@ -737,15 +740,33 @@ const Table = createComponentImplementation(
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => (
-              <tr key={i}>
-                {cols.map((c) => (
-                  <td key={c.key} className={`a2-col-${c.kind ?? "text"}`}>
-                    {cell(lang, c.kind, r[c.key])}
-                  </td>
-                ))}
-              </tr>
-            ))}
+            {rows.map((r, i) => {
+              // A row that names a node of the graph (a node_find source's):
+              // its title as the graph shows it, marked when it may be
+              // someone else's words; its first cell opens its page.
+              const n = typeof r.id === "string" ? lists?.node?.(r.id) : undefined;
+              return (
+                <tr key={i}>
+                  {cols.map((c, j) => {
+                    let v: ReactNode = cell(lang, c.kind, r[c.key]);
+                    if (n && c.key === "title") v = <NodeTitle x={n} fallback={str(r.title)} />;
+                    if (n && j === 0 && lists?.openNode) {
+                      const open = lists.openNode;
+                      v = (
+                        <button type="button" className="linkish a2-row-open" onClick={() => open(n.id)}>
+                          {v}
+                        </button>
+                      );
+                    }
+                    return (
+                      <td key={c.key} className={`a2-col-${c.kind ?? "text"}`}>
+                        {v}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

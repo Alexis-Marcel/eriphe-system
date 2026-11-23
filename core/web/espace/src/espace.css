@@ -916,6 +916,14 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .pg-body > .pg-foot { margin: var(--sp-5) calc(-1 * var(--pg-pad)) calc(-1 * var(--sp-5)); }
 /* Its rhythm: a step of --sp-5 between its parts (a paragraph, a block),
    --sp-3 inside a block, --sp-2 inside a column. */
+.pg-props { margin: 0 0 var(--sp-4); display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); font-size: var(--fs-small); color: var(--fg3); }
+.pg-tags { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); }
+.pg-tag { color: var(--fg2); }
+.pg-prop { display: flex; gap: var(--sp-1); min-width: 0; }
+.pg-prop dt { margin: 0; }
+.pg-prop dd { margin: 0; color: var(--fg2); overflow-wrap: anywhere; }
+.a2-row-open { color: inherit; text-decoration-color: var(--line); }
+.a2-row-open:hover { text-decoration-color: currentColor; }
 .pg-doc { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); }
 .pg-doc .a2-markdown > :first-child { margin-top: 0; }
 .a2-block { display: flex; flex-direction: column; gap: var(--sp-3); }

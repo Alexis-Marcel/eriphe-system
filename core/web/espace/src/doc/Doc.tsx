@@ -7,6 +7,7 @@ import { ask, openItem, type ListRow, type NodePage } from "../data/api";
 import { sourceKey, store, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Cards } from "../page/Cards";
+import { Props } from "./Props";
 import { blockOf, messages, pieces, sourceLists, sourceMessage, surfaceOf, toGesture, type Piece } from "./blocks";
 
 // Doc draws a node's page: its text as Markdown, by the page's own
@@ -99,13 +100,22 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
       open: latest ? (surface, list, item) => openItem(page.node.id, surface.slice(page.node.id.length + 2), list.source, item) : undefined,
       opened,
       marked: (surface) => page.parts.some((p) => !!p.block?.external && surfaceOf(page.node.id, p.block.name) === surface),
+      node: (id) => nodes[id],
+      openNode: onOpen,
     };
-  }, [latest, page, rows, opened]);
+  }, [latest, page, rows, opened, nodes, onOpen]);
 
   const surfaces = useSyncExternalStore(adapter.subscribe, adapter.surfaces);
-  if (ps.length === 0) return <p className="pg-empty">{t("espace.page.empty")}</p>;
+  if (ps.length === 0)
+    return (
+      <>
+        <Props page={page} />
+        <p className="pg-empty">{t("espace.page.empty")}</p>
+      </>
+    );
   return (
     <ListsContext.Provider value={lists}>
+      <Props page={page} />
       <div className="pg-doc">
         {ps.map((p: Piece, i) => {
           if (p.kind === "text") return <Markdown key={i} text={p.text} newTab={t("espace.a2.newtab")} wiki={wiki} />;

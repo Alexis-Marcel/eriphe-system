@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
-import type { ListRow, Opened, SourceList } from "../data/api";
+import type { GraphNode, ListRow, Opened, SourceList } from "../data/api";
 import { useWords } from "../i18n";
 import { InlineYes, RowItem } from "./inline";
 import { Opener, type OpenState } from "./opener";
@@ -22,6 +22,10 @@ export type Lists = {
   open?: (surface: string, list: SourceList, item: string) => Promise<Opened>;
   opened?: Map<string, OpenState>;
   marked?: (surface: string) => boolean;
+  // node: the graph's node a row's id names, if it is one (a node_find
+  // source's rows); openNode opens its page beside this one.
+  node?: (id: string) => GraphNode | undefined;
+  openNode?: (id: string) => void;
 };
 
 export const ListsContext = createContext<Lists | null>(null);
