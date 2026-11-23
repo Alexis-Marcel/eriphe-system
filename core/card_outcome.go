@@ -155,7 +155,7 @@ func (c *core) asksExec(asks []accessQuestion) (state, why, words string, extern
 // it ran (callToBrain, callsCardRan). A plain yes or no in words is told
 // with the user's message (cardAnswerLine), which carries the outcome.
 // A card withdrawn tells nobody: with its node, the user set the subject
-// aside; by Eriphe, its tool's answer says it (card_withdraw).
+// aside; by Eriphe, its tool's answer says it (withdraw_proposal).
 
 // cardTold is what came of a card, in the words of an event: Node is the
 // node it is of, "" for the card's own (cardNodes).

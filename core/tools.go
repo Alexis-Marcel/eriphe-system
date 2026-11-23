@@ -176,7 +176,7 @@ func newMCPServer(c *core) *mcp.Server {
 	registerSkillRunsTool(s, c)    // skill_runs (skill_report.go)
 	registerMonitorTools(s, c)     // write_monitor, monitors (monitors.go)
 	registerViewTool(s, c)         // propose_view (view_card.go)
-	registerCardWithdrawTool(s, c) // card_withdraw (card_withdraw.go)
+	registerCardWithdrawTool(s, c) // withdraw_proposal (card_withdraw.go)
 	registerNodeTools(s, c)        // node_open, node_find, node_read, node_write, node_edit, node_set, node_show, item_note, node_settle (node_tools.go)
 	c.registerCatalogTools(s)      // catalog_read, sources_read (node_catalog.go)
 	registerNotifyTools(s, c)      // notify, notifications, rule

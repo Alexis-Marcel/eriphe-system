@@ -27,7 +27,7 @@ type cardWithdrawIn struct {
 }
 
 func registerCardWithdrawTool(s *mcp.Server, c *core) {
-	tool(s, "card_withdraw", "Withdraw a card you made that still waits and the work made obsolete: it no longer asks the user and nothing of it runs. It decides nothing for the user. To replace it, propose the new one as usual.",
+	tool(s, "withdraw_proposal", "Withdraw a card you made that still waits and the work made obsolete: it no longer asks the user and nothing of it runs. It decides nothing for the user. To replace it, propose the new one as usual.",
 		func(ctx context.Context, in cardWithdrawIn) (map[string]any, error) {
 			return c.brainWithdrawCard(ctx, in.Ref)
 		})

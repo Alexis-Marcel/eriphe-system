@@ -18,9 +18,9 @@ func TestBrainWithdrawsHisCard(t *testing.T) {
 	c.cardNow(cardMemory, x.ID, "", nodeRef(node))
 	before := c.store.lastMessageSeq()
 
-	out, isErr := callBrainTool(t, c, "card_withdraw", map[string]any{"ref": ref})
+	out, isErr := callBrainTool(t, c, "withdraw_proposal", map[string]any{"ref": ref})
 	if isErr || out["withdrawn"] != ref {
-		t.Fatalf("card_withdraw: %v", out)
+		t.Fatalf("withdraw_proposal: %v", out)
 	}
 	if y := cardOfRef(t, c, ref); y.State != cardGone || y.By != cardByEriphe {
 		t.Errorf("the card: %s by %q", y.State, y.By)
@@ -37,10 +37,10 @@ func TestBrainWithdrawsHisCard(t *testing.T) {
 	if s := nodeStatusNow(t, c, node); s == nodeWaits {
 		t.Error("its node still waits")
 	}
-	if _, isErr := callBrainTool(t, c, "card_withdraw", map[string]any{"ref": ref}); !isErr {
+	if _, isErr := callBrainTool(t, c, "withdraw_proposal", map[string]any{"ref": ref}); !isErr {
 		t.Error("a card no longer waiting withdrawn again")
 	}
-	if _, isErr := callBrainTool(t, c, "card_withdraw", map[string]any{"ref": "nothing:1"}); !isErr {
+	if _, isErr := callBrainTool(t, c, "withdraw_proposal", map[string]any{"ref": "nothing:1"}); !isErr {
 		t.Error("no card's ref taken")
 	}
 }
