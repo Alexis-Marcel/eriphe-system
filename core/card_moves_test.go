@@ -176,6 +176,13 @@ func TestProposalMoves(t *testing.T) {
 	c.liveCard(cardOf(t, c, cardRule, r2.ID))
 	moved("found decided")
 
+	// A card linked to a node names it: its page reads it again.
+	c.store.db.Exec(`INSERT INTO node_cards (node, ref, created) VALUES ('n1', ?, 1)`, ref)
+	c.proposalMoved(ref)
+	if ev, _, _ := c.watchProposals(seq); !slices.Contains(ev.Refs, ref) || !slices.Equal(ev.Nodes, []string{"n1"}) {
+		t.Errorf("a node's card: %+v", ev)
+	}
+
 	// A stream far behind reads everything again.
 	for i := 0; i < proposalFeedMax+2; i++ {
 		c.proposalMoved("rule:1")

@@ -5,9 +5,10 @@ import { expect, type Locator, type Page } from "@playwright/test";
 // graph and the camera are at rest at once; the tests tagged @motion play
 // with motion and wait here for real.
 
-// rest waits until the graph is at rest and the camera still, as the
-// viewport says (data-still); false when no graph is drawn (a phone's
-// list).
+// rest waits until the graph is at rest, the camera still, no page
+// springing open and none being read, as the viewport says (data-still,
+// Graph.tsx); false when no graph is drawn (a phone's list). Every spec
+// waits for motion here, never with a fixed sleep.
 export async function rest(page: Page): Promise<boolean> {
   if (!(await page.locator(".gr-viewport").count())) return false;
   await expect(page.locator(".gr-viewport[data-still]")).toHaveCount(1, { timeout: 60_000 });

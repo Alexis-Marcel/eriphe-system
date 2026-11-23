@@ -255,12 +255,24 @@ func (w *web) handleArchives(rw http.ResponseWriter, r *http.Request, _ *session
 // espaceView is the workspace as the user left it: the pages open, the one
 // the bar talked to, the last of Eriphe's shows it took (so that a page
 // the user closed does not open again with the next visit) and the display
-// settings.
+// settings; and what the user closed of the orb's, that no screen shows it
+// again.
 type espaceView struct {
-	Open  []string `json:"open"`
-	Talk  string   `json:"talk,omitempty"`
-	Shown int      `json:"shown,omitempty"`
-	Theme string   `json:"theme,omitempty"` // "" (the system's), light or dark
+	Open  []string        `json:"open"`
+	Talk  string          `json:"talk,omitempty"`
+	Shown int             `json:"shown,omitempty"`
+	Theme string          `json:"theme,omitempty"` // "" (the system's), light or dark
+	Orb   *espaceOrbClose `json:"orb,omitempty"`
+}
+
+// espaceOrbClose is what the user closed of the orb's (web/espace,
+// orb/model.ts): the home's answer, the words seen and the failures by
+// their message's seq, the cards by their id; each only grows.
+type espaceOrbClose struct {
+	Answer int64 `json:"answer"`
+	Seen   int64 `json:"seen"`
+	Wait   int64 `json:"wait"`
+	Failed int64 `json:"failed"`
 }
 
 const (
@@ -313,6 +325,9 @@ func (w *web) handleEspaceView(rw http.ResponseWriter, r *http.Request, _ *sessi
 	}
 	if in.Shown < 0 {
 		in.Shown = 0
+	}
+	if o := in.Orb; o != nil {
+		o.Answer, o.Seen, o.Wait, o.Failed = max(0, o.Answer), max(0, o.Seen), max(0, o.Wait), max(0, o.Failed)
 	}
 	if len(in.Open) > espaceOpenMax {
 		in.Open = in.Open[:espaceOpenMax]

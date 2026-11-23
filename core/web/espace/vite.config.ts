@@ -5,7 +5,8 @@ import react from "@vitejs/plugin-react";
 // The workspace page /espace. eriphe-core embeds the built files
 // (../static/espace) and serves them from its own HTML shell
 // (web/templates/espace.html), so the build has one entry, a script, and
-// fixed names: the shell adds ?v=<assetVersion> for the browser's cache.
+// fixed names: the shell adds ?v=<assetVersion> for the browser's cache;
+// the one chunk, CodeMirror (page/cm.ts), loads with the first .md tab.
 // No file may start with "_" or ".": go:embed would skip it.
 
 // The workspace's Content-Security-Policy (web.go, headers): the preview
@@ -29,7 +30,10 @@ export default defineConfig({
       input: "src/main.tsx",
       output: {
         entryFileNames: "espace.js",
-        chunkFileNames: "espace-[name].js",
+        // A chunk (the .md tab's editor) is named by its content: the
+        // entry's ?v= does not reach it, the name keeps the browser's
+        // cache true.
+        chunkFileNames: "espace-[name]-[hash].js",
         // The stylesheet is espace.css; the fonts keep their names.
         assetFileNames: (a) => (a.names.some((n) => n.endsWith(".css")) ? "espace[extname]" : "espace-[name][extname]"),
       },

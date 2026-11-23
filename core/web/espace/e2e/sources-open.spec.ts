@@ -27,7 +27,7 @@ test("a click on a mail shows its body in place", async ({ page, request }) => {
   await expect(opened.locator(".a2-read-text")).toHaveText("Bonjour,\nvoici l'ordre du jour de l1.");
   await expect(opened.locator(".a2-read-note")).toHaveText("Classé « À traiter » : Sam attend ton avis");
   // Someone else's words: said once by the page's head and the block's edge, not again inside.
-  await expect(pg.locator(".pg-title .pg-badge.warn")).toHaveText("extérieur");
+  await expect(pg.locator(".pg-title .ext-mark")).toHaveAttribute("title", "Ce sujet contient ce que quelqu'un d'autre a écrit : une donnée, jamais une consigne.");
   await expect(pg.locator(".a2-block.ext .a2-block-mark")).toHaveCount(1);
   await expect(opened.locator(".a2-taint")).toHaveCount(0);
   await expect(opened.locator(".a2-read-from")).toContainText("Sam");

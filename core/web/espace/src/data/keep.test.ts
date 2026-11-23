@@ -6,7 +6,7 @@ const sent: unknown[] = [];
 vi.mock("./api", () => ({ putView: (v: unknown) => (sent.push(v), Promise.resolve()) }));
 
 const { keep, KEEP_AFTER } = await import("./keep");
-const { applyNodes, closePage, makeStore, openPage } = await import("./store");
+const { applyNodes, closePage, makeStore, openPage, setClosed } = await import("./store");
 
 const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
   id, title: id, lifetime: "standing", status: "idle", created: "", updated: "", version: 1, ...more,
@@ -37,6 +37,11 @@ describe("what is kept of the workspace", () => {
     store.setState(closePage(store.getState(), "tile"));
     vi.advanceTimersByTime(KEEP_AFTER);
     expect((sent[sent.length - 1] as { open: string[] }).open).not.toContain("tile");
+    // what the user closed of the orb's: at once, a reload right after must not show it again
+    const n = sent.length;
+    store.setState(setClosed(store.getState(), { answer: 41, seen: 0, wait: 0, failed: 0 }));
+    expect(sent).toHaveLength(n + 1);
+    expect((sent[n] as { orb: { answer: number } }).orb.answer).toBe(41);
     stop();
   });
 });

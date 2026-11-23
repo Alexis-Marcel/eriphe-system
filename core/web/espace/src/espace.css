@@ -567,7 +567,6 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
   --run: var(--s0);
 }
 .espace { position: fixed; inset: 0; overflow: hidden; }
-.micro { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; color: var(--fg3); text-transform: uppercase; }
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--fg3); flex: none; }
 .dot.yours { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
 .dot.run { background: var(--run); animation: breathe 1.4s ease-in-out infinite; }
@@ -601,17 +600,15 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 @keyframes orbit { to { rotate: 360deg; } }
 @media (prefers-reduced-motion: reduce) { .gr-sat { animation: none; rotate: 40deg; } }
 .gr-node.standing .gr-core { box-shadow: 0 0 0 1px var(--line-strong), inset 0 0 0 4px color-mix(in oklab, var(--bg) 60%, transparent), 0 0 24px -8px var(--accent); }
-.gr-node.focus .gr-core { box-shadow: 0 0 0 1.5px var(--accent), 0 0 34px 0 color-mix(in oklab, var(--accent) 55%, transparent); }
 .gr-node.held .gr-core { cursor: grabbing; }
 .gr-code { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; }
 .gr-glyph { font-size: 10px; color: var(--ok); }
+/* A node that waits: its halo, one sign: its glow, and its core ringed in the same violet (.gr-node.yours .gr-core). */
 .gr-halo { border-radius: 50%; pointer-events: none; background: radial-gradient(circle, color-mix(in oklab, var(--accent) 28%, transparent), transparent 62%); animation: halo 3.2s ease-in-out infinite; }
 @keyframes halo { 0%, 100% { opacity: 0.55; scale: 0.92; } 50% { opacity: 1; scale: 1.05; } }
 .gr-ring { pointer-events: none; overflow: visible; }
 .gr-orbit { fill: none; stroke: var(--link); stroke-width: 1; stroke-dasharray: 1 6; vector-effect: non-scaling-stroke; }
 .gr-ring-run { fill: none; stroke: var(--run); stroke-width: 2; stroke-dasharray: 6 5; animation: spin 6s linear infinite; transform-origin: 0 0; }
-.gr-ring-yours { fill: none; stroke: var(--accent); stroke-width: 2.5; transform-origin: 0 0; animation: wait-pulse 2.4s ease-in-out infinite; }
-@keyframes wait-pulse { 0%, 100% { opacity: 1; scale: 1; } 50% { opacity: 0.45; scale: 1.12; } }
 .gr-node.yours .gr-core { box-shadow: 0 0 0 2px var(--accent), 0 0 26px -2px color-mix(in oklab, var(--accent) 60%, transparent); }
 @keyframes spin { to { transform: rotate(360deg); } }
 /* A node's glance as a tile (graph/glance.ts): its core reshaped
@@ -691,10 +688,6 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .pg-crumb { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; letter-spacing: inherit; text-transform: inherit; }
 .pg-crumb:hover { color: var(--fg); }
 .pg-badge { font-style: normal; padding: 0 6px; border-radius: 5px; border: 1px solid var(--line-strong); font-size: 9.5px; }
-.pg-badge.warn { color: var(--warn-text); border-color: color-mix(in oklab, var(--warn) 50%, transparent); }
-/* Beside the title, on its line: a compact badge, never a line of its own. */
-.pg-title h2 .pg-badge { display: inline-block; margin-left: 10px; vertical-align: 0.25em; font-family: var(--mono); font-size: 9.5px; font-weight: 500; line-height: 15px;
-  letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; cursor: help; }
 /* The title row: the title takes what the rest leaves, on one line, cut
    short with « … » (whole in its tooltip); its badges stay beside it. */
 .pg-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -711,6 +704,7 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .gr-label .unasked-mark { pointer-events: auto; }
 .pg-title h2 .unasked-mark { margin-left: 8px; padding: 0 5px; vertical-align: 0.25em; border: 1px dashed var(--line-strong); border-radius: 5px; font-size: 10.5px; font-weight: 600; line-height: 15px; color: var(--fg2); white-space: nowrap; }
 .pg-standing { font-size: 15px; line-height: 1; color: var(--accent-text); cursor: help; margin-left: -4px; }
+.ls-row .pg-standing { margin-left: 0; font-size: 13px; }
 .pg-live { display: inline-flex; align-items: center; gap: 6px; color: var(--run); }
 /* Its versions: one chip, the version shown (amber when not the last),
    opening a short list under it, the newest first (page/Versions.tsx). */
@@ -950,7 +944,7 @@ a.notice-text:hover { text-decoration: underline; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .a2-shimmer, .a2-button.is-busy::after, .dot.run, .gr-halo, .gr-ring-run, .gr-ring-yours, .gr-edge, .pg-skel i { animation: none; }
+  .a2-shimmer, .a2-button.is-busy::after, .dot.run, .gr-halo, .gr-ring-run, .gr-edge, .pg-skel i { animation: none; }
   .btn, .a2-option span, .gr-core, .gr-link, .pg { transition: none; }
 }
 

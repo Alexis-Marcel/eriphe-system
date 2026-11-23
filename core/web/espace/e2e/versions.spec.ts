@@ -4,7 +4,7 @@ import { still } from "./rest";
 
 // A page with many versions: one chip in its head, the version shown,
 // that opens their list; the title stays on one line, cut short, its
-// « extérieur » badge beside it, nothing past the page's edge. Played on
+// one ⚠ beside it, nothing past the page's edge. Played on
 // the scenario's test core (TestEspaceScenario), signed in as there, on a
 // fresh urgent mail (POST /e2e/mail: an external node a skill opened, the
 // one thing this file adds to the core), and on the standing « Mails »;
@@ -68,7 +68,7 @@ async function oneLine(pg: Locator, name = title) {
   // graph's camera may scale the page)
   const [w, full] = await tx.evaluate((e) => [e.offsetWidth, e.scrollWidth]);
   expect(w).toBeGreaterThanOrEqual(Math.min(full, 60));
-  for (const sign of await pg.locator(".pg-title h2 .pg-badge.warn, .pg-title .pg-standing").all()) {
+  for (const sign of await pg.locator(".pg-title h2 .ext-mark, .pg-title .pg-standing").all()) {
     const b = (await sign.boundingBox())!;
     expect(Math.abs(b.y + b.height / 2 - (t.y + t.height / 2))).toBeLessThan(t.height / 2);
     expect(b.x).toBeGreaterThan(t.x);

@@ -1,20 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect } from "react";
 import { MotionConfig } from "motion/react";
-import { createAdapter } from "./a2ui/adapter";
-import { galleryFixtures, sampleOrb, sampleProposals } from "./a2ui/fixtures";
 import { coreProposals, ProposalsContext } from "./a2ui/proposals";
-import { Surfaces } from "./a2ui/Surfaces";
 import { tab, type Boot } from "./data/api";
+import type { Dev } from "./dev";
 import { startPresence } from "./data/presence";
-import { sample } from "./data/sample";
-import { onBump } from "./data/samplecore";
 import { applyTheme, keep } from "./data/keep";
-import { applyNodes, applyNotes, openPage, restore, step, store, useGraph } from "./data/store";
+import { applyNotes, openPage, restore, step, store, useGraph } from "./data/store";
 import { connect } from "./data/stream";
 import { Graph } from "./graph/Graph";
 import { List, useNarrow } from "./graph/List";
 import { Hud } from "./hud/Hud";
 import { Bar } from "./orb/Bar";
+import { OrbProvider } from "./orb/useOrb";
 import { useWords } from "./i18n";
 
 // The workspace, Eriphe's home page (#633): the graph of nodes, the pages
@@ -22,8 +19,7 @@ import { useWords } from "./i18n";
 // a small screen, the graph as a list (graph/List.tsx).
 // Nothing here is a screen planned in code: what shows is the graph
 // eriphe-core streams, and what the user opens. With no eriphe-core
-// behind (the dev server) it shows a made-up graph, and says so; ?gallery
-// shows every component of the catalog instead.
+// behind (the dev server) it shows a made-up graph (dev), and says so.
 
 // openAsked is the node a link asks to open (/espace?open=node-<id>).
 export function openAsked(search: string): string | null {
@@ -31,19 +27,9 @@ export function openAsked(search: string): string | null {
   return m ? m[1] : null;
 }
 
-export function App({ boot }: { boot: Boot }) {
-  const { lang } = useWords();
-  const [gallery] = useState(() => new URLSearchParams(location.search).has("gallery"));
-  const proposals = useMemo(() => (boot.live ? coreProposals : sampleProposals(lang)), [boot.live, lang]);
-
+export function App({ boot, dev }: { boot: Boot; dev?: Dev }) {
   useEffect(() => {
-    if (gallery) return;
-    if (!boot.live) {
-      step(store, applyNodes, { reset: true, nodes: sample.nodes });
-      store.setState({ orb: sampleOrb(lang) });
-      // A view the make-believe core changed is read again, as eriphe-core's "doc" says.
-      return onBump((id) => store.setState((s) => ({ docs: { ...s.docs, [id]: (s.docs[id] ?? 0) + 1 } })));
-    }
+    if (dev) return dev.start();
     step(store, restore, boot.view);
     const stop = connect(store);
     const kept = keep(store);
@@ -53,7 +39,7 @@ export function App({ boot }: { boot: Boot }) {
       kept();
       quiet();
     };
-  }, [boot, gallery, lang]);
+  }, [boot, dev]);
 
   // A link that names a node opens its page once the graph has it.
   useEffect(() => {
@@ -72,16 +58,17 @@ export function App({ boot }: { boot: Boot }) {
   const narrow = useNarrow();
   useEffect(() => applyTheme(theme), [theme]);
 
-  if (gallery) return <Gallery />;
   return (
-    <ProposalsContext.Provider value={proposals}>
+    <ProposalsContext.Provider value={dev?.proposals ?? coreProposals}>
       <MotionConfig reducedMotion="user">
-        <div className="espace">
-          {narrow ? <List live={boot.live} /> : <Graph live={boot.live} />}
-          <Hud live={boot.live} />
-          <Bar boot={boot} narrow={narrow} />
-          <Sample live={boot.live} />
-        </div>
+        <OrbProvider>
+          <div className="espace">
+            {narrow ? <List live={boot.live} /> : <Graph live={boot.live} />}
+            <Hud live={boot.live} />
+            <Bar boot={boot} narrow={narrow} />
+            <Sample live={boot.live} />
+          </div>
+        </OrbProvider>
       </MotionConfig>
     </ProposalsContext.Provider>
   );
@@ -92,22 +79,4 @@ function Sample({ live }: { live: boolean }) {
   const empty = useGraph((s) => Object.keys(s.nodes).length === 0);
   if (!live) return <p className="espace-note">{t("espace.sample")}</p>;
   return empty ? <p className="espace-note">{t("espace.empty")}</p> : null;
-}
-
-// Gallery shows every component of the catalog, one surface under the
-// other, to look at them on the dev server.
-function Gallery() {
-  const { lang } = useWords();
-  const [adapter] = useState(() => {
-    const a = createAdapter(lang);
-    a.applyMessages(galleryFixtures(lang));
-    return a;
-  });
-  return (
-    <ProposalsContext.Provider value={sampleProposals(lang)}>
-      <div className="gallery">
-        <Surfaces adapter={adapter} />
-      </div>
-    </ProposalsContext.Provider>
-  );
 }

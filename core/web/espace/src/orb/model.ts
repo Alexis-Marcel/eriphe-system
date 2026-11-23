@@ -1,4 +1,4 @@
-import type { GraphNode, OrbFeed, OrbWords } from "../data/api";
+import type { GraphNode, OrbClosed, OrbFeed, OrbWords } from "../data/api";
 import type { Sent } from "../data/store";
 
 // Eriphe's orb (web_orb.go): what it shows, and where, as pure functions
@@ -29,7 +29,7 @@ import type { Sent } from "../data/store";
 //      seen;
 //   5. rest: in the bar.
 // What the user closed, or saw for its while, is not shown again (Closed,
-// kept in the browser).
+// kept by eriphe-core with the view).
 
 export type Mode = "rest" | "work" | "failed" | "wait" | "answer";
 
@@ -50,8 +50,9 @@ export const WORDS_MS = 120_000;
 
 // Closed is what the user closed or saw for its while: the home's answer
 // (its seq), the words seen (their seq), the cards (their id), the
-// failures (their seq). Seqs and ids only grow.
-export type Closed = { answer: number; seen: number; wait: number; failed: number };
+// failures (their seq). Seqs and ids only grow. eriphe-core keeps it with
+// what is open (the view: data/keep.ts), on any of the user's screens.
+export type Closed = OrbClosed;
 
 export type Mind = {
   now: number; // the orb's clock: how long the page was seen
@@ -122,28 +123,6 @@ export function close(c: Closed, s: Show): Closed {
       return s.pinned ? { ...c, answer: Math.max(c.answer, s.words!.seq) } : { ...c, seen: Math.max(c.seen, s.words!.seq) };
   }
   return c;
-}
-
-// The closed things, kept in the browser so that a reload does not bring
-// them back.
-const CLOSED = "eriphe.espace.orb.closed";
-
-export function loadClosed(): Closed {
-  const none = { answer: 0, seen: 0, wait: 0, failed: 0 };
-  try {
-    const v = JSON.parse(localStorage.getItem(CLOSED) ?? "{}");
-    return { ...none, ...Object.fromEntries(Object.entries(v).filter(([k, n]) => k in none && typeof n === "number")) };
-  } catch {
-    return none;
-  }
-}
-
-export function saveClosed(c: Closed): void {
-  try {
-    localStorage.setItem(CLOSED, JSON.stringify(c));
-  } catch {
-    // no storage: closed for this page only
-  }
 }
 
 /* ---------- where it goes ---------- */
