@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -62,6 +63,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/bilan", sc.handleBilan)
 	mux.HandleFunc("POST /e2e/purge", sc.handlePurge)
 	mux.HandleFunc("POST /e2e/courrier", sc.handleCourrier)
+	mux.HandleFunc("POST /e2e/trash-fails", sc.handleTrashFails)
 	mux.HandleFunc("POST /e2e/proposals", sc.handleProposals)
 	mux.HandleFunc("POST /e2e/catalog", sc.handleCatalog)
 	mux.HandleFunc("POST /e2e/conso", sc.handleConso)
@@ -228,6 +230,7 @@ type scenarioTools struct {
 	deleted [][]string       // supprimer: the ids of each call (sections.spec.ts)
 	read    []string         // lire: the id of each call (sources-open.spec.ts)
 	trashed []string         // trash: "<account>:<ids>" of each call (view-bilan.spec.ts)
+	trashNo string           // trash: answers with this error, trashing nothing (view-failed.spec.ts)
 	replied []string         // repondre: the id of each call (view-bilan.spec.ts)
 	purged  []string         // purger: the ids it deleted (view-refresh.spec.ts)
 	kw      float64          // conso: the house's consumption (view-glance.spec.ts)
@@ -447,6 +450,9 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 			}) (*mcp.CallToolResult, map[string]any, error) {
 				f.mu.Lock()
 				defer f.mu.Unlock()
+				if f.trashNo != "" {
+					return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: f.trashNo}}}, nil, nil
+				}
 				f.trashed = append(f.trashed, in.Account+":"+strings.Join(in.IDs, ","))
 				return nil, map[string]any{"trashed": len(in.IDs)}, nil
 			})
@@ -1019,6 +1025,9 @@ func (sc *scenario) event(b *brainPlay, turn string) string {
 	if strings.Contains(turn, catalogEvent) {
 		return "Un outil de plus : films."
 	}
+	if strings.Contains(turn, "a dit oui") && strings.Contains(turn, "trash") && strings.Contains(turn, "n'a pas pu être exécutée") {
+		return "Échec : le serveur du courrier a refusé de les mettre à la corbeille."
+	}
 	if strings.Contains(turn, "a dit oui") && strings.Contains(turn, "trash") {
 		return "C'est fait : les 2 mails sont à la corbeille."
 	}
@@ -1544,6 +1553,20 @@ func (sc *scenario) handleCourrier(rw http.ResponseWriter, r *http.Request) {
 	c.showNode(id, byBrain, false)
 	c.bump()
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
+}
+
+// handleTrashFails is POST /e2e/trash-fails: the mail's trash answers
+// with an error from now on, its text the body (view-failed.spec.ts); an
+// empty body makes it work again. What it trashed before is back, so the
+// mailbox shows its four mails whatever ran before.
+func (sc *scenario) handleTrashFails(rw http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<10))
+	sc.tools.mu.Lock()
+	sc.tools.trashNo = strings.TrimSpace(string(body))
+	sc.tools.trashed = slices.DeleteFunc(sc.tools.trashed, func(t string) bool { return strings.HasPrefix(t, "perso:c") })
+	no := sc.tools.trashNo
+	sc.tools.mu.Unlock()
+	writeJSON(rw, http.StatusOK, map[string]string{"error": no})
 }
 
 // handleFinish is POST /e2e/finish/{key}: the worker so named finishes.

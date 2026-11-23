@@ -26,7 +26,8 @@ import (
 //     item, by another run, is the card already there.
 //   - Oui runs each call as kept, with the policy read again
 //     (catalogCall); Non runs none. A run's results go to its note, the
-//     others' to the node's trace: the brain is not told.
+//     others' to the node's trace; once all ran, the brain is told how
+//     the yes went, the orb's words (card_outcome.go).
 //   - Its words are code's: the action in a sentence, the items by their
 //     title and detail as their source lists them (call_words.go), its
 //     exact calls, as kept, under Détails. It waits in its node
@@ -129,7 +130,11 @@ func (c *core) callsProposal(p proposal) proposal {
 			}
 			shown = append(shown, f)
 		}
-		details = append(details, callDetail(a, names))
+		if len(asks) == 1 {
+			details = c.callDetails(a, names, c.userLang()) // its parameters by meaning, then its exact call
+		} else {
+			details = append(details, callDetail(a, names))
+		}
 	}
 	p.Fields = append(shown, details...)
 	p.origin = func(lang string) cardOrigin { return c.callsOrigin(first, items, lang) }
@@ -231,7 +236,14 @@ func (c *core) callsOrigin(first accessQuestion, items []string, lang string) ca
 	case len(items) > 1:
 		item = fmt.Sprintf(tr(lang, "card.from.itemsn"), len(items))
 	case first.Item != "" && first.Source != "":
-		item = fmt.Sprintf(tr(lang, "card.from.item"), truncate(oneLine(first.Item), 80), markedWords(first.Source, itemExt, lang))
+		// By its title, never its id: « Picnic » de invitations.
+		name := tr(lang, "card.from.itemnamed")
+		for _, l := range c.labelsOf(first) {
+			if l.ID == first.Item && l.Title != "" {
+				name = fmt.Sprintf(tr(lang, "card.call.itemt"), truncate(oneLine(l.Title), 80))
+			}
+		}
+		item = fmt.Sprintf(tr(lang, "card.from.item"), name, markedWords(first.Source, itemExt, lang))
 	default:
 		item = tr(lang, "card.from.itemn")
 	}
@@ -264,48 +276,28 @@ func (c *core) decideCalls(ctx context.Context, batch int64, approve bool) error
 	return nil
 }
 
-// callsExec is what a calls card's approved calls are doing, as its
-// Proposal shows it: running while one runs, failed if one failed, done
-// once all are.
-func (c *core) callsExec(batch int64) (string, string) {
-	state, why, all := "", "", true
-	for _, a := range c.batchAsks(batch) {
-		if a.State != startApproved {
-			continue
-		}
-		s, w := c.callState(a.ID)
-		switch {
-		case s == callRunning:
-			return callRunning, ""
-		case s == callFailed && state != callFailed:
-			state, why = callFailed, w
-		case s != callDone:
-			all = false
-		}
-	}
-	if state == "" && all {
-		state = callDone
-	}
-	return state, why
-}
-
 // callsAsk tells whether a calls card still asks something of the user:
-// one of its calls waits for a yes, or one it said yes to is not done
-// (about to run, running, or failed).
+// one of its calls waits for a yes, or one it said yes to is about to
+// run or running. Done or failed, it is decided: it leaves its rows
+// (card_outcome.go).
 func (c *core) callsAsk(batch int64) bool {
 	for _, a := range c.batchAsks(batch) {
 		if c.askWaits(a) {
 			return true
 		}
-		if s, _ := c.callState(a.ID); a.State == startApproved && s != callDone {
+		if a.State == startApproved && !callEnded(c.callState(a.ID)) {
 			return true
 		}
 	}
 	return false
 }
 
+// callEnded tells a call's state (callState) that is over: done or failed.
+func callEnded(state, _ string) bool { return state == callDone || state == callFailed }
+
 // itemCardsKept is how long after its yes a card on an item may still be
-// running or failed on its row: an older one asks nothing more there.
+// about to run or running on its row: an older one asks nothing more
+// there.
 const itemCardsKept = 7 * 24 * time.Hour
 
 // itemCards are the cards on a node's items of one of its sources that
@@ -371,14 +363,13 @@ func labelOf(a accessQuestion, item, source string) bool {
 }
 
 // accessAsks tells whether an access card still asks something of the
-// user: it waits for a yes, or its yes's call is not done (about to run,
-// running, or failed).
+// user: it waits for a yes, or its yes's call is about to run or
+// running. Done or failed, it is decided: it leaves its rows.
 func (c *core) accessAsks(a accessQuestion) bool {
 	if a.State == startProposed {
 		return true
 	}
-	s, _ := c.callState(a.ID)
-	return a.State == startApproved && s != callDone
+	return a.State == startApproved && !callEnded(c.callState(a.ID))
 }
 
 // accessCardMoved is the brain's call on items of a node that was made,
@@ -437,7 +428,14 @@ func (c *core) itemCardMoved(batch int64) {
 	if settled {
 		return // its decision and its call's end may both come here
 	}
-	if slices.ContainsFunc(asks, func(x accessQuestion) bool { return x.State == startApproved }) {
+	// Done once its yes ran, every call well: one failed leaves the item
+	// as it was (its card leaves the row all the same, decided).
+	approved := slices.ContainsFunc(asks, func(x accessQuestion) bool { return x.State == startApproved })
+	failed := slices.ContainsFunc(asks, func(x accessQuestion) bool {
+		s, _ := c.callState(x.ID)
+		return x.State == startApproved && s == callFailed
+	})
+	if approved && !failed {
 		c.itemDoneByCode(a.Node, a.Source, a.Item)
 	}
 	c.readNodeLater(context.Background(), a.Node, []string{a.Source}) // what it settled, as its source says it now
@@ -466,10 +464,10 @@ const itemDone = "done"
 var itemSettleMu sync.Mutex
 
 // itemCallDone keeps how a call on an item went in its node's trace,
-// once decided: not a run's (its note keeps it), and the brain is not
-// told.
+// once decided: not a run's (its note keeps it); one that failed is
+// traced with why already (traceFailedCall).
 func (c *core) itemCallDone(a accessQuestion, text string) {
-	if c.nodes != nil && a.Node != "" {
+	if s, _ := c.callState(a.ID); s != callFailed && c.nodes != nil && a.Node != "" {
 		if err := c.nodes.AppendTrace(a.Node, "user", truncate(text, 400)); err != nil {
 			log.Printf("item card %d: node %s: %v", a.Batch, a.Node, err)
 		}

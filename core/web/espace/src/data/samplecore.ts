@@ -1,4 +1,4 @@
-import type { ListRow, Moved, Opened, PageBlock, PagePart, ProposalView, SourceList } from "./api";
+import { stillAsks, type ListRow, type Moved, type Opened, type PageBlock, type PagePart, type ProposalView, type SourceList } from "./api";
 
 // A small make-believe eriphe-core for the dev server (sample.ts): a few
 // view nodes kept as their author writes them in the node's file (text and
@@ -114,10 +114,6 @@ function block(v: SampleView, b: Authored): PageBlock {
   }
   return { name: b.name, external: b.external, components: comps, data, lists };
 }
-
-// stillAsks tells whether a card still asks something of the user on its
-// page (pendingAsks, web_graph.go): it waits, or its yes runs or failed.
-const stillAsks = (c: ProposalView) => c.state === "pending" || (c.state === "approved" && (c.exec === "running" || c.exec === "failed"));
 
 export function samplePage(id: string): { parts: PagePart[]; cards: ProposalView[]; settled: ProposalView[] } | null {
   const v = viewOf(id);

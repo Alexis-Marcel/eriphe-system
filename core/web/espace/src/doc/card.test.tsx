@@ -65,16 +65,15 @@ describe("a card block", () => {
     expect(card?.querySelector(".a2-proposal-actions .a2-proposal-no")?.getAttribute("aria-label")).toBe("Non");
   });
 
-  it("says where it stands once decided, or withdrawn with its node", async () => {
-    for (const [state, word] of [
-      ["approved", "Validé"],
-      ["rejected", "Refusé"],
-      ["gone", "Proposition retirée"],
-    ]) {
-      await draw(pageWith(view(state)), state);
-      expect(el.querySelector(".pg-card .a2-proposal-kicker")?.textContent).toContain(word);
-      expect(el.querySelector(".pg-card .a2-proposal-actions")).toBeNull();
+  it("leaves the body once decided, done, failed, refused or withdrawn with its node; stays while its yes runs", async () => {
+    for (const p of [view("approved"), { ...view("approved"), exec: "failed" as const }, view("rejected"), view("gone")]) {
+      expect(pieces(pageWith(p)).map((x) => x.kind)).toEqual(["text", "text"]);
+      await draw(pageWith(p), p.state);
+      expect(el.querySelector(".pg-card")).toBeNull();
+      expect(el.querySelector(".pg-card-missing")).toBeNull();
     }
+    const running = { ...view("approved"), exec: "running" as const };
+    expect(pieces(pageWith(running)).map((x) => x.kind)).toEqual(["text", "card", "text"]);
   });
 
   it("says a card that is not the node's is not found, with no Oui", async () => {

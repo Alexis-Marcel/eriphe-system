@@ -80,7 +80,8 @@ func TestSkillRunCallsCard(t *testing.T) {
 		t.Fatalf("run %+v", r)
 	}
 	p, ok := runCard(c, cardRunCalls)
-	if !ok || len(p.Fields) != 1 || !strings.Contains(p.Fields[0].Value, "2.0.0") || p.Tainted == "" || !strings.Contains(p.Text("fr"), "rollback") || !strings.Contains(p.Why, "prod") || !p.Fields[0].Detail {
+	if !ok || len(p.Fields) != 2 || p.Fields[0].Name != "version" || p.Fields[0].Value != "2.0.0" || rawCall(p.Fields) == nil || !strings.Contains(rawCall(p.Fields).Value, "2.0.0") ||
+		p.Tainted == "" || !strings.Contains(p.Text("fr"), "rollback") || !strings.Contains(p.Why, "prod") || !p.Fields[0].Detail {
 		t.Fatalf("card %+v", p)
 	}
 	ns, _ := c.notificationsWhere(`source = ?`, notifyFromSkill)

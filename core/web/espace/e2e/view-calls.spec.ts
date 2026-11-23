@@ -72,7 +72,9 @@ test("a call to approve says what it does to which items, on their rows", async 
   expect(card.text).toBe("Mettre 2 mails à la corbeille");
   expect(card.context).toBe("compte perso");
   expect(card.summary).toEqual(["« Votre colis est arrivé » · Relais ⚠", "« Colis en point relais » · Relais ⚠"]);
-  expect(card.fields).toEqual([{ name: "mail/trash", value: 'account : perso\nids : ["c2","c4"]', detail: true }]);
+  // Its Détails say no id nor account (the rows and the quiet account say
+  // them): only its exact call, one click further.
+  expect(card.fields).toEqual([{ name: "mail/trash", value: 'account : perso\nids : ["c2","c4"]', detail: true, raw: true }]);
   expect(card.yes ?? "").toBe("");
 
   // Oui on the second row answers the one card: the call runs once.

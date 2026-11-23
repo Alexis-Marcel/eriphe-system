@@ -232,10 +232,21 @@ forget one. There is no settings page for the workspace and no rule to maintain.
   belongs to no page shows above the bar, wherever you are, until you answer it: no card waits
   out of sight (the only buttons the bar ever has). A proposed appointment shows on a day's block as a ghost marked **Proposed**.
   Answering in one place answers everywhere. After your yes, a proposal that runs a call shows
-  **Approved · running…**, then **done** or **failed** with why.
-- **A call says what it does, to which items.** "Move 2 mails to the trash", the mails listed by
-  their subject and sender (at most five, then "and N more"), the account quietly beside it
-  ("Gmail account"); the exact call is under one **details**. When you ask Eriphe to act on items
+  **Approved · running…** while it runs.
+- **A decided card leaves the page.** Done, failed, declined or withdrawn, a card leaves the page's
+  body, its foot and its rows; the page's **⋯** menu lists it under « Déjà décidé » with how it
+  went (« Fait », « Échec » and why, in the tool's own words, marked ⚠ when they may be someone
+  else's, « Refusé », « Retiré »). Eriphe's orb says what came of your yes, as it answers what you
+  say: « C'est fait », or « Échec : » and why in plain words. A failed call is never tried again by
+  itself, and there is no Retry button: Eriphe may propose it again, as a new card. Why it failed
+  is kept in the page's trace too.
+- **A call says what it does, to which items, in your language.** « Accepter « Picnic » · Sam »,
+  « Déplacer « Facture » vers les archives », « Mettre 2 mails à la corbeille »: the item by its
+  title (and its detail, a sender or an organizer), never an id; several are counted and listed
+  (at most five, then "and N more"). The account sits quietly beside it ("Gmail account"); the skill
+  or the page it comes from is a quiet line under it. Its **details** give its settings by their
+  meaning (an answer, a folder, a date in words), never an id nor the account; the exact call is
+  one more click away (« Appel exact »). When you ask Eriphe to act on items
   a page shows ("delete these 2"), its Yes sits on those items' own lines: one card for all of
   them, a small mark saying how many share it, the others lighting up when you point at one; a Yes
   on any line does it once, for all. Nothing waits at the foot of the page for them. The same

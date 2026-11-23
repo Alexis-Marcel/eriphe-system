@@ -481,11 +481,16 @@ func TestBrainCardReads(t *testing.T) {
 	// Its long text to read, named; its exact call, the rest, under the
 	// one Détails.
 	fs := p.FieldsIn("fr")
-	if len(fs) != 2 || fs[0].Name != "Texte" || fs[0].Value != long || fs[0].Detail {
+	if len(fs) != 4 || fs[0].Name != "Texte" || fs[0].Value != long || fs[0].Detail {
 		t.Fatalf("fields: %+v", fs)
 	}
-	if d := fs[1]; !d.Detail || d.Name != "mail/merge_pull_request" || d.Value != "number : 7\nrepo : portfolio" {
-		t.Errorf("details: %+v", d)
+	// Under Détails, its parameters by meaning; its exact call one click
+	// further.
+	if fs[1].Name != "number" || fs[1].Value != "7" || fs[2].Name != "repo" || fs[2].Value != "portfolio" || !fs[1].Detail {
+		t.Errorf("details: %+v", fs[1:3])
+	}
+	if d := rawCall(fs); d == nil || d.Name != "mail/merge_pull_request" || d.Value != "number : 7\nrepo : portfolio" {
+		t.Errorf("exact call: %+v", d)
 	}
 	if v := (&web{c: c}).proposalView(convoCard{Kind: cardAccess, State: cardPending}, p, "fr"); v.Yes != "" {
 		t.Errorf("Oui says %q", v.Yes)

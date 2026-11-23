@@ -79,6 +79,15 @@ func TestLabelLines(t *testing.T) {
 	}
 }
 
+// rawCall is a card's exact call among its fields: the last one, one
+// click further than its Détails; nil when there is none.
+func rawCall(fs []cardField) *cardField {
+	if len(fs) == 0 || !fs[len(fs)-1].Raw || !fs[len(fs)-1].Detail {
+		return nil
+	}
+	return &fs[len(fs)-1]
+}
+
 // brainCallOn has the brain call a tool held on a card.
 func brainCallOn(t *testing.T, c *core, pid, tool string, input map[string]any) {
 	t.Helper()
@@ -121,8 +130,12 @@ func TestBrainCallLandsOnItsRows(t *testing.T) {
 	if got := p.ContextIn("fr"); got != "compte sam@example.org" {
 		t.Errorf("context %q", got)
 	}
+	// Détails: its parameters by meaning, no id nor account; its exact
+	// call one click further.
 	fs := p.FieldsIn("fr")
-	if len(fs) != 1 || !fs[0].Detail || fs[0].Name != "monitor/move" || !strings.Contains(fs[0].Value, `ids : ["m1","m2"]`) || !strings.Contains(fs[0].Value, "to : archive") {
+	raw := rawCall(fs)
+	if len(fs) != 2 || fs[0].Name != "to" || fs[0].Value != "archive" || !fs[0].Detail || raw == nil || raw.Name != "monitor/move" ||
+		!strings.Contains(raw.Value, `ids : ["m1","m2"]`) || !strings.Contains(raw.Value, "to : archive") {
 		t.Errorf("details %+v", fs)
 	}
 

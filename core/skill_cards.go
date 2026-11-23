@@ -16,8 +16,9 @@ import (
 //     kept with its exact input (access_asks, run = the run), the task is
 //     told it did not run and goes on. When the run ends, they show on one
 //     card (kind runcalls), with its message: each action and its
-//     parameters; the yes runs them all as kept, the no none. The brain is
-//     not told of their results: the run's note keeps them.
+//     parameters; the yes runs them all as kept, the no none. The run's
+//     note keeps their results; once all ran, the brain is told how the yes
+//     went, the orb's words (card_outcome.go).
 //   - With urgent: <fixed text>, a run that weighs something 5 in its
 //     attention list sends that fixed text over the quiet hours and the
 //     daily cap, once per run, as an urgent rule does: nothing the run read
@@ -204,6 +205,9 @@ func (c *core) runCallsProposal(p proposal) proposal {
 	var fs []cardField
 	for _, a := range asks {
 		fs = append(fs, callDetail(a, nil))
+	}
+	if n == 1 {
+		fs = c.callDetails(asks[0], nil, c.userLang()) // its parameters by meaning, then its exact call
 	}
 	p.Fields = fs
 	return p

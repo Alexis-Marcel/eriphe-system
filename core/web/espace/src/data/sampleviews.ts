@@ -214,6 +214,17 @@ const mailCards: SampleView["cards"] = [
   { ref: "runcalls:30", card: 30, kind: "runcalls", state: "approved", exec: "done", node: "mails", text: "Archiver 12 mails" },
   { ref: "calls:31", card: 31, kind: "calls", state: "approved", exec: "done", node: "mails", text: "Mettre 5 mails à la corbeille" },
   { ref: "calls:33", card: 33, kind: "calls", state: "rejected", node: "mails", text: "Marquer 1 mail comme lu" },
+  {
+    ref: "runcalls:34",
+    card: 34,
+    kind: "runcalls",
+    state: "approved",
+    exec: "failed",
+    execWhy: "error",
+    execError: "perso: save event: the calendar server refused it (403 Forbidden): the account is not allowed to do this in this calendar",
+    node: "mails",
+    text: "Accepter « Picnic » · Sam",
+  },
   { ref: "skill:1", card: 1, kind: "skill", state: "approved", node: "mails", text: "Approuver le skill « Trier mes mails »" },
 ];
 

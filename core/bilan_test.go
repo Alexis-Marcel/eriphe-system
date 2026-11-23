@@ -273,7 +273,8 @@ func TestPendingAsks(t *testing.T) {
 	}{
 		{proposalView{State: cardPending}, true},
 		{proposalView{State: cardApproved, Exec: callRunning}, true},
-		{proposalView{State: cardApproved, Exec: callFailed}, true},
+		{proposalView{State: cardApproved, Exec: callFailed}, false}, // decided: its ⋯ menu lists it
+		{proposalView{State: cardGone}, false},
 		{proposalView{State: cardApproved, Exec: callDone}, false},
 		{proposalView{State: cardApproved}, false},
 		{proposalView{State: cardRejected}, false},

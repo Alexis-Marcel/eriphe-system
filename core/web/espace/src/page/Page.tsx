@@ -269,20 +269,38 @@ function More({ tab, onTab, alive, origin, settled = [] }: { tab: Tab; onTab: (t
   );
 }
 
+// outcomeOf is how a decided card went: done, failed, declined or
+// withdrawn.
+export function outcomeOf(c: ProposalView): "done" | "failed" | "declined" | "withdrawn" {
+  if (c.state === "approved") return c.exec === "failed" ? "failed" : "done";
+  return c.state === "rejected" ? "declined" : "withdrawn";
+}
+
 // Settled are the cards of the node already decided, the last first: a
-// line each, what it was and how it went.
+// line each, what it was and how it went; a failed one says why, the
+// tool's own words marked when they may be someone else's.
 export function Settled({ cards }: { cards: ProposalView[] }) {
   const { t } = useWords();
   return (
     <section className="pg-settled" role="group" aria-label={t("espace.page.settled")}>
       <h3>{t("espace.page.settled")}</h3>
       <ul>
-        {cards.map((c) => (
-          <li key={c.ref} className={c.state === "approved" ? "yes" : "no"}>
-            <span className="pg-settled-word">{t(c.state === "approved" ? "espace.row.done" : "espace.row.rejected")}</span>
-            <span className="pg-settled-text">{c.text}</span>
-          </li>
-        ))}
+        {cards.map((c) => {
+          const o = outcomeOf(c);
+          const why = o === "failed" ? c.execError || (c.execWhy ? t(`espace.a2.proposal.why.${c.execWhy}`) : "") : "";
+          return (
+            <li key={c.ref} className={o === "done" ? "yes" : o === "failed" ? "failed" : "no"}>
+              <span className="pg-settled-word">{t(`espace.page.settled.${o}`)}</span>
+              <span className="pg-settled-text">{c.text}</span>
+              {why && (
+                <small className="pg-settled-why">
+                  {why}
+                  {c.execError && c.execErrorExternal && <ExtMark why={t("espace.external.why")} />}
+                </small>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

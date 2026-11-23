@@ -7,7 +7,13 @@ access token lent by eriphe-core and used with XOAUTH2 (the server never runs an
 ## Tools
 
 Every tool has a title (`titles` in `tools.go`, « Move to the trash »): eriphe-core says with it
-what a call does when it has no words of its own for it.
+what a call does when it has no words of its own for it. The tools that change or send also say
+one call of theirs in French and English, for eriphe-core's cards (`says.go`, the tool's
+`_meta: {"eriphe/says": …}`, core/README.md « A tool that says its own call »): `move`
+« Déplacer « Facture » vers les archives », `trash` « Mettre 2 mails à la corbeille » (« dans les
+indésirables » with `junk`), `mark` « Marquer « Facture » comme lu », `send_message` « Envoyer un
+message à Sam : « Devis » », `create_draft` « Écrire un brouillon … », the mails by their subject
+as eriphe-core's source lists them, never their ids.
 
 | Tool | What | Hints |
 |---|---|---|

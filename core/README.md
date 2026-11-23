@@ -964,10 +964,23 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   foot (`cards`); an unplaced one waits there. The propose tools return the card's ref (`card`:
   `cardProposed`), and `propose_view` says how to place it (`cardPlaceNote`).
 - **The page's foot only asks.** `nodePageOf` sends at the foot (`cards`) only the cards that still
-  ask something (`pendingAsks`: pending, or approved with its call running or failed) and that no
-  row answers (any card told on a List's row, `placed`); the decided ones go to `settled` (20 at most, the last first), which the page lists in its
-  « ⋯ » menu under « Déjà décidé ». `alive.decided` is the goal the user approved the view with
-  (`view_proposals`), shown there as « Ce qu'on a décidé ».
+  ask something (`pendingAsks`: pending, or approved with its call running) and that no
+  row answers (any card told on a List's row, `placed`); the decided ones (done, failed, declined,
+  withdrawn) go to `settled` (20 at most, the last first), which the page lists in its « ⋯ » menu
+  under « Déjà décidé » with each outcome, a failed one with why (`execWhy`, and `execError`: the
+  tool's own words, `execErrorExternal` when its server is not trusted, shown marked). A placed
+  card decided is not drawn in the body either (the page skips it), and a row's card leaves its
+  row once its call is done or failed (`callsAsk`, `accessAsks`). `alive.decided` is the goal the
+  user approved the view with (`view_proposals`), shown there as « Ce qu'on a décidé ».
+- **What came of a yes** (`card_outcome.go`). The orb says it: the yes is the user talking, so how
+  it went reaches the brain as the user's act (`nodeEvent`), whose line is the orb's. A call of
+  the conversation tells it at once (`callToBrain`); the calls of a run's or an item's card
+  (`runcalls`, `calls`) once the last approved one ran, in one event (`callsCardRan`, told once
+  per card: `card_told:<ref>`), what was done and what failed with why. A failed call keeps the
+  tool's words (`call_error:<id>`, 500 characters at most) and writes « Échec : <sentence> — <why> »
+  in its node's trace (`traceFailedCall`); its item is not noted done. The brain is told to say
+  « Échec : » and why in plain words, never to retry by itself, and to propose it again on a new
+  card when that makes sense: there is no Retry button.
 - **A row's own card.** There is no yes in a block (no actions, no marks, no Proposal component):
   the page draws a row's card itself, on every List row code told it waits on
   (`lists[].items[].card`, out of band, never from the block's data), even in a block written on
@@ -1529,9 +1542,38 @@ noun from the server or source (`nounWords`: mails, events, files…), else « �
 items it acts on follow by their title and detail as the node's sources list them (`callRows`,
 `itemLabel`, kept with the call), at most 5 then « et N autres »; a title from a source that is not
 a trusted server's keeps its « ⚠ ». Where it acts goes apart, quietly (`context`: « compte
-Gmail », the account by its provider when it is the only one, « le dossier Clients »). The exact
-call (`server/tool` and every parameter, raw ids included) is under one « détails »; no line
-of what Oui does. A channel gets the sentence and where it acts.
+Gmail », the account by its provider when it is the only one, « le dossier Clients »). Under
+« détails », its parameters by their meaning (`callDetails`: named by the input schema's title,
+else `card.param.*`, else their own name; valued by the tool's declared words, a date in words),
+never an id (`id`, `ids`, `…_id`, or a value one of its items' ids) nor the account; then its exact
+call (`server/tool` and every parameter, raw ids included, field `raw`) one more click away
+(« Appel exact »). No line of what Oui does. A channel gets the sentence and where it acts. Its
+origin (a skill's run: `why`) is a quiet line beside where it comes from, never its subtitle, and
+that origin names an item by its title, never its id (`card.from.item`).
+
+**A tool that says its own call** (`call_says.go`). Core knows no tool: a server declares how one
+call of its tool reads in its `_meta`, under `eriphe/says`, and code fills it in the user's
+language. Our mail and calendar servers declare theirs.
+
+```json
+"eriphe/says": {
+  "text":   {"fr": "{response} {item}[ : « {comment} »]", "en": "{response} {item}[: “{comment}”]"},
+  "item":   {"fr": "l'invitation", "en": "the invitation"},
+  "values": {"response": {"accept": {"fr": "Accepter", "en": "Accept"}, "decline": {"fr": "Refuser", "en": "Decline"}}}
+}
+```
+
+`text` is the sentence by language (English, else any, when the user's is missing). `{item}` is
+what the call acts on: one item by its label as its node's source listed it (title, detail, ⚠ when
+someone else's words; the label bound to the call counts whatever id it names, an invitation's
+event), several counted (their lines below), else the declared `item` words, else counted.
+`{name}` is an argument: its words in `values` (`""` for an argument left out; a value is matched
+as is, then lowercased), else a date or a time said as one (« mardi 24 novembre, 14 h 10 », a time
+with an offset in the user's zone), a list joined, a short text as written; a bool or an id with
+no words says nothing. A part in `[ … ]` is said only when every placeholder in it has words. A
+tool that declares none is said as above (verb table, title, name). « Accepter « Picnic » · Sam,
+lundi 14 h 10 », « Créer « Dentiste », mardi 24 novembre, 14 h 10 », « Déplacer « Facture » · Sam
+vers les archives ».
 
 **On its rows.** A brain's call whose ids are those of rows a node's source shows (the node the
 turn is about first, else any live node that read them: `node_reads`) is kept on that node and
@@ -3740,8 +3782,9 @@ through `a2ui.Validate`).
   the stream says it moved (answered anywhere). Once approved, a held call's proposal shows what
   it is doing (`exec`: `running`,
   then `done` or `failed` with `execWhy` `notkept`, `gone`, `notallowed` or `error`, a reason of
-  Eriphe's, never the tool's words; kept as `call_state:<id>`, the proposal moved at each step):
-  « Validé · en cours… », « Validé · fait », « Validé · échec » and why.
+  Eriphe's, kept as `call_state:<id>`, the proposal moved at each step; `execError`, the tool's
+  own words, apart): « Validé · en cours… » while it runs; done or failed, the card is decided and
+  draws nothing (`stillAsks`): the page's ⋯ menu lists it, and the orb says how it went.
 
 Placement is classes only (the day's rows and lanes are `.a2-r-N`, `.a2-span-N`,
 `.a2-lane-N`), never a `style` attribute. Fixed words are the app's (`espace.a2.*` in

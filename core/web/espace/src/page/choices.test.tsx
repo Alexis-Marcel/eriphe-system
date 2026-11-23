@@ -100,12 +100,17 @@ describe("a card of several calls", () => {
     expect(yes().textContent).toBe("Archiver 1 mail");
   });
 
-  it("sends the ticked and the unticked, and says what was left", async () => {
+  it("sends the ticked and the unticked; while its yes runs, says what was left; done, leaves", async () => {
     await draw("n1");
     await act(async () => boxes()[1].click());
     await act(async () => yes().click());
     expect(answers).toHaveLength(1);
     expect(answers[0]).toMatchObject({ ref: "calls:4", yes: true, only: [4, 6], left: [5] });
+    expect(el.querySelector(".a2-proposal")).toBeNull(); // done: decided, it leaves
+    act(() => root.unmount());
+    root = createRoot(el);
+    shown = { ...decided, exec: "running" };
+    await draw("n1");
     expect(el.querySelector(".a2-proposal-text")?.textContent).toBe("Archiver 2 mails · 1 laissé");
     expect(boxes()).toHaveLength(0);
     const left = el.querySelector(".a2-proposal-choices li.is-left");
@@ -133,18 +138,19 @@ describe("a card of several calls", () => {
     await draw("n1");
     const card = el.querySelector(".a2-proposal")!;
     const details = card.querySelector(".a2-proposal-details")!;
-    for (const cls of ["a2-proposal-why", "a2-proposal-from"]) {
-      expect(card.querySelector(`:scope > .${cls}`)).toBeNull();
-      expect(details.querySelector(`.${cls}`)).not.toBeNull();
-    }
+    expect(card.querySelector(":scope > .a2-proposal-from")).toBeNull();
+    expect(card.querySelector(".a2-proposal-why")).toBeNull(); // the skill is never its subtitle
+    expect([...details.querySelectorAll(".a2-proposal-from")].map((p) => p.textContent).join(" ")).toContain("Skill « tri-mails »");
     expect(card.querySelector(".a2-proposal-yes")).toBeNull(); // its sentence says what Oui does
     expect(card.querySelector(".a2-taint")).not.toBeNull();
   });
 
-  it("elsewhere, says where it comes from", async () => {
+  it("elsewhere, says where it comes from in one quiet line, its skill with it", async () => {
     await draw();
     const card = el.querySelector(".a2-proposal")!;
-    expect(card.querySelector(":scope > .a2-proposal-why")?.textContent).toBe("Skill « tri-mails »");
-    expect(card.querySelector(":scope > .a2-proposal-from")?.textContent).toContain("Mes mails");
+    expect(card.querySelector(".a2-proposal-why")).toBeNull();
+    const from = card.querySelector(":scope > .a2-proposal-from")?.textContent;
+    expect(from).toContain("Mes mails");
+    expect(from).toContain("Skill « tri-mails »");
   });
 });

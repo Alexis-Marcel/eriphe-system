@@ -340,9 +340,10 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 const settledMax = 20
 
 // pendingAsks tells whether a card still asks something of the user on
-// its page: it waits, or its yes runs or failed.
+// its page: it waits, or its yes runs. Done, failed, declined or
+// withdrawn, it is decided and leaves the page (card_outcome.go).
 func pendingAsks(v proposalView) bool {
-	return v.State == cardPending || v.State == cardApproved && (v.Exec == callRunning || v.Exec == callFailed)
+	return v.State == cardPending || v.State == cardApproved && v.Exec == callRunning
 }
 
 // placedCard is the card a card block of node id places, as its records

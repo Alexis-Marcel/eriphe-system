@@ -6,7 +6,12 @@ Microsoft Graph. Secrets are app passwords or OAuth access tokens lent by eriphe
 ## Tools
 
 Every tool has a title (`toolTitles` in `tools.go`, « Move to the trash »): eriphe-core says with it
-what a call does when it has no words of its own for it.
+what a call does when it has no words of its own for it. The tools that write also say one call of
+theirs in French and English, for eriphe-core's cards (`says.go`, the tool's
+`_meta: {"eriphe/says": …}`, core/README.md « A tool that says its own call »): `create_event`
+« Créer « Dentiste », mardi 24 novembre, 14 h 10 », `update_event` « Modifier « Point » … »,
+`delete_event` « Supprimer « Point » », `respond_event` « Accepter « Picnic » » (« Refuser »,
+« Répondre « peut-être » à »), the event by its title as eriphe-core's source lists it, never its id.
 
 | Tool | What | Hints |
 |---|---|---|
@@ -40,6 +45,16 @@ account. For a recurring event it needs one of two: `occurrence`, the start of t
 answered as `list_events` gives it (a moved occurrence: its new start, or its original one), or
 `series: true` for every occurrence; nothing is guessed. The brain is told to answer only the
 occurrence when the user speaks of one date.
+
+What stops an answer is said so that the user knows what to do (eriphe-core shows these words on
+the decided card and the brain says them in plain words): an account with no address (on CalDAV,
+a `username` that is not an address and no `emails`: « no address is set for this account … add
+the address the invitations are sent to in the account's settings »), an invitation sent to an
+address the account does not list (« … add it to the account's addresses (emails) »), a server that
+refuses the sign-in (401: sign in again, or check the password) or the change (403: the account is
+not allowed to do this in this calendar; Google's own reasons, below, when it gives one). An
+invitation as Google's CalDAV gives it (Google's attendee parameters, a UID with an `@`) is answered
+like any other (`TestRespondGoogleInvite`).
 
 - CalDAV: it sets the user's own `PARTSTAT` (the comment in `COMMENT`) without changing anything
   of the organizer's, and saves the object with `If-Match`. For the series, in the series and its

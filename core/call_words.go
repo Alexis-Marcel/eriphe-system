@@ -365,7 +365,24 @@ func (c *core) callTextN(a accessQuestion, count int, lang string) string {
 	json.Unmarshal([]byte(a.Input), &in)
 	labels := c.labelsOf(a)
 	server, _, _ := splitToolName(name)
-	return callPhrase(name, c.toolTitle(name), in, labels, nounOf(server, labels), lang, count)
+	noun := nounOf(server, labels)
+	if s := c.toolSaysOf(name); s != nil {
+		// The tool says its call itself (call_says.go).
+		_, n := callItems(in, labels)
+		if count > 0 {
+			n = count
+		}
+		return s.phrase(in, s.itemWords(labels, n, noun, lang), lang, c.userZone())
+	}
+	return callPhrase(name, c.toolTitle(name), in, labels, noun, lang, count)
+}
+
+// saysItem tells whether a kept call's sentence names its one item
+// itself (a tool that says its call, call_says.go): no line below says
+// it again.
+func (c *core) saysItem(a accessQuestion) bool {
+	name, _, _ := strings.Cut(a.Call, " ")
+	return len(c.labelsOf(a)) == 1 && c.callCount(a) <= 1 && c.toolSaysOf(name) != nil
 }
 
 // callCount is how many items a kept call acts on (callItems), 0 for none.
@@ -453,9 +470,9 @@ func callTool(call string) string {
 	return name
 }
 
-// callDetail is a kept call's exact call, under the card's one Détails:
-// its tool, and every parameter of its input, raw, but those shown
-// (callShown, by name).
+// callDetail is a kept call's exact call, one click further than its
+// Détails (Raw): its tool, and every parameter of its input, raw, but
+// those shown (callShown, by name).
 func callDetail(a accessQuestion, shown []string) cardField {
 	var input map[string]any
 	json.Unmarshal([]byte(a.Input), &input)
@@ -465,7 +482,74 @@ func callDetail(a accessQuestion, shown []string) cardField {
 			lines = append(lines, f.Name+" : "+f.Value)
 		}
 	}
-	return cardField{Name: callTool(a.Call), Value: truncate(strings.Join(lines, "\n"), cardValueMax), Detail: true}
+	return cardField{Name: callTool(a.Call), Value: truncate(strings.Join(lines, "\n"), cardValueMax), Detail: true, Raw: true}
+}
+
+// callDetails are a kept call's Détails: its parameters by their meaning
+// (each named by its tool's input schema, else in the user's words for a
+// common name, else by its own; its value in words: the tool's declared
+// words, a date as one), never an id (its item is said by its label on
+// the card), nor the account (said quietly beside it), nor what is shown
+// (callShown); then its exact call (callDetail), one click further.
+func (c *core) callDetails(a accessQuestion, shown []string, lang string) []cardField {
+	var input map[string]any
+	json.Unmarshal([]byte(a.Input), &input)
+	tool, _, _ := strings.Cut(a.Call, " ")
+	props, _ := c.inputSchema(tool)["properties"].(map[string]any)
+	says := c.toolSaysOf(tool)
+	if says == nil {
+		says = &toolSays{}
+	}
+	ids := map[string]bool{}
+	for _, l := range c.labelsOf(a) {
+		ids[l.ID] = true
+	}
+	var out []cardField
+	for _, k := range slices.Sorted(maps.Keys(input)) {
+		v := input[k]
+		if slices.Contains(shown, k) || k == "account" || idArg(k, v, ids) {
+			continue
+		}
+		w := says.argWords(k, v, lang, c.userZone())
+		if _, isBool := v.(bool); isBool && w == "" {
+			w = argValue(v, lang)
+		}
+		if w == "" {
+			continue
+		}
+		out = append(out, cardField{Name: paramName(k, props, lang), Value: w, Detail: true})
+	}
+	return append(out, callDetail(a, shown))
+}
+
+// idArg tells an argument that names items by their id: by its name (id,
+// ids, …_id, …_ids), or its value one of the items' ids.
+func idArg(k string, v any, ids map[string]bool) bool {
+	k = strings.ToLower(k)
+	if k == "id" || k == "ids" || strings.HasSuffix(k, "_id") || strings.HasSuffix(k, "_ids") {
+		return true
+	}
+	switch x := v.(type) {
+	case string:
+		return ids[x]
+	case []any:
+		return slices.ContainsFunc(x, func(e any) bool { return ids[valueText(e)] })
+	}
+	return false
+}
+
+// paramName names a call's parameter for the user: its input schema's
+// title, else the user's words for a common name, else its own.
+func paramName(k string, props map[string]any, lang string) string {
+	p, _ := props[k].(map[string]any)
+	name, _ := p["title"].(string)
+	if name = truncate(oneLine(name), 60); name != "" {
+		return name
+	}
+	if w := tr(lang, "card.param."+strings.ToLower(k)); w != "card.param."+strings.ToLower(k) {
+		return w
+	}
+	return k
 }
 
 // callRead are what a card read to say a call (a pull request's title,
@@ -511,15 +595,7 @@ func (c *core) callShown(a accessQuestion, lang string) (fs []cardField, names [
 		if !ok || n > callShownMax || n <= callLongMin && !strings.Contains(strings.TrimSpace(s), "\n") {
 			continue
 		}
-		p, _ := props[k].(map[string]any)
-		name, _ := p["title"].(string)
-		if name = truncate(oneLine(name), 60); name == "" {
-			name = k
-			if w := tr(lang, "card.param."+strings.ToLower(k)); w != "card.param."+strings.ToLower(k) {
-				name = w
-			}
-		}
-		fs = append(fs, cardField{Name: name, Value: s})
+		fs = append(fs, cardField{Name: paramName(k, props, lang), Value: s})
 		names = append(names, k)
 	}
 	return fs, names
@@ -530,7 +606,7 @@ func (c *core) callShown(a accessQuestion, lang string) (fs []cardField, names [
 // one Détails.
 func (c *core) callFieldsOf(a accessQuestion, lang string) []cardField {
 	shown, names := c.callShown(a, lang)
-	return append(append(callRead(a), shown...), callDetail(a, names))
+	return append(append(callRead(a), shown...), c.callDetails(a, names, lang)...)
 }
 
 // callsWords are a card's words for the calls it keeps: one sentence for
@@ -539,13 +615,16 @@ func (c *core) callFieldsOf(a accessQuestion, lang string) []cardField {
 func (c *core) callsWords(asks []accessQuestion, lang string) (sentence string, lines []string) {
 	if len(asks) == 1 {
 		a := asks[0]
+		if c.saysItem(a) {
+			return c.callText(a, lang), nil
+		}
 		return c.callText(a, lang), labelLines(c.labelsOf(a), c.callCount(a), lang)
 	}
 	var said []string
 	for _, a := range asks {
 		s := c.callText(a, lang)
 		said = append(said, s)
-		if items := labelLines(c.labelsOf(a), c.callCount(a), lang); len(items) > 0 {
+		if items := labelLines(c.labelsOf(a), c.callCount(a), lang); len(items) > 0 && !c.saysItem(a) {
 			s = fmt.Sprintf(tr(lang, "card.call.with"), s, strings.Join(items, ", "))
 		}
 		lines = append(lines, s)

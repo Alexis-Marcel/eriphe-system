@@ -1,6 +1,6 @@
 import type { Action, Message } from "../a2ui/adapter";
 import { CATALOG } from "../a2ui/catalog";
-import type { ListRow, NodePage, PageBlock, SourceList } from "../data/api";
+import { stillAsks, type ListRow, type NodePage, type PageBlock, type SourceList } from "../data/api";
 
 // A node's page as the page draws it (web_graph.go's nodePage): its text
 // as Markdown, its blocks as A2UI surfaces, one per block, through the
@@ -28,7 +28,9 @@ export function pieces(page: NodePage): Piece[] {
       const b = p.block;
       if (b.error) out.push({ kind: "broken", name: b.name, error: b.error });
       // A card block: the card itself is eriphe-core's (proposal), drawn
-      // from its records; none when it is not one of the node's.
+      // from its records; none when it is not one of the node's. Decided,
+      // it leaves the body (the ⋯ menu lists it).
+      else if (b.card && b.proposal && b.proposal.ref === b.card && !stillAsks(b.proposal)) continue;
       else if (b.card) out.push({ kind: "card", surface: surfaceOf(page.node.id, b.name), name: b.name, ref: b.card, found: !!b.proposal && b.proposal.ref === b.card });
       else if (!Array.isArray(b.components)) out.push({ kind: "broken", name: b.name, error: "" });
       else out.push({ kind: "block", surface: surfaceOf(page.node.id, b.name), block: b });
