@@ -1266,6 +1266,7 @@ func (sc *scenario) handleProposals(rw http.ResponseWriter, r *http.Request) {
 		c.store.db.Exec(`UPDATE access_asks SET batch = ? WHERE id = ?`, id, id)
 		c.cardNow(cardCalls, id, "", refNode+":"+node)
 	}
+	c.foldCalls() // as a run's end does (skill_runs.go)
 	c.syncCards()
 	c.bump()
 	rw.WriteHeader(http.StatusNoContent)
@@ -1298,6 +1299,7 @@ func (sc *scenario) handleRows(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	c.foldCalls() // as a run's end does (skill_runs.go)
 	c.syncCards()
 	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)
@@ -1390,6 +1392,7 @@ func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	c.foldCalls() // as a run's end does (skill_runs.go)
 	c.syncCards()
 	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)
@@ -1481,6 +1484,7 @@ func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	c.foldCalls() // as a run's end does (skill_runs.go)
 	c.syncCards()
 	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)

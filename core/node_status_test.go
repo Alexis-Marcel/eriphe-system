@@ -51,10 +51,12 @@ func fakeStatus(c *core, id, status string) error {
 	case nodeRunning:
 		_, err = c.store.db.Exec(`INSERT INTO node_steps (node, parent, n, key, spec, status, opener) VALUES (?, 'elsewhere', 1, 'k', '{}', ?, 'brain')`, id, stepRunning)
 	case nodeWaits: // a card waits on it: the one way a node waits for the user
+		// A card of no kind of proposals: the status counts it, nothing
+		// settles it, and no page draws it (it has nothing to approve).
 		var n int64
 		c.store.db.QueryRow(`SELECT COUNT(*) FROM convo_cards`).Scan(&n)
-		ref := proposalRef(cardViewKind, 9000+n) // a kind no store hook settles (proposal_kinds.go)
-		if _, err = c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, text, created) VALUES (?, ?, 'x', 1)`, ref, cardViewKind); err == nil {
+		ref := fmt.Sprintf("fake:%d", n+1)
+		if _, err = c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, text, created) VALUES (?, 'fake', 'x', 1)`, ref); err == nil {
 			_, err = c.store.db.Exec(`INSERT INTO node_cards (node, ref, created) VALUES (?, ?, 1)`, id, ref)
 		}
 	case nodeDone:
