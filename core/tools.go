@@ -168,18 +168,19 @@ func newMCPServer(c *core) *mcp.Server {
 		func(ctx context.Context, in idIn) (map[string]string, error) {
 			return map[string]string{"result": "stopping"}, c.stopByBrain(ctx, in.TaskID)
 		})
-	registerMemoryTools(s, c)     // remember, recall, update_memory, forget, commitments
-	registerLearningTools(s, c)   // learned, unlearn
-	registerAttachmentTools(s, c) // read_attachment
-	registerSkillTools(s, c)      // list_skills, read_skill
-	registerSkillWriteTool(s, c)  // write_skill (skill_write.go)
-	registerSkillRunsTool(s, c)   // skill_runs (skill_report.go)
-	registerMonitorTools(s, c)    // write_monitor, monitors (monitors.go)
-	registerViewTool(s, c)        // propose_view (view_card.go)
-	registerNodeTools(s, c)       // node_open, node_find, node_read, node_write, node_edit, node_set, node_show, item_note, node_settle (node_tools.go)
-	c.registerCatalogTools(s)     // catalog_read, sources_read (node_catalog.go)
-	registerNotifyTools(s, c)     // notify, notifications, rule
-	registerSinceTools(s, c)      // since
+	registerMemoryTools(s, c)      // remember, recall, update_memory, forget, commitments
+	registerLearningTools(s, c)    // learned, unlearn
+	registerAttachmentTools(s, c)  // read_attachment
+	registerSkillTools(s, c)       // list_skills, read_skill
+	registerSkillWriteTool(s, c)   // write_skill (skill_write.go)
+	registerSkillRunsTool(s, c)    // skill_runs (skill_report.go)
+	registerMonitorTools(s, c)     // write_monitor, monitors (monitors.go)
+	registerViewTool(s, c)         // propose_view (view_card.go)
+	registerCardWithdrawTool(s, c) // card_withdraw (card_withdraw.go)
+	registerNodeTools(s, c)        // node_open, node_find, node_read, node_write, node_edit, node_set, node_show, item_note, node_settle (node_tools.go)
+	c.registerCatalogTools(s)      // catalog_read, sources_read (node_catalog.go)
+	registerNotifyTools(s, c)      // notify, notifications, rule
+	registerSinceTools(s, c)       // since
 	return s
 }
 

@@ -716,6 +716,7 @@ whatever address it dials) and one client certificate per device.
 | `list_tasks` | recent tasks |
 | `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task with a node, the reply goes to its node's trace (« Eriphe a répondu : … »), so the user can see and contradict it; display only |
 | `stop_task` | stop the agent |
+| `card_withdraw` | withdraw a card the brain made that still waits and the work made obsolete (`ref`): nothing of it runs, nothing is decided for the user; never a task's own ask or start ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
 | `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)); its node opens at once as a draft linked to the turn's subject, showing the real page, the card waiting on it; asked for a page kept up to date, the brain opens the subject first, then calls it in the same turn with sensible defaults, no questions first (its choices are changed after, by ask buttons); with `node`, the same draft is rewritten and its card says the new proposal; returns the draft (`node`) and the card's ref (`card`) |
 | `catalog_read`, `sources_read` | the whole grammar of a node's block (components, sources, items, sections, glance) and what a block may read ([The catalog tools](#the-catalog-tools-node_cataloggo)) |
@@ -992,6 +993,23 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   in its node's trace (`traceFailedCall`); its item is not noted done. The brain is told to say
   « Échec : » and why in plain words, never to retry by itself, and to propose it again on a new
   card when that makes sense: there is no Retry button.
+- **Every card says what came of it** (#750). Each kind of proposal has an `outcome`
+  (`proposal_kinds.go`), required at start: on a yes or a no, `decideCardWith`
+  (`cardOutcome`) tells the brain at once, as the user's act, on the card's live node, what was
+  decided and what came of it (« Sam a dit oui à la carte view:3 (…) : la vue est en place sur le
+  nœud X… »), so that it updates what it wrote of the card. A view's is told in the subject it
+  came from, naming the view's node. A call's yes is told once it ran (above). A plain yes or no
+  in words is told with the message (`cardAnswerLine` carries the outcome). A card withdrawn tells
+  nobody. `TestEveryCardKindTellsItsOutcome` decides a card of every kind both ways and fails for a
+  kind it has no maker for.
+- **Eriphe withdraws his own cards** (`card_withdraw`, `card_withdraw.go`). A card of his that
+  still waits and the work made obsolete is withdrawn: gone, by `eriphe`, nothing of it runs,
+  nobody is told, nothing decided for the user. His own are what the brain proposed, his calls,
+  and what his skills' runs keep; never what a task asks for itself (a grant, a release), a task's
+  start (`stop_task`), or a tools review. A replacement is proposed as usual.
+- **No message asks a card again.** A card the brain raises in its turn, its calls and releases
+  included, goes with its message of the turn (`cardProposedBy`); a task's access card, with the
+  queue's message, which says the card's line, not a question of its own.
 - **A row's own card.** There is no yes in a block (no actions, no marks, no Proposal component):
   the page draws a row's card itself, on every List row code told it waits on
   (`lists[].items[].card`, out of band, never from the block's data), even in a block written on

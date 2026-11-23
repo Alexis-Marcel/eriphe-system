@@ -831,7 +831,7 @@ func (c *core) withdrawAsk(ctx context.Context, a accessQuestion) {
 	if n, _ := rowsOf(res, err); n != 1 {
 		return
 	}
-	log.Printf("access ask %d: withdrawn, its node archived", a.ID)
+	log.Printf("access ask %d: withdrawn", a.ID)
 	if a.Call == "" {
 		c.settleWaiting(ctx, a, false) // the task's calls that waited on it (an access, a release): refused
 	}
