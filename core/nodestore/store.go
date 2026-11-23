@@ -271,6 +271,21 @@ func (s *Store) upgrade(raw []byte) ([]byte, error) {
 	return nodefile.Upgrade(raw, s.opts.conversions)
 }
 
+// parse reads a node's file, in today's format: one of an older format
+// (a version from before a conversion) is converted in memory first. A
+// file in today's format is parsed once.
+func (s *Store) parse(raw []byte) (*nodefile.Node, []byte, error) {
+	if n, err := nodefile.Parse(raw); err == nil && n.Meta.Format == s.format() {
+		return n, raw, nil
+	}
+	raw, err := s.upgrade(raw)
+	if err != nil {
+		return nil, nil, err
+	}
+	n, err := nodefile.Parse(raw)
+	return n, raw, err
+}
+
 // randomID is a new node's id: 10 letters and digits.
 func randomID() string {
 	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -491,10 +506,7 @@ func (s *Store) onlyCodeSince(cur *Doc, expect string) bool {
 	if err != nil {
 		return false
 	}
-	if raw, err = s.upgrade(raw); err != nil {
-		return false
-	}
-	was, err := nodefile.Parse(raw)
+	was, _, err := s.parse(raw)
 	if err != nil {
 		return false
 	}
@@ -671,10 +683,7 @@ func (s *Store) read(id string, version int) (*Doc, error) {
 		return nil, err
 	}
 	// A version from before a conversion reads in today's format.
-	if raw, err = s.upgrade(raw); err != nil {
-		return nil, fmt.Errorf("%s: %w", sum.File, err)
-	}
-	node, err := nodefile.Parse(raw)
+	node, raw, err := s.parse(raw)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", sum.File, err)
 	}
