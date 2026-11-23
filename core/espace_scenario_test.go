@@ -1564,8 +1564,9 @@ func (sc *scenario) handleTrashFails(rw http.ResponseWriter, r *http.Request) {
 	sc.tools.mu.Lock()
 	sc.tools.trashNo = strings.TrimSpace(string(body))
 	sc.tools.trashed = slices.DeleteFunc(sc.tools.trashed, func(t string) bool { return strings.HasPrefix(t, "perso:c") })
+	no := sc.tools.trashNo
 	sc.tools.mu.Unlock()
-	writeJSON(rw, http.StatusOK, map[string]string{"error": sc.tools.trashNo})
+	writeJSON(rw, http.StatusOK, map[string]string{"error": no})
 }
 
 // handleFinish is POST /e2e/finish/{key}: the worker so named finishes.

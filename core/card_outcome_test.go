@@ -59,6 +59,12 @@ func TestFailedYesLeavesThePage(t *testing.T) {
 	if raw, _ := c.nodes.Trace(node); !strings.Contains(string(raw), "Échec") || !strings.Contains(string(raw), "403 Forbidden") {
 		t.Errorf("the trace does not keep why:\n%s", raw)
 	}
+	if d, err := c.nodes.Read(node, 0); err != nil || !d.Node.Meta.External {
+		t.Error("an untrusted tool's words in the trace, its node not marked external")
+	}
+	if why := c.store.get(taintKey(lastUserAct(t, c))); why == "" {
+		t.Error("an untrusted tool's words reach the brain untainted")
+	}
 	told := yesTold(t, c)
 	if len(told) != 1 || !strings.Contains(told[0], "n'a pas marché") || !strings.Contains(told[0], "403 Forbidden") ||
 		!strings.Contains(told[0], "propose-la à nouveau") || !strings.Contains(told[0], "Archiver") {
@@ -92,6 +98,17 @@ func TestFailedYesLeavesThePage(t *testing.T) {
 
 // yesTold are the events that told the brain what came of the user's
 // yes or no, oldest first.
+// lastUserAct is the seq of the last event that told the brain what came
+// of a yes.
+func lastUserAct(t *testing.T, c *core) int {
+	t.Helper()
+	var seq int
+	if err := c.store.db.QueryRow(`SELECT MAX(seq) FROM messages WHERE user_act = 1`).Scan(&seq); err != nil {
+		t.Fatal(err)
+	}
+	return seq
+}
+
 func yesTold(t *testing.T, c *core) []string {
 	t.Helper()
 	rows, err := c.store.db.Query(`SELECT text FROM messages WHERE user_act = 1 ORDER BY seq`)

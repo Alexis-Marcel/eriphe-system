@@ -47,6 +47,9 @@ func (c *core) traceFailedCall(a accessQuestion) {
 		return
 	}
 	text := fmt.Sprintf("Échec : %s — %s", c.callText(a, "fr"), cmpOr(c.callError(a.ID), "?"))
+	if server, _, ok := splitToolName(strings.Fields(a.Call + " ")[0]); ok && !c.trustsServer(server) {
+		c.markNodeExternal(node, nodeByCode) // the tool's words: never without the mark
+	}
 	if err := c.nodes.AppendTrace(node, nodeByCode, truncate(text, 800)); err != nil {
 		log.Printf("card %d: trace of node %s: %v", a.ID, node, err)
 	}
