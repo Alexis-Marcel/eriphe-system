@@ -603,6 +603,9 @@ func (sc *scenario) play(a deviceAssignment) {
 	_, known := sc.tasks[a.ID]
 	if !known {
 		sc.tasks[a.ID] = workerRole(t)
+		for _, it := range a.Inbox {
+			sc.inbox[a.ID] = max(sc.inbox[a.ID], it.Seq) // what it starts with
+		}
 	}
 	sc.mu.Unlock()
 	if !known {
@@ -611,6 +614,22 @@ func (sc *scenario) play(a deviceAssignment) {
 			go sc.liveWork(a.ID, t)
 		} else {
 			go sc.work(a.ID, workerRole(t))
+		}
+		return
+	}
+	if sc.live == nil {
+		return
+	}
+	// The live bench: a message to a worker that finished its turn (a
+	// step's retry) is a new turn of its work.
+	for _, it := range a.Inbox {
+		sc.mu.Lock()
+		done := it.Kind != "message" || it.Seq <= sc.inbox[a.ID]
+		sc.inbox[a.ID] = max(sc.inbox[a.ID], it.Seq)
+		sc.mu.Unlock()
+		if !done {
+			sc.report(a.ID, deviceReport{State: stateRunning, Delivered: it.Seq})
+			go sc.liveWork(a.ID, t)
 		}
 	}
 }

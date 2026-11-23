@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -52,6 +53,11 @@ func TestCardBlock(t *testing.T) {
 	}
 	if d, _ := c.nodes.Read(subject, 0); d.Node.Block("vue").External || !d.Node.Meta.External {
 		t.Errorf("tainted: the card block external %v, the node external %v", d.Node.Block("vue").External, d.Node.Meta.External)
+	}
+	if p, _ := w.nodePageOf(subject, 0, "fr"); !slices.ContainsFunc(p.Parts, func(part pagePart) bool {
+		return part.Block != nil && part.Block.Name == "vue" && part.Block.Proposal != nil && part.Block.Proposal.Ref == mine
+	}) {
+		t.Error("the card placed in a tainted turn is not drawn where it is placed")
 	}
 	if err := write("vue", mine, false); err != nil {
 		t.Fatal(err)

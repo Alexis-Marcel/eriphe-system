@@ -293,6 +293,9 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 		t.Fatal(err)
 	}
 	b.allowed[mail] = true
+	b.names.mu.Lock()
+	b.names.set(mail, "$mail") // the replay makes it too
+	b.names.mu.Unlock()
 	b.quiet()
 	b.say("Réponds que je regarde dans l'heure, ouvre-moi la prod, et lance en arrière-plan une recherche sur l'erreur.", mail, turnWork)
 	b.scoreTainted(mail)
@@ -1088,7 +1091,7 @@ func (b *bench) end(work string) {
 	// A node born in a turn no message of the user's started (a card's
 	// yes, a task's end), out of any new work.
 	for id, sum := range b.liveNodes() {
-		if !b.allowed[id] && !b.codes(id) && !b.viewMade(id) {
+		if !b.allowed[id] && !b.codes(id) && !b.viewMade(id) && sum.OpenedBy != nodefile.OpenedSkill { // a skill's run opens its children
 			b.reopened = append(b.reopened, fmt.Sprintf("between turns: %q", sum.Title))
 			b.allowed[id] = true
 		}
