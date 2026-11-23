@@ -102,9 +102,10 @@ unread.
   then in their front matter.
 - **At start**, a file of an older format is converted to today's, through each conversion in
   turn: all of them in one commit by `convert`, each node a version of its own, the old one kept in
-  the history. A file changed by hand meanwhile is first committed as it is (`outside`). A
-  conversion that fails, or gives a file that does not read as a node, stops the start: nothing is
-  written.
+  the history. A file changed by hand meanwhile is first committed as it is (`outside`). A file
+  whose conversion fails, or gives a file that does not read as a node (one broken by hand), is
+  reported and left alone like any file that does not read, its node's last good version still
+  readable; it is converted at a later start, once mended.
 - **A file of a newer format** than this Eriphe knows stops the graph at start, with an error that
   names it; nothing is written, the file is left as it is. Update Eriphe.
 - **The index** (`nodes.db`) holds nothing the files do not: it may be rebuilt from them at any

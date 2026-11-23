@@ -70,8 +70,8 @@ account: providers and servers are faked; tests that need a real machine or acco
 - **Tests with the change**: a fix or a feature comes with its test; keep `go vet` and `gofmt`
   clean, and `install/lint.sh` when you touch the scripts.
 - **Nodes are never lost.** A node is the user's note. No code removes the nodes' repository, a
-  node's file or its trace, nor drops git history (no gc, prune, reset or force): a node is only
-  archived, by the user. A change of the node file format bumps its version and comes with its
+  node's file or its trace (only a trace's oldest part past 2 MiB is dropped), nor drops git
+  history (no gc, prune, reset or force): a node is only archived, by the user. A change of the node file format bumps its version and comes with its
   conversion and a test that reads the old format ([docs/node-format.md](docs/node-format.md#format-version)).
   The index (`nodes.db`) may be rebuilt from the files. `core/nodes_guard_test.go` holds the rule.
 - **One topic per pull request**; open an issue first for anything larger than a fix. Security

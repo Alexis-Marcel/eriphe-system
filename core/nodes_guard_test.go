@@ -16,27 +16,39 @@ import (
 // Nodes are the user's notes: never lost. No code of core removes the
 // nodes' repository, a node's file or its trace, nor drops the
 // repository's history. A node is only archived, by the user; a change of
-// the file format comes with its conversion (nodefile.Upgrade).
+// the file format comes with its conversion (nodefile.Upgrade). The one
+// loss known: a trace past MaxTraceFile drops its oldest part.
 
-// nodeRemovals are the removals and renames the store makes, each with
-// why it loses no node: "<file>:<func>".
+// nodeRemovals are the removals and renames the store makes, each call as
+// written, with why it loses no node: "<file> <func> <call>".
 var nodeRemovals = map[string]string{
-	"nodestore/backup.go:Backup":      "the backup's own copies: its temporary file, and the copies older than the ones it keeps",
-	"nodestore/backup.go:writeTraces": "the traces' tar written aside, then renamed once whole",
-	"nodestore/backup.go:writeBundle": "the bundle written aside, removed when it failed, renamed once checked",
-	"nodestore/git.go:commit":         "commits the removal of a node's file already removed by hand (reconcile): the history keeps it",
-	"nodestore/git.go:writeFile":      "writes a node's file whole, its new bytes renamed over the old ones, which the history keeps",
-	"nodestore/trace.go:appendTrace":  "a trace past MaxTraceFile becomes its older part, the one before dropped (docs/node-format.md)",
+	"nodestore/backup.go Backup os.Remove(tmp)":                          "the backup's temporary copy of the index",
+	"nodestore/backup.go Backup os.Remove(db)":                           "the night's copy of the index, replaced by the one just made",
+	"nodestore/backup.go Backup os.Rename(tmp, db)":                      "the index's copy takes its name once whole",
+	"nodestore/backup.go Backup os.Remove(files[0])":                     "backup copies older than the ones it keeps",
+	"nodestore/backup.go writeTraces os.Remove(tmp)":                     "the traces' tar written aside, when it failed",
+	"nodestore/backup.go writeTraces os.Rename(tmp, path)":               "the traces' tar takes its name once whole",
+	"nodestore/backup.go writeBundle os.Remove(tmp)":                     "the bundle written aside, when it failed",
+	"nodestore/backup.go writeBundle os.Rename(tmp, path)":               "the bundle takes its name once checked",
+	"nodestore/git.go commit wt.Remove(c.path)":                          "commits the removal of a file already removed by hand (reconcile's change without data): the history keeps it",
+	"nodestore/git.go writeFile os.Rename(tmp, path)":                    "writes a node's file whole, its new bytes over the old ones, which the history keeps",
+	"nodestore/trace.go appendTrace os.Rename(path, s.tracePath(id, 1))": "a trace past MaxTraceFile becomes its older part, the one before dropped (docs/node-format.md)",
 }
 
 // historyDropping are go-git's operations that drop history, objects or
-// the worktree's content: the store calls none, nor any method so named
-// (a buffer's Reset too: the guard does not know types).
+// the worktree's content, or move what the branch reaches: the store
+// calls none, nor any method so named (a buffer's Reset too: the guard
+// does not know types).
 var historyDropping = map[string]bool{
 	"Prune": true, "RepackObjects": true, "DeleteObject": true, "DeleteLooseObject": true,
 	"DeleteOldObjectPackAndIndex": true, "Reset": true, "ResetSparsely": true, "Clean": true,
 	"Restore": true, "DeleteBranch": true, "DeleteTag": true, "RemoveReference": true, "RemoveRef": true,
+	"SetReference": true, "CheckAndSetReference": true,
 }
+
+// rewriting are the options of go-git that write over what was: the
+// store sets none.
+var rewriting = map[string]bool{"Force": true, "Amend": true}
 
 // removals are the calls that remove or replace a file by its path
 // (os.Truncate too).
@@ -86,12 +98,13 @@ func TestNodesAreNeverLost(t *testing.T) {
 // nodeLossHits are what may lose a node in a file of core (path from
 // core's folder):
 //   - go-git outside the store; in the store, one of its operations that
-//     drops history, or any force option;
+//     drops history, a Force or Amend option;
 //   - git run as a program;
-//   - in the store, a removal or a rename not in nodeRemovals;
+//   - in the store, a removal or a rename not in nodeRemovals, or a
+//     change without data (a file removed) outside reconcile;
 //   - elsewhere, a removal or a rename in a function that names the nodes.
 //
-// used gets the store's removals it met, by "<file>:<func>".
+// used gets the store's removals it met, as nodeRemovals says them.
 func nodeLossHits(path string, src []byte, used map[string]bool) ([]string, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, path, src, 0)
@@ -130,8 +143,27 @@ func nodeLossHits(path string, src []byte, used map[string]bool) ([]string, erro
 		ast.Inspect(decl, func(n ast.Node) bool {
 			switch x := n.(type) {
 			case *ast.KeyValueExpr:
-				if k, ok := x.Key.(*ast.Ident); ok && k.Name == "Force" {
-					hit(x, "a Force option")
+				if k, ok := x.Key.(*ast.Ident); ok && store && rewriting[k.Name] {
+					hit(x, "a "+k.Name+" option")
+				}
+			case *ast.CompositeLit:
+				// A change without data removes a file: only reconcile
+				// makes one, for a file already removed by hand.
+				if !store || path == "nodestore/reconcile.go" {
+					return true
+				}
+				if id, ok := x.Type.(*ast.Ident); ok && id.Name == "change" && !hasKey(x, "data") {
+					hit(x, "a change without data removes a node's file")
+				}
+				// []change{{…}}: its elements' type is elided.
+				if arr, ok := x.Type.(*ast.ArrayType); ok {
+					if id, ok := arr.Elt.(*ast.Ident); ok && id.Name == "change" {
+						for _, e := range x.Elts {
+							if el, ok := e.(*ast.CompositeLit); ok && el.Type == nil && !hasKey(el, "data") {
+								hit(el, "a change without data removes a node's file")
+							}
+						}
+					}
 				}
 			case *ast.CallExpr:
 				sel, ok := x.Fun.(*ast.SelectorExpr)
@@ -149,10 +181,11 @@ func nodeLossHits(path string, src []byte, used map[string]bool) ([]string, erro
 				case store && historyDropping[name] && !imported[pkg]:
 					hit(x, name+": drops history")
 				case store && removal:
-					if _, ok := nodeRemovals[path+":"+fn]; !ok {
-						hit(x, name+" in the store, not in nodeRemovals")
+					at := path + " " + fn + " " + string(text(x))
+					if _, ok := nodeRemovals[at]; !ok {
+						hit(x, string(text(x))+" in the store, not in nodeRemovals")
 					}
-					used[path+":"+fn] = true
+					used[at] = true
 				case pkg == "os" && removal && nodesFunc:
 					hit(x, "os."+name+" where the nodes are named")
 				}
@@ -161,6 +194,18 @@ func nodeLossHits(path string, src []byte, used map[string]bool) ([]string, erro
 		})
 	}
 	return hits, nil
+}
+
+// hasKey tells a composite literal that sets the field key.
+func hasKey(lit *ast.CompositeLit, key string) bool {
+	for _, e := range lit.Elts {
+		if kv, ok := e.(*ast.KeyValueExpr); ok {
+			if id, ok := kv.Key.(*ast.Ident); ok && id.Name == key {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // runsGit tells an exec.Command whose program is git.
@@ -193,6 +238,12 @@ func TestNodesGuardCatches(t *testing.T) {
 		{"nodestore/x.go", `func drop(path string) { os.Remove(path) }`, 1},
 		{"nodestore/x.go", `func drop(wt *git.Worktree) { wt.Remove("a-a1.md") }`, 1},
 		{"nodestore/backup.go", `func Backup(tmp string) { os.Remove(tmp) }`, 0},
+		{"nodestore/backup.go", `func Backup(s *Store) { os.RemoveAll(s.dir) }`, 1},
+		{"nodestore/x.go", `func Delete(s *Store, file string) { s.commit("delete", "user", now, []change{{path: file}}, nil) }`, 1},
+		{"nodestore/x.go", `func del(file string) []change { return []change{change{path: file}} }`, 1},
+		{"nodestore/x.go", `func write(file string, raw []byte) []change { return []change{{path: file, data: raw}} }`, 0},
+		{"nodestore/x.go", `func move(r *git.Repository, ref *plumbing.Reference) { r.Storer.SetReference(ref) }`, 1},
+		{"nodestore/x.go", `func amend(wt *git.Worktree) { wt.Commit("x", &git.CommitOptions{Amend: true}) }`, 1},
 		{"nodestore/x.go", "import \"bytes\"\n\nfunc f(t time.Time) { t.Truncate(0); bytes.Clone(nil) }", 0},
 		{"x.go", `func clean(r *remote) { os.RemoveAll(r.dir); buf.Reset() }`, 0},
 	} {

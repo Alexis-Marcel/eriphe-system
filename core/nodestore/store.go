@@ -30,8 +30,9 @@
 //     outside Eriphe is committed as a version of its own (author
 //     "outside"), reindexed and reported.
 //   - Nodes are the user's notes and are never lost. No code removes the
-//     repository, a node's file or its history (no gc, prune, reset nor
-//     force); a node is only archived, by the user. A file of an older
+//     repository, a node's file, its trace (but a trace's oldest part past
+//     MaxTraceFile) or its history (no gc, prune, reset nor force); a node
+//     is only archived, by the user. A file of an older
 //     format is converted at start in a version of its own (author
 //     "convert"), the old one kept in the history and read converted; a
 //     file of a newer format stops the store, untouched

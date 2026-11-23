@@ -101,9 +101,11 @@ func TestFormatConversionKeepsEveryNode(t *testing.T) {
 	if mustRead(t, s2, ids[2]).Node.Meta.Archived.IsZero() {
 		t.Fatal("the archived node lost its archive")
 	}
-	// Written again and made after: in the new format.
-	if _, err := write(s2, ids[0], "The wall is gray.", hash, "brain"); err != nil {
-		t.Fatal(err)
+	// Written again, on the version read before the conversion (only
+	// code wrote since), and made after: in the new format.
+	pre := before[ids[0]][len(before[ids[0]])-1].Hash
+	if w, err := write(s2, ids[0], "The wall is gray.", pre, "brain"); err != nil || w.Node.Meta.Format != 2 {
+		t.Fatalf("a write on the version before the conversion: %v", err)
 	}
 	n := mustCreate(t, s2, New{Title: "New", Body: "x"})
 	if !strings.HasPrefix(string(n.Raw), "---\nformat: 2\n") {
@@ -155,6 +157,32 @@ func TestNewerFormatRefused(t *testing.T) {
 	}
 	if headOf(t, e.dir) != head {
 		t.Fatal("a commit was made")
+	}
+}
+
+// A file that does not read as a node stays reported and left alone when
+// a conversion is there: the other nodes are converted, the store starts.
+func TestBrokenFileNotConverted(t *testing.T) {
+	e := newEnv(t)
+	s, _ := e.open(t)
+	a := mustCreate(t, s, New{Title: "Broken", Body: "grey"})
+	b := mustCreate(t, s, New{Title: "Fine", Body: "grey"})
+	s.Close()
+	path := filepath.Join(e.dir, a.File)
+	bad := []byte(strings.Replace(string(a.Raw), "lifetime: work", "lifetime: forever", 1))
+	if err := os.WriteFile(path, bad, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.opts.conversions = []nodefile.Conversion{greyToGray}
+	s2, rep := e.open(t)
+	if len(rep.Broken) != 1 || !strings.Contains(rep.Broken[0], a.File) || !slices.Equal(rep.Converted, []string{b.Node.Meta.ID}) {
+		t.Fatalf("report: %+v", rep)
+	}
+	if got, _ := os.ReadFile(path); !bytes.Equal(got, bad) {
+		t.Fatal("the broken file was touched")
+	}
+	if old, err := s2.Read(a.Node.Meta.ID, 1); err != nil || old.Node.Text() != "gray" {
+		t.Fatalf("its last good version, read converted: %v %+v", err, old)
 	}
 }
 
