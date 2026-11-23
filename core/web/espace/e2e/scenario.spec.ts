@@ -345,9 +345,10 @@ test("the steps of the scenario", async ({ page, request }) => {
   await shot(page, "view-beside", false);
   await expectApart(page, [watch, pageOf("Mes mails")]);
   await page.setViewportSize({ width: 1440, height: 900 });
-  // Answered, the card stays in the document and says so.
-  await expect(viewCard.locator(".a2-proposal-kicker")).toContainText("Validé");
-  await expect(viewCard.getByRole("button", { name: "Oui" })).toHaveCount(0);
+  // Answered, the card is decided: it leaves the document (the page's ⋯
+  // menu lists it).
+  await expect(viewCard).toHaveCount(0);
+  await expect(watch.getByRole("button", { name: "Oui" })).toHaveCount(0);
   // Its pages closed, the view's bubble, made on the subject, sits beside
   // it. Dropped right on the view, the subject stays there and the view
   // gives way.

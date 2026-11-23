@@ -156,7 +156,9 @@ test.describe("a long page with its cards", () => {
     await shots(page, "page-scrolled");
     await yes.click();
     await expect.poll(() => answered).toEqual([9002]);
-    await expect(last.getByRole("button", { name: "Oui" })).toHaveCount(0);
+    // Decided, it leaves the foot; the other still waits.
+    await expect(pg.locator(".pg-foot .a2-proposal")).toHaveCount(1);
+    await expect(pg.locator(".pg-foot")).not.toContainText("Envoyer la réponse 2 ?");
     await unmoved();
   });
 });

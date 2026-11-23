@@ -50,7 +50,7 @@ const yes = () => $(".a2-proposal-actions .a2-button-primary") as HTMLButtonElem
 const no = () => $(".a2-proposal-actions .a2-proposal-no") as HTMLButtonElement;
 
 describe("a card", () => {
-  it("answers the one proposal it shows, and says how it was decided", async () => {
+  it("answers the one proposal it shows, then leaves once decided", async () => {
     const sent: Answer[] = [];
     let state = "pending";
     await draw("fr", "rule:7", {
@@ -67,8 +67,8 @@ describe("a card", () => {
     expect(no().getAttribute("aria-label")).toBe("Non");
     await click(yes());
     expect(sent).toMatchObject([{ ref: "rule:7", yes: true }]);
-    expect($(".a2-proposal-actions")).toBeNull();
-    expect(text(".a2-proposal-kicker")).toBe("Validé");
+    // Decided: it leaves (the page's ⋯ menu lists it; the orb says it).
+    expect($(".a2-proposal")).toBeNull();
   });
 
   it("leads a view's card with what its yes makes, its technical words one click away", async () => {
@@ -110,28 +110,52 @@ describe("a card", () => {
     const before = reads;
     await move({ refs: ["rule:10"] });
     expect(reads).toBe(before);
-    state = "approved";
+    expect($(".a2-proposal-actions")).not.toBeNull();
+    state = "rejected";
     await move({ refs: ["rule:9"] });
     await act(async () => {});
-    expect($(".a2-proposal-actions")).toBeNull();
-    expect(text(".a2-proposal-kicker")).toBe("Validé");
-    state = "rejected";
-    await move({ refs: [], all: true });
-    await act(async () => {});
-    expect(text(".a2-proposal-kicker")).toBe("Refusé");
+    expect($(".a2-proposal")).toBeNull();
   });
 
-  it("follows an approved call: running, then done or failed with our reason", async () => {
-    let view: Record<string, unknown> = { ref: "access:4", card: 4, state: "approved", exec: "running", text: "Fusionner ?" };
-    const followers = new Set<(m: Moved) => void>();
-    const move = (m: Moved) => act(async () => followers.forEach((f) => f(m)));
-    await draw("en", "access:4", { read: async () => view as never, follow: (on) => (followers.add(on), () => followers.delete(on)) });
-    expect(text(".a2-proposal-kicker")).toBe("Approved · running…");
-    view = { ...view, exec: "failed", execWhy: "error" };
-    await move({ refs: ["access:4"] });
-    await act(async () => {});
-    expect(text(".a2-proposal-kicker")).toBe("Approved · failed");
-    expect(text(".a2-proposal-failed")).toBe("The tool answered with an error.");
+  it("follows an approved call while it runs, then leaves, done or failed", async () => {
+    for (const end of [{ exec: "done" }, { exec: "failed", execWhy: "error", execError: "403 Forbidden" }]) {
+      let view: Record<string, unknown> = { ref: "access:4", card: 4, state: "approved", exec: "running", text: "Fusionner ?" };
+      const followers = new Set<(m: Moved) => void>();
+      const move = (m: Moved) => act(async () => followers.forEach((f) => f(m)));
+      await draw("en", "access:4", { read: async () => view as never, follow: (on) => (followers.add(on), () => followers.delete(on)) });
+      expect(text(".a2-proposal-kicker")).toBe("Approved · running…");
+      expect($(".a2-proposal-actions")).toBeNull();
+      view = { ...view, ...end };
+      await move({ refs: ["access:4"] });
+      await act(async () => {});
+      expect($(".a2-proposal")).toBeNull();
+      act(() => root.unmount());
+    }
+    root = createRoot(el); // for afterEach
+  });
+
+  it("names its exact call one click further than its Détails, and a skill's origin as a quiet line", async () => {
+    await draw("fr", "runcalls:2", {
+      read: async () => ({
+        ref: "runcalls:2",
+        card: 2,
+        kind: "runcalls",
+        state: "pending",
+        text: "Accepter « Picnic » · Sam",
+        why: "Skill « ma-journee »",
+        fields: [
+          { name: "Réponse", value: "Accepter", detail: true },
+          { name: "calendar/respond_event", value: "id : ZTF8\nresponse : accept", detail: true, raw: true },
+        ],
+      }),
+    });
+    expect($(".a2-proposal-why")).toBeNull();
+    expect(text(".a2-proposal > .a2-proposal-from")).toBe("Skill « ma-journee »");
+    const details = $("details.a2-proposal-details");
+    expect([...details.querySelectorAll(":scope > .a2-proposal-fields dt")].map((d) => d.textContent)).toEqual(["Réponse"]);
+    const raw = details.querySelector("details.a2-proposal-raw")!;
+    expect(raw.querySelector("summary")?.textContent).toBe("Appel exact");
+    expect(raw.querySelector("dd")?.textContent).toContain("ZTF8");
   });
 
   it("says when a proposal is gone, or an answer did not leave", async () => {
@@ -160,7 +184,7 @@ describe("a card", () => {
       }
     }
     await draw("fr", "memory:1", { read: async (r) => ({ ref: r, card: 1, kind: "memory", state: "approved", text: "x" }) });
-    expect(text(".a2-proposal-kicker")).toBe("Gardé");
+    expect($(".a2-proposal")).toBeNull(); // kept: it leaves
   });
 
   it("marks a proposal drawn from external content with a small sign, no word", async () => {
