@@ -9,7 +9,6 @@ import (
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // rowsBlock is a block that lists the monitor's received messages; extra
@@ -88,24 +87,5 @@ func TestBlockListsRows(t *testing.T) {
 	raw, _ := json.Marshal(page)
 	if !strings.Contains(string(raw), `"lists":[{"component":"root","source":"received"`) || strings.Contains(string(raw), `"actions"`) {
 		t.Fatalf("the page's lists: %s", raw)
-	}
-}
-
-// A tool that says it throws away, or whose name or description does,
-// looks destructive.
-func TestDestructiveLooks(t *testing.T) {
-	c, _, _ := viewCore(t)
-	_, move := c.catalogTool("monitor/move")
-	if destructive(move) {
-		t.Fatal("move is not destructive")
-	}
-	for _, w := range []string{"trash", "Delete", "remove"} {
-		if !destructive(&mcp.Tool{Name: "x", Description: "It will " + w + " them"}) {
-			t.Errorf("%s: not destructive", w)
-		}
-	}
-	yes := true
-	if !destructive(&mcp.Tool{Name: "x", Annotations: &mcp.ToolAnnotations{DestructiveHint: &yes}}) {
-		t.Error("destructiveHint: not destructive")
 	}
 }

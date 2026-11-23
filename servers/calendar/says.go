@@ -14,12 +14,15 @@ var says = map[string]map[string]any{
 		"text": map[string]string{"fr": "Créer « {title} »[, {start}]", "en": "Create “{title}”[, {start}]"},
 	},
 	"update_event": {
-		"text": map[string]string{"fr": "Modifier {item}[ : « {title} »][, {start}]", "en": "Change {item}[: “{title}”][, {start}]"},
-		"item": map[string]string{"fr": "l'événement", "en": "the event"},
+		"text":  map[string]string{"fr": "Modifier {item}[ : « {title} »][, {start}]", "en": "Change {item}[: “{title}”][, {start}]"},
+		"item":  map[string]string{"fr": "l'événement", "en": "the event"},
+		"items": map[string][]string{"fr": {"1 événement", "{n} événements"}, "en": {"1 event", "{n} events"}},
 	},
 	"delete_event": {
-		"text": map[string]string{"fr": "Supprimer {item}", "en": "Delete {item}"},
-		"item": map[string]string{"fr": "l'événement", "en": "the event"},
+		"text":  map[string]string{"fr": "Supprimer {item}", "en": "Delete {item}"},
+		"item":  map[string]string{"fr": "l'événement", "en": "the event"},
+		"items": map[string][]string{"fr": {"1 événement", "{n} événements"}, "en": {"1 event", "{n} events"}},
+		"done":  map[string][]string{"fr": {"1 supprimé", "{n} supprimés"}, "en": {"1 deleted", "{n} deleted"}},
 	},
 	"respond_event": {
 		"text": map[string]string{"fr": "{response} {item}[ : « {comment} »]", "en": "{response} {item}[: “{comment}”]"},
@@ -32,10 +35,24 @@ var says = map[string]map[string]any{
 	},
 }
 
-// metaOf is a tool's _meta: how eriphe-core says its call, when declared.
+// opens are the fields of an item a read tool says, for eriphe-core to
+// show it opened: its _meta "eriphe/open" (core/README.md, Items).
+var opens = map[string]map[string]string{
+	"get_event": {"title": "title", "date": "start", "body": "description"},
+}
+
+// metaOf is a tool's _meta: how eriphe-core says its call, and the fields
+// of what it reads, when declared.
 func metaOf(name string) mcp.Meta {
+	m := mcp.Meta{}
 	if s, ok := says[name]; ok {
-		return mcp.Meta{"eriphe/says": s}
+		m["eriphe/says"] = s
 	}
-	return nil
+	if o, ok := opens[name]; ok {
+		m["eriphe/open"] = o
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
 }

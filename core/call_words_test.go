@@ -8,10 +8,9 @@ import (
 	"time"
 )
 
-// What a call does to what, in plain words, nothing of a server's own: a
-// verb of ours for a usual tool name, a move to a usual place said as
-// such, else the tool's title, else its name; the items counted, of the
-// kind its server or source names, else « éléments ».
+// What a call of a tool that declares nothing does to what, in plain
+// words, nothing of core's for its name: the tool's title, else its name;
+// the items counted as « éléments ».
 func TestCallPhrase(t *testing.T) {
 	ids := func(xs ...string) []any {
 		out := []any{}
@@ -26,33 +25,26 @@ func TestCallPhrase(t *testing.T) {
 		labels      []itemLabel
 		lang, want  string
 	}{
-		{"mcp__mail__trash", "", map[string]any{"account": "perso", "ids": ids("a", "b")}, nil, "fr", "Mettre 2 mails à la corbeille"},
-		{"mcp__mail__trash", "", map[string]any{"ids": ids("a")}, nil, "en", "Move 1 email to the trash"},
-		{"mcp__mail__delete", "", map[string]any{"ids": ids("a", "b")}, nil, "fr", "Supprimer 2 mails"},
-		{"mcp__mail__move", "", map[string]any{"ids": ids("a"), "to": "Archive"}, nil, "fr", "Archiver 1 mail"},
-		{"mcp__mail__move", "", map[string]any{"ids": ids("a", "b"), "to": "Factures"}, nil, "fr", "Déplacer 2 mails → Factures"},
-		{"mcp__calendar__delete", "", map[string]any{"event_ids": ids("e1")}, nil, "fr", "Supprimer 1 événement"},
-		// The kind from the source that lists them, the server saying none.
-		{"mcp__box__remove", "", map[string]any{"ids": ids("f1", "f2")}, []itemLabel{{ID: "f1", Source: "files"}, {ID: "f2", Source: "files"}}, "fr", "Retirer 2 fichiers"},
-		// Neither: « éléments ».
-		{"mcp__box__remove", "", map[string]any{"ids": ids("x", "y", "z")}, nil, "fr", "Retirer 3 éléments"},
-		// No verb of ours: the tool's title, then its name.
-		{"mcp__box__file_away", "Ranger", map[string]any{"ids": ids("x", "y")}, nil, "fr", "Ranger · 2 éléments"},
-		{"mcp__box__file_away", "", map[string]any{"ids": ids("x", "y")}, nil, "fr", "Utiliser « file_away » sur 2 éléments"},
+		// No verb of core's for a usual name: the title, then the name.
+		{"mcp__box__trash", "", map[string]any{"account": "perso", "ids": ids("a", "b")}, nil, "fr", "Utiliser « trash » sur 2 éléments"},
+		{"mcp__box__trash", "Throw away", map[string]any{"ids": ids("a")}, nil, "en", "Throw away · 1 item"},
+		{"mcp__box__move", "Ranger", map[string]any{"ids": ids("a", "b"), "to": "Factures"}, nil, "fr", "Ranger · 2 éléments → Factures"},
+		// A list its name says is of ids, any name.
+		{"mcp__box__drop", "Retirer", map[string]any{"thing_ids": ids("e1", "e2", "e3")}, nil, "fr", "Retirer · 3 éléments"},
+		// The source that lists them says no kind: « éléments ».
+		{"mcp__box__remove", "", map[string]any{"ids": ids("f1", "f2")}, []itemLabel{{ID: "f1", Source: "files"}, {ID: "f2", Source: "files"}}, "fr", "Utiliser « remove » sur 2 éléments"},
 		// One item it names, by a title: said by itself.
-		{"mcp__mail__reply", "Envoyer la réponse", map[string]any{"id": "a1", "body": "Merci"}, []itemLabel{{ID: "a1", Title: "Devis", Detail: "Sam"}}, "fr", "Envoyer la réponse · « Devis » · Sam"},
+		{"mcp__box__reply", "Envoyer la réponse", map[string]any{"id": "a1", "body": "Merci"}, []itemLabel{{ID: "a1", Title: "Devis", Detail: "Sam"}}, "fr", "Envoyer la réponse · « Devis » · Sam"},
 		// Nothing by id: the action alone.
-		{"mcp__github__merge_pull_request", "", map[string]any{"pullNumber": 3}, nil, "fr", "Fusionner une pull request"},
-		{"mcp__mail__send", "Envoyer un mail", map[string]any{"to": "sam@example.org"}, nil, "fr", "Envoyer un mail"},
+		{"mcp__box__send", "Envoyer un mail", map[string]any{"to": "sam@example.org"}, nil, "fr", "Envoyer un mail"},
 		{"mcp__ops__rollback", "", map[string]any{"version": "2.0.0"}, nil, "fr", "Utiliser « rollback »"},
 	} {
-		server, _, _ := splitToolName(tc.tool)
-		if got := callPhrase(tc.tool, tc.title, tc.input, tc.labels, nounOf(server, tc.labels), tc.lang, 0); got != tc.want {
+		if got := callPhrase(tc.tool, tc.title, tc.input, tc.labels, tc.lang, 0); got != tc.want {
 			t.Errorf("%s %v: %q, want %q", tc.tool, tc.input, got, tc.want)
 		}
 	}
 	// A count given: calls that do the same to other items, together.
-	if got := callPhrase("mcp__mail__trash", "", map[string]any{"ids": ids("a")}, nil, "mail", "fr", 4); got != "Mettre 4 mails à la corbeille" {
+	if got := callPhrase("mcp__box__trash", "Jeter", map[string]any{"ids": ids("a")}, nil, "fr", 4); got != "Jeter · 4 éléments" {
 		t.Errorf("counted: %q", got)
 	}
 }
@@ -121,7 +113,7 @@ func TestBrainCallLandsOnItsRows(t *testing.T) {
 		t.Errorf("the card is not the view's: %v", c.cardNodes(ref))
 	}
 	p := c.proposalOf(cardAccess, id)
-	if got := p.Text("fr"); got != "Archiver 2 mails" {
+	if got := p.Text("fr"); got != "Déplacer 2 mails vers les archives" {
 		t.Errorf("text %q", got)
 	}
 	if got := p.SummaryIn("fr"); !slices.Equal(got, []string{"« STAGE – Data Engineer » · Emplois Example ⚠", "« Votre lettre de la semaine » · news@example.org ⚠"}) {
@@ -134,7 +126,7 @@ func TestBrainCallLandsOnItsRows(t *testing.T) {
 	// call one click further.
 	fs := p.FieldsIn("fr")
 	raw := rawCall(fs)
-	if len(fs) != 2 || fs[0].Name != "to" || fs[0].Value != "archive" || !fs[0].Detail || raw == nil || raw.Name != "monitor/move" ||
+	if len(fs) != 2 || fs[0].Name != "to" || fs[0].Value != "les archives" || !fs[0].Detail || raw == nil || raw.Name != "monitor/move" ||
 		!strings.Contains(raw.Value, `ids : ["m1","m2"]`) || !strings.Contains(raw.Value, "to : archive") {
 		t.Errorf("details %+v", fs)
 	}
@@ -162,7 +154,7 @@ func TestBrainCallLandsOnItsRows(t *testing.T) {
 	if o, _ := c.accessAskOf(other); o.Node != "" || len(o.Labels) != 0 {
 		t.Errorf("a call on no row: %+v", o)
 	}
-	if got := c.proposalOf(cardAccess, other).Text("fr"); got != "Archiver 1 élément" {
+	if got := c.proposalOf(cardAccess, other).Text("fr"); got != "Déplacer 1 mail vers les archives" {
 		t.Errorf("its words %q", got)
 	}
 

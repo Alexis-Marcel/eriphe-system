@@ -118,10 +118,10 @@ func TestSkillCardsWaitInTheirView(t *testing.T) {
 
 	// On the item: one mail, by its subject and sender.
 	one := calls[0]
-	if got := one.Text("fr"); got != "Archiver 1 mail" {
+	if got := one.Text("fr"); got != "Déplacer 1 mail vers les archives" {
 		t.Errorf("text %q", got)
 	}
-	if got := one.Text("en"); got != "Archive 1 email" {
+	if got := one.Text("en"); got != "Move 1 email to the archive" {
 		t.Errorf("English text %q", got)
 	}
 	if got := one.SummaryIn("fr"); !slices.Equal(got, []string{"« STAGE – Data Engineer » · Emplois Example ⚠"}) {
@@ -140,7 +140,7 @@ func TestSkillCardsWaitInTheirView(t *testing.T) {
 
 	// Two at once: one card, both mails.
 	two := runs[0]
-	if got := two.Text("fr"); got != "Archiver 2 mails" {
+	if got := two.Text("fr"); got != "Déplacer 2 mails vers les archives" {
 		t.Errorf("text %q", got)
 	}
 	said := strings.Join(two.SummaryIn("fr"), "\n")

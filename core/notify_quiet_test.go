@@ -169,3 +169,20 @@ func TestLastSeen(t *testing.T) {
 		t.Fatalf("since 14:30: %d", len(got))
 	}
 }
+
+// The user's messages are activity; a channel's they did not trust (an
+// automation, someone in the room) is not, whatever app it is.
+func TestMessageActivityLeavesUntrustedChannels(t *testing.T) {
+	now := at(t, "2026-11-04", "18:00")
+	c, _ := notifyCore(t, now)
+	if _, _, err := c.addChannel("Salon", false, carrySentence); err != nil {
+		t.Fatal(err)
+	}
+	c.store.addMessageVia(roleUser, "bonjour", "", false)
+	seq, _ := c.store.addMessageVia(roleUser, "allume", "Salon, Cuisine", false)
+	c.store.set(taintKey(int(seq)), channelTaint("Salon"))
+	got, err := messageActivity(c, now.Add(-24*time.Hour))
+	if err != nil || len(got) != 1 {
+		t.Fatalf("activity %v, %v", got, err)
+	}
+}

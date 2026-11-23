@@ -17,12 +17,10 @@ import (
 // card's one Détails, and the yes runs that, as it is shown. Nothing here
 // knows a server: mail, calendar or any other.
 //
-//   - The sentence says what happens to what (callPhrase): the action, by
-//     a verb of ours for the usual tool names (act.verb.*: trash, delete,
-//     archive, move…; a move to archive or inbox is said as such), else
-//     the tool's own title (annotations' title, or its own), else its
-//     name; and what it acts on, how many and of what kind (callNoun: a
-//     mail, an event, a file… by the server or the source, else
+//   - The sentence says what happens to what: as the tool declares it
+//     (its _meta "eriphe/says", call_says.go), else by its own title (its
+//     annotations', or its own), else by its name; and what it acts on,
+//     how many and of what kind (the kind as the tool declares it, else
 //     « élément »). The account it names is said apart, quietly
 //     (accountWords: « compte Gmail »).
 //   - The items are those of a node's sources its input names by their
@@ -207,66 +205,30 @@ func callItems(input map[string]any, labels []itemLabel) (key string, n int) {
 	if key != "" {
 		return key, n
 	}
-	// No item known: a list of ids by its usual name.
-	for _, k := range []string{"ids", "message_ids", "item_ids", "event_ids", "file_ids"} {
-		if v, ok := input[k].([]any); ok && len(v) > 0 {
+	// No item known: a list its name says is of ids (idArg).
+	for _, k := range slices.Sorted(maps.Keys(input)) {
+		if v, ok := input[k].([]any); ok && len(v) > 0 && idArg(k, nil, nil) {
 			return k, len(v)
 		}
 	}
 	return "", 0
 }
 
-// nounOf is the kind of item a call acts on, a key of the card.noun.*
-// words: by its server's name, else its items' source's name, when either
-// is a usual word; "" when neither says.
-func nounOf(server string, labels []itemLabel) string {
-	names := []string{strings.ToLower(server)}
-	for _, l := range labels {
-		names = append(names, strings.ToLower(l.Source))
-	}
-	for _, n := range names {
-		if k, ok := nounWords[n]; ok {
-			return k
-		}
-	}
-	return ""
-}
-
-// nounWords are the usual names of a server or a source, by the kind of
-// item they list.
-var nounWords = map[string]string{
-	"mail": "mail", "mails": "mail", "email": "mail", "emails": "mail", "inbox": "mail",
-	"calendar": "event", "agenda": "event", "events": "event", "calendars": "event",
-	"files": "file", "file": "file", "documents": "file", "folders": "file",
-	"messages": "message", "chat": "message",
-	"issues": "issue", "pulls": "pull", "pull_requests": "pull",
-	"contacts": "contact", "tasks": "task", "todos": "task", "notes": "note", "photos": "photo",
-}
-
-// countNoun says n items of a kind: « 2 mails », « 1 événement », else
-// « 3 éléments ».
-func countNoun(noun string, n int, lang string) string {
-	key := "card.noun." + cmpOr(noun, "item")
+// countItems says n items, of no kind: « 3 éléments ».
+func countItems(n int, lang string) string {
 	if n == 1 {
-		return tr(lang, key+".one")
+		return tr(lang, "card.noun.item.one")
 	}
-	return fmt.Sprintf(tr(lang, key+".many"), n)
+	return fmt.Sprintf(tr(lang, "card.noun.item.many"), n)
 }
 
-// destVerbs are the verbs of a move whose destination is a usual place,
-// by the place: archive, the inbox, the trash.
-var destVerbs = map[string]string{"archive": "archive", "archives": "archive", "inbox": "inbox", "trash": "trash", "bin": "trash", "corbeille": "trash"}
-
-// destArgs are the usual names of a move's destination.
-var destArgs = []string{"to", "folder", "destination", "mailbox", "target"}
-
-// callPhrase says what a call does to what, in a sentence: the action
-// (a verb of ours for its name, else its title, else its name), the items
-// (how many, of what kind), and its other short parameters. title is the
-// tool's own (its annotations' or its own), "" for none; noun the kind of
-// its items (nounOf); count, when not 0, how many it says in the place
-// of the input's (calls that do the same to other items, together).
-func callPhrase(tool, title string, input map[string]any, labels []itemLabel, noun, lang string, count int) string {
+// callPhrase says what a call does to what, in a sentence, for a tool
+// that does not say it itself (call_says.go): the action (its title, else
+// its name), the items (how many), and its other short parameters. title
+// is the tool's own (its annotations' or its own), "" for none; count,
+// when not 0, how many it says in the place of the input's (calls that do
+// the same to other items, together).
+func callPhrase(tool, title string, input map[string]any, labels []itemLabel, lang string, count int) string {
 	short := tool
 	if _, t, ok := splitToolName(tool); ok {
 		short = t
@@ -288,13 +250,8 @@ func callPhrase(tool, title string, input map[string]any, labels []itemLabel, no
 	}
 	if n == 0 {
 		// Nothing it acts on by id: the action alone (a mail to send).
-		s := tr(lang, "access.call."+short)
-		switch t := buttonText(title, 80); {
-		case s != "access.call."+short:
-			s = upperFirst(s)
-		case t != "":
-			s = t
-		default:
+		s := buttonText(title, 80)
+		if s == "" {
 			s = upperFirst(fmt.Sprintf(tr(lang, "access.call.other"), strings.ReplaceAll(short, "_", " ")))
 		}
 		if one != "" {
@@ -302,24 +259,9 @@ func callPhrase(tool, title string, input map[string]any, labels []itemLabel, no
 		}
 		return s
 	}
-	verb := tr(lang, "act.verb."+short)
-	known := verb != "act.verb."+short
-	for _, d := range destArgs {
-		to, ok := rest[d].(string)
-		if !ok {
-			continue
-		}
-		if v, ok := destVerbs[strings.ToLower(strings.TrimSpace(to))]; ok && (short == "move" || short == "label" || !known) {
-			verb, known = tr(lang, "act.verb."+v), true
-			delete(rest, d)
-		}
-		break
-	}
-	what := countNoun(noun, n, lang)
+	what := countItems(n, lang)
 	var s string
 	switch t := buttonText(title, 60); {
-	case known:
-		s = fmt.Sprintf(verb, what)
 	case t != "" && one != "":
 		s = t + " · " + one
 	case t != "":
@@ -364,17 +306,15 @@ func (c *core) callTextN(a accessQuestion, count int, lang string) string {
 	var in map[string]any
 	json.Unmarshal([]byte(a.Input), &in)
 	labels := c.labelsOf(a)
-	server, _, _ := splitToolName(name)
-	noun := nounOf(server, labels)
 	if s := c.toolSaysOf(name); s != nil {
 		// The tool says its call itself (call_says.go).
 		_, n := callItems(in, labels)
 		if count > 0 {
 			n = count
 		}
-		return s.phrase(in, s.itemWords(labels, n, noun, lang), lang, c.userZone())
+		return s.phrase(in, s.itemWords(labels, n, lang), s.countWords(n, lang), lang, c.userZone())
 	}
-	return callPhrase(name, c.toolTitle(name), in, labels, noun, lang, count)
+	return callPhrase(name, c.toolTitle(name), in, labels, lang, count)
 }
 
 // saysItem tells whether a kept call's sentence names its one item
@@ -382,7 +322,11 @@ func (c *core) callTextN(a accessQuestion, count int, lang string) string {
 // it again.
 func (c *core) saysItem(a accessQuestion) bool {
 	name, _, _ := strings.Cut(a.Call, " ")
-	return len(c.labelsOf(a)) == 1 && c.callCount(a) <= 1 && c.toolSaysOf(name) != nil
+	if len(c.labelsOf(a)) != 1 || c.callCount(a) > 1 {
+		return false
+	}
+	s := c.toolSaysOf(name)
+	return s != nil && strings.Contains(inLang(s.Text, "fr")+inLang(s.Text, "en"), "{item}")
 }
 
 // callCount is how many items a kept call acts on (callItems), 0 for none.
@@ -646,22 +590,6 @@ func (c *core) catalogTool(name string) (*upstream, *mcp.Tool) {
 	return u, u.toolByClaudeName(tool)
 }
 
-// destructiveWords are the words of a tool that throws something away.
-var destructiveWords = []string{"trash", "delete", "remove", "destroy", "purge", "erase"}
-
-// destructive tells whether a tool looks like it throws something away:
-// it says so (destructiveHint), or its name or description does.
-func destructive(t *mcp.Tool) bool {
-	if t == nil {
-		return false
-	}
-	if t.Annotations != nil && t.Annotations.DestructiveHint != nil && *t.Annotations.DestructiveHint {
-		return true
-	}
-	text := strings.ToLower(t.Name + " " + t.Description)
-	return slices.ContainsFunc(destructiveWords, func(w string) bool { return strings.Contains(text, w) })
-}
-
 // annotationTitle is a tool's title as its annotations say it.
 func annotationTitle(t *mcp.Tool) string {
 	if t.Annotations != nil {
@@ -718,16 +646,16 @@ func argValue(v any, lang string) string {
 	return string(raw)
 }
 
-// doneText says in a line what calls did: by the tool's verb when it has
-// one of its own (act.done.<tool>), else how many items they took.
-func doneText(tool string, n int, lang string) string {
-	_, short, _ := strings.Cut(tool, "/")
-	key := "act.done." + short
-	if tr(lang, key+".one") == key+".one" {
-		key = "act.done"
+// doneText says in a line what calls of a tool did: as the tool declares
+// it (call_says.go), else how many items they took.
+func (c *core) doneText(call string, n int, lang string) string {
+	if s := c.toolSaysOf(call); s != nil {
+		if w := counted(s.Done, n, lang); w != "" {
+			return w
+		}
 	}
 	if n == 1 {
-		return tr(lang, key+".one")
+		return tr(lang, "act.done.one")
 	}
-	return fmt.Sprintf(tr(lang, key+".many"), n)
+	return fmt.Sprintf(tr(lang, "act.done.many"), n)
 }

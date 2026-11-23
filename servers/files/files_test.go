@@ -657,3 +657,30 @@ func TestPlacesInListingsAndSearch(t *testing.T) {
 		}
 	}
 }
+
+// What writes says its call in French and English, for eriphe-core's
+// cards; what throws a file away counts files and says it is done.
+func TestWritesSayTheirCall(t *testing.T) {
+	_, f := setup(t)
+	tools, err := session(t, f).ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, tl := range tools.Tools {
+		says, _ := tl.Meta["eriphe/says"].(map[string]any)
+		text, _ := says["text"].(map[string]any)
+		if writes := tl.Annotations == nil || !tl.Annotations.ReadOnlyHint; writes && tl.Name != "test_account" {
+			seen++
+			if text["fr"] == nil || text["en"] == nil {
+				t.Errorf("%s says its call in no French and English sentence: %v", tl.Name, tl.Meta)
+			}
+		}
+		if tl.Name == "trash_file" && (says["items"] == nil || says["done"] == nil) {
+			t.Errorf("trash_file counts no files: %v", tl.Meta)
+		}
+	}
+	if seen != 3 {
+		t.Errorf("%d tools that write", seen)
+	}
+}

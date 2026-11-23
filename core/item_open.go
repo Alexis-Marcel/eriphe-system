@@ -31,11 +31,28 @@ import (
 //     runs; any other is refused, in a line that says so. The click that
 //     opens is no yes: a yes is a card's (web_convo_cards.go), and the
 //     opened item shows the card that waits on it, as its row does.
-//   - Shown: what the tool said, its common fields picked generically
-//     (title, from, date, body: openFields) and the whole as JSON under
-//     « Détails », marked external when the server is not trusted, with
-//     the item's note. Nothing is kept: no version, no trace, nothing the
-//     brain reads. The page keeps it for its session.
+//   - Shown: what the tool said, its fields as the read tool declares
+//     them in its _meta (openMetaKey: which field is the title, the
+//     sender, the date, the body), else a title and a sender found as a
+//     row finds them (itemField) and a text said as the body; and the
+//     whole as JSON under « Détails », marked external when the server is
+//     not trusted, with the item's note. Nothing is kept: no version, no
+//     trace, nothing the brain reads. The page keeps it for its session.
+//
+//	"eriphe/open": {"title": "subject", "from": "from", "date": "date", "body": "body"}
+
+// openMetaKey is the _meta key under which a read tool declares the
+// fields of an item it reads.
+const openMetaKey = "eriphe/open"
+
+// toolOpen is a read tool's declaration of an item's fields: the top-level
+// names of what it says (or of its one object).
+type toolOpen struct {
+	Title string `json:"title,omitempty"`
+	From  string `json:"from,omitempty"`
+	Date  string `json:"date,omitempty"`
+	Body  string `json:"body,omitempty"`
+}
 
 // openValueMax is the most bytes of what an open shows.
 const openValueMax = 256 << 10
@@ -179,7 +196,9 @@ func (c *core) openItem(ctx context.Context, id string, in itemOpenIn, lang stri
 	case res.IsError:
 		return openOut{}, http.StatusBadGateway, fmt.Sprintf(tr(lang, "act.failed"), truncate(oneLine(resultText(res)), 200))
 	}
-	out := openFields(resultValue(res))
+	var decl toolOpen
+	metaValue(c.toolMeta(u, t), openMetaKey, &decl)
+	out := openFields(resultValue(res), decl)
 	out.External = !c.trustedServers()[u.name]
 	if n, ok := c.itemNotes(id, in.Source)[in.Item]; ok && (n.Group != "" || n.Note != "") {
 		out.Note = &openNote{Group: n.Group, Note: n.Note, External: n.Tainted != ""}
@@ -187,16 +206,10 @@ func (c *core) openItem(ctx context.Context, id string, in itemOpenIn, lang stri
 	return out, http.StatusOK, ""
 }
 
-// What an item's fields are, whatever its source: the first of these it
-// has at its top level (or in its one object, {"message": {…}}).
-var (
-	openDateFields = []string{"date", "received", "receivedAt", "received_at", "sent", "sentAt", "created", "createdAt", "created_at", "updated", "start", "time"}
-	openBodyFields = []string{"body", "text", "content", "markdown", "plain", "snippet", "description", "summary"}
-)
-
-// openFields chooses an item's common fields from what its tool said, and
-// keeps the whole as JSON; a text is its body.
-func openFields(v any) openOut {
+// openFields chooses an item's fields from what its tool said, as the tool
+// declares them (decl), else its title and sender as a row finds them; and
+// keeps the whole as JSON. A text is its body.
+func openFields(v any, decl toolOpen) openOut {
 	var out openOut
 	if s, ok := v.(string); ok {
 		out.Body = truncateBytes(s, openValueMax)
@@ -215,20 +228,17 @@ func openFields(v any) openOut {
 			}
 		}
 	}
-	out.Title, _ = itemField(m, "", itemTitleFields[:5], false) // subject, title, name, summary, label
-	out.From, _ = itemField(m, "", itemDetailFields, false)     // as written: the page says the name, the address beside
-	out.Date = firstText(m, openDateFields, 80)
-	out.Body = firstText(m, openBodyFields, openValueMax)
+	out.Title, _ = itemField(m, decl.Title, itemTitleFields[:5], false) // subject, title, name, summary, label
+	out.From, _ = itemField(m, decl.From, itemDetailFields, false)      // as written: the page says the name, the address beside
+	out.Date = fieldText(m, decl.Date, 80)
+	out.Body = fieldText(m, decl.Body, openValueMax)
 	return out
 }
 
-// firstText is the first of fields an object has as a text, n bytes at
-// most.
-func firstText(m map[string]any, fields []string, n int) string {
-	for _, k := range fields {
-		if s, ok := m[k].(string); ok && strings.TrimSpace(s) != "" {
-			return truncateBytes(strings.TrimSpace(s), n)
-		}
+// fieldText is an object's field as a text, n bytes at most; "" for none.
+func fieldText(m map[string]any, field string, n int) string {
+	if s, ok := m[field].(string); ok && field != "" {
+		return truncateBytes(strings.TrimSpace(s), n)
 	}
 	return ""
 }

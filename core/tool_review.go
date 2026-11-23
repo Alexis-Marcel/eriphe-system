@@ -300,7 +300,9 @@ func (c *core) reviewMCP() *mcp.Server {
 			}
 			return nil, map[string]any{"changes": chs, "count": len(chs)}, nil
 		})
-	mcp.AddTool(s, changeTool("catalog_accept", "Accept the changes named: each tool is used again with the definition shown (one its server dropped is forgotten). Only the user's own yes on its card runs it, in Eriphe.", false),
+	accept := changeTool("catalog_accept", "Accept the changes named: each tool is used again with the definition shown (one its server dropped is forgotten). Only the user's own yes on its card runs it, in Eriphe.", false)
+	accept.Meta = mcp.Meta{saysMetaKey: acceptSays} // its card's words, as any tool declares them (call_says.go)
+	mcp.AddTool(s, accept,
 		func(ctx context.Context, _ *mcp.CallToolRequest, in changeIDsIn) (*mcp.CallToolResult, map[string]any, error) {
 			n, err := c.settleChanges(in.IDs, true)
 			if err != nil {
@@ -412,6 +414,13 @@ func (c *core) reviewCards(ctx context.Context) {
 			c.withdrawCard(ctx, proposalRef(cardCalls, a.Batch), cardByCode)
 		}
 	}
+}
+
+// acceptSays is how a card says a call of catalog_accept.
+var acceptSays = map[string]any{
+	"text":  map[string]any{"fr": "Accepter {count}", "en": "Accept {count}"},
+	"items": map[string]any{"fr": []any{"1 changement", "{n} changements"}, "en": []any{"1 change", "{n} changes"}},
+	"done":  map[string]any{"fr": []any{"1 accepté", "{n} acceptés"}, "en": []any{"1 accepted", "{n} accepted"}},
 }
 
 // reviewCard makes a change's card: catalog_accept on its id, on its row.

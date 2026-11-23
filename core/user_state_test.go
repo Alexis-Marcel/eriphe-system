@@ -62,7 +62,7 @@ func TestUserStateLine(t *testing.T) {
 	// A busy source gives times only.
 	busySources = []busySource{func(*core, time.Time) (time.Time, bool) { return at(t, "2026-11-05", "01:00"), true }}
 	t.Cleanup(func() { busySources = nil })
-	if got := stateLine(t, c); !strings.Contains(got, "occupé jusqu'à 2026-11-05 01:00 (agenda)") {
+	if got := stateLine(t, c); !strings.Contains(got, "occupé jusqu'à 2026-11-05 01:00") {
 		t.Errorf("busy: %s", got)
 	}
 }

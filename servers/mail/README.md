@@ -13,7 +13,10 @@ one call of theirs in French and English, for eriphe-core's cards (`says.go`, th
 « Déplacer « Facture » vers les archives », `trash` « Mettre 2 mails à la corbeille » (« dans les
 indésirables » with `junk`), `mark` « Marquer « Facture » comme lu », `send_message` « Envoyer un
 message à Sam : « Devis » », `create_draft` « Écrire un brouillon … », the mails by their subject
-as eriphe-core's source lists them, never their ids.
+as eriphe-core's source lists them, never their ids; `move`, `trash` and `mark` count mails
+(`items`, « 2 mails ») and say what they did (`done`, « 2 déplacés »). `read_message` declares the
+fields of what it reads (`_meta: {"eriphe/open": …}`: subject, from, date, body), for an item
+eriphe-core opens in place.
 
 | Tool | What | Hints |
 |---|---|---|

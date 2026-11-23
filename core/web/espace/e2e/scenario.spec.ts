@@ -366,7 +366,7 @@ test("the steps of the scenario", async ({ page, request }) => {
 
   // 14b. The view's skill, woken once per mail, proposed to archive
   // three: they wait as one card on the view's page, in plain
-  // words (« Archiver 3 mails »), each mail a line
+  // words (« Déplacer 3 mails vers les archives »), each mail a line
   // ticked, still signed as someone else's words (⚠), where it comes from
   // under Détails. The user leaves one out: Oui archives the two others,
   // the card, settled, leaves the page's foot.
@@ -393,7 +393,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   expect((await request.post("/e2e/proposals")).status()).toBe(204);
   const batch = view.locator(".pg-foot .a2-proposal");
   await expect(batch).toHaveCount(1);
-  await expect(batch.locator(".a2-proposal-text")).toHaveText("Archiver 3 mails");
+  await expect(batch.locator(".a2-proposal-text")).toHaveText("Déplacer 3 mails vers les archives");
   const ticks = batch.locator(".a2-proposal-choices input[type=checkbox]");
   await expect(ticks).toHaveCount(3);
   await expect(batch.locator(".a2-proposal-choices")).toContainText("« La lettre de la semaine » · news@example.org");
@@ -423,7 +423,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await still(view);
   await shot(page, "chosen-calls-pending");
   await ticks.nth(1).uncheck();
-  await batch.getByRole("button", { name: "Archiver 2 mails" }).click();
+  await batch.getByRole("button", { name: "Déplacer 2 mails vers les archives" }).click();
   // Decided and done, it asks nothing more: it leaves the page's foot.
   await expect(batch).toHaveCount(0);
   // Each call as kept, one mail each; the one left out never moved.

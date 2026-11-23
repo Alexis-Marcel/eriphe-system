@@ -16,7 +16,12 @@ environment, never through a task.
 ## Tools
 
 Every tool has a title (`titles` in `tools.go`, « Move to the trash »): eriphe-core says with it
-what a call does when it has no words of its own for it.
+what a call does when it has no words of its own for it. The tools that write also say one call of
+theirs in French and English, for eriphe-core's cards (`says.go`, the tool's
+`_meta: {"eriphe/says": …}`, core/README.md « A tool that says its own call »): `write_file`
+« Écrire « notes.md » dans Clients », `update_file` « Remplacer le contenu de « notes.md » »,
+`trash_file` « Mettre « notes.md » à la corbeille », the file by its name as eriphe-core's source
+lists it, never its id; files counted (`items`), and `trash_file` says what it did (`done`).
 
 | Tool | What | Hints |
 |---|---|---|
