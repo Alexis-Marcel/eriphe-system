@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"math"
 	"net/http"
 	"slices"
 	"strings"
@@ -271,7 +272,8 @@ func (w *web) handleArchives(rw http.ResponseWriter, r *http.Request, _ *session
 // espaceView is the workspace as the user left it: the pages open, the one
 // the bar talked to, the last of Eriphe's shows it took (so that a page
 // the user closed does not open again with the next visit) and the display
-// settings; and what the user closed of the orb's, that no screen shows it
+// settings (the theme, the graph's forces and whether the open node is its
+// centre); and what the user closed of the orb's, that no screen shows it
 // again.
 type espaceView struct {
 	Open  []string        `json:"open"`
@@ -279,6 +281,39 @@ type espaceView struct {
 	Shown int             `json:"shown,omitempty"`
 	Theme string          `json:"theme,omitempty"` // "" (the system's), light or dark
 	Orb   *espaceOrbClose `json:"orb,omitempty"`
+	// Forces are the graph's forces the user changed in the settings, by
+	// name (web/espace, graph/layout.ts: FORCE_RANGES); the others are the
+	// defaults. Centring false: the open node is not the graph's centre
+	// (absent, it is).
+	Forces   map[string]float64 `json:"forces,omitempty"`
+	Centring *bool              `json:"centring,omitempty"`
+}
+
+// espaceForceRanges are the bounds of each of the graph's forces, as the
+// workspace has them (graph/layout.ts, FORCE_RANGES): a value kept is
+// brought within them, a name that is not a force is dropped.
+var espaceForceRanges = map[string][2]float64{
+	"centre":    {0, 0.4},
+	"repulsion": {0, 6000},
+	"link":      {0, 1.5},
+	"distance":  {0, 300},
+}
+
+// forcesKept is what of fs the workspace knows as forces, each within its
+// range; nil when nothing is left.
+func forcesKept(fs map[string]float64) map[string]float64 {
+	var out map[string]float64
+	for k, v := range fs {
+		r, ok := espaceForceRanges[k]
+		if !ok || math.IsNaN(v) || math.IsInf(v, 0) {
+			continue
+		}
+		if out == nil {
+			out = map[string]float64{}
+		}
+		out[k] = min(r[1], max(r[0], v))
+	}
+	return out
 }
 
 // espaceOrbClose is what the user closed of the orb's (web/espace,
@@ -347,6 +382,10 @@ func (w *web) handleEspaceView(rw http.ResponseWriter, r *http.Request, _ *sessi
 	}
 	if len(in.Open) > espaceOpenMax {
 		in.Open = in.Open[:espaceOpenMax]
+	}
+	in.Forces = forcesKept(in.Forces)
+	if in.Centring != nil && *in.Centring {
+		in.Centring = nil // on is the default: kept as nothing
 	}
 	for _, id := range append(slices.Clone(in.Open), in.Talk) {
 		if id != "" && !nodefile.IDOK(id) {

@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { stamp } from "../a2ui/format";
-import { Icon } from "../a2ui/icons";
+import { Settings } from "./Settings";
 import { archives, reopen, type ArchivedNode } from "../data/api";
 import { localURL } from "../data/presence";
 import { dropNote, openPage, setTheme, step, store, useGraph } from "../data/store";
@@ -11,21 +11,18 @@ import { useWords } from "../i18n";
 
 // The head-up display (#633), with no bar: the graph takes the whole
 // screen, and its bubbles say what waits for the user and what runs. In
-// the top-right corner, three icons:
-// what the user archived, to reopen; the light or dark theme; the way to
-// the settings. Under them, the notifications routed to this tab, and a
-// word when the stream is down.
+// the top-right corner, three icons: what the user archived, to reopen;
+// the light or dark theme; the workspace's settings, and the way to the
+// others (Settings.tsx). Under them, the notifications routed to this
+// tab, and a word when the stream is down.
 
-export function Hud({ live }: { live: boolean }) {
-  const { t } = useWords();
+export function Hud({ live, narrow }: { live: boolean; narrow?: boolean }) {
   return (
     <>
       <div className="hud-corner">
         {live && <Archives />}
         <Theme />
-        <a className="hud-icon" href="/settings" aria-label={t("espace.settings")} title={t("espace.settings")}>
-          <Icon name="settings" />
-        </a>
+        <Settings narrow={narrow} />
       </div>
       {live && <Offline />}
       <Notices />

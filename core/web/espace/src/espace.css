@@ -704,10 +704,28 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .gr-viewport.holding, .gr-viewport.holding * { cursor: grabbing !important; user-select: none; }
 .gr-world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
 .gr-links { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
-.gr-link { fill: none; stroke: var(--link); stroke-width: 1; vector-effect: non-scaling-stroke; transition: stroke 0.4s, opacity 0.4s; }
-.gr-link.on { stroke: var(--link-on); }
-.gr-link.far { opacity: 0.2; }
-.gr-link.rel { stroke: color-mix(in oklab, var(--warn) 55%, transparent); stroke-dasharray: 2 5; }
+/* One thin solid grey line per pair of linked nodes, under them; hovering
+   a node keeps it, its neighbours and their links sharp, the rest fades
+   (Graph.tsx, hoverOn: .hovering on the viewport, .near on what stays). */
+.gr-link { fill: none; stroke: var(--edge); stroke-width: 1; vector-effect: non-scaling-stroke; transition: stroke 0.2s, opacity 0.2s; }
+:root { --edge: color-mix(in oklab, var(--fg) 24%, transparent); --edge-on: color-mix(in oklab, var(--fg) 55%, transparent); }
+.gr-viewport.hovering .gr-link:not(.near) { opacity: 0.12; }
+.gr-viewport.hovering .gr-link.near { stroke: var(--edge-on); }
+.gr-node, .gr-page { transition: filter 0.2s; }
+.gr-viewport.hovering .gr-node:not(.near) { filter: opacity(0.2); }
+.gr-viewport.hovering .gr-page:not(.near) { filter: opacity(0.4); }
+
+/* The graph's forces as sliders (graph/Forces.tsx). */
+.forces { margin: 0; padding: 0; border: 0; display: grid; gap: 10px; min-width: 0; }
+.forces legend { padding: 0; margin-bottom: 8px; font-size: var(--fs-small); font-weight: 600; color: var(--fg); }
+.forces-row { display: grid; gap: 4px; font-size: var(--fs-small); color: var(--fg2); }
+.forces-row span { display: flex; justify-content: space-between; gap: 8px; }
+.forces-row output { font: var(--fs-tiny) var(--mono); color: var(--fg3); font-variant-numeric: tabular-nums; }
+.forces-row input { width: 100%; margin: 0; accent-color: var(--accent); }
+.forces-switch { display: flex; gap: 8px; align-items: center; font-size: var(--fs-small); color: var(--fg2); cursor: pointer; }
+.forces-switch input { margin: 0; accent-color: var(--accent); }
+.forces-reset { justify-self: start; }
+.forces-reset:disabled { opacity: 0.45; cursor: default; }
 
 .gr-node { position: absolute; width: 0; height: 0; z-index: 2; }
 .gr-node > * { position: absolute; left: 0; top: 0; translate: -50% -50%; }
@@ -944,7 +962,7 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 button.hud-icon { cursor: pointer; padding: 0; font: inherit; }
 .hud-count { position: absolute; top: -3px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; display: grid; place-items: center; border-radius: 999px;
   background: var(--fg2); color: var(--bg); font-size: 10px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
-.hud-archives { position: relative; }
+.hud-archives, .hud-settings { position: relative; }
 .hud-panel { position: absolute; top: 42px; right: 0; z-index: 40; width: 330px; display: grid; gap: 10px; padding: 12px; border-radius: 14px;
   background: var(--glass); border: 1px solid var(--glass-line); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--lift); }
 .hud-muted { margin: 0; font-size: 13px; color: var(--fg3); }
@@ -954,6 +972,11 @@ button.hud-icon { cursor: pointer; padding: 0; font: inherit; }
 .hud-arch b { font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hud-arch em { font-style: normal; font-size: 12px; color: var(--fg3); }
 .hud-arch .btn { padding: 3px 9px; font-size: 12.5px; }
+/* The workspace's settings under the gear (Settings.tsx): the graph's
+   forces, then the way to the other settings. */
+.hud-settings .hud-panel { width: 290px; gap: 12px; }
+.hud-more { justify-self: start; font-size: var(--fs-small); color: var(--fg2); text-decoration: none; }
+.hud-more:hover { color: var(--fg); text-decoration: underline; }
 .hud-offline { position: absolute; top: 58px; left: 50%; translate: -50% 0; z-index: 25; margin: 0; padding: 6px 12px; border-radius: 10px; font-size: 13px;
   background: var(--warn-soft); color: var(--warn-text); border: 1px solid color-mix(in oklab, var(--warn) 40%, transparent); }
 .espace-note { position: absolute; left: 16px; bottom: 18px; z-index: 20; margin: 0; font-size: 12.5px; color: var(--fg3); max-width: 300px; }

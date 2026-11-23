@@ -345,8 +345,8 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(page.locator(".gr-node.standing", { has: page.locator('.gr-core[aria-label="Mes mails"]') })).toHaveCount(1);
   await expect(pageOf("Mes mails")).toBeVisible();
   // Opened beside the subject, the view's page takes free room next to
-  // it: the two never overlap, the new one is framed whole, its head on
-  // screen, and no page goes under the bar.
+  // it: the two never overlap, and the one the bar talks to, the graph's
+  // centre, is framed whole, its head on screen, above the bar.
   await still(pageOf("Mes mails"));
   await shot(page, "view-beside", false);
   await expectApart(page, [watch, pageOf("Mes mails")]);
@@ -356,18 +356,18 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(viewCard).toHaveCount(0);
   await expect(watch.getByRole("button", { name: "Oui" })).toHaveCount(0);
   // Its pages closed, the view's bubble, made on the subject, sits beside
-  // it. Dropped right on the view, the subject stays there and the view
-  // gives way.
+  // it. Dropped right on the view, nothing is pinned: the two are set
+  // apart and the graph settles again, no bubble on another.
   await home(page);
   const mine = page.locator(".gr-node:not(.external)", { has: page.locator('.gr-core[aria-label^="Mes mails"]') });
   const watching = page.locator(".gr-node:not(.external)", { has: page.locator('.gr-core[aria-label^="Garder un œil sur mes mails"]') });
   await settled(mine);
-  const onView = await settled(watching);
+  await settled(watching);
   await dragOnto(page, bubble("Mes mails"), bubble("Garder un œil sur mes mails"));
   const dropped = await settled(mine);
-  expect(Math.hypot(dropped[0] - onView[0], dropped[1] - onView[1])).toBeLessThan(40);
   const aside = await settled(watching);
-  expect(Math.hypot(aside[0] - onView[0], aside[1] - onView[1])).toBeGreaterThan(10);
+  expect(Math.hypot(aside[0] - dropped[0], aside[1] - dropped[1])).toBeGreaterThan(10);
+  await expectBubblesApart(page);
   await shot(page, "graph-apart");
 
   // 14b. The view's skill, woken once per mail, proposed to archive
@@ -551,9 +551,9 @@ test("the steps of the scenario", async ({ page, request }) => {
   expect(problems).toEqual([]);
 });
 
-// What the workspace keeps for the user: the pages open and the theme, on
-// the next visit; a bubble dropped holds where it was dropped for the
-// session, and is not kept.
+// What the workspace keeps for the user: the pages open, the theme and the
+// graph's settings, on the next visit; a bubble dropped is not pinned, and
+// where it is is not kept.
 // With motion (@motion): a dragged bubble glides to where it is let go.
 test("the workspace as the user left it", { tag: "@motion" }, async ({ page }) => {
   const problems: string[] = [];
@@ -578,16 +578,19 @@ test("the workspace as the user left it", { tag: "@motion" }, async ({ page }) =
   for (let i = 1; i <= 12; i++) await page.mouse.move(box.x + box.width / 2 + i * 12, box.y + box.height / 2 + i * 6);
   await page.mouse.up();
   await expect.poll(async () => (await at(node))[0]).not.toBeCloseTo(from[0], 0);
-  const dropped = await settled(node);
+  await settled(node);
   expect(sent).toEqual([]);
   await expectBubblesApart(page);
 
-  // The arrangement holds for the session: a page opened and closed
-  // pushes it aside for a while, then it is back where it was dropped.
+  // Nothing is pinned: a page opened becomes the graph's centre, the
+  // graph settles round it, and once it is closed the graph rests again,
+  // no bubble on another, still nothing sent.
   await page.locator('.gr-core[aria-label="Substack"]').click();
   await expect(page.locator('article.pg[aria-label="Substack"]')).toBeVisible();
   await home(page);
-  await expect.poll(async () => Math.hypot((await settled(node))[0] - dropped[0], (await at(node))[1] - dropped[1])).toBeLessThan(60);
+  await settled(node);
+  await expectBubblesApart(page);
+  expect(sent).toEqual([]);
 
   // The page open and the theme come back on the next visit; where the
   // bubbles were is not kept: the graph lays itself out afresh.
@@ -604,6 +607,26 @@ test("the workspace as the user left it", { tag: "@motion" }, async ({ page }) =
 
   await page.getByRole("button", { name: "Thème clair ou sombre" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  // The graph's settings, under the gear: a force moved and the centring
+  // turned off are kept for the next visit, and « Par défaut » gives the
+  // forces back.
+  const gear = page.getByRole("button", { name: "Réglages" });
+  await gear.click();
+  const settings = page.getByRole("region", { name: "Réglages" });
+  const repulsion = settings.getByRole("slider", { name: "Répulsion" });
+  await repulsion.focus();
+  await page.keyboard.press("ArrowRight");
+  await settings.getByRole("checkbox", { name: "Le node ouvert devient le centre" }).uncheck();
+  await expect(settings.getByRole("link", { name: "Tous les réglages" })).toHaveAttribute("href", "/settings");
+  await expect.poll(async () => (await (await page.request.get("/espace/boot")).json()).view).toMatchObject({ forces: { repulsion: 2050 }, centring: false });
+  await page.reload();
+  await page.getByRole("button", { name: "Réglages" }).click();
+  await expect(settings.getByRole("slider", { name: "Répulsion" })).toHaveValue("2050");
+  await expect(settings.getByRole("checkbox", { name: "Le node ouvert devient le centre" })).not.toBeChecked();
+  await settings.getByRole("button", { name: "Par défaut" }).click();
+  await settings.getByRole("checkbox", { name: "Le node ouvert devient le centre" }).check();
+  await expect.poll(async () => (await (await page.request.get("/espace/boot")).json()).view.forces).toBeUndefined();
   expect(problems).toEqual([]);
 });
 
@@ -648,7 +671,11 @@ async function home(page: Page) {
       .poll(async () => {
         if ((await pages.count()) < n) return (left = true);
         const order = [page.locator("article.pg.talking"), ...Array.from({ length: n }, (_, i) => pages.nth(i))];
-        for (const pg of order) if ((await pg.count()) && (await inView(pg.first().locator(".pg-x")))) return !!(x = pg.first().locator(".pg-x"));
+        for (const pg of order) if ((await pg.count()) && (await inView(pg.first().locator(".pg-x"))) && (await onTop(pg.first().locator(".pg-x")))) return !!(x = pg.first().locator(".pg-x"));
+        // Eriphe's words at the home may lie over the neighbours' heads
+        // (the page in focus is the centre, the others round it): closed.
+        const say = page.locator(".orb-say.on .orb-x");
+        if (await say.count()) await say.first().click();
         return false;
       })
       .toBe(true);
@@ -656,6 +683,16 @@ async function home(page: Page) {
     await x!.click();
     await expect(pages).toHaveCount(n - 1);
   }
+}
+
+// onTop tells whether nothing lies over an element's middle: a click there
+// lands on it.
+async function onTop(el: Locator): Promise<boolean> {
+  return el.evaluate((e) => {
+    const r = e.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return !!hit && e.contains(hit);
+  });
 }
 
 // inView tells whether an element is whole inside the viewport.
@@ -680,8 +717,9 @@ async function openMail(page: Page, id: string) {
 
 // expectApart checks open pages, once they are at rest (the layout's
 // soft collision and the camera's spring ease them into place): no two
-// overlap, the last one opened is whole on screen, its head in view, and
-// none goes under the bar.
+// overlap, and the one in focus (the bar talks to it: the graph's centre)
+// is whole on screen, its head in view, not under the bar; the others may
+// go past the screen's edge.
 async function expectApart(page: Page, pages: Locator[]): Promise<void> {
   await expect(async () => {
     for (const p of pages) await still(p);
@@ -695,16 +733,15 @@ async function expectApart(page: Page, pages: Locator[]): Promise<void> {
         expect(apart, `pages ${i} and ${j} overlap`).toBe(true);
       }
     }
-    const last = boxes.at(-1)!;
-    const head = (await pages.at(-1)!.locator(".pg-head").boundingBox())!;
+    const talking = await Promise.all(pages.map((p) => p.evaluate((el) => el.classList.contains("talking"))));
+    const f = talking.includes(true) ? talking.indexOf(true) : pages.length - 1; // none: the last opened
+    const focus = boxes[f];
+    const head = (await pages[f].locator(".pg-head").boundingBox())!;
     expect(head.y).toBeGreaterThanOrEqual(0);
-    expect(last.x).toBeGreaterThanOrEqual(0);
-    expect(last.x + last.width).toBeLessThanOrEqual(view.width);
-    // a page in view ends above the bar zone: its last line is not under it
-    for (const b of boxes) {
-      const seen = b.x + b.width > 0 && b.x < view.width;
-      if (seen && b.x < bar.x + bar.width && bar.x < b.x + b.width) expect(b.y + b.height, "a page under the bar").toBeLessThanOrEqual(bar.y + 0.5);
-    }
+    expect(focus.x).toBeGreaterThanOrEqual(0);
+    expect(focus.x + focus.width).toBeLessThanOrEqual(view.width);
+    // the page in focus ends above the bar zone: its last line is not under it
+    if (focus.x < bar.x + bar.width && bar.x < focus.x + focus.width) expect(focus.y + focus.height, "the page in focus under the bar").toBeLessThanOrEqual(bar.y + 0.5);
   }).toPass({ timeout: 15_000 });
 }
 

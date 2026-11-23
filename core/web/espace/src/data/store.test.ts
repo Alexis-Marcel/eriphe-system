@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { GraphNode, OrbWords } from "./api";
 import {
   applyDoc, applyMoved, applyNodes, applyNotes, applyOrb, applyProgress, applyShow, applySource, closePage, empty, NOTES_KEPT,
-  landed, openPage, pathOf, restore, setClosed, setSent, setTheme, SHOW_FRESH, sourceKey, subtree, talkTo, viewOf, type State,
+  landed, openPage, pathOf, restore, setClosed, setGraphCentring, setGraphForces, setSent, setTheme, SHOW_FRESH, sourceKey, subtree, talkTo, viewOf, type State,
 } from "./store";
+import { DEFAULT_FORCES, FORCE_RANGES } from "../graph/layout";
 
 const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
   id, title: id.toUpperCase(), lifetime: "work", status: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
@@ -179,5 +180,26 @@ describe("the store", () => {
     const t = setTheme(s, "light");
     expect(t.theme).toBe("light");
     expect(setTheme(t, "light")).toBe(t);
+  });
+
+  it("keeps the graph's forces and its centring, only what differs from the defaults", () => {
+    // Never set: the defaults, the open node the centre; nothing to keep.
+    let s = restore(empty(), { open: [] });
+    expect(s.forces).toEqual(DEFAULT_FORCES);
+    expect(s.centring).toBe(true);
+    expect(viewOf(s).forces).toBeUndefined();
+    expect(viewOf(s).centring).toBeUndefined();
+    // Set: each within its range, only the one changed kept.
+    s = setGraphForces(s, { repulsion: 9999 });
+    expect(s.forces).toEqual({ ...DEFAULT_FORCES, repulsion: FORCE_RANGES.repulsion.max });
+    expect(setGraphForces(s, { repulsion: 9999 })).toBe(s);
+    s = setGraphCentring(s, false);
+    expect(viewOf(s)).toMatchObject({ forces: { repulsion: FORCE_RANGES.repulsion.max }, centring: false });
+    // Back: what was kept comes back, what is not a force reads as nothing.
+    const back = restore(empty(), { open: [], forces: { centre: 0.2, spin: 3, link: "x" as never }, centring: false });
+    expect(back.forces).toEqual({ ...DEFAULT_FORCES, centre: 0.2 });
+    expect(back.centring).toBe(false);
+    // The defaults again: nothing kept.
+    expect(viewOf(setGraphCentring(setGraphForces(back, DEFAULT_FORCES), true))).toMatchObject({ forces: undefined, centring: undefined });
   });
 });

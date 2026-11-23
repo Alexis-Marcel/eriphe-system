@@ -226,3 +226,48 @@ func TestEspaceViewKept(t *testing.T) {
 		t.Fatal("the shell does not carry the theme")
 	}
 }
+
+// The graph's forces and its centring, set in the workspace's settings,
+// are kept with the view for every screen: only the forces there are,
+// each within its range; the centring on (the default) is kept as nothing.
+func TestEspaceGraphSettingsKept(t *testing.T) {
+	tw, csrf := graphWeb(t)
+	bootView := func() (espaceView, string) {
+		_, body, _ := tw.do("GET", "/espace/boot", nil, nil)
+		var boot espaceBoot
+		json.Unmarshal([]byte(body), &boot)
+		return boot.View, body
+	}
+	// Never set: no forces, the centring absent (on).
+	if v, body := bootView(); v.Forces != nil || v.Centring != nil || strings.Contains(body, `"forces"`) || strings.Contains(body, `"centring"`) {
+		t.Fatalf("a view never set: %s", body)
+	}
+	off := false
+	in := map[string]any{"open": []string{}, "theme": "dark", "centring": off, "forces": map[string]any{"centre": 0.2, "repulsion": 90000, "link": -3, "spin": 4}}
+	if code, _ := gesture(t, tw, csrf, "PUT", "/api/espace/view", in); code != http.StatusNoContent {
+		t.Fatalf("view: %d", code)
+	}
+	v, body := bootView()
+	want := map[string]float64{"centre": 0.2, "repulsion": 6000, "link": 0}
+	if v.Centring == nil || *v.Centring || v.Theme != "dark" || len(v.Forces) != len(want) {
+		t.Fatalf("kept: %s", body)
+	}
+	for k, x := range want {
+		if v.Forces[k] != x {
+			t.Errorf("%s: %v, want %v", k, v.Forces[k], x)
+		}
+	}
+	// A node closed keeps them (the view is written again whole).
+	tw.c.dropFromView("zzzzzzzzzz")
+	if v, body := bootView(); v.Centring == nil || len(v.Forces) != 3 {
+		t.Fatalf("after a drop: %s", body)
+	}
+	// Back to the defaults: nothing kept.
+	on := true
+	if code, _ := gesture(t, tw, csrf, "PUT", "/api/espace/view", espaceView{Open: []string{}, Centring: &on, Forces: map[string]float64{"spin": 1}}); code != http.StatusNoContent {
+		t.Fatalf("view: %d", code)
+	}
+	if v, body := bootView(); v.Forces != nil || v.Centring != nil {
+		t.Fatalf("defaults kept: %s", body)
+	}
+}

@@ -97,6 +97,21 @@ export function slide(cam: Cam, keep: Box[], all: Box[], size: Size): Cam {
   return { k, x: band(SIDE, size.w - SIDE, kx0, kx1, ax0, ax1, cam.x), y: band(TOP, size.h - footOf(size), ky0, ky1, ay0, ay1, cam.y) };
 }
 
+// FLOOR is the smallest scale the camera takes by itself on a page in
+// focus: pages stay readable. Below it, only the user's wheel or pinch.
+export const FLOOR = 0.9;
+
+// frameAround frames the page in focus, readable: at scale 1, or as much
+// less as it takes to show it whole, never below FLOOR; always in the
+// middle of the free band. What does not fit round it stays off screen,
+// its edge mark showing the way to what waits.
+export function frameAround(focus: Box, size: Size): Cam {
+  const cx = (focus[0] + focus[2]) / 2, cy = (focus[1] + focus[3]) / 2;
+  const left = SIDE, right = size.w - SIDE, top = TOP, bottom = size.h - footOf(size);
+  const k = Math.max(FLOOR, Math.min(1, (right - left) / (focus[2] - focus[0] + 60), (bottom - top) / (focus[3] - focus[1] + 40)));
+  return { k, x: (left + right) / 2 - cx * k, y: (top + bottom) / 2 - cy * k };
+}
+
 // frameAll frames the whole graph, the home's view: each body whole, a
 // bubble with its label under it.
 export function frameAll(boxes: Box[], size: Size): Cam {

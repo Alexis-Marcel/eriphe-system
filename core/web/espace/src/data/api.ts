@@ -16,19 +16,23 @@ import type { Lang } from "../i18n";
 // - the user's gestures (web_gestures.go): PUT /api/nodes/{id}/md (an edit,
 //   made on the version it was read at), POST .../ask (a block's button,
 //   which only asks), .../open (an item read in full), .../archive and
-//   .../reopen, PUT /api/espace/view (the pages open, the display settings);
+//   .../reopen, PUT /api/espace/view (the pages open, the display settings:
+//   the theme, the graph's forces);
 // - POST /presence: whether this tab is in front of the user (presence.ts).
-// No control of the page keeps a rule or a preference: the user says it to
-// Eriphe, who remembers it. A request without a session gets 401: the page
+// No control of the page keeps a rule or a preference about what Eriphe
+// does: the user says it to Eriphe, who remembers it. Only how the page
+// looks is set on it (the theme, the graph's forces). A request without a session gets 401: the page
 // goes to the sign-in.
 
 // The workspace as the user left it (espaceView, web_gestures.go): the
 // pages open, the one the bar talked to, the last of Eriphe's shows
 // taken, the theme ("" follows the system), what the user closed of the
-// orb's (orb/model.ts: Closed).
+// orb's (orb/model.ts: Closed); the graph's forces the user changed in the
+// settings (the others are the defaults, graph/layout.ts) and, false,
+// that the open node is not the graph's centre (hud/Settings.tsx).
 export type Theme = "" | "light" | "dark";
 export type OrbClosed = { answer: number; seen: number; wait: number; failed: number };
-export type View = { open: string[]; talk?: string; shown?: number; theme?: Theme; orb?: OrbClosed };
+export type View = { open: string[]; talk?: string; shown?: number; theme?: Theme; orb?: OrbClosed; forces?: Record<string, number>; centring?: boolean };
 
 export type Boot = {
   lang: Lang;

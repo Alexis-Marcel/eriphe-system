@@ -66,7 +66,7 @@ describe("the graph's frames", () => {
     expect(bubble("c").style.left).not.toBe("");
 
     // A page opens: the graph moves for a while; the bubbles are drawn
-    // again once (dimmed, the one open hidden), then not at each frame.
+    // again once (the one open hidden), then not at each frame.
     await act(async () => step(store, openPage, "a", false));
     frame();
     const drawn = vi.mocked(coreShape).mock.calls.length;
@@ -74,9 +74,10 @@ describe("the graph's frames", () => {
     for (let i = 0; i < 40; i++) frame();
     expect([bubble("c").style.left, bubble("c").style.top].join()).not.toBe(was);
     expect(vi.mocked(coreShape).mock.calls.length).toBe(drawn);
-    // The links follow too, straight on their elements.
-    expect(el.querySelector("line.gr-link")?.getAttribute("x1")).not.toBeNull();
-    expect(el.querySelector("path.gr-link")?.getAttribute("d")).toMatch(/^M/);
+    // The links follow too, straight on their elements: one line per pair.
+    expect(el.querySelectorAll("line.gr-link")).toHaveLength(4);
+    expect(el.querySelector("path.gr-link")).toBeNull();
+    for (const l of el.querySelectorAll("line.gr-link")) expect(l.getAttribute("x1")).not.toBeNull();
 
     act(() => root.unmount());
     el.remove();
