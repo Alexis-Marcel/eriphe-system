@@ -45,7 +45,7 @@ func TestPresets(t *testing.T) {
 	if a[4].Folders["archive"] != "Old" {
 		t.Errorf("folder override: %v", a[4].Folders)
 	}
-	if cfg.MaxResults != 50 || cfg.MaxBodyChars != 20000 {
+	if cfg.MaxResults != 200 || cfg.MaxBodyChars != 20000 {
 		t.Errorf("limits: %+v", cfg)
 	}
 }

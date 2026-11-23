@@ -596,32 +596,36 @@ func (mc *mailCache) folder(s string) (string, *folderCache) {
 // no full-text search, a cached folder, and either a since inside the window
 // or enough matches in the window to fill the limit (older mail would come
 // after them). ok is false otherwise, and the caller asks the server.
-func (mc *mailCache) search(q Query) ([]Summary, bool) {
+// matched is how many matched in all, -1 when older mail the cache does not
+// hold may match too.
+func (mc *mailCache) search(q Query) (hits []Summary, matched int, ok bool) {
 	if mc == nil || strings.TrimSpace(q.Text) != "" {
-		return nil, false
+		return nil, 0, false
 	}
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 	_, f := mc.folder(q.Folder)
 	if f == nil {
-		return nil, false
+		return nil, 0, false
 	}
-	var hits []Summary
 	for _, h := range f.msgs {
 		if q.matches(h) {
 			hits = append(hits, h.Summary)
 		}
 	}
 	sortNewest(hits)
-	whole := !q.Since.IsZero() && !q.Since.Before(day(f.cover))
-	whole = whole || len(hits) >= q.Limit || len(f.msgs) == int(f.numMessages)
-	if !whole {
-		return nil, false
+	all := !q.Since.IsZero() && !q.Since.Before(day(f.cover)) || len(f.msgs) == int(f.numMessages)
+	if !all && len(hits) < q.Limit {
+		return nil, 0, false
+	}
+	matched = len(hits)
+	if !all {
+		matched = -1 // older mail, not held, may match too
 	}
 	if len(hits) > q.Limit {
 		hits = hits[:q.Limit]
 	}
-	return hits, true
+	return hits, matched, true
 }
 
 // day is the date of t, as IMAP compares dates (in t's own zone).
