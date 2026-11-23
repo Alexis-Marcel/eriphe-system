@@ -179,12 +179,15 @@ test("the steps of the scenario", async ({ page, request }) => {
   // 8. A draft with its « Envoyer ? » card, the production view beside it,
   // a research child running.
   await say("Réponds que je regarde dans l'heure, ouvre-moi la prod, et lance en arrière-plan une recherche sur l'erreur.");
-  // Its send waits for the user's yes: the orb beside the mail's page,
-  // pointing at the card, with what it did.
+  // Its send waits for the user's yes: the orb only answers, beside the
+  // mail's page, with what it did; what waits is the graph's to show, the
+  // card in the page and the node's halo.
   await expect(said).toContainText("Le brouillon est prêt");
-  await expect(words).toHaveClass(/wait/);
+  await expect(words).toHaveClass(/answer/);
+  await expect(said).not.toContainText("Il me faut ton oui ici.");
   await orbBeside(page, mailPage);
-  await shot(page, "orb-wait");
+  await expect(page.locator(`.gr-node.yours[data-node="${mail}"]`)).toHaveCount(1);
+  await shot(page, "orb-card-answer");
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", `Écris à Eriphe, sur ${external}`);
   await expect(mailPage).toContainText("Je regarde dans l'heure.");
   await expect(pageOf("Production")).toBeVisible();
@@ -310,12 +313,13 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(watch.getByRole("button", { name: "Toutes, et réveille-moi la nuit pour la prod" })).toBeVisible();
   await defaults.click();
   // The view is proposed as a draft of its own, opened beside the
-  // subject: its card waits on it for the user's yes, and the orb, beside
-  // the draft, points at it.
-  await expect(said).toContainText("Il me faut ton oui ici.");
-  await expect(words).toHaveClass(/wait/);
+  // subject: its card waits on it for the user's yes, its node's halo says
+  // so, and the orb says the answer, as any other.
+  await expect(said).toContainText("Voici la vue : dis oui sur sa carte et elle s'ouvre.");
+  await expect(words).toHaveClass(/answer/);
   const draft = pageOf("Mes mails");
   await expect(draft).toBeVisible();
+  await expect(page.locator(`.gr-node.yours[data-node="${await page.locator(".gr-page", { has: draft }).getAttribute("data-page")}"]`)).toHaveCount(1);
   // The subject says where things stand: the questions and their
   // buttons gone, the choices written, the draft linked; no card in it.
   await expect(defaults).toHaveCount(0);

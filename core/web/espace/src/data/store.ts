@@ -63,7 +63,7 @@ export const empty = (): State => ({
   moved: { n: 0, refs: [] },
   live: false,
   theme: "",
-  closed: { answer: 0, seen: 0, wait: 0, failed: 0 },
+  closed: { answer: 0, seen: 0, failed: 0 },
   forces: { ...DEFAULT_FORCES },
   centring: true,
 });
@@ -79,7 +79,7 @@ export function restore(s: State, v: View | undefined): State {
   const theme: Theme = v?.theme === "light" || v?.theme === "dark" ? v.theme : "";
   const shown = typeof v?.shown === "number" && v.shown > 0 ? v.shown : s.shown;
   const n = (k: keyof OrbClosed) => (typeof v?.orb?.[k] === "number" && v.orb[k] > 0 ? v.orb[k] : 0);
-  const closed = { answer: n("answer"), seen: n("seen"), wait: n("wait"), failed: n("failed") };
+  const closed = { answer: n("answer"), seen: n("seen"), failed: n("failed") };
   return { ...s, open, talk, theme, shown, closed, forces: forcesFrom(v?.forces), centring: v?.centring !== false };
 }
 
@@ -213,10 +213,9 @@ export function applyOrb(s: State, x: OrbFeed): State {
   const str = (v: unknown) => (typeof v === "string" ? v : undefined);
   const work = x.work && typeof x.work === "object" ? { node: str(x.work.node), draft: str(x.work.draft) } : undefined;
   const failed = x.failed && typeof x.failed.seq === "number" ? { seq: x.failed.seq, node: str(x.failed.node) } : undefined;
-  const wait = x.wait && typeof x.wait.card === "number" && typeof x.wait.node === "string" ? x.wait : undefined;
   const cards = Array.isArray(x.cards) ? x.cards.filter((t) => typeof t === "string") : undefined;
   const waiting = Array.isArray(x.waiting) ? x.waiting.filter((w): w is Waiting => !!words(w)) : undefined;
-  const orb: OrbFeed = { asked: typeof x.asked === "number" ? x.asked : undefined, work, answer: words(x.answer), failed, wait, cards, waiting };
+  const orb: OrbFeed = { asked: typeof x.asked === "number" ? x.asked : undefined, work, answer: words(x.answer), failed, cards, waiting };
   return { ...s, orb, sent: landed(orb, s.sent) ? null : s.sent };
 }
 

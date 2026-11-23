@@ -31,7 +31,7 @@ import type { Lang } from "../i18n";
 // settings (the others are the defaults, graph/layout.ts) and, false,
 // that the open node is not the graph's centre (hud/Settings.tsx).
 export type Theme = "" | "light" | "dark";
-export type OrbClosed = { answer: number; seen: number; wait: number; failed: number };
+export type OrbClosed = { answer: number; seen: number; failed: number };
 export type View = { open: string[]; talk?: string; shown?: number; theme?: Theme; orb?: OrbClosed; forces?: Record<string, number>; centring?: boolean };
 
 export type Boot = {
@@ -331,15 +331,14 @@ export type OrbWords = { seq: number; node?: string; text: string; more?: boolea
 // whatever page the bar talks to. asked: the seq of the user's last
 // message Eriphe read; work: Eriphe is at work, on that node (none: the
 // home), and what it is writing; answer: its answer to that message;
-// failed: it could not answer it; wait: the newest card that answer raised
-// that waits for the user's yes in a node; cards: those no node holds,
-// shown above the bar. Nothing Eriphe says or does unasked is the orb's.
+// failed: it could not answer it; cards: the cards that wait for the
+// user's yes that no node holds, shown above the bar (one a node holds
+// waits in its page: the graph shows it, not the orb). Nothing Eriphe says or does unasked is the orb's.
 export type OrbFeed = {
   asked?: number;
   work?: { node?: string; draft?: string };
   answer?: OrbWords;
   failed?: { seq: number; node?: string };
-  wait?: { card: number; node: string };
   cards?: string[];
   // The user's messages that wait for Eriphe, whatever node they were
   // said to, oldest first.

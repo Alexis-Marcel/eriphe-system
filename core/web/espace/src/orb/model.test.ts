@@ -10,7 +10,7 @@ const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
   id, title: id.toUpperCase(), lifetime: "work", status: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
 });
 const nodes = { sub: node("sub"), mail: node("mail"), day: node("day") };
-const none: Closed = { answer: 0, seen: 0, wait: 0, failed: 0 };
+const none: Closed = { answer: 0, seen: 0, failed: 0 };
 const mind = (more: Partial<Mind> = {}): Mind => ({ now: 1_000_000, sent: null, closed: none, met: () => undefined, nodes, ...more });
 
 describe("what the orb shows", () => {
@@ -57,8 +57,8 @@ describe("what the orb shows", () => {
     expect(replaced(a, orbShow(answer, mind()))).toBe(false);
     // the user writing replaces them too
     expect(replaced(a, orbShow(answer, mind({ sent: { text: "Et ?", after: 4, to: "sub" } })))).toBe(true);
-    // a card or a failure only comes before them; pinned things are not words
-    expect(replaced(a, orbShow({ ...answer, wait: { card: 2, node: "mail" } }, mind()))).toBe(false);
+    // a failure only comes before them; pinned things are not words
+    expect(replaced(a, orbShow({ ...answer, failed: { seq: 2, node: "mail" } }, mind()))).toBe(false);
     expect(replaced(orbShow({ answer: { seq: 5, text: "a\n\nb", whole: true } }, mind()), again)).toBe(false);
   });
 
@@ -69,7 +69,7 @@ describe("what the orb shows", () => {
     // the subject they are about, opened (« Voir plus », Eriphe's show): they stay beside its page
     expect(leaves(s, "sub")).toBe(false);
     // the pinned ones are not words that leave
-    expect(leaves(orbShow({ wait: { card: 3, node: "mail" } }, mind()), "sub")).toBe(false);
+    expect(leaves(orbShow({ failed: { seq: 3, node: "mail" } }, mind()), "sub")).toBe(false);
   });
 
   it("speaks at the home when its subject is not in the graph", () => {
@@ -92,16 +92,14 @@ describe("what the orb shows", () => {
     expect(orbShow(x, mind({ closed: close(none, s) })).mode).toBe("rest");
   });
 
-  it("points at the card that waits for the user's yes, with its answer when it is about it", () => {
-    const x: OrbFeed = { asked: 8, answer: { seq: 9, node: "mail", text: "Tu me donnes ton accord ?" }, wait: { card: 3, node: "mail" } };
+  it("says the answer of a turn that raised a card as any other, wherever the card waits", () => {
+    // the answer belongs to the subject asked in, the card waits in another node's page (a task's)
+    const x = { asked: 8, answer: { seq: 9, node: "mail", text: "J'ai lancé le tri : dis oui sur sa carte." }, wait: { card: 3, node: "sub" } } as OrbFeed;
     const s = orbShow(x, mind());
-    expect(s).toMatchObject({ mode: "wait", node: "mail", card: 3, pinned: true });
-    expect(s.words?.text).toBe("Tu me donnes ton accord ?");
-    expect(orbShow({ wait: { card: 3, node: "mail" } }, mind()).words).toBeUndefined();
-    // closed: the next thing shows, here the answer
-    expect(orbShow(x, mind({ closed: close(none, s) }))).toMatchObject({ mode: "answer", node: "mail" });
-    // a card in a node the graph does not have: nothing to point at
-    expect(orbShow({ wait: { card: 4, node: "gone" } }, mind()).mode).toBe("rest");
+    expect(s).toMatchObject({ mode: "answer", node: "mail" });
+    expect(s.words?.text).toBe("J'ai lancé le tri : dis oui sur sa carte.");
+    // a feed with nothing but a card to point at: the orb rests, the graph shows what waits
+    expect(orbShow({ asked: 8, wait: { card: 3, node: "mail" } } as OrbFeed, mind()).mode).toBe("rest");
   });
 
   it("only answers: a subject that begins to wait for the user, unasked, leaves it in the bar", () => {
@@ -202,13 +200,6 @@ describe("where the orb goes", () => {
     expect(b.r).toBeLessThanOrEqual(screen.r);
     expect(b.t).toBeGreaterThanOrEqual(screen.t);
     expect(overlaps(b, sub)).toBe(false);
-  });
-
-  it("points at a card's height in an open page", () => {
-    const page: Rect = { l: 400, t: 100, r: 1000, b: 700 };
-    const p = placeBeside(page, words, [page, bar], screen, undefined, 520);
-    expect(p.orb[1]).toBe(520);
-    expect(p.orb[0]).toBeGreaterThan(page.r);
   });
 
   it("finds a free spot near the middle at the home, clear of bubbles and the bar", () => {

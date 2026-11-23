@@ -39,7 +39,7 @@ describe("what is kept of the workspace", () => {
     expect((sent[sent.length - 1] as { open: string[] }).open).not.toContain("tile");
     // what the user closed of the orb's: at once, a reload right after must not show it again
     const n = sent.length;
-    store.setState(setClosed(store.getState(), { answer: 41, seen: 0, wait: 0, failed: 0 }));
+    store.setState(setClosed(store.getState(), { answer: 41, seen: 0, failed: 0 }));
     expect(sent).toHaveLength(n + 1);
     expect((sent[n] as { orb: { answer: number } }).orb.answer).toBe(41);
     stop();

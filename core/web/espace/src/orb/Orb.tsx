@@ -87,11 +87,7 @@ export function Orb({ bodies, at: where, onFrame, cam, onOpen }: {
       }
       const target = show.node ? bodies.find((b) => b.id === show.node && at[b.id]) : undefined;
       if (target) {
-        // A card waits in its open page: the orb points at its height.
-        let anchor: number | undefined;
-        const card = show.mode === "wait" && target.box ? document.querySelector(`[data-page="${CSS.escape(target.id)}"] .a2-proposal-pending`)?.getBoundingClientRect() : undefined;
-        if (card && card.height > 0) anchor = card.top + Math.min(card.height, 60) / 2;
-        placed = placeBeside(rect(target, at[target.id]), words, obstacles, screen, s.side, anchor);
+        placed = placeBeside(rect(target, at[target.id]), words, obstacles, screen, s.side);
       } else {
         placed = placeHome(words, obstacles, screen, s.home);
         s.home = placed ? homePoint(placed, words) : undefined;
@@ -172,7 +168,7 @@ export function Orb({ bodies, at: where, onFrame, cam, onOpen }: {
         onClick={() => show.node && open(show.node)}
       />
       <div ref={say} className={`orb-say ${show.mode}${show.pinned ? " pinned" : ""}`} data-orb={show.key}>
-        <Words show={show} dismiss={dismiss} open={open} unfold={unfold} />
+        <Words show={show} dismiss={dismiss} unfold={unfold} />
       </div>
     </>
   );

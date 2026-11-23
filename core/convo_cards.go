@@ -53,8 +53,7 @@ const convoCardsSchema = `CREATE TABLE IF NOT EXISTS convo_cards (
 	attached INTEGER NOT NULL DEFAULT 0,
 	decided  INTEGER NOT NULL DEFAULT 0,
 	by       TEXT NOT NULL DEFAULT '',
-	about  TEXT NOT NULL DEFAULT '',  -- what it is about: node:<id> or an entity's key (about.go)
-	asked  INTEGER NOT NULL DEFAULT 0 -- raised by the brain in a turn that answered the user (web_orb.go's markCardAsked)
+	about  TEXT NOT NULL DEFAULT ''  -- what it is about: node:<id> or an entity's key (about.go)
 );
 CREATE INDEX IF NOT EXISTS convo_cards_seq ON convo_cards (seq);`
 
@@ -97,7 +96,6 @@ type convoCard struct {
 	Decided  time.Time
 	By       string // web, a channel's id, text, page (the fallback page), or archive (withdrawCards)
 	About    string // what it is about: its proposal's, else its maker's (cardAbout)
-	Asked    bool   // raised by the brain in a turn that answered the user (markCardAsked)
 }
 
 func proposalRef(kind string, id int64) string { return kind + ":" + strconv.FormatInt(id, 10) }
@@ -108,12 +106,12 @@ func parseProposalRef(ref string) (string, int64, bool) {
 	return kind, id, ok && err == nil && id > 0 && slices.Contains(proposalKinds, kind)
 }
 
-const cardColumns = `id, ref, kind, seq, turn, state, text, created, attached, decided, by, about, asked`
+const cardColumns = `id, ref, kind, seq, turn, state, text, created, attached, decided, by, about`
 
 func scanCard(row interface{ Scan(...any) error }) (convoCard, error) {
 	var x convoCard
 	var created, attached, decided int64
-	err := row.Scan(&x.ID, &x.Ref, &x.Kind, &x.Seq, &x.Turn, &x.State, &x.Text, &created, &attached, &decided, &x.By, &x.About, &x.Asked)
+	err := row.Scan(&x.ID, &x.Ref, &x.Kind, &x.Seq, &x.Turn, &x.State, &x.Text, &created, &attached, &decided, &x.By, &x.About)
 	x.Created, x.Attached, x.Decided = unixOrZero(created), unixOrZero(attached), unixOrZero(decided)
 	return x, err
 }

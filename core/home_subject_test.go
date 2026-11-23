@@ -77,8 +77,8 @@ func TestHomeSubjectTakesTheExchange(t *testing.T) {
 		t.Fatalf("the view's card does not wait on its draft alone: %v", c.cardNodes(ref))
 	}
 	w := &web{c: c}
-	if x, _ := w.orbFor("", false); len(x.Cards) != 0 || x.Wait == nil || x.Wait.Node != view {
-		t.Errorf("a card its draft holds is above the bar too, or the orb does not point at it: %v %+v", x.Cards, x.Wait)
+	if x, _ := w.orbFor("", false); len(x.Cards) != 0 {
+		t.Errorf("a card its draft holds is above the bar too: %v", x.Cards)
 	}
 	if _, err := c.decideCard(context.Background(), cardOfRef(t, c, ref).ID, true, "web"); err != nil {
 		t.Fatal(err)

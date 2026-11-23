@@ -9,6 +9,8 @@ import type { Sent } from "../data/store";
 // to it, never unasked. What Eriphe does or says on its own (an event's
 // words, a subject that began to wait) is the graph's to show (a node's
 // ring), not the orb's; eriphe-core sends it only what answers the user.
+// What waits for the user's yes is the graph's too (the node's ring, the
+// card in its page): an answer that raised a card is said as any other.
 //
 // One orb, one thing at a time, by what matters most:
 //   1. work: Eriphe is at work on the user's message (or the user just
@@ -16,10 +18,7 @@ import type { Sent } from "../data/store";
 //      it works, and the first line of what it writes;
 //   2. failed: it could not answer: where the turn belonged, with « Try
 //      again », until the user writes again or closes it;
-//   3. wait: its answer raised a card that waits for the user's yes in a
-//      subject: beside it, pointing at the card, until it is answered or
-//      closed;
-//   4. answer: its answer to the user's last message: at the home, an
+//   3. answer: its answer to the user's last message: at the home, an
 //      answer of more than a line, whole, held until the user moves on
 //      (writes again, opens a subject, closes it); beside a subject, a few
 //      lines (« Voir plus » unfolds all of it, which then stays until the
@@ -27,11 +26,11 @@ import type { Sent } from "../data/store";
 //      words replace them, or the user moves on (opens another subject,
 //      writes, closes them); else they go after WORDS_MS of the page being
 //      seen;
-//   5. rest: in the bar.
+//   4. rest: in the bar.
 // What the user closed, or saw for its while, is not shown again (Closed,
 // kept by eriphe-core with the view).
 
-export type Mode = "rest" | "work" | "failed" | "wait" | "answer";
+export type Mode = "rest" | "work" | "failed" | "answer";
 
 export type Show = {
   mode: Mode;
@@ -39,7 +38,6 @@ export type Show = {
   key: string; // what is shown, to remember it
   words?: OrbWords; // Eriphe's words
   draft?: string; // the first line of what it writes
-  card?: number; // the card waiting
   pinned?: boolean; // stays until the user moves on
   full?: boolean; // its words unfolded whole (« Voir plus »): they stay until the user moves on
 };
@@ -49,8 +47,7 @@ export type Show = {
 export const WORDS_MS = 120_000;
 
 // Closed is what the user closed or saw for its while: the home's answer
-// (its seq), the words seen (their seq), the cards (their id), the
-// failures (their seq). Seqs and ids only grow. eriphe-core keeps it with
+// (its seq), the words seen (their seq), the failures (their seq). Seqs and ids only grow. eriphe-core keeps it with
 // what is open (the view: data/keep.ts), on any of the user's screens.
 export type Closed = OrbClosed;
 
@@ -80,10 +77,6 @@ export function orbShow(x: OrbFeed | null, m: Mind): Show {
   const a = x?.answer;
   const answerKey = a ? wordsKey(a.seq) : "";
   const answerFresh = !!a && a.seq > m.closed.seen && fresh(answerKey);
-  if (x?.wait && x.wait.card > m.closed.wait && known(x.wait.node)) {
-    const words = a && answerFresh && known(a.node) === x.wait.node ? a : undefined;
-    return { mode: "wait", node: x.wait.node, key: `wait:${x.wait.card}`, card: x.wait.card, words, pinned: true };
-  }
   const home = !!a && !!a.whole && !a.node;
   if (a && home && a.seq > m.closed.answer) return { mode: "answer", node: null, key: answerKey, words: a, pinned: true };
   // Beside a subject, its answer, a few lines.
@@ -103,7 +96,7 @@ export const words = (s: Show) => s.mode === "answer" && !s.pinned;
 
 // replaced tells whether the words shown (was) are over now that
 // something else shows (now): newer words, or Eriphe at work (the user
-// wrote). A card or a failure only comes before them: they come back after.
+// wrote). A failure only comes before them: they come back after.
 export const replaced = (was: Show, now: Show) => words(was) && was.key !== now.key && (now.mode === "work" || words(now));
 
 // leaves tells whether the bar talking to another page (talk) moves on
@@ -117,8 +110,6 @@ export function close(c: Closed, s: Show): Closed {
   switch (s.mode) {
     case "failed":
       return { ...c, failed: Math.max(c.failed, Number(s.key.split(":")[1])) };
-    case "wait":
-      return { ...c, wait: Math.max(c.wait, s.card ?? 0) };
     case "answer":
       return s.pinned ? { ...c, answer: Math.max(c.answer, s.words!.seq) } : { ...c, seen: Math.max(c.seen, s.words!.seq) };
   }
@@ -177,14 +168,14 @@ function cost(box: Rect, obstacles: Rect[], screen: Rect): number {
   return c;
 }
 
-// placeBeside is where the orb goes beside a subject (target, on screen;
-// anchor: the height it points at, its middle by default): the first side
+// placeBeside is where the orb goes beside a subject (target, on screen):
+// the first side
 // where it covers nothing and stays on screen, the side it had (prev)
 // first, so that it does not hop while things move around it; when none
 // is free, the free spot nearest around it; null when there is none: the
 // orb never covers a title, a page or the bar, it stays in the bar.
-export function placeBeside(target: Rect, words: [number, number], obstacles: Rect[], screen: Rect, prev?: Side | "home", anchor?: number): Placed | null {
-  const ay = Math.max(target.t, Math.min(target.b, anchor ?? target.t + Math.min(target.b - target.t, 2 * ORB) / 2));
+export function placeBeside(target: Rect, words: [number, number], obstacles: Rect[], screen: Rect, prev?: Side | "home"): Placed | null {
+  const ay = target.t + Math.min(target.b - target.t, 2 * ORB) / 2;
   const cx = (target.l + target.r) / 2;
   const h = Math.max(ORB, words[1]);
   const at = (side: Beside) => {

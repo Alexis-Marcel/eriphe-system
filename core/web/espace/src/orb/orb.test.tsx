@@ -194,11 +194,18 @@ describe("the orb", () => {
     expect(say()?.textContent).toBe("Je regarde");
   });
 
-  it("points at the card that waits, and says when it could not answer, without its error", async () => {
+  it("says the answer that raised a card as any other, never a placeholder, wherever the card waits", async () => {
     await draw();
-    await feed({ asked: 2, wait: { card: 7, node: "mail" } });
-    expect(orb().getAttribute("aria-label")).toBe("Eriphe, à côté de Urgent : la prod ⚠ : l'ouvrir");
-    expect(say()?.textContent).toContain("Il me faut ton oui ici.");
+    // the answer belongs to Substack, the card waits in the mail's page: the orb says the answer beside Substack
+    await feed({ asked: 2, answer: { seq: 3, node: "sub", text: "J'ai lancé le tri : dis oui sur sa carte." }, cards: [] });
+    expect(orb().getAttribute("aria-label")).toBe("Eriphe, à côté de Substack : l'ouvrir");
+    expect(say()?.textContent).toContain("J'ai lancé le tri : dis oui sur sa carte.");
+    expect(say()?.textContent).not.toContain("Il me faut ton oui ici.");
+    expect(say()?.querySelectorAll("button.orb-link")).toHaveLength(0);
+  });
+
+  it("says when it could not answer, without its error", async () => {
+    await draw();
     await feed({ asked: 3, failed: { seq: 4 } });
     expect(say()?.querySelector('[role="alert"]')?.textContent).toContain("n'a pas pu répondre");
     expect(say()?.textContent).toContain("Réessayer");

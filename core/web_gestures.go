@@ -318,11 +318,10 @@ func forcesKept(fs map[string]float64) map[string]float64 {
 
 // espaceOrbClose is what the user closed of the orb's (web/espace,
 // orb/model.ts): the home's answer, the words seen and the failures by
-// their message's seq, the cards by their id; each only grows.
+// their message's seq; each only grows.
 type espaceOrbClose struct {
 	Answer int64 `json:"answer"`
 	Seen   int64 `json:"seen"`
-	Wait   int64 `json:"wait"`
 	Failed int64 `json:"failed"`
 }
 
@@ -378,7 +377,7 @@ func (w *web) handleEspaceView(rw http.ResponseWriter, r *http.Request, _ *sessi
 		in.Shown = 0
 	}
 	if o := in.Orb; o != nil {
-		o.Answer, o.Seen, o.Wait, o.Failed = max(0, o.Answer), max(0, o.Seen), max(0, o.Wait), max(0, o.Failed)
+		o.Answer, o.Seen, o.Failed = max(0, o.Answer), max(0, o.Seen), max(0, o.Failed)
 	}
 	if len(in.Open) > espaceOpenMax {
 		in.Open = in.Open[:espaceOpenMax]

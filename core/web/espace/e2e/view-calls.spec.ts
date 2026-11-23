@@ -49,7 +49,7 @@ test("a call to approve says what it does to which items, on their rows", async 
   await page.setViewportSize({ width: 1000, height: wide.height });
   await rest(page);
   const words = page.locator(".orb-say.on, .orb-line");
-  await expect(words).toContainText("Il me faut ton oui ici.");
+  await expect(words).toContainText("Je les mets à la corbeille dès que tu dis oui.");
   await expect
     .poll(async () => {
       const b = await words.boundingBox();
