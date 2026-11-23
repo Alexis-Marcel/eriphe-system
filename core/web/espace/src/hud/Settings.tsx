@@ -10,12 +10,21 @@ import { useWords } from "../i18n";
 // (graph/Forces.tsx), applied at once, the graph moving to them while the
 // user sets them; eriphe-core keeps them with the view (keep.ts), for
 // every screen. The rest of the settings are a link away (/settings).
+// Narrow (a phone, the graph as a list), the gear is that link alone.
 
-export function Settings() {
+export function Settings({ narrow }: { narrow?: boolean }) {
   const { t } = useWords();
   const [open, setOpen] = useState(false);
   const forces = useGraph((s) => s.forces);
   const centring = useGraph((s) => s.centring);
+  // On a phone the graph is a list: nothing of its forces to set, the gear
+  // goes to the settings.
+  if (narrow)
+    return (
+      <a className="hud-icon" href="/settings" aria-label={t("espace.settings")} title={t("espace.settings")}>
+        <Icon name="settings" />
+      </a>
+    );
   return (
     <div className="hud-settings">
       <button

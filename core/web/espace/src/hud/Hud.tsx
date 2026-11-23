@@ -16,13 +16,13 @@ import { useWords } from "../i18n";
 // others (Settings.tsx). Under them, the notifications routed to this
 // tab, and a word when the stream is down.
 
-export function Hud({ live }: { live: boolean }) {
+export function Hud({ live, narrow }: { live: boolean; narrow?: boolean }) {
   return (
     <>
       <div className="hud-corner">
         {live && <Archives />}
         <Theme />
-        <Settings />
+        <Settings narrow={narrow} />
       </div>
       {live && <Offline />}
       <Notices />

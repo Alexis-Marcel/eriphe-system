@@ -19,8 +19,9 @@ import type { Lang } from "../i18n";
 //   .../reopen, PUT /api/espace/view (the pages open, the display settings:
 //   the theme, the graph's forces);
 // - POST /presence: whether this tab is in front of the user (presence.ts).
-// No control of the page keeps a rule or a preference: the user says it to
-// Eriphe, who remembers it. A request without a session gets 401: the page
+// No control of the page keeps a rule or a preference about what Eriphe
+// does: the user says it to Eriphe, who remembers it. Only how the page
+// looks is set on it (the theme, the graph's forces). A request without a session gets 401: the page
 // goes to the sign-in.
 
 // The workspace as the user left it (espaceView, web_gestures.go): the

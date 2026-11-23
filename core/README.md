@@ -3558,7 +3558,8 @@ token in `X-CSRF-Token`:
   reader; out of view, an arrow at the screen's edge that opens it) and what runs. In the top-right corner, three icons: Archives (its
   count as a badge), what the user archived, each to reopen; the light or dark theme; the
   gear, the workspace's own settings (the graph's forces and its centring, `Settings.tsx`) and a
-  link to all the settings (`/settings`). Under them, the notices and a word when the stream is down. A page shows its own
+  link to all the settings (`/settings`); on a phone, where the graph is a list, the gear is that
+  link alone. Under them, the notices and a word when the stream is down. A page shows its own
   path; closing the last one brings the bar back to the home.
 
 A link may open a page: `/espace?open=node-<id>`. The theme follows the system, light or dark,

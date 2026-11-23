@@ -57,4 +57,21 @@ describe("the workspace's settings", () => {
     act(() => root.unmount());
     el.remove();
   });
+
+  it("are a link to all the settings on a phone, where the graph is a list", async () => {
+    const el = document.createElement("div");
+    document.body.append(el);
+    const root = createRoot(el);
+    await act(async () =>
+      root.render(
+        <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}>
+          <Settings narrow />
+        </WordsContext.Provider>,
+      ),
+    );
+    expect(el.querySelector<HTMLAnchorElement>('a[aria-label="Réglages"]')?.getAttribute("href")).toBe("/settings");
+    expect(el.querySelector("button")).toBeNull();
+    act(() => root.unmount());
+    el.remove();
+  });
 });

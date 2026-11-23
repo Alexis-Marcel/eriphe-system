@@ -71,7 +71,7 @@ export function App({ boot, dev }: { boot: Boot; dev?: Dev }) {
         <OrbProvider>
           <div className="espace">
             {narrow ? <List live={boot.live} /> : <Graph live={boot.live} />}
-            <Hud live={boot.live} />
+            <Hud live={boot.live} narrow={narrow} />
             <Bar boot={boot} narrow={narrow} />
             <Sample live={boot.live} />
             {dev?.Panel && <dev.Panel />}
