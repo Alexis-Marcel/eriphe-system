@@ -607,6 +607,26 @@ test("the workspace as the user left it", { tag: "@motion" }, async ({ page }) =
 
   await page.getByRole("button", { name: "Thème clair ou sombre" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  // The graph's settings, under the gear: a force moved and the centring
+  // turned off are kept for the next visit, and « Par défaut » gives the
+  // forces back.
+  const gear = page.getByRole("button", { name: "Réglages" });
+  await gear.click();
+  const settings = page.getByRole("region", { name: "Réglages" });
+  const repulsion = settings.getByRole("slider", { name: "Répulsion" });
+  await repulsion.focus();
+  await page.keyboard.press("ArrowRight");
+  await settings.getByRole("checkbox", { name: "Le node ouvert devient le centre" }).uncheck();
+  await expect(settings.getByRole("link", { name: "Tous les réglages" })).toHaveAttribute("href", "/settings");
+  await expect.poll(async () => (await (await page.request.get("/espace/boot")).json()).view).toMatchObject({ forces: { repulsion: 2050 }, centring: false });
+  await page.reload();
+  await page.getByRole("button", { name: "Réglages" }).click();
+  await expect(settings.getByRole("slider", { name: "Répulsion" })).toHaveValue("2050");
+  await expect(settings.getByRole("checkbox", { name: "Le node ouvert devient le centre" })).not.toBeChecked();
+  await settings.getByRole("button", { name: "Par défaut" }).click();
+  await settings.getByRole("checkbox", { name: "Le node ouvert devient le centre" }).check();
+  await expect.poll(async () => (await (await page.request.get("/espace/boot")).json()).view.forces).toBeUndefined();
   expect(problems).toEqual([]);
 });
 

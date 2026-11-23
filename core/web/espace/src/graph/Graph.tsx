@@ -284,8 +284,34 @@ export function Graph({ live }: { live: boolean }) {
   // centre (layout.ts, focus): the graph settles round it, the camera
   // frames it in the middle with the graph around. Its page closed, the
   // bar writes to the last one open (store.ts, closePage), which becomes
-  // the centre.
-  const centre = centring && talk && openIds.includes(talk) ? talk : null;
+  // the centre. A press in a page makes it the one the bar writes to
+  // (Page, onTalk): it becomes the centre once the pointer is let go, so
+  // that what was pressed (a Oui, a link) is still under it when the click
+  // lands.
+  const wanted = centring && talk && openIds.includes(talk) ? talk : null;
+  const [centre, setCentre] = useState(wanted);
+  const wantedNow = useRef(wanted);
+  wantedNow.current = wanted;
+  const pressing = useRef(false);
+  useEffect(() => {
+    if (!pressing.current) setCentre(wanted);
+  }, [wanted]);
+  useEffect(() => {
+    const down = () => void (pressing.current = true);
+    const up = () => {
+      if (!pressing.current) return;
+      pressing.current = false;
+      setTimeout(() => !pressing.current && setCentre(wantedNow.current), 0);
+    };
+    addEventListener("pointerdown", down, true);
+    addEventListener("pointerup", up, true);
+    addEventListener("pointercancel", up, true);
+    return () => {
+      removeEventListener("pointerdown", down, true);
+      removeEventListener("pointerup", up, true);
+      removeEventListener("pointercancel", up, true);
+    };
+  }, []);
   useLayoutEffect(() => {
     sim.focus(centre);
     wake();
