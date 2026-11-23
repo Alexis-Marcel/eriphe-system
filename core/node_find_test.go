@@ -46,6 +46,10 @@ func TestNodeFindByProps(t *testing.T) {
 	if first["pages"] != 30.0 || first["rendu"] != "2026-12-01" || first["title"] != "Étude sur le café" || !slices.Equal(anyStrings(first["tags"]), []string{"etude"}) {
 		t.Fatalf("columns: %v", first)
 	}
+	// A column comes under the name asked.
+	if raw := fmtJSON(mustBrainNodes(t, c, "node_find", map[string]any{"query": "café", "columns": []any{"Pages"}})); !strings.Contains(raw, `"Pages":30`) {
+		t.Fatalf("a column's name: %s", raw)
+	}
 	// Its page shows its tags and properties.
 	p, err := (&web{c: c}).nodePageOf(b, 0, "fr")
 	if err != nil {
@@ -158,6 +162,27 @@ func TestNodeFindSource(t *testing.T) {
 	sum, _ := c.nodes.Get(page)
 	if sum.External {
 		t.Fatal("the page is external")
+	}
+	// The page draws the block from it, a work node's as a standing one's.
+	std, err := c.nodes.Create(nodestore.New{Title: "Études en attente", Lifetime: nodefile.Standing, Body: block(`{"tags": ["etude"]}`), Author: byBrain})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.readNode(context.Background(), std.Node.Meta.ID, nil, time.Now())
+	for _, id := range []string{page, std.Node.Meta.ID} {
+		p, err := (&web{c: c}).nodePageOf(id, 0, "fr")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var b *pageBlock
+		for _, part := range p.Parts {
+			if part.Block != nil {
+				b = part.Block
+			}
+		}
+		if b == nil || b.Error != "" || !strings.Contains(fmtJSON(b.Data), `"id":"`+a+`"`) {
+			t.Fatalf("%s's page: %s", id, fmtJSON(p))
+		}
 	}
 	if d, _ := c.nodes.Read(page, 0); d.Node.Block("etudes").External || c.untrustedSources(d.Node.Block("etudes")) {
 		t.Fatal("a node_find source without include_external is not trusted")

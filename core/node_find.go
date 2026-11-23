@@ -52,7 +52,7 @@ type nodeFindIn struct {
 	Archived bool         `json:"archived,omitempty" jsonschema:"the archived nodes too"`
 	// IncludeExternal quotes the titles written after an external read,
 	// as since does: it taints the turn.
-	IncludeExternal bool `json:"include_external,omitempty" jsonschema:"quote what may be someone else's words too (a title written after an external read, an external node's properties): this taints the turn"`
+	IncludeExternal bool `json:"include_external,omitempty" jsonschema:"quote what may be someone else's words too (a title written after an external read, an external node's properties): this taints the turn; a block that reads it is external"`
 }
 
 // nodeCondIn is a condition on a property.
@@ -153,13 +153,25 @@ func (c *core) findNodes(in nodeFindIn) (found []nodeFound, quoted bool, err err
 			if x.External && !in.IncludeExternal {
 				f.Withheld = true // its properties may be someone else's words
 			} else {
-				f.Props = cols[x.ID]
+				f.Props = asked(in.Columns, cols[x.ID])
 				quoted = quoted || x.External
 			}
 		}
 		found = append(found, f)
 	}
 	return found, quoted, nil
+}
+
+// asked are a node's columns under the names asked (the index keeps
+// them lowercase): a Table's column reads the key it was written with.
+func asked(columns []string, vals map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, k := range columns {
+		if v, ok := vals[strings.ToLower(strings.TrimSpace(k))]; ok {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 // brainNodeFind is node_find, as the brain calls it: what it quotes that

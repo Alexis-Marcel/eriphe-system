@@ -18,7 +18,7 @@ const nodeGrammar = "# Un bloc d'Eriphe\n\n" +
 	"Le code les lit sans modèle et les tient à jour (une lecture qui échoue garde la dernière bonne valeur) ; la valeur d'une source est en `/<nom>`. Une source est :\n" +
 	"- un outil, une lecture libre (une tâche : un outil qu'on lui a prêté) : `{\"tool\": \"serveur/outil\", \"args\": {…}}` (sources_read les liste, avec leurs arguments) ;\n" +
 	"- des nœuds du graphe, comme `node_find` les trouve : `{\"tool\": \"eriphe-core/node_find\", \"args\": {\"tags\": [\"etude\"], \"where\": [{\"key\": \"temps\", \"op\": \"<\", \"value\": 20}], \"sort\": \"temps\", \"columns\": [\"temps\"]}}` ; " +
-	"sa valeur est `{\"nodes\": [{\"id\", \"title\", \"status\", \"changed\", et chaque colonne}]}`, relue dès qu'un nœud change ; une `Table` les montre (`\"rows\": {\"@path\": \"/<nom>/nodes\"}`), une ligne ouvre son nœud ;\n" +
+	"sa valeur est `{\"nodes\": [{\"id\", \"title\", \"status\", \"changed\", et chaque colonne}]}`, relue dès qu'un nœud change ; une `Table` les montre (`\"rows\": {\"@path\": \"/<nom>/nodes\"}`), une ligne ouvre son nœud. Un titre écrit après une lecture extérieure, les propriétés d'un nœud extérieur n'y sont qu'avec `include_external` : le bloc est alors extérieur ;\n" +
 	"- une ressource : `{\"resource\": \"serveur\", \"uri\": \"…\"}` ;\n" +
 	"- une surveillance approuvée, par son nom : `{\"monitor\": \"nom\"}`.\n" +
 	"`every` : les minutes entre deux lectures (1 à 1440 ; le défaut sinon). Après un appel qui change quelque chose sur un serveur, ses sources sont relues aussitôt : rien à rafraîchir.\n\n" +
