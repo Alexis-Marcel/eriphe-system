@@ -551,9 +551,9 @@ test("the steps of the scenario", async ({ page, request }) => {
   expect(problems).toEqual([]);
 });
 
-// What the workspace keeps for the user: the pages open and the theme, on
-// the next visit; a bubble dropped holds where it was dropped for the
-// session, and is not kept.
+// What the workspace keeps for the user: the pages open, the theme and the
+// graph's settings, on the next visit; a bubble dropped is not pinned, and
+// where it is is not kept.
 // With motion (@motion): a dragged bubble glides to where it is let go.
 test("the workspace as the user left it", { tag: "@motion" }, async ({ page }) => {
   const problems: string[] = [];
@@ -578,16 +578,19 @@ test("the workspace as the user left it", { tag: "@motion" }, async ({ page }) =
   for (let i = 1; i <= 12; i++) await page.mouse.move(box.x + box.width / 2 + i * 12, box.y + box.height / 2 + i * 6);
   await page.mouse.up();
   await expect.poll(async () => (await at(node))[0]).not.toBeCloseTo(from[0], 0);
-  const dropped = await settled(node);
+  await settled(node);
   expect(sent).toEqual([]);
   await expectBubblesApart(page);
 
-  // The arrangement holds for the session: a page opened and closed
-  // pushes it aside for a while, then it is back where it was dropped.
+  // Nothing is pinned: a page opened becomes the graph's centre, the
+  // graph settles round it, and once it is closed the graph rests again,
+  // no bubble on another, still nothing sent.
   await page.locator('.gr-core[aria-label="Substack"]').click();
   await expect(page.locator('article.pg[aria-label="Substack"]')).toBeVisible();
   await home(page);
-  await expect.poll(async () => Math.hypot((await settled(node))[0] - dropped[0], (await at(node))[1] - dropped[1])).toBeLessThan(60);
+  await settled(node);
+  await expectBubblesApart(page);
+  expect(sent).toEqual([]);
 
   // The page open and the theme come back on the next visit; where the
   // bubbles were is not kept: the graph lays itself out afresh.

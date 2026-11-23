@@ -11,8 +11,8 @@ advance and works with the ones you linked.
 
 Each thing Eriphe holds is a **bubble**. A bubble on its own is a **subject** (« Substack », « My
 day », « Mails »), drawn larger; the work done for it grows around it as smaller bubbles (« Plan
-of the first article », « Style of the articles »). A dashed line joins bubbles that relate to each
-other.
+of the first article », « Style of the articles »). A thin grey line joins bubbles that relate to
+each other.
 
 How a bubble looks says what it is, never chosen by an AI, one sign for each meaning: what waits for
 you is brighter, with a breathing violet halo (out of view, a small arrow at the edge of
@@ -57,8 +57,7 @@ the subject (« On Plan of the first article »).
 
 ## Open a page
 
-Click a bubble: its **page** opens right there in the graph, and the bubbles around make room for it,
-nothing else moves. Hold ⌘ (Ctrl on Windows and Linux) or shift as you click to open one more page
+Click a bubble: its **page** opens right there in the graph, and the graph makes room for it. Hold ⌘ (Ctrl on Windows and Linux) or shift as you click to open one more page
 beside those already open. Each page closes on its own cross.
 
 A page shows:
@@ -98,8 +97,11 @@ subject, its text, then **On Yes** and what it sends (the reply itself), the exa
 
 The bar talks to the page you opened or clicked last: « Write to Eriphe about Plan of the first
 article ». With no page open it talks to the home. Close every page, or click Eriphe's name, to go
-home. The camera frames every open page when they fit readably, otherwise the one the bar talks
-to; the others stay open where they are.
+home. The page the bar talks to becomes the centre of the graph: the graph glides round it, the
+other bubbles and pages spread all round it, and the view shows it in the middle at its full size
+(the neighbours may go past the screen's edge; what waits for you out of view keeps its arrow).
+This can be turned off in the workspace's settings (below): the view then frames every open page
+when they fit readably, otherwise the one the bar talks to; the others stay open where they are.
 
 A link may open a page directly: `/espace?open=node-<id>`. When Eriphe wants to show you something,
 it opens its page beside yours; the bar stays where you were: only your own click moves it.
@@ -116,15 +118,22 @@ brings the list back. The bar is the same.
 ## Move things
 
 Drag the background to look around, scroll or use two fingers to move, hold ⌘ or Ctrl with the
-wheel to zoom; a double click gives the view back to Eriphe. The graph is alive: subjects push each
-other apart, a bubble stays close to its subject and linked subjects close to each other, those
-linked to nothing on the edge. Drag a bubble, or a page by its head: it passes over everything, and
-what is linked to it follows, less and less the further the link; nothing else moves. Drop it: it
-stays exactly there, and what was under it steps aside. A subject dragged far out in the void lags
-behind and, dropped there, comes back to the edge; a bubble stays near its subject, and a bubble
-dropped by an open page goes back beside it. Bring a bubble to the edge of the screen and the view
-follows. A page that opens pushes bubbles aside, its own bubbles staying beside it; closed, they go
-back where they were.
+wheel to zoom; a double click gives the view back to Eriphe. The graph is a force graph, like
+Obsidian's: everything is pulled to the centre, everything pushes everything else away, and two
+linked things (a bubble and its subject, two subjects a link joins) hold together like a spring.
+An open page is a node like any other, only bigger: a subject and the view it links to end up side
+by side. Each link is a thin grey line. Any change (a bubble come or gone, a page opened or
+closed) sets the graph moving until it settles again, then it rests; a new bubble appears in free
+space near what it links to. Hover a bubble or a page's title line: it, its neighbours and their
+links stay sharp, the rest fades. Drag a bubble, or a page by its head: what is linked to it comes
+along. Drop it: nothing is pinned, the graph settles again from where you left it. Bring a bubble
+to the edge of the screen and the view follows.
+
+The workspace's own settings are under the gear at the top right: the graph's four forces as
+sliders (**Centre**, **Repulsion**, **Link force**, **Link distance**), **Default** to give them
+back, and **The open node becomes the centre** (on unless you turn it off). They apply at once,
+the graph moving as you set them, and are kept for every screen you use. **All settings** leads to
+the rest of Settings.
 
 Where things are holds while the workspace is open, not after: a reload lays the graph out afresh.
 Your Eriphe keeps the pages you left open and your light or dark choice (the sun or moon at the top;
@@ -225,7 +234,8 @@ there.
 "No more newsletters from news.example.org", "show me less of this" are **preferences**. Eriphe
 remembers them as memories about you, and whatever watches your mail or your agenda reads them
 before noting what it found. You manage them like any memory: ask Eriphe what it remembers, or to
-forget one. There is no settings page for the workspace and no rule to maintain.
+forget one. There is no rule to maintain: the workspace's only settings are how the graph moves
+(see Move things).
 
 ## Proposals
 

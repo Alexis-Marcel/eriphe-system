@@ -3430,70 +3430,66 @@ token in `X-CSRF-Token`:
 - `POST /api/nodes/{id}/archive` and `.../reopen`: the user's alone (`archiveNode`: what runs
   below it stops, and the cascade leaves the graph; `reopenNode`: back with what was archived with
   it and the archived parents it needs, in one commit).
-- `PUT /api/espace/view` `{open, talk, shown, theme, orb}`: the pages open, the one the bar talks
+- `PUT /api/espace/view` `{open, talk, shown, theme, orb, forces, centring}`: the pages open, the one the bar talks
   to, the last of Eriphe's shows the page took (a page the user closed does not open again on the
   next visit), the theme (`""` follows the system, `light`, `dark`), and what the user closed of
-  the orb's (`orb`: `{answer, seen, wait, failed}`, seqs and a card id that only grow), in the kv `espace_view`. The boot gives
+  the orb's (`orb`: `{answer, seen, wait, failed}`, seqs and a card id that only grow); the graph's
+  forces the user changed (`forces`: `{centre, repulsion, link, distance}`, each brought within its
+  range, `espaceForceRanges`, a name that is not a force dropped; absent, the defaults) and
+  `centring: false` when the open node is not the graph's centre (absent, it is); in the kv `espace_view`. The boot gives
   them back (`view`), on any of the user's screens; where the bubbles are is not kept, and the shell carries the theme
   (`data-theme`) before the app draws.
 
 **The app** (`web/espace/src`):
 
 - `data/`: the requests (`api.ts`), the stream (`stream.ts`: one per page) and the store (`store.ts`, Zustand): the graph as streamed, what is
-  open and the theme, each event a pure step tested on its own. `keep.ts` sends what
-  is open and the theme back to eriphe-core a moment after they change. `presence.ts` says the
+  open, the theme and the graph's settings, each event a pure step tested on its own. `keep.ts` sends what
+  is open, the theme and the graph's settings back to eriphe-core a moment after they change. `presence.ts` says the
   user is there. A page Eriphe shows (`applyShow`) opens beside the others and leaves the bar
   where it was: only the user's click or ⌘-click moves it.
-- `graph/`: the layout (`layout.ts`, `Sim`): a living force graph, like Obsidian's, one
-  simulation for the page's life, ticked a frame at a time while something moves. Every bubble
-  pushes every other away (many-body, strength / distance, no cutoff), all are pulled to the centre,
-  a bubble and its parent and two subjects a link joins (`links`: the text's `[[links]]` and the
-  front matter's) are held close by short strong springs, and a bubble never rests on a link it is
-  not part of: the graph is a compact disc, the subjects linked to nothing on its rim. Every body, a
-  bubble with its label or an open page of its measured size (measured again whenever its content
-  changes, at most what the screen holds above the bar), is a solid box to every other (`collide`).
-  Nothing is kept and nothing orders the subjects: a reload lays the graph out afresh. Like
-  Obsidian's graph it never goes cold: every body keeps a little energy (`ambient`, 0.05), so the
-  centre pull, the repulsion, the springs and the collision always act and the graph is always a
-  compact disc, pages open or not. The first layout runs on a global energy and is settled before
-  it is shown; a page that opens or closes warms the whole graph a while (`stir`, 0.4, cooling by
-  1.2 % a tick), a new node is warm (its siblings near it too), and so is what a drag carries. Once
-  no body moved more than 2 px over 24 ticks (or 420 ticks after the last change, if nothing sits
-  on anything), the graph is at rest and is not ticked until something changes: friction, a little
-  stiction (a body on the ambient energy alone that would move less than 0.25 px a tick stays
-  still) and contacts that carry what they press on keep it still, never trembling. It never rests
-  with two bodies on each other (more than 4 px, within their margins): the collision runs again
-  while a shove put one body on another, a bubble with no way off a page or its parent, caught
-  between it and the others, holds it back (they share the move), and a crowd the forces still
-  press is settled by the collision alone before it rests. A page opens
-  where its bubble was, or right beside the page the bar talks to (else the last opened) when
-  it would cover it, at its height (`bornBeside`); then the open pages glide to the middle of the
-  graph, side by side in the order they stand in (`row`), solid boxes the bubbles gather around;
-  what they pushed comes back when they close. A standing view made from a subject's card is linked to that
-  subject (`decideView`), so it sits beside it. The user drags a bubble, or a page by its head: it
-  is translucent and passes over everything; what is linked to it follows on its springs, one link
-  away strongly (0.8), two weakly (0.25), beyond still, passing over what is not theirs; nothing
-  else moves. Dropped, it stays exactly there for the session (a bubble at its place by its
-  subject; while the subject's page is open it lives on its springs, and goes back when it
-  closes) and wins every collision, the last dropped first: what is under it steps aside by the
-  smallest move; a subject the graph has left more than 200 px past the disc's edge is let go. Its
-  followers settle on their springs around where it was dropped
-  (pulled there, not to the centre), passing over the others, warm at their drag energy (0.3 at
-  most), until they are back on their springs (150 ticks at most), then giving way to the bodies in
-  place. A subject dragged more than 420 px past the
-  disc's edge lags behind the pointer (a 0.3 rubber band), and dropped there comes back to the edge
-  on that side; a bubble stays within 300 px of its parent (of its page's edge). Near the screen's edge the camera scrolls, driven by the dragged bubble's place
-  on screen, not the pointer: a 110 px zone, after 200 ms, speeding up over 700 ms to 16 px a
-  frame. The camera (`camera.ts`) frames every open page if they fit at a scale of 0.8 or more,
-  else the page in focus (the last one opened, Eriphe's show too, or the one the user turned
-  to), whole, its head on screen and its foot above the bar's zone, the others open in place;
-  and the whole graph with them when all of it fits at a scale of 0.72 or more, else it slides,
-  within what keeps the pages framed, toward the rest of the graph, so that no bubble is cut at
-  the screen's edge while there is room; with no page open, the whole graph, labels included. It
-  frames what the graph is when it comes to rest (or what is open changes), and while the graph
-  moves every quarter of a second, not at each frame. Dragging a bubble leaves it framing unless
-  the drag scrolls it at the edge. A drag of the background or the wheel moves it by hand, ⌘ or Ctrl with the wheel zooms, a double click
-  gives it back. A bubble's size and light come from what the node is (`model.ts`): a subject is
+- `graph/`: the layout (`layout.ts`, `Sim`): a force graph like Obsidian's, one simulation for
+  the page's life, ticked a frame at a time while it is warm. Four forces, the user's to set
+  (`FORCES`, defaults `DEFAULT_FORCES`, bounds `FORCE_RANGES`): the **centre** (0.1) pulls every
+  body to the middle, the **repulsion** (2000) pushes every body away from every other
+  (many-body), the **link force** (0.8) holds two linked bodies together like a spring, and the
+  **link distance** (30) is that spring's rest length, shape to shape (a bubble's circle, a page's
+  rectangle; never a label). The links are one per pair of nodes (`pairs`): a bubble and its
+  parent, two nodes a `[[link]]` or the front matter joins, one way or both; each is drawn as one
+  thin grey straight line. An open page is a node like any other, only a bigger shape: the same
+  forces act on it, so a subject and the view it links to end up side by side because they are
+  linked. Every body, a bubble with its label or an open page of its measured size (measured again
+  whenever its content changes), is a solid box to every other (`collide`). One energy drives it
+  all, as in d3: any change (a node come or gone, a link, a page opened, closed or resized, the
+  forces set, a drag) warms the graph (0.5), the forces adapt everything as it cools (2.28 % a
+  tick, some 300 ticks), and once cold the graph rests: anything still overlapping is set apart at
+  once, and nothing ticks until the next change, nothing trembles. The first layout is settled
+  before it is shown. A new node is born in the most free space near what it links to (on the
+  disc, near its middle, when it links to nothing), then settles. Nothing is kept: a reload lays
+  the graph out afresh. A standing view made from a subject's card is linked to that subject
+  (`decideView`), so it sits beside it. The user drags a bubble, or a page by its head: its cluster
+  comes along (one link away 0.85 of the move, two links 0.35) and the graph stays warm (0.3);
+  dropped, nothing is pinned: the body and its cluster take up the forces from where they were let
+  go, so they stay on the side the user chose while the centre keeps them in the disc. **The open
+  node is the centre** (the setting « Le node ouvert devient le centre », on by default): the page
+  in focus, the one the bar writes to, stays where it is and the centre force pulls to it; when the
+  focus changes, the graph glides to its new centre and the other bodies spread all round it, in
+  the order they stood in (`spreadRound`). Hovering a bubble or a page's head keeps it, its
+  neighbours and their links sharp and fades the rest; nothing else dims, pages open or not. Near
+  the screen's edge the camera scrolls, driven by the dragged bubble's place on screen, not the
+  pointer: a 110 px zone, after 200 ms, speeding up over 700 ms to 16 px a frame. The camera
+  (`camera.ts`) frames the page in focus in the middle of the free band, readable: at scale 1, or
+  as much less as it takes to show it whole, never below 0.9 (`frameAround`, `FLOOR`); the
+  neighbours round it may overflow the screen, and a node that waits for the user out of view
+  keeps its arrow at the screen's edge (`Edges`). An enlarged page is framed alone at scale 1.
+  With the centring off, it frames every open page if they fit at a scale of 0.8 or more, else the
+  page in focus, whole, the others in place, and the whole graph with them when it fits at 0.72 or
+  more; with no page open, the whole graph, labels included. It frames what the graph is when it
+  comes to rest (or what is open changes), and while the graph moves every quarter of a second,
+  not at each frame. Dragging a bubble leaves it framing unless the drag scrolls it at the edge. A
+  drag of the background or the wheel moves it by hand, ⌘ or Ctrl with the wheel zooms, a double
+  click gives it back. The forces and the centring are set under the corner's gear
+  (`hud/Settings.tsx`, `graph/Forces.tsx`: four sliders and « Par défaut »), applied at once
+  (`setForces` warms the graph) and kept by eriphe-core with the view (`forces`, `centring`). A bubble's size and light come from what the node is (`model.ts`): a subject is
   bigger, what waits for the user brighter, what runs a little, what is done or old quieter. Under
   760 px wide the graph is a list (`graph/List.tsx`, `listOrder`): each subject, then its bubbles
   under it, depth first, in the order they were made, one that waits for the user said by its
@@ -3561,7 +3557,8 @@ token in `X-CSRF-Token`:
   breathing accent halo, its core ringed in the same violet: one sign, « t'attend » in its core's words for a screen
   reader; out of view, an arrow at the screen's edge that opens it) and what runs. In the top-right corner, three icons: Archives (its
   count as a badge), what the user archived, each to reopen; the light or dark theme; the
-  settings. Under them, the notices and a word when the stream is down. A page shows its own
+  gear, the workspace's own settings (the graph's forces and its centring, `Settings.tsx`) and a
+  link to all the settings (`/settings`). Under them, the notices and a word when the stream is down. A page shows its own
   path; closing the last one brings the bar back to the home.
 
 A link may open a page: `/espace?open=node-<id>`. The theme follows the system, light or dark,
