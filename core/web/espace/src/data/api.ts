@@ -193,8 +193,11 @@ export type NodePage = {
   props?: PageProp[];
 };
 // A property of a node (pageProp, web_graph.go): its name, its value or
-// list of them, and its kind (text, number, date).
-export type PageProp = { key: string; value: unknown; kind: "text" | "number" | "date" };
+// list of them, and its kind (text, number, date); media: the node's own
+// files it names (a photo kept with it), as eriphe-core serves them.
+export type PageProp = { key: string; value: unknown; kind: "text" | "number" | "date"; media?: PageMedia[] };
+// One of a node's files: its address on eriphe-core, an image or a file to download (a PDF).
+export type PageMedia = { src: string; image: boolean };
 // What keeps a permanent subject alive (pageAlive, node_alive.go): its
 // sources, monitors and skills, each named, what it does in code's words.
 export type AliveLine = { name: string; what: string };

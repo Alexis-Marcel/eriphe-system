@@ -773,6 +773,9 @@ func (sc *scenario) brainTurn(task, turn string) {
 	sc.report(task, deviceReport{State: stateIdle, Events: sc.events(task, evs...)})
 }
 
+// attachmentRe is an attachment's id in a turn's [pièce jointe …] line.
+var attachmentRe = regexp.MustCompile(`att_[0-9a-f]{32}`)
+
 // userLine is the user's last line of a turn, and the node it was said to.
 var userLineRe = regexp.MustCompile(`(?m)^\[Sam \d\d:\d\d #\d+([^\]]*)\] (.*)$`)
 
@@ -1008,6 +1011,17 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		// (view-refresh.spec.ts).
 		b.catalog("mail", "purger", map[string]any{"ids": []string{"p1", "p3"}}, false)
 		return "Les deux promos sont supprimées."
+	case strings.Contains(said, "garde-robe"):
+		// A photo sent with the message, kept with the node of what it
+		// shows: the page shows it (attach-node.spec.ts).
+		sc.mu.Lock()
+		att := attachmentRe.FindString(sc.given[len(sc.given)-1])
+		sc.mu.Unlock()
+		out := b.self("node_open", map[string]any{"title": "Chemise bleue", "body": "Une chemise en lin."})
+		if id, _ := out["id"].(string); id != "" && att != "" {
+			b.self("node_set", map[string]any{"id": id, "props": map[string]any{"tags": []any{"vêtement"}, "couleur": "bleu", "photo": att}})
+		}
+		return "Je l'ajoute à ta garde-robe."
 	case strings.Contains(said, "Écris-moi un article"):
 		// Asked at the home: the main subject opens with its plan and its
 		// questions, their buttons below.

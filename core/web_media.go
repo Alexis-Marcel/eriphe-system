@@ -36,7 +36,11 @@ import (
 // 8 MiB at most, an image (not SVG, which carries scripts) or a video, kept
 // 10 minutes by the browser.
 //
-// A task's own images are a node's media. Most sites refuse being framed:
+// A node's media are its own files: a task's images, or a file the user
+// attached to a message that the brain kept with the node (node_set, a
+// property whose value is the attachment's id: node_attach.go).
+//
+// A task's images. Most sites refuse being framed:
 // to show a page, a task with a node captures it in its container
 // (eriphe-capture, worker/base) and posts the image to its device, which
 // relays it here with the device's secret and the task's id:
@@ -114,6 +118,18 @@ func (c *core) mediaOrDrop(id, raw string, allowed bool) string {
 	return mediaPath + "?" + url.Values{"u": {raw}, "s": {c.mediaSign(raw)}}.Encode()
 }
 
+// nodeFileSrc is the address on eriphe-core of node id's own file a
+// value names (media:<name>), "" for a value that names none.
+func (c *core) nodeFileSrc(id, v string) string {
+	if name, ok := strings.CutPrefix(strings.TrimSpace(v), mediaScheme); !ok || !nodestore.ValidFileName(name) {
+		return ""
+	}
+	return c.mediaOrDrop(id, v, false)
+}
+
+// mediaIsImage tells a media:<name> of an image from a file's (a PDF).
+func mediaIsImage(v string) bool { return !strings.HasSuffix(strings.TrimSpace(v), ".pdf") }
+
 // handleMedia is GET /espace/media: a block's image or video, fetched by
 // eriphe-core, or read from its node's files. 403 for an address it did
 // not sign, 502 for one that is not a media it serves, 404 for a node's
@@ -143,7 +159,11 @@ func (w *web) handleMedia(rw http.ResponseWriter, r *http.Request, _ *session) {
 	h.Set("Cache-Control", "private, max-age=600")
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
-	h.Set("Content-Disposition", "inline")
+	if strings.HasPrefix(kind, "image/") || strings.HasPrefix(kind, "video/") {
+		h.Set("Content-Disposition", "inline")
+	} else {
+		h.Set("Content-Disposition", "attachment") // a node's PDF: downloaded, never run in the page's origin
+	}
 	rw.Write(body)
 }
 
@@ -194,11 +214,23 @@ func (c *core) nodeMedia(at string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", errors.New("no such media")
 	}
-	kind, ok := imageType(body)
+	kind, _, ok := nodeFileType(body)
 	if !ok {
 		return nil, "", errors.New("no such media")
 	}
 	return body, kind, nil
+}
+
+// nodeFileTypes are the types a node's file may be, sniffed from its
+// bytes, and the extension each is kept under: never SVG nor HTML, which
+// carry scripts.
+var nodeFileTypes = map[string]string{"image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "application/pdf": "pdf"}
+
+// nodeFileType tells a node's file's type and extension from its bytes.
+func nodeFileType(data []byte) (kind, ext string, ok bool) {
+	kind = http.DetectContentType(data)
+	ext, ok = nodeFileTypes[kind]
+	return kind, ext, ok
 }
 
 // imageType tells a PNG or a JPEG from its bytes; anything else is

@@ -723,7 +723,7 @@ whatever address it dials) and one client certificate per device.
 | `node_find` | find nodes by words of their title, goal, text or blocks (any word of three letters or more is enough, the nodes that hold the most first), each with its `status`; and/or by their `tags` (each, or one below it) and properties (`where`: `{key, op, value}`, `op` one of `=`, `!=`, `<`, `<=`, `>`, `>=`, `exists`, `missing`; a number compares as a number, a date as a date, a text without case; `=` on a list holds when one value is equal), sorted (`sort` a property, `title`, `created` or `changed`; `desc`), the properties asked (`columns`) written beside each node's fields, `limit` (30, 200 at most); with neither words nor filters, those running or waiting, then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does); an external node's columns are `withheld` the same way. It is also a block's source, `eriphe-core/node_find` (`node_find.go`) |
 | `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, `backlinks` (the live nodes that link it, by their text or code), done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
 | `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying `external` (code's field); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
-| `node_set` | change a node's `title` or `goal`, its properties and tags (`props`: `{"tags": ["cuisine/recette"], "temps": 15, "source": null}`, `null` removes one; set in a tainted turn, they mark the node external: [node-format](../docs/node-format.md#front-matter)), move it under another node (`parent`, `""` for the top; never under itself or a node below it, never a step: `nodestore.SetParent`), or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
+| `node_set` | change a node's `title` or `goal`, its properties and tags (`props`: `{"tags": ["cuisine/recette"], "temps": 15, "source": null}`, `null` removes one; set in a tainted turn, they mark the node external: [node-format](../docs/node-format.md#front-matter); an attachment's id as a value keeps that file in the node: [A file the user sent](#a-file-the-user-sent-kept-with-a-node-node_attachgo)), move it under another node (`parent`, `""` for the top; never under itself or a node below it, never a step: `nodestore.SetParent`), or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
 | `node_show` | open a node's page on the user's screen (kv `node_show`, read by the page): asked at the home, the turn and the bar move into it (`moveHomeTurn`), from a node it opens beside; writes nothing |
 | `turn_home` | the user's message, said in a node's bar, is not about that node: the turn is about no node from then on, as at the home (`turnHome`, node_turn.go). What it raises waits above the bar (a card it raised already is unlinked from that node), and nothing of it is filed there; its lines stay in that node's bar, where the user reads them. At the home, or on events only, it does nothing |
 | `item_note` | note an item of a node's source: what the user should know, a state (`act`, `look`, `info`, `none`, `done`) and a group, the section a view shows it in (`À supprimer`; a List filters on `_group`) |
@@ -4014,7 +4014,7 @@ only), which relays it here with its own secret and the task's id:
 - **Its own node only.** The node must be the task's (`task_nodes`): another, or a task with no
   node, gets 403; an unknown or finished task 404.
 - **What is kept.** A PNG or a JPEG, sniffed from its bytes (anything else 415), 5 MiB at most
-  (413), 20 a node at most: in `files/<id>/med_<32 hex>.<png|jpg>` of the graph's repository, one
+  (413), 20 files a node at most: in `files/<id>/med_<32 hex>.<ext>` of the graph's repository, one
   commit by the task's author (`nodestore.PutFile`). It is not a version of the node; it stays
   with it when it is archived. The answer is `{"src": "media:<name>", "type", "size"}`: the task
   writes `src` as an `Image`'s `url` in a block of its node. The bytes never go through a model.
@@ -4022,6 +4022,28 @@ only), which relays it here with its own secret and the task's id:
   the block, external or not: the file is the node's own and the address carries nothing out), and
   `GET /espace/media` reads it from that node's files only, with the session: a block of another
   node naming the same file gets 404.
+
+### A file the user sent, kept with a node (`node_attach.go`)
+
+The photo of a shirt sent with « ajoute cette chemise à ma garde-robe », a recipe's PDF: the brain
+keeps the file with the node of what it shows (#748) by giving `node_set` a property whose value is
+the attachment's id (`props: {"photo": "att_…"}`, a list of them too). Code copies the file into the
+node's media, as a task's image (`nodestore.PutFile`, by `brain`), and writes the property as
+`media:<name>`; the answer gives it (`media`). No card, as any `node_set`.
+
+- **What is kept.** Only an attachment of one of the user's messages, found by its id (never a path
+  the brain names); an image (PNG, JPEG, GIF, WebP) or a PDF, sniffed from its bytes, 5 MiB at most,
+  20 files a node; a text is written in the node's body instead. Each refusal says why, for the
+  brain to tell the user; everything is checked first (the attachments, the node's files, the
+  properties' names), so a refused write keeps nothing.
+- **Trust.** The user's own file does not taint the turn, as `read_attachment`; one from a channel
+  the user did not trust taints it, and the node is marked external.
+- **Shown.** The node's page gives each property that names one of its files with its signed address
+  (`pageProp.media`: an image shows as the node's picture, a PDF as a link that downloads it:
+  `GET /espace/media` serves a node's non-image file as `Content-Disposition: attachment`). A
+  `Table` whose source is `eriphe-core/node_find` with such a column (`columns: ["photo"]`) shows
+  each node's file as a thumbnail (`nodeFindMedia` signs `media:<name>` for the row's own node; an
+  external node's columns stay withheld). The brain's `node_find` gives `media:<name>` as written.
 
 ### Proposals in the blocks they concern (`card_moves.go`)
 

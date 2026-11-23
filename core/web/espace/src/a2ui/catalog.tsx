@@ -714,6 +714,35 @@ function cell(lang: Lang, kind: string | undefined, v: unknown): string {
   return typeof v === "object" ? "" : String(v);
 }
 
+// A node's own file a node_find row names (a photo kept with it):
+// eriphe-core gives its address (nodeFindMedia, node_find.go), which only
+// it signs. An image shows as a thumbnail; another file (a PDF), as a
+// link to download it.
+const MEDIA = "/espace/media?";
+
+function isMedia(v: unknown): v is string {
+  return typeof v === "string" && v.startsWith(MEDIA);
+}
+
+function mediaImage(src: string): boolean {
+  const u = new URLSearchParams(src.slice(MEDIA.length)).get("u") ?? "";
+  return !u.toLowerCase().endsWith(".pdf");
+}
+
+function mediaCell(v: unknown, alt: string, file: string): ReactNode | undefined {
+  const xs = (Array.isArray(v) ? v : [v]).filter(isMedia);
+  if (!xs.length) return undefined;
+  return xs.map((src) =>
+    mediaImage(src) ? (
+      <img key={src} className="a2-thumb" src={src} alt={alt} loading="lazy" />
+    ) : (
+      <a key={src} className="a2-file" href={src} download>
+        {file}
+      </a>
+    ),
+  );
+}
+
 const Table = createComponentImplementation(
   {
     name: "Table",
@@ -748,7 +777,7 @@ const Table = createComponentImplementation(
               return (
                 <tr key={i}>
                   {cols.map((c, j) => {
-                    let v: ReactNode = cell(lang, c.kind, r[c.key]);
+                    let v: ReactNode = mediaCell(r[c.key], c.label, t("espace.props.file")) ?? cell(lang, c.kind, r[c.key]);
                     if (n && c.key === "title") v = <NodeTitle x={n} fallback={str(r.title)} />;
                     if (n && j === 0 && lists?.openNode) {
                       const open = lists.openNode;
