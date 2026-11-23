@@ -290,6 +290,14 @@ func TestCardAnsweredInWords(t *testing.T) {
 			c.store.setMsgTaint(int(seq), channelTaint("Home Assistant"))
 			return int(seq)
 		}, "untrusted"},
+		"a button of an external block": {func() int {
+			proposedRule(t, c, "h1", "")
+			brainSays(c, "Je propose ça ?")
+			c.addAsk("oui", "", "q", true) // said at the home, below the card
+			var seq int
+			c.store.db.QueryRow(`SELECT MAX(seq) FROM messages`).Scan(&seq)
+			return seq
+		}, "external ask"},
 	} {
 		seq := tc.setup()
 		if x, ok := c.resolveByText(ctx, seq); ok {

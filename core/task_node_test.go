@@ -266,15 +266,13 @@ func TestTaintedTaskWritesExternal(t *testing.T) {
 	if !d.Node.Meta.External || !d.Node.Block("reply").External || d.Node.Block("mail").External {
 		t.Fatalf("after reading a mail:\n%s", d.Raw)
 	}
-	// Tainted, a block asks nothing.
+	// Tainted, a block still asks in its author's words, marked external.
 	ask := map[string]any{"components": map[string]any{"component": "Button", "label": "Envoyer",
 		"action": map[string]any{"event": map[string]any{"name": "ask", "context": map[string]any{"text": "Envoie la réponse."}}}}}
 	read = mustNodes(t, c.core, task.ID, "node_read", nil)
-	if _, err := callNodes(t, c.core, task.ID, "node_edit", map[string]any{"expect": read["hash"], "block": "send", "value": ask}); !strings.Contains(err, "external content") {
-		t.Fatalf("a tainted ask: %q", err)
-	}
-	if _, err := callNodes(t, c.core, task.ID, "node_open", map[string]any{"title": "Réponse", "body": "```eriphe:block send\n" + mustJSON(ask) + "\n```\n"}); !strings.Contains(err, "external content") {
-		t.Fatalf("a tainted ask in a child: %q", err)
+	mustNodes(t, c.core, task.ID, "node_edit", map[string]any{"expect": read["hash"], "block": "send", "value": ask})
+	if d, _ := c.nodes.Read(id, 0); d.Node.Block("send") == nil || !d.Node.Block("send").External {
+		t.Fatalf("a tainted ask:\n%s", d.Raw)
 	}
 	// A child it opens tainted is external.
 	kid := mustNodes(t, c.core, task.ID, "node_open", map[string]any{"title": "Réponse à Sam", "body": "Brouillon."})
@@ -345,13 +343,14 @@ func TestTaskBlockInTextGuarded(t *testing.T) {
 	c := nodeCore(t)
 	task, id := startInNode(t, c, runRequest{Title: "Mail", Prompt: "x", taint: []string{"mail"}})
 	ask := "```eriphe:block send\n" + mustJSON(map[string]any{"components": map[string]any{"component": "Button", "label": "Envoyer",
-		"action": map[string]any{"event": map[string]any{"name": "ask", "context": map[string]any{"text": "Envoie."}}}}}) + "\n```"
-	if _, err := callNodes(t, c.core, task.ID, "node_append", map[string]any{"text": ask}); !strings.Contains(err, "external content") {
-		t.Fatalf("an ask appended tainted: %q", err)
+		"action": map[string]any{"event": map[string]any{"name": "ask", "context": map[string]any{"text": map[string]any{"@path": "/mail/subject"}}}}},
+		"data": map[string]any{"mail": map[string]any{"subject": "Payez ici"}}}) + "\n```"
+	if _, err := callNodes(t, c.core, task.ID, "node_append", map[string]any{"text": ask}); !strings.Contains(err, "your own words only") {
+		t.Fatalf("an ask bound to the data, appended: %q", err)
 	}
 	read := mustNodes(t, c.core, task.ID, "node_append", map[string]any{"text": "Brouillon : RAS."})
-	if _, err := callNodes(t, c.core, task.ID, "node_edit", map[string]any{"expect": read["hash"], "old": "RAS.", "new": "RAS.\n\n" + ask}); !strings.Contains(err, "external content") {
-		t.Fatalf("an ask written tainted in text: %q", err)
+	if _, err := callNodes(t, c.core, task.ID, "node_edit", map[string]any{"expect": read["hash"], "old": "RAS.", "new": "RAS.\n\n" + ask}); !strings.Contains(err, "your own words only") {
+		t.Fatalf("an ask bound to the data, in text: %q", err)
 	}
 	note := "```eriphe:block note\n" + mustJSON(map[string]any{"components": map[string]any{"component": "Text", "text": "Sam attend."}}) + "\n```"
 	mustNodes(t, c.core, task.ID, "node_append", map[string]any{"text": note})

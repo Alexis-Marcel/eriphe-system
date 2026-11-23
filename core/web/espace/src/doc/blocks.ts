@@ -7,8 +7,8 @@ import { stillAsks, type ListRow, type NodePage, type PageBlock, type SourceList
 // renderer the catalog's components use (a2ui/). A block's surface is
 // named by its node and its name; its data is the block's, with each
 // source's last value at /<name>, as eriphe-core sends it. A block
-// someone else's words may have written (external) is marked so: there,
-// a button asks nothing.
+// someone else's words may have written (external) is marked so; its
+// button still asks, and eriphe-core marks what it says as external too.
 
 export type Piece =
   | { kind: "text"; text: string }
@@ -88,14 +88,14 @@ export function blockOf(page: NodePage, name: string): PageBlock | undefined {
 export type Gesture = { kind: "ask"; block: string; component: string };
 
 // toGesture reads an action of one of the node's blocks: none from
-// another surface, from a block that is not there, or from an external
-// one (someone else's words may have written it).
+// another surface or from a block that is not there. An external block's
+// ask goes too: eriphe-core carries its taint to the turn it starts.
 export function toGesture(a: Action, node: string, block: (name: string) => PageBlock | undefined): Gesture | null {
   const prefix = surfaceOf(node, "");
   if (!a.surfaceId.startsWith(prefix)) return null;
   const name = a.surfaceId.slice(prefix.length);
   const b = block(name);
-  if (!b || b.external) return null;
+  if (!b) return null;
   if (a.name === "ask") return { kind: "ask", block: name, component: a.sourceComponentId };
   return null;
 }

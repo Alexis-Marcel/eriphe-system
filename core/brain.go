@@ -251,8 +251,12 @@ func (c *core) messageRef(m Message) string {
 	if m.Role == roleUser && m.Node != "" {
 		ref += " · nœud " + m.Node // said to that node (node_turn.go); its card says the rest, never its words here
 	}
-	if m.Role == roleUser && c.fromUntrusted(m.Seq) {
+	switch why := c.store.msgTaint(m.Seq); {
+	case m.Role != roleUser:
+	case strings.HasPrefix(why, channelTaintPrefx):
 		ref += " · canal sans confiance" // maybe not the user's words (channels_added.go)
+	case strings.HasPrefix(why, askTaintPrefix):
+		ref += " · bouton d'un bloc extérieur" // its words may echo what was read (web_gestures.go)
 	}
 	return ref
 }

@@ -21,6 +21,8 @@ func TestCardBlock(t *testing.T) {
 	other := mustNode(t, c, nodestore.New{Title: "Garage"})
 	propose := func(title, node string) string {
 		t.Helper()
+		c.turn.start(0, 0, 0)
+		c.turn.about(node) // proposed from the subject: placed in it
 		out, err := c.proposeView(proposeViewIn{Title: title, Body: title + ".\n"}, nil)
 		if err != nil {
 			t.Fatal(err)

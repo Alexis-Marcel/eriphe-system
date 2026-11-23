@@ -196,7 +196,8 @@ stale: it applies over it, code's fields kept.
 ### No yes in a block
 
 A block draws, reads and asks; it never acts. There are no block actions, no marks and no boxes to
-pick: a button only asks Eriphe (`ask`, the words its author wrote, sent as the user's message), and
+pick: a button only asks Eriphe (`ask`, the words its author wrote, sent as the user's message; from
+an `external` block, sent marked as not the user's own words), and
 whatever asks the user's yes is a **card**, drawn by code: on an item's row when it waits on that
 item (its `_card`, below), at the foot of the page otherwise, or where a `card` block places it (a
 ref alone, so never `external`: a turn that read external content places one too). A

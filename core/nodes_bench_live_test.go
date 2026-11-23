@@ -53,7 +53,8 @@ import (
 // as a table (benchMetrics), one column per run. The test fails when a
 // run breaks one of the bars (benchBars): a lost reply, a duplicate node,
 // more than one write refused for its grammar or the catalog, a view that
-// is not valid, more than benchTurns turns of the user's.
+// is not valid, more than benchTurns turns of the user's, a page asked for
+// (the mails, the day) not shown first: no card in its turn, or questions.
 func TestNodesBenchLive(t *testing.T) {
 	if os.Getenv("ERIPHE_LIVE_NODES") == "" {
 		t.Skip("set ERIPHE_LIVE_NODES=1 to play the epic's scenario on a real model")
@@ -117,15 +118,19 @@ var benchMetrics = []struct{ key, want string }{
 	{"node_set parent", "yes"},
 	{"links written / resolved", "n / n"},
 	{"glance set", "yes"},
-	{"watch: asked before proposing", "yes"},
-	{"watch: ask buttons (clean turn)", "yes"},
-	{"view proposed, card placed", "yes"},
+	{"watch: card in the first turn", "yes"},
+	{"watch: no questionnaire", "yes"},
+	{"watch: changes offered (ask)", "-"},
 	{"view approved", "yes"},
 	{"view: bilan lead", "yes"},
 	{"view: items, sections", "yes"},
 	{"view: batch", "yes"},
 	{"skill: item_note", "≥ 1"},
 	{"skill: card on a row", "-"},
+	{"day: card in the first turn", "yes"},
+	{"day: no questionnaire", "yes"},
+	{"day: changes offered (ask)", "-"},
+	{"day: short titles", "yes"},
 	{"cost, time", "-"},
 }
 
@@ -142,6 +147,7 @@ type benchScore struct {
 	lost, dups, grammar int
 	viewValid           bool
 	turns               int
+	notShown            []string // pages asked for, not shown first (scoreShownFirst)
 }
 
 func (s *benchScore) set(key, val string, ok bool) {
@@ -181,6 +187,9 @@ func (s *benchScore) broken() []string {
 	}
 	if !s.viewValid {
 		out = append(out, "the view is not valid")
+	}
+	for _, what := range s.notShown {
+		out = append(out, what+": not shown first")
 	}
 	if s.turns > benchTurns {
 		out = append(out, fmt.Sprintf("%d turns of the user's", s.turns))
@@ -354,36 +363,26 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 	b.say("Garde un œil sur la consommation de la maison : je veux voir quand elle dépasse 10 kW.", "", turnWork)
 	b.s.yes("glance set", b.glance("maison/conso"), "no glance reads maison/conso")
 
-	// 12-13. Setting up a mail watch asks before proposing: the first
-	// turn opens the subject and asks there, with buttons for the likely
-	// answers on a clean turn; the answer brings the card, placed.
-	pending := b.setups()
+	// 12. Setting up a mail watch shows it first: the view's card in the
+	// same turn, with sensible defaults, its choices adjustable after
+	// (ask buttons, in a tainted turn too), never a questionnaire before.
 	b.say("Tu peux garder un œil sur mes mails, m'aider à les gérer et me proposer des actions à faire.", "", turnWork)
-	asked, _ := b.lastAnswer()
-	b.s.yes("watch: asked before proposing", b.setups() == pending && asked.Node != "",
-		fmt.Sprintf("%d proposed, answered in %q", b.setups()-pending, asked.Node))
-	tainted := b.taintedWrites(asked.Node)
-	switch {
-	case asked.Node == "":
-		b.s.set("watch: ask buttons (clean turn)", "no subject", false)
-	case len(tainted) > 0:
-		b.s.set("watch: ask buttons (clean turn)", "tainted turn", false)
-		b.note(fmt.Sprintf("watch: the questions were written after reading %q", tainted))
-	default:
-		b.s.yes("watch: ask buttons (clean turn)", nodeAsks(sc.c, asked.Node), "the questions have no ask button")
-	}
-	view := ""
-	if asked.Node != "" {
-		b.say("Fais comme tu proposes.", asked.Node, turnNoNode)
-		ref, placed := b.placedCard(asked.Node)
-		b.s.yes("view proposed, card placed", ref != "" && placed, fmt.Sprintf("card %q, placed %v", ref, placed))
-		view = b.approveView()
-	} else {
-		b.s.set("view proposed, card placed", "not played", false)
-	}
+	b.scoreShownFirst("watch", "")
+	view := b.approveView()
 	b.s.yes("view approved", view != "", "no view approved")
 	b.scoreView(view)
 	b.runSkill(view)
+
+	// 13. The day asked to be followed, at the home, as on a fresh install
+	// (the seed's day page archived first): its view's card in that turn,
+	// an Agenda on it, no questionnaire, no title made of the sentence. The
+	// last turn: the replay checks it again (nodes_replay_test.go).
+	if err := sc.c.archiveNode(ctx, day, byUser); err != nil {
+		b.note("day: " + err.Error())
+	}
+	const followDay = "Tu peux suivre et gérer mes journées ?"
+	b.say(followDay, "", turnWork)
+	b.scoreShownFirst("day", followDay)
 
 	b.end(work) // before the archive: the whole graph is scored
 	if err := sc.c.archiveNode(ctx, mail, byUser); err != nil {
@@ -628,13 +627,6 @@ func (b *bench) viewMade(id string) bool {
 	return n > 0
 }
 
-// setups counts what waits to run alone: views and skills proposed.
-func (b *bench) setups() int {
-	var n int
-	b.sc.c.store.db.QueryRow(`SELECT (SELECT COUNT(*) FROM view_proposals WHERE state = ?) + (SELECT COUNT(*) FROM skills WHERE pending != '')`, viewProposed).Scan(&n)
-	return n
-}
-
 // lastAnswer is the brain's last message.
 func (b *bench) lastAnswer() (Message, bool) {
 	msgs, _ := b.sc.c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ? ORDER BY seq DESC LIMIT 1`, roleBrain)
@@ -871,35 +863,50 @@ func (b *bench) glance(tool string) bool {
 	return slices.ContainsFunc(srcs, func(s nodestore.LiveSource) bool { return s.Source.Tool == tool && s.Source.Glance != nil })
 }
 
-// taintedWrites is why the last turn's writes of node were tainted.
-func (b *bench) taintedWrites(node string) []string {
-	var why []string
-	for _, x := range b.turnCalls(b.turn) {
-		if slices.Contains(benchWrites, x.tool) && (fmt.Sprint(x.args["id"]) == node || fmt.Sprint(x.out["id"]) == node) {
-			for _, w := range x.tainted {
-				if !slices.Contains(why, w) {
-					why = append(why, w)
-				}
-			}
-		}
-	}
-	return why
-}
-
-// placedCard is the view's card proposed in the last turn, and whether a
-// card block of node places it.
-func (b *bench) placedCard(node string) (string, bool) {
-	ref := ""
+// scoreShownFirst scores a page asked for, kept up to date, in the last
+// turn (its rows are what's « … »): its view proposed in that very turn,
+// no questionnaire written in it nor said, the changes offered by ask
+// buttons; with the user's sentence, no title made of it. A page not
+// proposed, or asked about first, breaks a bar.
+func (b *bench) scoreShownFirst(what, sentence string) {
+	proposed, asked, asks := false, false, false
+	var titles []string
 	for _, x := range b.turnCalls(b.turn) {
 		if x.tool == "propose_view" && x.err == "" {
-			ref, _ = x.out["card"].(string)
+			proposed = true
+		}
+		if !slices.Contains(benchWrites, x.tool) || x.err != "" {
+			continue
+		}
+		for _, k := range []string{"body", "text", "new"} {
+			s, _ := x.args[k].(string)
+			asked = asked || questionnaire(s)
+			asks = asks || strings.Contains(s, `"ask"`)
+		}
+		if v, ok := x.args["value"]; ok {
+			raw, _ := json.Marshal(v)
+			asks = asks || strings.Contains(string(raw), `"ask"`)
+		}
+		if t, _ := x.args["title"].(string); t != "" && (x.tool == "node_open" || x.tool == "propose_view" || x.tool == "node_set") {
+			titles = append(titles, t)
 		}
 	}
-	d, err := b.sc.c.nodes.Read(node, 0)
-	if ref == "" || err != nil {
-		return ref, false
+	if said, ok := b.lastAnswer(); ok && questionnaire(said.Text) {
+		asked = true
 	}
-	return ref, slices.ContainsFunc(d.Node.Blocks(), func(bl *nodefile.Block) bool { return bl.Card == ref && !bl.External })
+	b.s.yes(what+": card in the first turn", proposed, "no view proposed in the turn it was asked")
+	b.s.yes(what+": no questionnaire", !asked, "questions asked before the page was shown")
+	b.s.set(what+": changes offered (ask)", yesNo(asks), true)
+	if !proposed || asked {
+		b.s.notShown = append(b.s.notShown, what)
+	}
+	if sentence == "" {
+		return
+	}
+	short := !slices.ContainsFunc(titles, func(t string) bool {
+		return strings.Contains(t, "?") || strings.EqualFold(strings.TrimSpace(t), strings.TrimSpace(sentence))
+	})
+	b.s.yes(what+": short titles", short, fmt.Sprintf("titled %q", titles))
 }
 
 // approveView says yes on the view's card: the view's node, "" if none.

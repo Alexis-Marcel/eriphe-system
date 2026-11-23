@@ -52,7 +52,7 @@ const viewProposalsSchema = `CREATE TABLE IF NOT EXISTS view_proposals (
 func init() { extraSchema = append(extraSchema, viewProposalsSchema) }
 
 type proposeViewIn struct {
-	Title   string          `json:"title" jsonschema:"the view's title, in the user's words"`
+	Title   string          `json:"title" jsonschema:"a short name of what it shows (Mes mails, Mon portefeuille), never the user's sentence"`
 	Goal    string          `json:"goal,omitempty" jsonschema:"what it is for and the user's choices: the card shows it, the skill's runs read it"`
 	Body    string          `json:"body" jsonschema:"its text and blocks (catalog_read)"`
 	Monitor *writeMonitorIn `json:"monitor,omitempty" jsonschema:"write_monitor's fields; a block reads it by its name"`
@@ -60,7 +60,7 @@ type proposeViewIn struct {
 }
 
 func registerViewTool(s *mcp.Server, c *core) {
-	tool(s, "propose_view", "Propose a view: a standing node whose blocks code keeps fresh, the monitor that detects what comes and the skill that works in the node when it does, checked now and shown on one card: one yes makes them all, nothing before. Reuse a monitor or a skill that does it already, by its name. Place its card in the subject's document with a card block (the ref this gives).",
+	tool(s, "propose_view", "Propose a view: a standing node whose blocks code keeps fresh, the monitor that detects what comes and the skill that works in the node when it does, checked now and shown on one card: one yes makes them all, nothing before. Asked for a page kept up to date, propose it at once with sensible defaults, no questions first: its card shows the page. Reuse a monitor or a skill that does it already, by its name. From a subject, place its card in its document with a card block (the ref this gives); at the home, it waits above the bar.",
 		func(ctx context.Context, in proposeViewIn) (map[string]any, error) {
 			return c.proposeView(in, c.turnTaint())
 		})
@@ -100,7 +100,7 @@ func (c *core) proposeView(in proposeViewIn, tainted []string) (map[string]any, 
 	// Its blocks are checked as a task's are (nodeGuard): what they ask,
 	// what they link; each source a catalog server's, or a monitor the
 	// user approved, or the view's own.
-	if _, err := c.nodeGuard(n, blockNames(n), len(tainted) > 0, c.viewSourceOK(monitorName)); err != nil {
+	if _, err := c.nodeGuard(n, blockNames(n), c.viewSourceOK(monitorName)); err != nil {
 		return nil, fmt.Errorf("the node: %w", err)
 	}
 	if in.Monitor != nil {
@@ -145,8 +145,13 @@ func (c *core) proposeView(in proposeViewIn, tainted []string) (map[string]any, 
 	}
 	id, _ := res.LastInsertId()
 	card := c.cardProposed(cardViewKind, id)
-	return map[string]any{"result": "proposed; it waits for the user's yes on its card, then the node, its monitor and its skill are made at once", "node": v.Node, "card": card,
-		"place": cardPlaceNote(card)}, nil
+	out := map[string]any{"result": "proposed; it waits for the user's yes on its card, then the node, its monitor and its skill are made at once", "node": v.Node, "card": card}
+	if c.turn.aboutNode() != "" {
+		out["place"] = cardPlaceNote(card)
+	} else { // at the home: no node holds it (web_orb.go's unheldCards)
+		out["place"] = "It waits above the bar, in front of the user: nothing to place."
+	}
+	return out, nil
 }
 
 // viewSourceOK is the check of a view's sources: a catalog server's tool

@@ -717,9 +717,9 @@ whatever address it dials) and one client certificate per device.
 | `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task with a node, the reply goes to its node's trace (« Eriphe a répondu : … »), so the user can see and contradict it; display only |
 | `stop_task` | stop the agent |
 | `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
-| `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)); returns the card's ref (`card`), to place in the subject's document |
+| `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)); asked for a page kept up to date, the brain calls it at once with sensible defaults, no questions first (the card shows the page; its choices are changed after, by ask buttons); returns the card's ref (`card`), to place in the subject's document, else it waits above the bar |
 | `catalog_read`, `sources_read` | the whole grammar of a node's block (components, sources, items, sections, glance) and what a block may read ([The catalog tools](#the-catalog-tools-node_cataloggo)) |
-| `node_open` | open a work node: `title`, `parent` (a child of that node), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); written in a tainted turn, the node is external, and a subject opened at the home in answer to the user is titled from the user's request (`requestTitle`: their words, its title trusted); a standing node, a view, is made only by `propose_view`, on the user's yes; the same `openNode` as a task's `node_open`; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
+| `node_open` | open a work node: `title`, `parent` (a child of that node), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); its `title` a short name of what it is about, never the user's sentence; written in a tainted turn, the node is external and its title marked; a standing node, a view, is made only by `propose_view`, on the user's yes; the same `openNode` as a task's `node_open`; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_find` | find nodes by words of their title, goal, text or blocks (any word of three letters or more is enough, the nodes that hold the most first), each with its `status`; with no words, those running or waiting, then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does) |
 | `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, `backlinks` (the live nodes that link it, by their text or code), done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
 | `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying `external` (code's field); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
@@ -1071,11 +1071,10 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   the user spoke from), else, from the home, of the node the turn is about (the last it named):
   `Appel : <server>/<tool>.`. A turn of the home about no node (a light switched on) files it in no
   node: the decisions keep it, and the brain reads nothing first to place it (#706).
-- **A title before an external read** (`brainNodeOpen`): a subject the brain opens at the home, in
-  answer to the user, after its turn read external content, takes the user's request as its title
-  (`requestTitle`, the safety net's: their first line, never an untrusted channel's nor a secret),
-  trusted: their words are never marked external, whatever the brain wrote. A child, or a node
-  opened from a node, keeps the brain's title, marked when the turn is tainted.
+- **A node's title is the brain's** (`brainNodeOpen`): a short name of what it is about (« Mes
+  mails »), never the user's sentence, and never replaced by code. Opened before the turn reads
+  external content, it is trusted; opened after, it is shown as it is and marked (`TitleExternal`),
+  like any title written after an outside read.
 
 ## Node files (`nodefile/`)
 
@@ -1097,8 +1096,8 @@ body and typed blocks (`` ```eriphe:block <name> ``). The format is specified in
   an author copying one) still reads, the snapshot ignored, and is written again without it. An
   old step's front matter `after` reads as a field this package does not know, kept as it was.
 
-The checks that need the core (offers, an `ask` after external content, a bound Link's value,
-taint) are the tools' that write nodes.
+The checks that need the core (offers, a card block's ref, a bound Link's value, taint) are the
+tools' that write nodes.
 
 ## Node store (`nodestore/`, `nodes.go`)
 
@@ -1221,8 +1220,9 @@ decided), and a run or a step that ends, or the node archived, drops its progres
   external: code marks its node and the blocks it writes, in the same version; a child it opens is
   external; its item notes carry the taint. Reading an external node taints the task.
 - **Guards** nodefile does not hold, on every block a write adds or changes (a block, or a fence
-  written in its text): a Button only asks (`a2ui.CheckActions`); written tainted, a
-  block asks nothing (no `ask` button); a `Link` never opens a
+  written in its text): a Button only asks, in its author's literal words (`a2ui.CheckActions`),
+  tainted or not (written tainted, the block is external, and its click comes back marked: see
+  `POST /api/nodes/{id}/ask`); a `Link` never opens a
   source's value; a block's source reads a tool or server the task is lent, or a monitor the user
   approved, and one of a server not trusted marks the block external.
 - **Its report**: at the end of each turn, the task's last message (its receipt left out) is filed
@@ -1376,7 +1376,7 @@ composes each one from the catalog.
   refuses every call. On its own node's page, a card's origin, its skill and what Oui does in
   general are under Détails; the « extérieur » badge stays.
 - **One card** (`view_card.go`, kind `view`, table `view_proposals`): `propose_view` checks the
-  node (its body as a task's blocks are: the actions' grammar, no ask after external content, no
+  node (its body as a task's blocks are: the actions' grammar, an ask in its own words, no
   Link to a source's value; each source a catalog server's, an approved monitor, or the view's
   own), the monitor (`write_monitor`'s checks, its name free) and the skill (`write_skill`'s, its
   name free, with `when`; code writes its `node:`, the id given beforehand). The card leads with a
@@ -1385,9 +1385,9 @@ composes each one from the catalog.
 (« À chaque … », "Each …"), how it may tell the user, its urgent text), then,
   under « Détails » (fields marked `detail`), the node's blocks with what each reads, what the
   monitor does, and when the skill runs, with the repositories its steps may borrow, and its
-  instructions (marked `markdown`, drawn as Markdown); the view's `goal` is its why, where the brain recalls
-  the choices the user made when it asked first (scope, what matters, when to tell: the prompt's
-  « Ce qui tournera seul »). One yes makes the node (standing, by `user`), the
+  instructions (marked `markdown`, drawn as Markdown); the view's `goal` is its why, where the brain says
+  the choices it proposed it with, sensible defaults the user changes after, never asked first
+  (scope, what matters, when to tell: the prompt's « Ce qui tournera seul, montre-le d'abord »). One yes makes the node (standing, by `user`), the
   monitor (on) and the skill (approved), in that order; one that fails takes back those before,
   and the card waits still. No makes none; archiving the node it waits on drops it (`dropped`,
   its card `gone`). Written on a tainted turn, the card says so and the
@@ -2314,8 +2314,9 @@ GET  /v1/channel/out?wait=50&places=Salon,Bureau  → {"messages": [{"id", "text
 ```
 
 The text joins the conversation like any of mine, marked with the channel and its place
-(`[Sam 12:00 #N · Home Assistant, Bureau]`, `· canal sans confiance` when not trusted), and the
-brain answers it in the same conversation; with a place, short and without markdown, as it is most often
+(`[Sam 12:00 #N · Home Assistant, Bureau]`, `· canal sans confiance` when not trusted: then it
+taints the turn, and is never cited as the user's own words, for a preference, a lesson or the
+profile, nor read as theirs by the nightly extraction), and the brain answers it in the same conversation; with a place, short and without markdown, as it is most often
 read aloud. The answer streams back from the brain's draft as it writes; only what it says after
 reading the text counts. Without a word within `wait` seconds (10 by default, at most 80 for an
 automation that sends the answer on), it answers « Je m'en occupe, je te préviens » and the answer
@@ -3395,7 +3396,10 @@ token in `X-CSRF-Token`:
   `body`, and writes nothing; an archived node `410`; a body that does not read `400`.
 - `POST /api/nodes/{id}/ask` `{block, component}`: a block's button. Its words are read again in
   the stored block (`a2ui.AskText`), never taken from the page, and become the user's message to
-  that node; a block written after reading external content asks nothing (`403`). It acts on
+  that node. A block marked external asks too, but its words may echo what was read: the message
+  is stored tainted (`ask:<node>/<block>`), so the turn it starts is tainted as the one that wrote
+  it, and it is never taken for the user's own words (`fromUntrusted`: no owner memory cited from
+  it, no text « oui » on a card, no lending, the extraction reads it as external). It acts on
   nothing: no route marks a block's items or acts on them; a yes is a card's.
 - `POST /api/nodes/{id}/open` `{block, source, item}`: an item opened in place
   (`item_open.go`), the user's gesture. The source's `items.open` is read again in the stored block
@@ -3494,7 +3498,7 @@ token in `X-CSRF-Token`:
 - `doc/`: the page's parts: text as Markdown by the page's own renderer, which makes no HTML of it;
   each block an A2UI surface (`<node>--<block>`) of the page's own adapter, a source's new value put
   at its place in the block's data. A block marked external is a tainted surface. A button's `ask` goes to eriphe-core (`.../ask`)
-  from the last version of a block that is not external; a row's card is drawn by the page from
+  from the last version of a block, an external one's too (eriphe-core marks its words); a row's card is drawn by the page from
   the out-of-band `lists`, never from the block; anything else stays in the page. A card block is
   the card it places (`Cards`, read from eriphe-core), or « Carte introuvable » when the page sent
   no card for it.
@@ -3586,11 +3590,13 @@ taint or a stale version), the turn's node left with `turn_home`, the day's page
 a step's failure settled with `node_settle`, a tainted turn (tainted, the title it opened marked,
 its `run_task` under the turn's node), the reply sent on its card, a child reused, an aside opened
 below its subject without being shown, `node_set parent`, `[[links]]` written and resolved, a
-glance, a mail watch asked before it is proposed (ask buttons on a clean turn), the view proposed
-with its card placed, approved and valid (its bilan lead, items in sections; its batch reported),
-the view's skill noting the new mail (`item_note`) and the cards on its rows. The test fails on a
-lost reply, a duplicate node, more than one write refused for its grammar or the catalog, a view
-that is not valid, or more than 15 turns; the rest is reported.
+glance, a mail watch shown first (its view's card in the turn it is asked, no questionnaire, the
+changes offered by ask buttons), approved and valid (its bilan lead, items in sections; its batch
+reported), the view's skill noting the new mail (`item_note`) and the cards on its rows, and, last,
+« Tu peux suivre et gérer mes journées ? » asked at the home (the seed's day page archived): its
+view's card in that turn, no questionnaire, no title made of the sentence. The test fails on a lost
+reply, a duplicate node, more than one write refused for its grammar or the catalog, a view that is
+not valid, more than 15 turns, or a page asked for not shown first; the rest is reported.
 
 ```sh
 ERIPHE_LIVE_NODES=1 ERIPHE_LIVE_NODES_RUNS=2 go test -run TestNodesBenchLive -timeout 0 -v .
@@ -3605,7 +3611,10 @@ command, `ERIPHE_LIVE_NODES_RECORD` a file the first run's node writes are recor
 scenario's core without a model, in CI: ids, hashes and card refs as placeholders, a call on a node
 code opened and a piece of text replaced (which depend on what workers wrote) left out. Each call
 must be taken or refused as it was, and what they leave must hold to the rules: a card block draws
-its card, no external block asks. Record it again with `ERIPHE_LIVE_NODES_RECORD=testdata/nodes_replay.json`
+its card. Its last turn, « tu peux suivre et gérer mes journées ? » (written by hand after a real
+case until a run records it: asked after a recall read a mail's fact), must propose its view in
+that turn with no questionnaire; its yes makes a page whose `Agenda` reads the calendar and whose
+buttons, written in the tainted turn, ask and are marked. Record it again with `ERIPHE_LIVE_NODES_RECORD=testdata/nodes_replay.json`
 when the rules change on purpose.
 
 **A full home** (#455). The workspace says the user is

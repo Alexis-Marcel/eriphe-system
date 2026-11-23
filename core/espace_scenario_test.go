@@ -1647,16 +1647,6 @@ func (sc *scenario) mail() (string, error) {
 	return d.Node.Meta.ID, nil
 }
 
-// nodeAsks tells a node whose document has a button that asks Eriphe
-// (a block's ask): its questions come with their answers.
-func nodeAsks(c *core, id string) bool {
-	d, err := c.nodes.Read(id, 0)
-	if err != nil {
-		return false
-	}
-	return slices.ContainsFunc(d.Node.Blocks(), func(b *nodefile.Block) bool { return blockAsks(b.Components) })
-}
-
 // blockAsks tells a block's components that hold a button's ask.
 func blockAsks(components json.RawMessage) bool {
 	var list []struct {

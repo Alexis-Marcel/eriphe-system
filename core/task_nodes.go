@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -99,7 +98,7 @@ type nodeAppendIn struct {
 // nodeOpenFields are what node_open makes, for the brain (brainNodeOpenIn)
 // and a task (its node_open) alike: openNode.
 type nodeOpenFields struct {
-	Title  string     `json:"title" jsonschema:"a few words in the user's language, no ids"`
+	Title  string     `json:"title" jsonschema:"a short name of what it is about, in the user's language (Mes mails), never their sentence, no ids"`
 	Goal   string     `json:"goal,omitempty" jsonschema:"what it is for, one or two sentences, never shown; with steps, what a fresh agent checks once every step is accepted"`
 	Body   string     `json:"body,omitempty" jsonschema:"its first body: markdown and blocks (catalog_read)"`
 	Steps  []stepSpec `json:"steps,omitempty" jsonschema:"its work in steps, each a child an agent runs: a step starts once those it comes after are accepted (in parallel when it can), and is accepted when its receipt says done and its contract's checks pass"`
@@ -327,7 +326,7 @@ func (c *core) authorWrite(id, expect, author string, tainted bool, sourceOK fun
 				names = append(names, b.Name)
 			}
 		}
-		outside, err := c.nodeGuard(n, names, tainted, sourceOK)
+		outside, err := c.nodeGuard(n, names, sourceOK)
 		if err != nil {
 			return err
 		}
@@ -403,11 +402,11 @@ func (c *core) externalSources(d *nodestore.Doc, author string) error {
 
 // nodeGuard checks the blocks an author wrote (names) in a node: a card
 // block places one of the node's own cards, tainted or not; the
-// actions' grammar (an ask only), nothing asked when tainted, no Link to a
+// actions' grammar (an ask only, its words literal), no Link to a
 // source's value, sources the author may give (sourceOK: those a task is
 // lent, lentTo). It tells the blocks that read a source of a server not
 // trusted.
-func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, sourceOK func(nodefile.Source) error) (map[string]bool, error) {
+func (c *core) nodeGuard(n *nodefile.Node, names []string, sourceOK func(nodefile.Source) error) (map[string]bool, error) {
 	outside := map[string]bool{}
 	var problems []string
 	for _, name := range names {
@@ -423,18 +422,10 @@ func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, sourceO
 			}
 			continue
 		}
+		// An ask is its author's literal words, tainted turn or not: its
+		// click goes back marked as the block is (handleNodeAsk).
 		sid := "block:" + name
 		errs := a2ui.CheckActions(sid, b.Components)
-		var list []map[string]any
-		json.Unmarshal(b.Components, &list)
-		for i, comp := range list {
-			at := "/components/" + strconv.Itoa(i)
-			a, _ := comp["action"].(map[string]any)
-			if ev, ok := a["event"].(map[string]any); ok && tainted && ev["name"] == a2ui.ActionAsk {
-				errs = append(errs, a2ui.ValidationError{SurfaceID: sid, Path: at + "/action/event",
-					Message: "an ask written after reading external content could carry it to the brain as a request: leave the button out"})
-			}
-		}
 		for _, bound := range a2ui.Eriphe().BoundPaths(b.Components) {
 			head, _, _ := strings.Cut(strings.TrimPrefix(bound.Path, "/"), "/")
 			if _, ok := b.Sources[head]; ok && bound.Link {
