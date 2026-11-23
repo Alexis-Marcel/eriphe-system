@@ -308,7 +308,7 @@ func replayDay(t *testing.T, c *core, calls []replayCall) {
 	agenda, asks := false, false
 	for _, b := range d.Node.Blocks() {
 		agenda = agenda || strings.Contains(string(b.Components), `"Agenda"`) && len(b.Sources) > 0
-		asks = asks || b.External && blockAsks(b.Components)
+		asks = asks || blockAsks(b.Components) && (b.External || !calls[len(calls)-1].Tainted) // marked when written after a read
 	}
 	if !agenda || !asks || d.Node.Meta.Lifetime != "standing" {
 		t.Errorf("the day's view: agenda %v, asks marked %v:\n%s", agenda, asks, d.Raw)

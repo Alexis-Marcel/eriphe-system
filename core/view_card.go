@@ -145,8 +145,13 @@ func (c *core) proposeView(in proposeViewIn, tainted []string) (map[string]any, 
 	}
 	id, _ := res.LastInsertId()
 	card := c.cardProposed(cardViewKind, id)
-	return map[string]any{"result": "proposed; it waits for the user's yes on its card, then the node, its monitor and its skill are made at once", "node": v.Node, "card": card,
-		"place": cardPlaceNote(card)}, nil
+	out := map[string]any{"result": "proposed; it waits for the user's yes on its card, then the node, its monitor and its skill are made at once", "node": v.Node, "card": card}
+	if c.turn.aboutNode() != "" {
+		out["place"] = cardPlaceNote(card)
+	} else { // at the home: no node holds it (web_orb.go's unheldCards)
+		out["place"] = "It waits above the bar, in front of the user: nothing to place."
+	}
+	return out, nil
 }
 
 // viewSourceOK is the check of a view's sources: a catalog server's tool

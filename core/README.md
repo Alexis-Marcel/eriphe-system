@@ -1385,9 +1385,9 @@ composes each one from the catalog.
 (« À chaque … », "Each …"), how it may tell the user, its urgent text), then,
   under « Détails » (fields marked `detail`), the node's blocks with what each reads, what the
   monitor does, and when the skill runs, with the repositories its steps may borrow, and its
-  instructions (marked `markdown`, drawn as Markdown); the view's `goal` is its why, where the brain recalls
-  the choices the user made when it asked first (scope, what matters, when to tell: the prompt's
-  « Ce qui tournera seul »). One yes makes the node (standing, by `user`), the
+  instructions (marked `markdown`, drawn as Markdown); the view's `goal` is its why, where the brain says
+  the choices it proposed it with, sensible defaults the user changes after, never asked first
+  (scope, what matters, when to tell: the prompt's « Ce qui tournera seul, montre-le d'abord »). One yes makes the node (standing, by `user`), the
   monitor (on) and the skill (approved), in that order; one that fails takes back those before,
   and the card waits still. No makes none; archiving the node it waits on drops it (`dropped`,
   its card `gone`). Written on a tainted turn, the card says so and the
@@ -2314,8 +2314,9 @@ GET  /v1/channel/out?wait=50&places=Salon,Bureau  → {"messages": [{"id", "text
 ```
 
 The text joins the conversation like any of mine, marked with the channel and its place
-(`[Sam 12:00 #N · Home Assistant, Bureau]`, `· canal sans confiance` when not trusted), and the
-brain answers it in the same conversation; with a place, short and without markdown, as it is most often
+(`[Sam 12:00 #N · Home Assistant, Bureau]`, `· canal sans confiance` when not trusted: then it
+taints the turn, and is never cited as the user's own words, for a preference, a lesson or the
+profile, nor read as theirs by the nightly extraction), and the brain answers it in the same conversation; with a place, short and without markdown, as it is most often
 read aloud. The answer streams back from the brain's draft as it writes; only what it says after
 reading the text counts. Without a word within `wait` seconds (10 by default, at most 80 for an
 automation that sends the answer on), it answers « Je m'en occupe, je te préviens » and the answer
