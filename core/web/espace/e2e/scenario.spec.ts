@@ -179,13 +179,14 @@ test("the steps of the scenario", async ({ page, request }) => {
   // 8. A draft with its « Envoyer ? » card, the production view beside it,
   // a research child running.
   await say("Réponds que je regarde dans l'heure, ouvre-moi la prod, et lance en arrière-plan une recherche sur l'erreur.");
-  // Its send waits for the user's yes: the orb only answers, beside the
-  // mail's page, with what it did; what waits is the graph's to show, the
-  // card in the page and the node's halo.
+  // Its send waits for the user's yes: the orb only answers, about the
+  // mail (beside its page, or as the bar's line when the pages leave it
+  // no free spot), with what it did; what waits is the graph's to show,
+  // the card in the page and the node's halo.
   await expect(said).toContainText("Le brouillon est prêt");
   await expect(words).toHaveClass(/answer/);
   await expect(said).not.toContainText("Il me faut ton oui ici.");
-  await orbBeside(page, mailPage);
+  await expect(page.locator("button.orb")).toHaveAttribute("aria-label", new RegExp(`à côté de ${external.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   await expect(page.locator(`.gr-node.yours[data-node="${mail}"]`)).toHaveCount(1);
   await shot(page, "orb-card-answer");
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", `Écris à Eriphe, sur ${external}`);
