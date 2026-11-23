@@ -4041,8 +4041,9 @@ node's media, as a task's image (`nodestore.PutFile`, by `brain`), and writes th
 - **Shown.** The node's page gives each property that names one of its files with its signed address
   (`pageProp.media`: an image shows as the node's picture, a PDF as a link that downloads it:
   `GET /espace/media` serves a node's non-image file as `Content-Disposition: attachment`). A
-  `Table` whose source is `eriphe-core/node_find` with such a column (`columns: ["photo"]`) shows
-  each node's file as a thumbnail (`nodeFindMedia` signs `media:<name>` for the row's own node; an
+  block whose source is `eriphe-core/node_find` with such a column (`columns: ["photo"]`) shows
+  each node's file: a `Table` as a thumbnail, an `Image` of a `List` as itself (`nodeFindMedia`
+  signs `media:<name>` for the row's own node, and `mediaOrDrop` keeps an address it signed; an
   external node's columns stay withheld). The brain's `node_find` gives `media:<name>` as written.
 
 ### Proposals in the blocks they concern (`card_moves.go`)

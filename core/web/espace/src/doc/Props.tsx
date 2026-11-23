@@ -23,7 +23,7 @@ export function Props({ page }: { page: NodePage }) {
               m.image ? (
                 <img key={`${p.key}-${i}`} className="pg-picture" src={m.src} alt={p.key} loading="lazy" />
               ) : (
-                <a key={`${p.key}-${i}`} className="pg-file" href={m.src} download>
+                <a key={`${p.key}-${i}`} className="pg-file" href={m.src} download={`${p.key}.pdf`}>
                   {p.key} · {t("espace.props.file")}
                 </a>
               ),

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
@@ -86,6 +87,25 @@ func TestAttachmentToNodeMedia(t *testing.T) {
 	if code, body, _ := tw.do("GET", thumb, nil, nil); code != http.StatusOK || body != string(photo) {
 		t.Fatalf("thumbnail served %d", code)
 	}
+	// As a List of Images (a gallery), the same address: signed by
+	// eriphe-core, it is kept as it is.
+	b := &nodefile.Block{Name: "galerie", Components: json.RawMessage(`[
+  {"id": "root", "component": "List", "children": {"path": "/garde/nodes", "componentId": "pic"}},
+  {"id": "pic", "component": "Image", "url": {"@path": "photo"}}]`),
+		Sources: map[string]nodefile.Source{"garde": {Tool: nodeFindSource, Args: map[string]any{"tags": []any{"vêtement"}, "columns": []any{"photo"}}}}}
+	reads := c.keptReads(page)
+	for i := range reads {
+		reads[i].Block = "galerie"
+	}
+	v := c.blockView(page, b, reads)
+	if got := v.Data["garde"].(map[string]any)["nodes"].([]any)[0].(map[string]any)["photo"]; got != thumb {
+		t.Fatalf("an Image of a List: %q, want %q", got, thumb)
+	}
+	// An address eriphe-core did not sign is dropped.
+	if got := c.mediaOrDrop(page, mediaPath+"?u=media%3A"+id+"%2F"+name+"&s=forged", false); got != "" {
+		t.Fatalf("a forged address kept: %q", got)
+	}
+
 	// The brain's node_find still gives the property as it is written.
 	found := mustBrainNodes(t, c, "node_find", map[string]any{"tags": []any{"vêtement"}, "columns": []any{"photo"}})
 	if raw, _ := json.Marshal(found["nodes"]); !strings.Contains(string(raw), `"photo":"`+src+`"`) {

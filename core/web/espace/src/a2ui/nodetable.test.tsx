@@ -125,7 +125,7 @@ describe("a node's properties", () => {
     expect(img?.alt).toBe("photo");
     const file = el.querySelector<HTMLAnchorElement>("a.pg-file");
     expect(file?.getAttribute("href")).toBe("/espace/media?u=media%3Aa1%2Fmed_b.pdf&s=y");
-    expect(file?.hasAttribute("download")).toBe(true);
+    expect(file?.getAttribute("download")).toBe("notice.pdf");
     expect(file?.textContent).toBe("notice · télécharger");
     // Its other properties as before; the media: value never as text.
     expect([...el.querySelectorAll(".pg-prop")].map((p) => p.textContent)).toEqual(["couleurbleu"]);

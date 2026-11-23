@@ -111,6 +111,9 @@ func (c *core) mediaOrDrop(id, raw string, allowed bool) string {
 		at := mediaScheme + id + "/" + name
 		return mediaPath + "?" + url.Values{"u": {at}, "s": {c.mediaSign(at)}}.Encode()
 	}
+	if c.mediaSigned(raw) { // eriphe-core's own already (a node_find row's file: nodeFindMedia)
+		return raw
+	}
 	u, err := url.Parse(raw)
 	if !allowed || err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || len(raw) > 4096 {
 		return ""
@@ -125,6 +128,18 @@ func (c *core) nodeFileSrc(id, v string) string {
 		return ""
 	}
 	return c.mediaOrDrop(id, v, false)
+}
+
+// mediaSigned tells an address of eriphe-core's media endpoint it signed
+// itself.
+func (c *core) mediaSigned(raw string) bool {
+	q, ok := strings.CutPrefix(raw, mediaPath+"?")
+	if !ok {
+		return false
+	}
+	v, err := url.ParseQuery(q)
+	u, s := v.Get("u"), v.Get("s")
+	return err == nil && u != "" && hmac.Equal([]byte(s), []byte(c.mediaSign(u)))
 }
 
 // mediaIsImage tells a media:<name> of an image from a file's (a PDF).

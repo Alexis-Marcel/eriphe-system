@@ -736,7 +736,7 @@ function mediaCell(v: unknown, alt: string, file: string): ReactNode | undefined
     mediaImage(src) ? (
       <img key={src} className="a2-thumb" src={src} alt={alt} loading="lazy" />
     ) : (
-      <a key={src} className="a2-file" href={src} download>
+      <a key={src} className="a2-file" href={src} download={`${alt}.pdf`}>
         {file}
       </a>
     ),
