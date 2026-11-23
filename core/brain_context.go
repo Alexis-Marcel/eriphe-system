@@ -480,11 +480,7 @@ func (c *core) packTasks() (perms, tasks []string) {
 		}
 		for _, perm := range st.PendingPermissions {
 			pid := fmt.Sprint(perm["id"])
-			reason := c.store.userOnly(t.ID, pid)
-			who := fmt.Sprintf("à %s seul (%s) : relaie-la-lui", user, reason)
-			if c.accessAsked(t.ID, pid) {
-				who = fmt.Sprintf("une carte la demande déjà à %s (%s) : ne la relaie pas", user, reason)
-			}
+			who := fmt.Sprintf("une carte la demande déjà à %s (%s) : ne la relaie pas", user, c.store.userOnly(t.ID, pid))
 			perms = append(perms, truncate(fmt.Sprintf("- permission %s de la tâche %s, %v, %s", pid, t.ID, perm["tool_name"], who), packLineMax))
 		}
 	}

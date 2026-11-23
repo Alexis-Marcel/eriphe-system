@@ -36,7 +36,7 @@ func taskIn(c *core, id, state string) (string, error) {
 }
 
 // setStatus gives node id a status as code would: a step running (no
-// task listed beside the test's own), a task waiting for a permission,
+// task listed beside the test's own), a card waiting on it,
 // its file done; nothing for idle.
 func setStatus(t *testing.T, c *core, id, status string) {
 	t.Helper()

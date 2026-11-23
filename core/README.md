@@ -1010,8 +1010,12 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   a proposal) is linked to it (`node_cards`), and the node waits for the user while one waits
   (`cardRaisedFor`; its status, `node_status.go`). A decided card stays linked (a card block still
   places it, the page lists it as settled): the status reads only the cards still pending, in one
-  query. A card whose proposal went elsewhere (its task stopped) is settled when its task moves and at
-  each minute's tick (`settleCards`); a page's yes or no is the card's own (`answerProposal`). `run_task` works under the node it names, else the turn's node (at the top when the turn is about none), and is about that node (its
+  query. The card's state is the one truth of what waits: a proposal that moves other than on its
+  card (its task stopped, a page, the user's own change, the memory's expiry) moves its card the
+  moment it moves (`settleCards`, called by the task's state, the memory's store and the pages
+  that change a proposal; `decideProposal` settles its own), never on a timer; the cards are put
+  in step once more when eriphe-core starts (`reconcileCards`: a proposal and its card are not
+  written in one transaction). A page's yes or no is the card's own (`answerProposal`). `run_task` works under the node it names, else the turn's node (at the top when the turn is about none), and is about that node (its
   `about`, set by code: it takes none).
 - **A subject opened from the home** (`moveHomeTurn`): by default a node the brain opens
   (`node_open` without `aside`) opens in front of the user. In a turn that answers the user at the
@@ -1184,9 +1188,12 @@ when the task starts on a tainted turn. Code keeps which task works in which nod
 
 **A node's status** (`node_status.go`) is computed each time it is read, never stored: the graph,
 the page, `node_find`, `node_read`, `since`, `where_now` and the context pack read the same one.
-`waits`: a card linked to it is pending, a task in it is held for its start card or waits for a
-permission, or it is a finished work's result the
-user has not said done (below); `running`: a task works in it, or it is a step whose task runs;
+`waits`: a card linked to it is pending (whatever asks the user's yes is a card: a task's held
+start, on the task's node as well as the turn's; an access a task waits on; a tool lent held back
+that a task calls, whose release card code raises at the call, `askHeldCall`), or it is a finished
+work's result the user has not said done (below: computed, not a card, since no button asks it);
+`running`: a task works in it (one held for its start card does not yet), or it is a step whose
+task runs;
 `done`: its file says `done`, or the steps' engine finished it (a step accepted or dropped, a work
 done whose results are its steps); `idle` otherwise. What waits comes first; an archived node waits
 for no one. A task that ended (stopped, failed, lost) leaves its node idle: only the user, or the
@@ -1724,7 +1731,9 @@ calls is authorized, whatever the grid or a grant says (`lend.go`). The brain as
 `release` (the entries' `ref`, `mail.move`), for an entry lent held only: the user gets a
 [card](#the-approval-card), and only their yes releases it. The release is kept in the task's
 resources, what it needs is granted, it is logged in `decisions` (`release mail.move`), and the
-brain is told the answer. An entry lent outright beside a held one wins.
+brain is told the answer. A task that calls a held tool before that waits on the same card,
+raised by code at its call (`askHeldCall`, one card per release however many calls wait on it):
+a yes lets its calls go, a no refuses them. An entry lent outright beside a held one wins.
 
 **On a tainted turn** (the brain read external content), `run_task` refuses `trust_skills` and a place (its tool is lent whole for now): the brain asks the user and starts the task in the turn of their answer. Reads still
 go, and tools, accesses and a GitHub repository for `write`: what they may do is asked on a card at
@@ -3040,13 +3049,19 @@ needs something of theirs: [asked at launch](#github-in-a-task)) is a card bound
 to that one proposal, filed with the brain's message of the turn that made it (or its last message of
 the turn), with Oui and Non (the proposal's own approve and reject), shown in the workspace
 [in the blocks it concerns](#proposals-in-the-blocks-they-concern-card_movesgo); to change one, the
-user tells the brain, which proposes again. The event stream keeps cards up to date (`proposals`:
-approved, declined, no longer current). The memory's extraction makes no card: what it is not
+user tells the brain, which proposes again. The kinds of proposals are one table
+(`proposal_kinds.go`, `kindsOf`): each row says how its proposal is read, which wait, how a yes or
+a no applies, how it is withdrawn, which node it belongs to and whom a decision tells; reading,
+deciding, withdrawing and listing go through the same few functions for all of them. The event
+stream keeps cards up to date (`proposals`:
+approved, declined, no longer current). The memory's extraction makes no card for a memory (an
+intention it proposes gets one, queued, `cardQueued`): what it is not
 sure of waits in À valider and expires (see [Memory](#memory)). Other proposals (a skill's run, a
 turn that said nothing) are queued and enter the attention queue at their card's weight
 (`cardWeight`: one a task or a node waits on 4; a skill, a monitor or a run's calls 3; a
-reminder 2; a memory, a rule, a setting or an undo 1; `attendQueuedCards` each minute on the
-journal's timer); the queue delivers them like anything else that goes to the user. A card made
+reminder 2; a memory, a rule, a setting or an undo 1; `attendQueuedCards` as they are queued: a
+turn that ends without a message, an intention the extraction proposes, `cardQueued`); the queue
+delivers them like anything else that goes to the user. A card made
 outside a brain turn (the start of a task the brain did not launch, such as a step of a work;
 a skill run's calls when its message is held or not sent; an access asked at a task's call)
 enters the queue with the message eriphe-core will write for it (`cardNow`); the brain is not
@@ -3971,10 +3986,10 @@ A proposal shows where it matters (#428), with no code for any tool:
   ghost, all answering the one card. `GET /api/proposals?day=YYYY-MM-DD` gives the day's
   (`{"day", "proposals": [<proposal view with when>]}`, the times with the user's offset; 400
   without a day); `GET /api/proposals/{ref}` gives `when` too.
-- **Moved.** A card made (`cardProposed`, `cardNow`, `syncCards`), decided (`decideCardWith`, the
+- **Moved.** A card made (`cardProposed`, `cardNow`, `cardQueued`), decided (`decideCardWith`, the
   one way any answer goes: its buttons, a channel, a plain "oui", or a page through
-  `answerProposal`, `TestOneWayToSayYes`) or found
-  decided when read (`liveCard`) notes its ref (`proposalMoved`, the last 64 kept). The
+  `answerProposal`, `TestOneWayToSayYes`) or settled when its proposal moved elsewhere
+  (`settleCards`) notes its ref (`proposalMoved`, the last 64 kept). The
   workspace's stream sends them as a `proposals` event, `{"refs": [...], "nodes": [...]}` (`nodes`:
   the nodes their cards are linked to; `{"all": true}` for a stream further behind), at once
   (`watchProposals`); the page reads again each card of those refs, a node's page only when one
