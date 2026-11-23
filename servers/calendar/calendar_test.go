@@ -136,7 +136,7 @@ func TestCalDAVCreateUpdateDelete(t *testing.T) {
 	cs := e.connect(t)
 	ev := call[Event](t, cs, "create_event", map[string]any{
 		"account": "icloud", "calendar": "Travail", "title": "Dentiste", "start": "2026-10-27T14:00", "duration_minutes": 45,
-		"location": "Lille", "description": "Apporter la carte",
+		"place": "Lille", "description": "Apporter la carte",
 	})
 	if ev.Start != "2026-10-27T14:00:00+01:00" || ev.End != "2026-10-27T14:45:00+01:00" || ev.Calendar != "Travail" {
 		t.Fatalf("created: %+v", ev)
@@ -202,6 +202,25 @@ func TestAllDayEvents(t *testing.T) {
 	}
 	if msg := callErr(t, cs, "create_event", map[string]any{"account": "cloud", "title": "x", "start": "2026-11-05", "end": "2026-11-05T10:00"}); !strings.Contains(msg, "both be dates") {
 		t.Errorf("mixed: %s", msg)
+	}
+}
+
+// An event is written in the shape eriphe-core's Agenda block reads
+// (title, start, end, place, allDay, status), so a block binds the list
+// as it is, with no mapping.
+func TestEventAgendaShape(t *testing.T) {
+	raw, _ := json.Marshal(Event{ID: "e1", Title: "Pique-nique", Start: "2026-11-23", End: "2026-11-23", AllDay: true, Location: "Parc", MyStatus: "needs-action"})
+	var got map[string]any
+	json.Unmarshal(raw, &got)
+	for k, want := range map[string]any{"title": "Pique-nique", "start": "2026-11-23", "end": "2026-11-23", "place": "Parc", "allDay": true, "status": "needs-action"} {
+		if got[k] != want {
+			t.Errorf("%s: %v, want %v (%s)", k, got[k], want, raw)
+		}
+	}
+	for _, old := range []string{"location", "all_day", "my_status"} {
+		if _, ok := got[old]; ok {
+			t.Errorf("%s is still written: %s", old, raw)
+		}
 	}
 }
 
@@ -274,7 +293,7 @@ func TestGraph(t *testing.T) {
 	if msg := callErr(t, cs, "create_event", map[string]any{"account": "work", "calendar": "Holidays", "title": "x", "start": "2026-10-27T10:00"}); !strings.Contains(msg, "no writable") {
 		t.Errorf("read-only calendar: %s", msg)
 	}
-	a := call[Event](t, cs, "create_event", map[string]any{"account": "work", "title": "Revue", "start": "2026-10-27T10:00", "end": "2026-10-27T11:30", "location": "Salle 2"})
+	a := call[Event](t, cs, "create_event", map[string]any{"account": "work", "title": "Revue", "start": "2026-10-27T10:00", "end": "2026-10-27T11:30", "place": "Salle 2"})
 	b := call[Event](t, cs, "create_event", map[string]any{"account": "work", "title": "Séminaire", "start": "2026-10-29", "end": "2026-10-30"})
 	if a.Start != "2026-10-27T10:00:00+01:00" || a.End != "2026-10-27T11:30:00+01:00" || a.Location != "Salle 2" {
 		t.Fatalf("created: %+v", a)

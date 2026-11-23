@@ -305,6 +305,15 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 		}
 	}
 	placed := map[string]bool{}
+	// The days the page's Agendas draw: a card that waits with a time on
+	// one of them shows there, its Oui on its ghost, not at the foot.
+	loc := c.userZone()
+	var days []time.Time
+	for i, part := range d.Node.Parts() {
+		if part.Block != nil && p.Parts[i].Block != nil && p.Parts[i].Block.Error == "" {
+			days = append(days, shownDays(part.Block, time.Now().In(loc))...)
+		}
+	}
 	for _, part := range p.Parts {
 		if part.Block != nil && part.Block.Proposal != nil {
 			placed[part.Block.Proposal.Ref] = true
@@ -329,7 +338,7 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 			if len(p.Settled) < settledMax {
 				p.Settled = append(p.Settled, v)
 			}
-		case !placed[v.Ref]:
+		case !placed[v.Ref] && !c.datedOn(v.Ref, days, loc):
 			p.Cards = append(p.Cards, v)
 		}
 	}

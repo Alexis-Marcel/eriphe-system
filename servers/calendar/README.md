@@ -35,9 +35,11 @@ New CalDAV events are written in UTC; recurring events the server does not expan
 here (RRULE, EXDATE, moved occurrences), and an unknown TZID (Windows zone names) falls back to the
 configured zone.
 
-An event with attendees (a meeting) also has its `organizer` (name, email), `attendees_count`
-and `my_status`: the user's own answer (`accepted`, `declined`, `tentative`, `needs-action` when not
-answered yet, `delegated`), or `organizer` when the user sent it. `get_event` adds `attendees`
+An event says `title`, `start`, `end`, `place` and `allDay`, the shape eriphe-core's Agenda block
+reads (a block binds `events` as they are, nothing mapped). An event with attendees (a meeting) also
+has its `organizer` (name, email), `attendees_count` and `status`: the user's own answer
+(`accepted`, `declined`, `tentative`, `needs-action` when not answered yet, `delegated`), or
+`organizer` when the user sent it. `get_event` adds `attendees`
 (name, email, status, `optional`); `list_events` leaves them out, a meeting can have hundreds. An
 event without attendees has none of these. On CalDAV the user is found among the attendees by the
 account's `username` and its `emails`; Microsoft Graph says it itself (`isOrganizer`,
@@ -103,7 +105,7 @@ disk.
   account with counts (calendars, fetched, unchanged, failed, events) and duration; no titles or
   descriptions.
 - **Invitations for eriphe-core**: the MCP resource `calendar://invitations` lists, from the
-  cache, the invitations waiting for the user's answer (`my_status` `needs-action`) that have not
+  cache, the invitations waiting for the user's answer (`status` `needs-action`) that have not
   ended, soonest first, JSON `{"invitations": [{"id", "event", "account", "calendar", "title",
   "start", "organizer", "recurring", "pending"}]}`. A recurring invitation is listed once, by its
   series (the CalDAV object, Graph's series master): `start` and `event` (an id for `get_event`
@@ -156,7 +158,7 @@ JSON in `TOOL_CONFIG`, or a file in `TOOL_CONFIG_FILE` (or `-config`):
   Calendar API), or the account connected without Google Calendar, each with what to do. Any other
   refusal stays "403 Forbidden".
 - `emails`: other addresses the user is invited at (aliases, an Apple ID that is not the invited
-  address), besides `username`: how `my_status` and `respond_event` find the user on CalDAV.
+  address), besides `username`: how `status` and `respond_event` find the user on CalDAV.
 - `read_only`: the account is only read (eriphe-core sets it for an account it gives read-only
   access).
 - Limits: `max_events` (500), `timeout_seconds` (30), ranges up to 92 days (62 for free time).

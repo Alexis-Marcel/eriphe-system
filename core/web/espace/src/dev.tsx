@@ -3,6 +3,7 @@ import { createAdapter } from "./a2ui/adapter";
 import { galleryFixtures, sampleOrb, sampleProposals } from "./a2ui/fixtures";
 import { ProposalsContext, type Proposals } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
+import { BlocksGallery } from "./dev-blocks";
 import { setReads, type Boot } from "./data/api";
 import { sample } from "./data/sample";
 import { onBump, sampleOpen } from "./data/samplecore";
@@ -12,9 +13,10 @@ import strings from "./strings.json";
 
 // The dev server's workspace (npm run dev), when no eriphe-core is behind:
 // a made-up graph whose pages a make-believe core reads (data/sample.ts,
-// samplecore.ts), made-up proposals and orb, and ?gallery, every component
-// of the catalog. main.tsx imports it only on the dev server: none of it is
-// in the built app (a test checks espace.js holds no sample's words).
+// samplecore.ts, sampledays.ts), made-up proposals and orb; ?gallery, every
+// component of the catalog; ?blocks, the blocks a page is made of, a page
+// each (dev-blocks.tsx). main.tsx imports it only on the dev server: none
+// of it is in the built app (a test checks espace.js holds no sample's words).
 
 export type Dev = { proposals: Proposals; start(): () => void; gallery: boolean };
 
@@ -35,7 +37,7 @@ export function dev(lang: Lang): Dev {
   });
   return {
     proposals: sampleProposals(lang),
-    gallery: new URLSearchParams(location.search).has("gallery"),
+    gallery: ["gallery", "blocks"].some((k) => new URLSearchParams(location.search).has(k)),
     start() {
       step(store, applyNodes, { reset: true, nodes: sample.nodes });
       store.setState({ orb: sampleOrb(lang) });
@@ -45,9 +47,14 @@ export function dev(lang: Lang): Dev {
   };
 }
 
-// Gallery shows every component of the catalog, one surface under the
-// other, to look at them on the dev server (?gallery).
+// Gallery is what the dev server shows instead of the workspace: ?blocks,
+// the blocks gallery; ?gallery, every component of the catalog, one
+// surface under the other.
 export function Gallery() {
+  return new URLSearchParams(location.search).has("blocks") ? <BlocksGallery /> : <Catalog />;
+}
+
+function Catalog() {
   const { lang } = useWords();
   const [adapter] = useState(() => {
     const a = createAdapter(lang);

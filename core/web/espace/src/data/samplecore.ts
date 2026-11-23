@@ -95,6 +95,14 @@ function block(v: SampleView, b: Authored): PageBlock {
     (holder as Record<string, unknown>)[src.items.path.split("/").at(-1)!] = items;
     data[name] = value;
     for (const c of comps) {
+      // An Agenda bound to the source's items: its events' rows, each with
+      // the card that waits on it (an invitation's), as for a List.
+      const evs = c.events as { "@path"?: string } | undefined;
+      if (c.component === "Agenda" && evs?.["@path"] === `/${name}/${src.items.path}`) {
+        const rows: ListRow[] = items.map((it, n) => ({ n, id: String(it[src.items.id]), title: String(it[src.items.title] ?? ""), card: (it._card as string) || undefined }));
+        lists.push({ component: String(c.id), source: name, items: rows });
+        continue;
+      }
       const ch = c.children as { path?: string; componentId?: string } | undefined;
       if (c.component !== "List" || !ch?.path) continue;
       const { base, filters } = parsePath(ch.path);
@@ -120,8 +128,11 @@ export function samplePage(id: string): { parts: PagePart[]; cards: ProposalView
   if (!v) return null;
   // the node's own cards, as eriphe-core splits them: those that still ask
   // at the foot, the decided ones for the « ⋯ » menu; those on items show
-  // on their lines
-  const own = v.cards.filter((c) => !c.items);
+  // on their lines, and a dated one that still asks in the page's Agenda,
+  // as a ghost with its Oui (eriphe-core checks the Agenda draws its day;
+  // the samples' cards are all within the week)
+  const agenda = v.parts.some((p) => typeof p !== "string" && p.components.some((c) => c.component === "Agenda"));
+  const own = v.cards.filter((c) => !c.items && !(agenda && c.when?.length && stillAsks(c)));
   return {
     parts: v.parts.map((p) => (typeof p === "string" ? { text: p } : { block: block(v, p) })),
     cards: own.filter(stillAsks),
@@ -152,7 +163,12 @@ function later(v: SampleView) {
 // done), and its items settle: code notes them done (those of the calls
 // left, unticked, stay), and the List that keeps what is not done no
 // longer shows them.
-export function sampleCards(): { read(ref: string): ProposalView | null; answer(ref: string, yes: boolean, only?: number[]): boolean; follow(on: (m: Moved) => void): () => void } {
+export function sampleCards(): {
+  read(ref: string): ProposalView | null;
+  answer(ref: string, yes: boolean, only?: number[]): boolean;
+  day(date: string): ProposalView[];
+  follow(on: (m: Moved) => void): () => void;
+} {
   const find = (ref: string) => {
     for (const v of views) {
       const c = v.cards.find((x) => x.ref === ref);
@@ -181,6 +197,11 @@ export function sampleCards(): { read(ref: string): ProposalView | null; answer(
         later(f.v);
       }, 900);
       return true;
+    },
+    // the cards dated on a day that still wait: an Agenda's ghosts
+    day: (date) => {
+      const dated = views.flatMap((v) => v.cards).filter((c) => c.state === "pending" && c.when?.some((w) => w.start.startsWith(date)));
+      return dated.filter((c, i) => dated.findIndex((d) => d.ref === c.ref) === i).map((c) => ({ ...c }));
     },
     follow: (on) => {
       followers.add(on);

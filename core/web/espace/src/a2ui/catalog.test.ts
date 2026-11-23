@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import served from "../../../../a2ui/catalog_v1.json";
-import { CATALOG, catalog, components } from "./catalog";
+import { CATALOG, catalog, components, factLink } from "./catalog";
 import { ICON_NAMES } from "./icons";
 
 // The page implements the catalog eriphe-core serves (core/a2ui/catalog_v1.json):
@@ -40,7 +40,7 @@ describe("catalog", () => {
 
   it("implements every component core declares, and no other", () => {
     expect(components.map((c) => c.name).sort()).toEqual(Object.keys(declared).sort());
-    expect(components).toHaveLength(28);
+    expect(components).toHaveLength(30);
   });
 
   for (const c of components) {
@@ -64,5 +64,25 @@ describe("catalog", () => {
     for (const lang of ["fr", "en"] as const) {
       expect([...catalog(lang).functions.keys()].sort()).toEqual(Object.keys(served.functions).sort());
     }
+  });
+});
+
+describe("factLink", () => {
+  it("opens a whole phone number or e-mail address, nothing else", () => {
+    expect(factLink("06 00 00 00 00")).toBe("tel:0600000000");
+    expect(factLink("+33 6 00 00 00 00")).toBe("tel:+33600000000");
+    expect(factLink(" sam@example.org ")).toBe("mailto:sam@example.org");
+    const refused = [
+      "mailto:sam@example.org?body=hi",
+      "sam@example.org?body=hi",
+      "sms:0600000000",
+      "javascript:alert(1)",
+      "tel:0600000000",
+      "12 rue de la Gare",
+      "Mercredi 9 h",
+      "12345",
+      "sam@example.org, lea@example.org",
+    ];
+    for (const v of refused) expect(factLink(v), v).toBeNull();
   });
 });

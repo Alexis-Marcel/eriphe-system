@@ -176,13 +176,13 @@ type Event struct {
 	Title       string      `json:"title"`
 	Start       string      `json:"start"`
 	End         string      `json:"end"`
-	AllDay      bool        `json:"all_day,omitempty"`
-	Location    string      `json:"location,omitempty"`
+	AllDay      bool        `json:"allDay,omitempty"`
+	Location    string      `json:"place,omitempty"`
 	Description string      `json:"description,omitempty"`
 	Recurring   bool        `json:"recurring,omitempty"`
 	Free        bool        `json:"free,omitempty"`
 	Organizer   *Person     `json:"organizer,omitempty" jsonschema:"who sent the invitation; only for an event with attendees"`
-	MyStatus    string      `json:"my_status,omitempty" jsonschema:"the user's own answer: accepted, declined, tentative, needs-action (not answered), or organizer"`
+	MyStatus    string      `json:"status,omitempty" jsonschema:"the user's own answer: accepted, declined, tentative, needs-action (not answered), or organizer"`
 	Count       int         `json:"attendees_count,omitempty"`
 	Attendees   []Attendee  `json:"attendees,omitempty" jsonschema:"everyone invited and their answer; given by get_event, not list_events"`
 	Copies      []EventCopy `json:"copies,omitempty" jsonschema:"the same event (same UID and start) in other calendars or accounts, shown once"`
@@ -287,7 +287,7 @@ type listEventsIn struct {
 	Days     int    `json:"days,omitempty" jsonschema:"number of days when to is empty; default 7, max 92"`
 	Account  string `json:"account,omitempty" jsonschema:"account name; empty for all"`
 	Calendar string `json:"calendar,omitempty" jsonschema:"calendar name or id; empty for all"`
-	Query    string `json:"query,omitempty" jsonschema:"only events whose title, location or description contain this text"`
+	Query    string `json:"query,omitempty" jsonschema:"only events whose title, place or description contain this text"`
 	Timezone string `json:"timezone,omitempty" jsonschema:"IANA zone for reading and showing times, e.g. Europe/Paris; default the configured one"`
 }
 type listEventsOut struct {
@@ -309,7 +309,7 @@ type createIn struct {
 	Start       string `json:"start" jsonschema:"YYYY-MM-DDTHH:MM (in timezone), RFC 3339, or YYYY-MM-DD for an all-day event"`
 	End         string `json:"end,omitempty" jsonschema:"end time; for all-day events the last day (inclusive); default start + duration_minutes, or the same day"`
 	Duration    int    `json:"duration_minutes,omitempty" jsonschema:"length when end is empty; default 60"`
-	Location    string `json:"location,omitempty"`
+	Location    string `json:"place,omitempty"`
 	Description string `json:"description,omitempty"`
 	Timezone    string `json:"timezone,omitempty" jsonschema:"IANA zone of times given without offset; default the configured one"`
 }
@@ -320,7 +320,7 @@ type updateIn struct {
 	Title       *string `json:"title,omitempty"`
 	Start       *string `json:"start,omitempty" jsonschema:"new start; the duration is kept when end is not given; a date makes it all-day"`
 	End         *string `json:"end,omitempty" jsonschema:"new end; for all-day events the last day (inclusive)"`
-	Location    *string `json:"location,omitempty"`
+	Location    *string `json:"place,omitempty"`
 	Description *string `json:"description,omitempty"`
 	Timezone    string  `json:"timezone,omitempty"`
 }
@@ -564,7 +564,7 @@ func newServer(c *Calendars, version string) *mcp.Server {
 	tool(s, "respond_event", "Answer an invitation as the user: accept, decline or tentative, with an optional comment. "+
 		"The organizer is told. For a recurring event, give occurrence (its start, as list_events gives it) when the user "+
 		"speaks of one date (« je ne serai pas là samedi »), series: true only when they mean every occurrence; one of the two "+
-		"is required. Refused for an event the user organizes or is not invited to (my_status tells).",
+		"is required. Refused for an event the user organizes or is not invited to (its status tells).",
 		&mcp.ToolAnnotations{DestructiveHint: ptr(false), IdempotentHint: true},
 		func(ctx context.Context, in respondIn) (Event, error) {
 			loc, err := c.zone(in.Timezone)

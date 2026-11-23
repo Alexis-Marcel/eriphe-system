@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -87,5 +88,56 @@ func TestBlockListsRows(t *testing.T) {
 	raw, _ := json.Marshal(page)
 	if !strings.Contains(string(raw), `"lists":[{"component":"root","source":"received"`) || strings.Contains(string(raw), `"actions"`) {
 		t.Fatalf("the page's lists: %s", raw)
+	}
+}
+
+// A component that shows a source's items as its rows (an Agenda's
+// events) is told to the page as a List is, once a card waits on one of
+// its rows: each row its place and its card; that card is placed (on its
+// row), not at the page's foot. Bound to no source's items as a whole, it
+// is not told.
+func TestBlockRowsOfAgenda(t *testing.T) {
+	tw, _, _, id := rowsWeb(t)
+	c := tw.c
+	block := func(events string) {
+		t.Helper()
+		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error {
+			return n.AuthorBody("Les rendez-vous.\n\n```eriphe:block inbox\n" + `{"components": [{"id": "root", "component": "Agenda", "days": 2, "events": ` + events + `}],
+ "sources": {"received": {"resource": "monitor", "uri": "monitor://received", "items": {"path": "messages", "id": "id", "title": "subject"}}}}` + "\n```\n")
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.readNode(context.Background(), id, nil, time.Now())
+	}
+	block(`{"@path": "/received/messages"}`)
+	page, _ := tw.w.nodePageOf(id, 0, "fr")
+	if l := page.Parts[1].Block.Lists; len(l) != 0 {
+		t.Fatalf("no card on its rows, yet told: %+v", l)
+	}
+	labels, _ := json.Marshal([]itemLabel{{ID: "m3", Source: "received"}})
+	res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, server, category, call, input, created, node, source, labels)
+		VALUES ('t', 'monitor', 'change', 'mcp__monitor__move {}', '{"ids":["m3"]}', ?, ?, 'received', ?)`, time.Now().Unix(), id, string(labels))
+	ask, _ := rowsID(res, err)
+	ref := proposalRef(cardAccess, ask)
+	c.cardProposed(cardAccess, ask)
+	c.store.db.Exec(`INSERT INTO node_cards (node, ref, created) VALUES (?, ?, 1)`, id, ref)
+	page, _ = tw.w.nodePageOf(id, 0, "fr")
+	l := page.Parts[1].Block.Lists
+	if len(l) != 1 || l[0].Component != "root" || l[0].Source != "received" || len(l[0].Items) != 3 || l[0].Items[2].N != 2 || l[0].Items[2].Card != ref {
+		t.Fatalf("its rows: %+v", l)
+	}
+	if slices.ContainsFunc(page.Cards, func(v proposalView) bool { return v.Ref == ref }) {
+		t.Fatalf("its card is at the foot too: %+v", page.Cards)
+	}
+	// Its events written in the block, not a source's: no rows, the card
+	// at the foot.
+	block(`[{"title": "Dentiste", "start": "2026-11-20T09:30"}]`)
+	page, _ = tw.w.nodePageOf(id, 0, "fr")
+	if l := page.Parts[1].Block.Lists; len(l) != 0 {
+		t.Fatalf("written events told as rows: %+v", l)
+	}
+	if !slices.ContainsFunc(page.Cards, func(v proposalView) bool { return v.Ref == ref }) {
+		t.Fatalf("the card is nowhere: %+v", page.Cards)
 	}
 }

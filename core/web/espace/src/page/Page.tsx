@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as PtrEvent } from "react";
 import { createPortal } from "react-dom";
-import { stamp } from "../a2ui/format";
+import { since, stamp } from "../a2ui/format";
+import { useNow } from "../a2ui/now";
 import { archive, label, type PageAlive, type PageOrigin, type ProposalView, type TraceEntry } from "../data/api";
 import { pathOf, subtree, useGraph } from "../data/store";
 import { Doc } from "../doc/Doc";
@@ -58,7 +59,10 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen, big, 
   const path = pathOf(nodes, id);
   const kicker = path.length > 1 ? titleOf(nodes[path[0]], external) : null;
   const running = node?.status === "running";
-  const at = stamp(lang, node?.updated);
+  // When it last changed, on the page's one clock (an agenda's now line
+  // reads it too), written as every time of day is.
+  const now = useNow();
+  const at = stamp(lang, node?.updated, now);
   const shift = page?.shift ?? 0;
   // At its foot, only the cards that still ask something (eriphe-core's
   // cards: one that waits, or whose yes runs or failed). What is settled
@@ -111,14 +115,14 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen, big, 
             {node?.unasked && <UnaskedMark />}
           </h2>
           {node?.lifetime === "standing" && <StandingMark />}
-          <span className="pg-when">
+          <span className="pg-when" title={at && !running ? t("espace.alive.updated", at) : undefined}>
             {running ? (
               <span className="pg-live">
                 <i className="dot run" />
                 {t("espace.page.running")}
               </span>
             ) : (
-              at
+              since(lang, node?.updated, now)
             )}
           </span>
           {page && <Versions versions={page.versions} shown={shown} last={last} shift={shift} onPick={(n) => setVersion(n === last ? 0 : n)} />}

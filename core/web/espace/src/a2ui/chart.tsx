@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { Lang } from "../i18n";
 import { number, shortDate, time, wall } from "./format";
 
@@ -13,6 +14,21 @@ export type Point = { x: string | number; y: number };
 export type Series = { name: string; points: Point[] };
 
 const W = 320, H = 168;
+
+// useWidth is the width an element is drawn at, again when it changes: a
+// plot takes it as its own, so its words and its height keep their size
+// however wide the page (320 until measured, and where nothing measures).
+function useWidth(): [(el: Element | null) => void, number] {
+  const [w, setW] = useState(W);
+  const [el, setEl] = useState<Element | null>(null);
+  useEffect(() => {
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setW(Math.max(240, Math.round(e.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [el]);
+  return [setEl, w];
+}
 const PAD = { l: 38, r: 8, t: 8, b: 22 };
 const SLOTS = 4; // validated hues; a fifth series and on are grey
 
@@ -153,6 +169,7 @@ function Numbers({ series, xs, label, xLabel, withUnit }: { series: Series[]; xs
 }
 
 function Plot({ kind, series, unit, lang, label }: ChartProps) {
+  const [measure, W] = useWidth();
   const xs = categories(series);
   const ys = series.flatMap((s) => s.points.map((p) => p.y));
   if (!xs.length || !ys.length) return null;
@@ -212,7 +229,7 @@ function Plot({ kind, series, unit, lang, label }: ChartProps) {
     });
 
   return (
-    <figure className="a2-chart">
+    <figure className="a2-chart" ref={measure}>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
         <g className="a2-grid" aria-hidden="true">
           {t.map((v) => (

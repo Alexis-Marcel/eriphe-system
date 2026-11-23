@@ -22,8 +22,11 @@ import (
 // LinkURLMax is the longest address of a Link, in bytes.
 const LinkURLMax = 2048
 
-// IsLink tells whether a component's property is a Link's address.
-func IsLink(componentType, prop string) bool { return componentType == "Link" && prop == "url" }
+// IsLink tells whether a component's property is an address the page
+// opens on a click: a Link's, or the page a Quote comes from.
+func IsLink(componentType, prop string) bool {
+	return (componentType == "Link" || componentType == "Quote") && prop == "url"
+}
 
 // LinkURLOK tells whether a Link may open an address: http or https, a host, no
 // user or password, nothing a reader could misread (a space, a control

@@ -179,12 +179,12 @@ func TestOneErrorPerMistake(t *testing.T) {
 	errs := ValidateSurface(surfaceOf(
 		`{"id":"root","component":"Column","children":["a","b"]}`,
 		`{"id":"a","component":"Text","text":42}`,
-		`{"id":"b","component":"Metric","label":"x","value":true,"better":"left"}`,
+		`{"id":"b","component":"Metric","label":"x","value":true,"unit":3}`,
 	))
 	if len(errs) != 3 {
 		t.Fatalf("want 3 errors, got %d: %v", len(errs), errs)
 	}
-	for i, path := range []string{"/components/1/text", "/components/2/better", "/components/2/value"} {
+	for i, path := range []string{"/components/1/text", "/components/2/unit", "/components/2/value"} {
 		if errs[i].Path != path {
 			t.Errorf("error %d at %s, want %s", i, errs[i].Path, path)
 		}
