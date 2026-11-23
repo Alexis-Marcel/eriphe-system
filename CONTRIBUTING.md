@@ -11,7 +11,7 @@ runs the same.
 
 | Module | Checks |
 |---|---|
-| `core/`, `cli/`, `servers/mail/`, `servers/calendar/`, `servers/files/` | `go build ./... && go vet ./... && go test ./...` |
+| `core/`, `cli/`, `servers/mail/`, `servers/calendar/`, `servers/files/` | `go build ./... && go vet ./... && go test -race ./...` |
 | `device/` | the same, plus `GOOS=windows go build ./...` |
 | `install/` | `sh install/lint.sh` (needs `shellcheck`) |
 | `.github/scripts/` (releases) | `sh .github/scripts/release_test.sh` |
