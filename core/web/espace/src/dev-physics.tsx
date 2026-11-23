@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { GraphNode } from "./data/api";
-import { applyNodes, closePage, openPage, step, store, useGraph } from "./data/store";
+import { applyNodes, closePage, openPage, step, store, talkTo, useGraph } from "./data/store";
 import { ForcesPanel } from "./graph/Forces";
-import { FORCES, forcesFrom, setForces, type Forces } from "./graph/layout";
+import { CENTRING, FORCES, forcesFrom, setCentring, setForces, type Forces } from "./graph/layout";
 import "./dev.css";
 
 // The dev server's ?physique page: the graph's four forces to tune by hand,
@@ -23,7 +23,7 @@ function ownerGraph(): GraphNode[] {
     row("sj", "Suivre mes journées", { links: ["day"], created: at(700) }),
     row("day", "Ma journée", { links: ["sj"], lifetime: "standing", created: at(699) }),
     row("sm", "Suivre mes mails", { links: ["mails"], created: at(698) }),
-    row("mails", "Mes mails", { links: ["sm"], lifetime: "standing", status: "waits", external: true, created: at(697) }),
+    row("mails", "Mes mails", { links: ["sm"], lifetime: "standing", external: true, created: at(697) }),
     row("si", "Suivre mes investissements", { links: ["invest"], created: at(696) }),
     row("invest", "Mon portefeuille", { links: ["si"], lifetime: "standing", created: at(695) }),
     row("tools", "Outils à revoir", { created: at(694) }),
@@ -74,6 +74,8 @@ export function keptForces(): void {
 export function PhysicsPanel() {
   const nodes = useGraph((s) => s.nodes);
   const open = useGraph((s) => s.open);
+  const talk = useGraph((s) => s.talk);
+  const [centred, setCentred] = useState(CENTRING.focus);
   const [f, setF] = useState<Forces>({ ...FORCES });
   const [copied, setCopied] = useState(false);
   const [linkTo, setLinkTo] = useState("");
@@ -114,6 +116,20 @@ export function PhysicsPanel() {
     step(store, applyNodes, { nodes: [{ ...a, links: [...(a.links ?? []), b] }] });
   };
   const name = (x: GraphNode) => x.title ?? x.id;
+  const centre = (on: boolean) => {
+    setCentring(on);
+    setCentred(on);
+  };
+  // the focus goes to the next open page, in the order they opened
+  const nextFocus = () => {
+    if (open.length < 2) return;
+    step(store, talkTo, open[(open.indexOf(talk ?? "") + 1) % open.length]);
+  };
+  // something happens in « Ma journée »: it waits for the user (its halo), or no more
+  const happen = () => {
+    const d = nodes.day;
+    if (d) step(store, applyNodes, { nodes: [{ ...d, status: d.status === "waits" ? "idle" : "waits", updated: new Date().toISOString() }] });
+  };
 
   return (
     <aside className={`dev-phys${shut ? " shut" : ""}`} aria-label="Forces">
@@ -125,7 +141,7 @@ export function PhysicsPanel() {
       </header>
       {!shut && (
         <>
-          <ForcesPanel value={f} onChange={tune} />
+          <ForcesPanel value={f} onChange={tune} centred={centred} onCentred={centre} />
           <div className="dev-phys-row">
             <button type="button" onClick={copy}>
               {copied ? "Copié" : "Copier les valeurs"}
@@ -154,6 +170,15 @@ export function PhysicsPanel() {
           <div className="dev-phys-row">
             <button type="button" onClick={toggleAll}>
               {allOpen ? "Tout fermer" : "Tout ouvrir"}
+            </button>
+            <button type="button" onClick={nextFocus} disabled={open.length < 2}>
+              Focus suivant
+            </button>
+          </div>
+          <p className="dev-phys-note">Focus : {talk && nodes[talk] ? name(nodes[talk]) : "aucun"}</p>
+          <div className="dev-phys-row">
+            <button type="button" onClick={happen} disabled={!nodes.day}>
+              {nodes.day?.status === "waits" ? "Ma journée : plus rien" : "Déclencher un changement dans Ma journée"}
             </button>
           </div>
 

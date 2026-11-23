@@ -720,6 +720,8 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .forces-row span { display: flex; justify-content: space-between; gap: 8px; }
 .forces-row output { font: var(--fs-tiny) var(--mono); color: var(--fg3); font-variant-numeric: tabular-nums; }
 .forces-row input { width: 100%; margin: 0; accent-color: var(--accent); }
+.forces-switch { display: flex; gap: 8px; align-items: center; font-size: var(--fs-small); color: var(--fg2); cursor: pointer; }
+.forces-switch input { margin: 0; accent-color: var(--accent); }
 .forces-reset { justify-self: start; }
 .forces-reset:disabled { opacity: 0.45; cursor: default; }
 .gr-viewport.hovering .gr-node:not(.near) { filter: opacity(0.2); }

@@ -6,8 +6,8 @@ import { useWords, type Lang } from "../i18n";
 import { Orb } from "../orb/Orb";
 import { Page } from "../page/Page";
 import { onReads, readsUnderWay } from "../page/usePage";
-import { bigBox, bigRoom, boxAt, edgeMark, frameAll, frameAlone, framePages, pageMax, type Box, type Cam } from "./camera";
-import { edgePush, edgeStep, extent, onForces, pairs, Sim, type LNode, type Pos, type Pt } from "./layout";
+import { bigBox, bigRoom, boxAt, edgeMark, frameAll, frameAlone, frameAround, framePages, pageMax, type Box, type Cam } from "./camera";
+import { CENTRING, edgePush, edgeStep, extent, onForces, pairs, Sim, type LNode, type Pos, type Pt } from "./layout";
 import { coreShape, pickTiles, TILE, variation } from "./glance";
 import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits, weight } from "./model";
 import { TileFace } from "./Tile";
@@ -267,10 +267,29 @@ export function Graph({ live }: { live: boolean }) {
     rest.current = sim.positions();
     wake();
   }, [bodies]); // eslint-disable-line react-hooks/exhaustive-deps
-  // The forces tuned (the ?physique dev page): the graph, warmed, moves.
+  // The forces tuned, or the centring turned on or off (the ?physique dev
+  // page): the graph, warmed, moves.
   const wakeNow = useRef(wake);
   wakeNow.current = wake;
-  useEffect(() => onForces(() => wakeNow.current()), []);
+  const [centring, setCentring] = useState(CENTRING.focus);
+  useEffect(
+    () =>
+      onForces(() => {
+        setCentring(CENTRING.focus);
+        wakeNow.current();
+      }),
+    [],
+  );
+  // The node in focus, the open page the bar writes to, is the graph's
+  // centre (layout.ts, focus): the graph settles round it, the camera
+  // frames it in the middle with the graph around. Its page closed, the
+  // bar writes to the last one open (store.ts, closePage), which becomes
+  // the centre.
+  const centre = centring && talk && openIds.includes(talk) ? talk : null;
+  useLayoutEffect(() => {
+    sim.focus(centre);
+    wake();
+  }, [centre, bodies]); // eslint-disable-line react-hooks/exhaustive-deps
   // Whatever React drew (a bubble come, a page opened) goes where the
   // simulation has it, before the screen shows it.
   useLayoutEffect(place);
@@ -305,6 +324,12 @@ export function Graph({ live }: { live: boolean }) {
     const all = bubbles.map((x) => bubbleBox(x, rp[x.id]));
     // An enlarged page in focus is framed alone and whole, at scale 1.
     if (focus && shown.includes(focus) && sizes.get(focus) === "big") return frameAlone(boxAt(rp[focus], boxOf(focus)), band);
+    if (centre && shown.includes(centre))
+      return frameAround(
+        boxAt(rp[centre], boxOf(centre)),
+        [...all, ...shown.filter((id) => id !== centre).map((id) => boxAt(rp[id], boxOf(id)))],
+        band,
+      );
     if (shown.length) {
       const pages = shown.map((id) => ({ id, box: boxAt(rp[id], boxOf(id)) }));
       const near = bubbles.filter((x) => lit.has(x.id)).map((x) => bubbleBox(x, rp[x.id]));
@@ -613,7 +638,8 @@ export function Graph({ live }: { live: boolean }) {
               lang={lang}
               glanceWord={x.glance ? glanceSaid(x.glance, lang, t) : ""}
               open={openIds.includes(x.id)}
-              dim={openIds.length > 0 && !lit.has(x.id)}
+              // a node that waits for the user is never dimmed: seen round the page in focus
+              dim={openIds.length > 0 && !lit.has(x.id) && !waits(x)}
               held={held === x.id}
               light={0.3 + 0.7 * Math.min(1, weight(x, nodes, now) / 0.85)}
               waitsWord={t("espace.waits")}

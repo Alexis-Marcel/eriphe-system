@@ -5,12 +5,14 @@ import { DEFAULT_FORCES, FORCE_RANGES, type Forces } from "./layout";
 // panel, and a « Par défaut » that gives the defaults back. It only shows
 // and tells: value is the forces now (layout.ts, forcesFrom: the defaults
 // and what the user changed), onChange gets the new ones at each move
-// (the caller sets them, setForces, and keeps them). On the dev server's
+// (the caller sets them, setForces, and keeps them); centred, whether the
+// open node becomes the centre (layout.ts, CENTRING), told by onCentred
+// (no switch without it). On the dev server's
 // ?physique page for now; meant for the workspace's settings.
 
 const ORDER: (keyof Forces)[] = ["centre", "repulsion", "link", "distance"];
 
-export function ForcesPanel({ value, onChange }: { value: Forces; onChange: (f: Forces) => void }) {
+export function ForcesPanel({ value, onChange, centred, onCentred }: { value: Forces; onChange: (f: Forces) => void; centred?: boolean; onCentred?: (on: boolean) => void }) {
   const { t } = useWords();
   const same = ORDER.every((k) => value[k] === DEFAULT_FORCES[k]);
   return (
@@ -28,6 +30,12 @@ export function ForcesPanel({ value, onChange }: { value: Forces; onChange: (f: 
           </label>
         );
       })}
+      {onCentred && (
+        <label className="forces-switch">
+          <input type="checkbox" checked={!!centred} onChange={(e) => onCentred(e.target.checked)} />
+          {t("espace.forces.focus")}
+        </label>
+      )}
       <button type="button" className="btn forces-reset" disabled={same} onClick={() => onChange({ ...DEFAULT_FORCES })}>
         {t("espace.forces.reset")}
       </button>

@@ -97,6 +97,21 @@ export function slide(cam: Cam, keep: Box[], all: Box[], size: Size): Cam {
   return { k, x: band(SIDE, size.w - SIDE, kx0, kx1, ax0, ax1, cam.x), y: band(TOP, size.h - footOf(size), ky0, ky1, ay0, ay1, cam.y) };
 }
 
+// frameAround frames the page in focus at the middle of the free band, and
+// the whole graph around it (all): the scale is the largest that keeps
+// every body whole on each side of the page, at most 1.
+export function frameAround(focus: Box, all: Box[], size: Size): Cam {
+  const cx = (focus[0] + focus[2]) / 2, cy = (focus[1] + focus[3]) / 2;
+  let hw = (focus[2] - focus[0]) / 2, hh = (focus[3] - focus[1]) / 2;
+  for (const b of [focus, ...all]) {
+    hw = Math.max(hw, cx - b[0], b[2] - cx);
+    hh = Math.max(hh, cy - b[1], b[3] - cy);
+  }
+  const left = SIDE, right = size.w - SIDE, top = TOP, bottom = size.h - footOf(size);
+  const k = Math.max(0.25, Math.min(1, (right - left) / 2 / (hw + 30), (bottom - top) / 2 / (hh + 20)));
+  return { k, x: (left + right) / 2 - cx * k, y: (top + bottom) / 2 - cy * k };
+}
+
 // frameAll frames the whole graph, the home's view: each body whole, a
 // bubble with its label under it.
 export function frameAll(boxes: Box[], size: Size): Cam {

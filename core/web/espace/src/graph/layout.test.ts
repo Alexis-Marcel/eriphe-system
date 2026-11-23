@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { boxAt, frameAround } from "./camera";
 import { DEFAULT_FORCES, EDGE_DELAY, EDGE_RAMP, EDGE_SPEED, EDGE_ZONE, edgePush, edgeStep, extent, FORCES, pairs, setForces, Sim, T, type LNode, type Pos, type Pt } from "./layout";
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -253,34 +254,119 @@ describe("the force graph", () => {
   });
 
   describe("a drag", () => {
-    it("keeps the body held under the pointer, its linked ones following, and leaves it where dropped", () => {
+    it("carries the held body's cluster, and on drop lets it settle on the side it was put, linked, within the disc", () => {
       const nodes = owner();
       const sim = laid(nodes);
       const p0 = sim.positions();
-      const to: Pt = [p0.SJ[0] + 700, p0.SJ[1] + 300];
+      // to the other side of the graph, far out
+      const side = p0.SJ[0] > 0 ? -1 : 1;
+      const to: Pt = [side * 900, p0.SJ[1]];
       const { mid } = drag(sim, "SJ", to);
-      // its view followed it during the drag, on its spring
-      expect(dist(mid.MJ, p0.MJ)).toBeGreaterThan(100);
-      expect(dist(mid.MJ, mid.SJ)).toBeLessThan(dist(p0.MJ, mid.SJ) * 0.7);
+      // its view came along: the cluster stayed formed while held
+      expect(dist(mid.MJ, mid.SJ)).toBeLessThan(dist(p0.MJ, p0.SJ) + 60);
+      // dropped: nothing pinned, the forces bring it back into the disc,
+      // on the side it was put, its view beside it
       const p = sim.positions();
-      expect(dist(p.SJ, to)).toBeLessThan(0.01);
-      const sj = nodes.find((n) => n.id === "SJ")!, mj = nodes.find((n) => n.id === "MJ")!;
-      expect(gap(sim, sj, mj)).toBeLessThan(80);
-      expect(overlaps(sim, nodes)).toEqual([]);
       expect(sim.asleep()).toBe(true);
-      // it stays there as the graph changes
-      sim.sync(open(nodes, ["SM"]));
-      sim.settle();
-      expect(dist(sim.at("SJ")!, to)).toBeLessThan(0.01);
+      expect(Math.sign(p.SJ[0])).toBe(side);
+      expect(Math.sign(p.MJ[0])).toBe(side);
+      const sj = nodes.find((n) => n.id === "SJ")!, mj = nodes.find((n) => n.id === "MJ")!;
+      expect(gap(sim, sj, mj)).toBeLessThan(FORCES.distance + 40);
+      expect(Math.max(...nodes.map((n) => Math.hypot(...p[n.id])))).toBeLessThan(450);
+      expect(overlaps(sim, nodes)).toEqual([]);
     });
 
-    it("dropped on another body, stays, and that one steps aside", () => {
-      const nodes = small();
+    it("brings two linked nodes dragged apart back together", () => {
+      const nodes = owner();
       const sim = laid(nodes);
       const p0 = sim.positions();
-      const onto: Pt = [p0.MES[0] + 15, p0.MES[1]];
-      drag(sim, "MAJ", onto);
-      expect(dist(sim.at("MAJ")!, onto)).toBeLessThan(0.01);
+      drag(sim, "SI", [p0.SI[0] - 500, p0.SI[1]]);
+      drag(sim, "MP", [p0.MP[0] + 500, p0.MP[1]]);
+      const si = nodes.find((n) => n.id === "SI")!, mp = nodes.find((n) => n.id === "MP")!;
+      expect(gap(sim, si, mp)).toBeLessThan(FORCES.distance + 40);
+      expect(overlaps(sim, nodes)).toEqual([]);
+    });
+
+    it("keeps a subject's bubbles round it while it is dragged across a big graph", () => {
+      const nodes = big();
+      const sim = laid(nodes);
+      const p0 = sim.positions();
+      const { mid } = drag(sim, "s4", [-p0.s4[0] * 1.5, -p0.s4[1] * 1.5]);
+      for (let j = 0; j < 3; j++) expect(dist(mid[`s4c${j}`], mid.s4), `s4c${j}`).toBeLessThan(dist(p0[`s4c${j}`], p0.s4) + 80);
+      expect(overlaps(sim, nodes)).toEqual([]);
+    });
+  });
+
+  describe("the node in focus as the centre", () => {
+    const size = { w: 1440, h: 900 };
+    const view = (sim: Sim, nodes: LNode[], id: string) => {
+      const p = sim.positions();
+      const f = nodes.find((n) => n.id === id)!;
+      const all = nodes.filter((n) => n.id !== id).map((n) => {
+        const [h, t, b] = extent(n, p[n.id]);
+        return [p[n.id][0] - h, t, p[n.id][0] + h, b] as [number, number, number, number];
+      });
+      return { cam: frameAround(boxAt(p[id], f.box!), all, size), all };
+    };
+
+    it("holds the focused page where it is, the graph settling round it, its neighbours closest, all in view", () => {
+      for (const id of ["MM", "MJ"]) {
+        const nodes = owner();
+        const sim = laid(nodes);
+        const opened = open(nodes, [id]);
+        sim.sync(opened);
+        sim.focus(id);
+        const at = sim.at(id)!;
+        sim.settle();
+        expect(sim.focused()).toBe(id);
+        // it stayed put: the graph came round it
+        expect(dist(sim.at(id)!, at)).toBeLessThan(0.01);
+        const p = sim.positions();
+        const c: Pt = [opened.reduce((s, n) => s + p[n.id][0], 0) / opened.length, opened.reduce((s, n) => s + p[n.id][1], 0) / opened.length];
+        // the graph's middle is on its page
+        expect(Math.abs(c[0] - at[0])).toBeLessThan(350);
+        expect(Math.abs(c[1] - at[1])).toBeLessThan(260);
+        // its neighbour is closer than the others
+        const ps = pairs(opened);
+        const kin = ps.flatMap(([a, b]) => (a === id ? [b] : b === id ? [a] : []));
+        const me = opened.find((n) => n.id === id)!;
+        const others = opened.filter((n) => n.id !== id && !kin.includes(n.id)).map((n) => gap(sim, me, n)).sort((a, b) => a - b);
+        for (const k of kin) {
+          const g = gap(sim, me, opened.find((n) => n.id === k)!);
+          expect(g).toBeLessThan(FORCES.distance + 40);
+          expect(g).toBeLessThanOrEqual(others[others.length >> 1]);
+        }
+        expect(overlaps(sim, opened)).toEqual([]);
+        // the camera frames it in the middle and every other body whole
+        const { cam, all } = view(sim, opened, id);
+        expect(cam.x + at[0] * cam.k).toBeCloseTo((size.w) / 2, 0);
+        for (const [l, t, r, b] of all) {
+          expect(cam.x + l * cam.k).toBeGreaterThanOrEqual(0);
+          expect(cam.x + r * cam.k).toBeLessThanOrEqual(size.w);
+          expect(cam.y + t * cam.k).toBeGreaterThanOrEqual(0);
+          expect(cam.y + b * cam.k).toBeLessThanOrEqual(size.h);
+        }
+      }
+    });
+
+    it("glides to a new focus: nothing jumps, the new one stays, and none at all keeps the graph about where it is", () => {
+      const nodes = open(owner(), ["MM", "SM"]);
+      const sim = laid(nodes);
+      sim.focus("MM");
+      sim.settle();
+      const before = sim.positions();
+      sim.focus("SM");
+      const at = sim.at("SM")!;
+      sim.tick();
+      expect(moved(before, sim.positions(), nodes.map((n) => n.id))).toBeLessThan(T.cap + 1);
+      sim.settle();
+      expect(dist(sim.at("SM")!, at)).toBeLessThan(0.01);
+      // no focus: the centre stays where the last one was, the graph
+      // settles round it as a disc, nothing drifts away
+      sim.focus(null);
+      sim.settle();
+      const p = sim.positions();
+      expect(Math.max(...nodes.map((n) => dist(p[n.id], at)))).toBeLessThan(700);
       expect(overlaps(sim, nodes)).toEqual([]);
     });
   });

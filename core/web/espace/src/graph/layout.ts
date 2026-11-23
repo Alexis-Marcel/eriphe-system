@@ -21,9 +21,13 @@
 // trembles. A new node is born in the most free space near what it links
 // to (in free space on the disc when it links to nothing), then settles.
 //
-// A drag: the body held follows the pointer, the graph stays warm and what
-// is linked to it follows on its springs; dropped, it stays where it was
-// let go, for the session. Nothing here knows a node by its name.
+// A drag: the body held follows the pointer, its cluster comes along (one
+// link away nearly all the way, two a little, HOP1 and HOP2) and the graph
+// stays warm. Dropped, nothing is pinned: the body and its cluster take up
+// the forces again from where they were let go, as if born there, so they
+// stay on the side the user chose while the centre keeps them in the disc. The node in focus (focus) can be the
+// centre: the centre force pulls to it and it stays where it is. Nothing
+// here knows a node by its name.
 
 export type Pt = [number, number];
 export type Pos = Record<string, Pt>;
@@ -73,6 +77,11 @@ export function forcesFrom(kept: unknown): Forces {
   return out;
 }
 
+// HOP1 and HOP2 are the shares of a drag's moves the bodies one and two
+// links from the one held take: its cluster comes along.
+export const HOP1 = 0.85;
+export const HOP2 = 0.35;
+
 const sims = new Set<WeakRef<Sim>>();
 const tuned = new Set<() => void>();
 
@@ -88,7 +97,21 @@ export function setForces(f: Partial<Forces>): void {
   for (const w of tuned) w();
 }
 
-// onForces calls f each time the forces change; it gives what stops it.
+// CENTRING says whether the node in focus (the open page the bar writes
+// to) becomes the graph's centre: the centre force pulls to it, it stays
+// where it is, the camera frames it in the middle and the graph around
+// it (Graph.tsx). Off, the centre is the graph's middle.
+export const CENTRING = { focus: true };
+
+// setCentring turns it on or off; what ticks a graph is told, as for the
+// forces.
+export function setCentring(on: boolean): void {
+  CENTRING.focus = on;
+  for (const w of tuned) w();
+}
+
+// onForces calls f each time the forces (or the centring) change; it
+// gives what stops it.
 export function onForces(f: () => void): () => void {
   tuned.add(f);
   return () => void tuned.delete(f);
@@ -160,7 +183,9 @@ export class Sim {
   private degree = new Map<string, number>();
   private alpha = 0;
   private held: { id: string; at: Pt } | null = null;
-  private pinned = new Map<string, Pt>(); // the bodies the user dropped: they stay there
+  private carried = new Map<string, number>(); // the held body's cluster: the share of its moves each one takes
+  private focusId: string | null = null; // the node in focus: the centre, it stays where it is
+  private centre: Pt = [0, 0]; // where the centre force pulls: the node in focus, else where the last one was
   private forces: Forces;
 
   constructor(forces: Forces = FORCES) {
@@ -177,8 +202,8 @@ export class Sim {
     for (const b of this.list)
       if (!want.has(b.id)) {
         this.byId.delete(b.id);
-        this.pinned.delete(b.id);
         if (this.held?.id === b.id) this.held = null;
+        if (this.focusId === b.id) this.focusId = null;
         changed = true;
       }
     const first = this.list.length === 0 && nodes.length > 0;
@@ -227,22 +252,72 @@ export class Sim {
   hold(id: string, at: Pt): void {
     const x = this.byId.get(id);
     if (!x) return;
-    if (this.held?.id !== id) this.pinned.delete(id);
+    if (this.held?.id !== id) this.carried = this.cluster(id);
+    // its cluster comes along: one link away nearly all the way, two links
+    // a little; the springs do the rest, the cluster stays formed
+    const dx = at[0] - x.x, dy = at[1] - x.y;
+    for (const [k, share] of this.carried) {
+      const b = this.byId.get(k);
+      if (!b || this.focusId === k) continue;
+      b.x += dx * share;
+      b.y += dy * share;
+    }
     this.held = { id, at };
     [x.x, x.y] = at;
     x.vx = x.vy = 0;
     this.reheat(T.dragWarm);
   }
 
-  // drop lets go of the body held: it stays where it is for the session;
-  // the graph settles around it.
+  // cluster is the bodies one and two links from id, with the share of
+  // its moves they take when it is dragged.
+  private cluster(id: string): Map<string, number> {
+    const out = new Map<string, number>();
+    const seen = new Set([id]);
+    let ring = [id];
+    for (const share of [HOP1, HOP2]) {
+      const next: string[] = [];
+      for (const [p, q] of this.edges)
+        for (const [a, b] of [
+          [p.id, q.id],
+          [q.id, p.id],
+        ])
+          if (ring.includes(a) && !seen.has(b)) {
+            seen.add(b);
+            out.set(b, share);
+            next.push(b);
+          }
+      ring = next;
+    }
+    return out;
+  }
+
+  // drop lets go of the body held, to the forces like any other (as in
+  // Obsidian): the graph, warmed, settles again, what is linked to it
+  // coming back together.
   drop(): void {
-    const h = this.held;
-    if (!h) return;
+    if (!this.held) return;
     this.held = null;
-    const x = this.byId.get(h.id);
-    if (x) this.pinned.set(x.id, [x.x, x.y]);
-    this.reheat(T.dragWarm);
+    this.carried = new Map();
+    this.reheat();
+  }
+
+  // focus makes a node the graph's centre (null: none): the centre force
+  // pulls every other body to it, and it stays where it is, the graph
+  // settling round it. Nothing else moves at once: the graph, warmed,
+  // glides to its new centre. Without one, the centre stays where the last
+  // one was: the graph's middle, nothing drifts.
+  focus(id: string | null): void {
+    const x = id ? this.byId.get(id) : undefined;
+    const next = x ? x.id : null;
+    if (next === this.focusId) return;
+    this.focusId = next;
+    if (x) this.centre = [x.x, x.y];
+    this.reheat();
+  }
+
+  // focused is the node in focus, if any.
+  focused(): string | null {
+    return this.focusId;
   }
 
   // heldId is the body held, if any.
@@ -295,6 +370,9 @@ export class Sim {
       return;
     }
     const a = this.alpha, F = this.forces, L = this.list;
+    const fx = this.focusId ? this.byId.get(this.focusId) : undefined;
+    if (fx) this.centre = [fx.x, fx.y];
+    const [cx, cy] = this.centre;
     // repulsion: every body pushes every other away
     for (let i = 0; i < L.length; i++)
       for (let j = i + 1; j < L.length; j++) {
@@ -324,14 +402,14 @@ export class Sim {
       p.vx += dx * l * (1 - bias);
       p.vy += dy * l * (1 - bias);
     }
-    // centre: every body is pulled to the middle
+    // centre: every body is pulled to the middle (the node in focus)
     for (const x of L) {
-      x.vx -= x.x * F.centre * a;
-      x.vy -= x.y * F.centre * a;
+      x.vx -= (x.x - cx) * F.centre * a;
+      x.vy -= (x.y - cy) * F.centre * a;
     }
-    // move: what is held or was dropped stays
+    // move: what is held or in focus stays
     for (const x of L) {
-      if (x === held || this.pinned.has(x.id)) {
+      if (this.fixed(x)) {
         x.vx = x.vy = 0;
         continue;
       }
@@ -361,7 +439,7 @@ export class Sim {
   // label under it, an open page with its margin: extent) is a solid box
   // to every other. Two that overlap are set apart the shorter way, each
   // by a share that falls with its size (a page moves less than a bubble);
-  // what is held or was dropped does not move. It gives the largest
+  // what is held or in focus does not move. It gives the largest
   // overlap it found.
   private collide(strength: number): number {
     let most = 0;
@@ -393,7 +471,7 @@ export class Sim {
   }
 
   private fixed(x: Body): boolean {
-    return this.held?.id === x.id || this.pinned.has(x.id);
+    return this.held?.id === x.id || this.focusId === x.id;
   }
 
   /* ---------- birth ---------- */
