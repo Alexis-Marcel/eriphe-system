@@ -277,9 +277,7 @@ func pollCore(t *testing.T, before ...func(*core)) (*core, *fakeMonitor, *time.T
 	for _, f := range before {
 		f(c)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	c.pool.run(ctx)
+	runPool(t, context.Background(), c.pool)
 	waitStatus(t, c.pool.get("monitor"), statusReady)
 	setBrain(c, &BrainConfig{Agent: "small", Tools: []string{"monitor"}})
 	store.insertTask(&TaskRow{ID: "t-brain", Kind: "brain", Runtime: "claude-code", State: stateIdle, Prompt: "brain"})

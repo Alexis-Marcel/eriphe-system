@@ -48,9 +48,7 @@ func newMailCore(t *testing.T, access string, opts ...func(*core)) *core {
 	for _, o := range opts {
 		o(c) // before its pool runs (withGraph)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	c.pool.run(ctx)
+	runPool(t, context.Background(), c.pool)
 	waitStatus(t, c.pool.get("mail"), statusReady)
 	return c
 }

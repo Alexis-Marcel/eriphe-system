@@ -62,9 +62,15 @@ func TestToolOfAnotherVersion(t *testing.T) {
 	if res, _ := u.call(context.Background(), "search_messages", nil); len(res.Content) != 1 {
 		t.Fatalf("a note with the right version: %+v", res.Content)
 	}
-	// A development build of eriphe-core says nothing.
+	mail := cc.conf().Servers["mail"]
+	if ownToolVersion(mail) != "0.79.1" || ownToolVersion(Server{URL: "https://docs.example/mcp"}) != "" {
+		t.Fatal("the version asked of Eriphe's own tool, or of another server")
+	}
+	// A development build of eriphe-core says nothing; the version is
+	// changed only once the pool, which reads it, has stopped.
+	cc.stopPool()
 	version = "dev"
-	if ownToolVersion(cc.conf().Servers["mail"]) != "" || ownToolVersion(Server{URL: "https://docs.example/mcp"}) != "" {
-		t.Fatal("a version asked of a dev build, or of another server")
+	if ownToolVersion(mail) != "" {
+		t.Fatal("a version asked of a dev build")
 	}
 }

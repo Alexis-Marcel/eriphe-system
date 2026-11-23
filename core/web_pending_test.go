@@ -29,16 +29,14 @@ func pendingWeb(t *testing.T) (*testWeb, *core, *fakeAS, string) {
 	setVault(v)
 	t.Cleanup(func() { setVault(nil) })
 	c := newCore(&Config{}, store)
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(func() {
+	runPool(t, context.Background(), c.pool)
+	t.Cleanup(func() { // before the pool stops
 		c.pool.mu.Lock()
 		for _, ps := range c.pool.pending {
 			ps.stop()
 		}
 		c.pool.mu.Unlock()
-		cancel()
 	})
-	c.pool.run(ctx)
 	tw := newTestWebFor(t, c)
 	return tw, c, f, tw.setup()
 }

@@ -24,6 +24,9 @@ type catalogCore struct {
 	*core
 	mu    sync.Mutex
 	dials map[string]int
+	// stopPool stops the pool and waits for it, which the end of the test
+	// does anyway.
+	stopPool func()
 }
 
 func newDynamicCore(t *testing.T, mutate func(*Config), before ...func(*core)) *catalogCore {
@@ -74,10 +77,62 @@ func startDynamicCore(t *testing.T, cfg *Config, store *Store, before ...func(*c
 	for _, f := range before {
 		f(cc.core)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	cc.pool.run(ctx)
+	cc.stopPool = runPool(t, context.Background(), cc.pool)
 	return cc
+}
+
+// runPool runs p in ctx until the test ends, or until stop: either way it
+// waits for the pool's controllers, so that none outlives the test and
+// reads what a later one changes (a package variable it swaps).
+func runPool(t *testing.T, ctx context.Context, p *pool) (stop func()) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(ctx)
+	stop = func() {
+		cancel()
+		done := make(chan struct{})
+		go func() { p.wait(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Errorf("the pool's controllers still run 10 s after it stopped")
+		}
+	}
+	t.Cleanup(stop)
+	p.run(ctx)
+	return stop
+}
+
+// A stopped pool's wait returns once its controllers have ended, not before:
+// one in the middle of a connect still runs until the connect returns.
+func TestPoolWaitsForItsControllers(t *testing.T) {
+	store, err := openStore(filepath.Join(t.TempDir(), "core.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := newPool(store, map[string]Server{"docs": {URL: "https://docs.example.org/mcp", Auth: &ServerAuth{None: true}}})
+	dialing, release := make(chan struct{}), make(chan struct{})
+	p.dial = func(context.Context, *upstream) (mcp.Transport, error) {
+		close(dialing)
+		<-release // deaf to its context, as a slow dial is
+		return nil, errors.New("released")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	p.run(ctx)
+	<-dialing
+	cancel()
+	waited := make(chan struct{})
+	go func() { p.wait(); close(waited) }()
+	select {
+	case <-waited:
+		t.Fatal("wait returned while a controller still connects")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-waited:
+	case <-time.After(5 * time.Second):
+		t.Fatal("wait did not return once the controller ended")
+	}
 }
 
 func wantKey(t *testing.T, err error, key string) {

@@ -64,6 +64,8 @@ type pool struct {
 	ctx     context.Context // set by run; servers added later start in it
 	ups     map[string]*upstream
 	pending map[string]*pendingServer // OAuth servers being authorized before they are saved (pending.go)
+	// running counts the controllers started; wait waits for them to end.
+	running sync.WaitGroup
 }
 
 // upstream is one catalog server and its session.
@@ -161,12 +163,20 @@ func (p *pool) run(ctx context.Context) {
 
 // start runs a server's controller in its own context. p.mu is held.
 func (p *pool) start(u *upstream) {
-	if p.ctx == nil {
-		return // not running yet: run starts it
+	if p.ctx == nil || p.ctx.Err() != nil {
+		return // not running yet (run starts it), or stopped
 	}
 	ctx, cancel := context.WithCancel(p.ctx)
 	u.cancel = cancel
-	go u.run(ctx)
+	p.running.Go(func() { u.run(ctx) })
+}
+
+// wait returns once every controller has ended, after the context run was
+// given is done: none is left to touch what the pool shared.
+func (p *pool) wait() {
+	p.mu.Lock() // a start under way has counted its controller
+	p.mu.Unlock()
+	p.running.Wait()
 }
 
 // stop ends a server's controller and its session; a connect in progress

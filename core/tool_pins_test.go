@@ -44,11 +44,9 @@ func TestChangedToolIsHeldUntilAccepted(t *testing.T) {
 		}
 		return ct, nil
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
 	told := make(chan []string, 8)
 	c.pool.toolsListed = func(server string) { told <- c.pool.get(server).heldTools() }
-	c.pool.run(ctx)
+	runPool(t, context.Background(), c.pool)
 	u := c.pool.get("web")
 	waitStatus(t, u, statusReady)
 	names := func() string {
@@ -93,13 +91,13 @@ func TestChangedToolIsHeldUntilAccepted(t *testing.T) {
 	if u.tool("fetch") != nil {
 		t.Error("a held tool is listed")
 	}
-	if _, err := u.call(ctx, "fetch", nil); !errors.Is(err, errHeldTool) {
+	if _, err := u.call(t.Context(), "fetch", nil); !errors.Is(err, errHeldTool) {
 		t.Errorf("a held tool is called: %v", err)
 	}
 	// Through a task's proxy too, with a ticket of an earlier yes.
 	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "brain", Device: "box", Runtime: "claude-code"})
 	c.store.addTicket("t-1", "mcp__web__fetch", map[string]any{})
-	if res := c.proxyCall(ctx, "t-1", []string{"web"}, u, "fetch", nil); !res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, "changed") {
+	if res := c.proxyCall(t.Context(), "t-1", []string{"web"}, u, "fetch", nil); !res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, "changed") {
 		t.Errorf("the proxy calls a held tool: %+v", res)
 	}
 	// Reconnecting does not accept them.
