@@ -1,12 +1,13 @@
 import type { Authored, SampleView } from "./samplecore";
 
-// Prototype (#730): « Ma journée » and « Investissements », written as
-// Eriphe would write them with the new blocks, on made-up data (Sam, Léa,
-// example.org) dated from today, so the agenda's line is where the clock
-// is. No real name, address or tool in it.
+// Prototype (#730): « Ma journée », « Investissements », and the blocks
+// gallery (?blocks), written as Eriphe would write them with the new
+// blocks, on made-up data (Sam, Léa, Alex, example.org) dated from today,
+// so the agenda's line is where the clock is. No real name, address or
+// tool in it.
 
 const p2 = (n: number) => String(n).padStart(2, "0");
-function dayOf(offset: number): string {
+export function dayOf(offset: number): string {
   const d = new Date();
   d.setDate(d.getDate() + offset);
   return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
@@ -36,66 +37,277 @@ const events: Ev[] = [
   { id: "e17", title: "Brunch chez Sam", start: at(6, "11:00"), end: at(6, "13:00"), status: "needs-action", organizer: "Sam" },
 ];
 
+const calendar = { agenda: { tool: "calendar/list_events", args: { days: 7 }, items: { path: "events", id: "id", title: "title" } } };
+
 const agendaBlock: Authored = {
   name: "agenda",
-  sources: {
-    agenda: { tool: "calendar/list_events", args: { days: 7 }, items: { path: "events", id: "id", title: "title" } },
-  },
+  sources: calendar,
   components: [{ id: "root", component: "Agenda", days: 7, events: { "@path": "/agenda/events" } }],
 };
+
+const workBlock: Authored = {
+  name: "en_cours",
+  components: [
+    { id: "root", component: "Column", children: ["h", "article", "terrasse"] },
+    { id: "h", component: "Text", variant: "subtitle", text: "En cours" },
+    { id: "article", component: "Progress", label: "Article « Le bureau en graphe »", value: 3, current: 1, total: 5, step: "Relecture par Léa" },
+    { id: "terrasse", component: "Progress", label: "Terrasse", value: 1, total: 4, step: "Attente du bon signé de Sam", tone: "urgent" },
+  ],
+};
+
+const nightBlock: Authored = {
+  name: "cette_nuit",
+  components: [
+    { id: "root", component: "Column", children: ["h", "steps"] },
+    { id: "h", component: "Text", variant: "subtitle", text: "Pendant la nuit" },
+    { id: "steps", component: "Timeline", items: { "@path": "/night" } },
+  ],
+  data: {
+    night: [
+      { label: "Sauvegarde du NAS faite", state: "done", date: at(0, "02:10"), detail: "412 Go, 18 min" },
+      { label: "38 mails triés, prêts à jeter sur ton oui", state: "done", date: at(0, "06:30") },
+      { label: "Relevé de la banque : la synchronisation a échoué", state: "failed", date: at(0, "06:45"), detail: "Elle sera retentée à 12 h" },
+      { label: "Ta journée écrite", state: "done", date: at(0, "07:00") },
+    ],
+  },
+};
+
+const dayCards: SampleView["cards"] = [
+  {
+    ref: "calls:61",
+    card: 61,
+    items: ["e4"],
+    kind: "calls",
+    state: "pending",
+    node: "day",
+    text: "Accepter l'invitation de Léa : « Pique-nique au parc », 12 h 30",
+    fields: [{ name: "calendar/respond_event", value: "event : e4\nresponse : accepted", detail: true }],
+  },
+  {
+    ref: "calls:62",
+    card: 62,
+    items: ["e11"],
+    kind: "calls",
+    state: "pending",
+    node: "day",
+    text: "Accepter l'invitation du club : « Dîner du club », demain 20 h",
+    fields: [{ name: "calendar/respond_event", value: "event : e11\nresponse : accepted", detail: true }],
+  },
+  {
+    ref: "calls:63",
+    card: 63,
+    items: ["e17"],
+    kind: "calls",
+    state: "pending",
+    node: "day",
+    text: "Accepter l'invitation de Sam : « Brunch chez Sam »",
+    fields: [{ name: "calendar/respond_event", value: "event : e17\nresponse : accepted", detail: true }],
+  },
+  {
+    ref: "intention:64",
+    card: 64,
+    state: "pending",
+    node: "day",
+    text: "Une heure pour relire le devis de Sam",
+    why: "L'appel avec Alex est annulé : le créneau est libre.",
+    when: [{ start: at(0, "16:00"), end: at(0, "17:00") }],
+  },
+];
 
 const dayView: SampleView = {
   id: "day",
   parts: [
     "Une matinée pleine jusqu'à 11 h 30, puis Léa t'invite au pique-nique de 12 h 30 : il chevauche le déjeuner avec Alex, encore incertain. L'appel de 17 h 30 est annulé, j'y ai mis une heure pour relire le devis de Sam.\n\n",
     agendaBlock,
+    workBlock,
+    nightBlock,
   ],
   values: { agenda: { events } },
   notes: {},
   bodies: {},
-  cards: [
+  cards: dayCards,
+};
+
+// --- Investissements --------------------------------------------------------
+
+// The PEA's value over the last 30 days, ending today.
+const pea = [46120, 46380, 46210, 46540, 46900, 46710, 46650, 47020, 47310, 47180, 46890, 46970, 47250, 47480, 47390, 47610, 47820, 47560, 47400, 47690, 47930, 48010, 47780, 47660, 47890, 48120, 47990, 48060, 48190, 48230];
+const peaSeries = pea.map((y, i) => ({ x: dayOf(i - pea.length + 1), y }));
+
+const investFigures: Authored = {
+  name: "chiffres",
+  components: [
+    { id: "root", component: "Row", children: ["total", "pea", "av", "livret"] },
+    { id: "total", component: "Metric", label: "Patrimoine placé", value: 82170, unit: "€", delta: 968, deltaLabel: "cette semaine", trend: pea.map((v) => v + 33940) },
+    { id: "pea", component: "Metric", label: "PEA", value: 48230, unit: "€", delta: 852, deltaLabel: "cette semaine", trend: pea },
+    { id: "av", component: "Metric", label: "Assurance-vie", value: 21940, unit: "€", delta: 88, deltaLabel: "cette semaine", trend: [21700, 21720, 21760, 21750, 21800, 21830, 21810, 21860, 21900, 21940] },
+    { id: "livret", component: "Metric", label: "Livret A", value: 12000, unit: "€", delta: 0, deltaLabel: "3 % par an" },
+  ],
+};
+
+const investChart: Authored = {
+  name: "courbe",
+  components: [
+    { id: "root", component: "Column", children: ["h", "chart"] },
+    { id: "h", component: "Text", variant: "subtitle", text: "Le PEA sur 30 jours" },
+    { id: "chart", component: "Chart", kind: "line", unit: "€", series: [{ name: "PEA", points: peaSeries }] },
+  ],
+};
+
+const investTable: Authored = {
+  name: "lignes",
+  components: [
+    { id: "root", component: "Column", children: ["h", "table", "alloc"] },
+    { id: "h", component: "Text", variant: "subtitle", text: "Les lignes du PEA" },
     {
-      ref: "calls:61",
-      card: 61,
-      items: ["e4"],
-      kind: "calls",
-      state: "pending",
-      node: "day",
-      tainted: true,
-      text: "Accepter l'invitation de Léa : « Pique-nique au parc », 12 h 30",
-      fields: [{ name: "calendar/respond_event", value: "event : e4\nresponse : accepted", detail: true }],
+      id: "table",
+      component: "Table",
+      columns: [
+        { key: "nom", label: "Ligne" },
+        { key: "valeur", label: "Valeur (€)", kind: "number" },
+        { key: "semaine", label: "Semaine", kind: "change" },
+        { key: "an", label: "Depuis janvier", kind: "change" },
+        { key: "part", label: "Part (%)", kind: "number" },
+      ],
+      rows: { "@path": "/lignes" },
     },
     {
-      ref: "calls:62",
-      card: 62,
-      items: ["e11"],
-      kind: "calls",
-      state: "pending",
-      node: "day",
-      tainted: true,
-      text: "Accepter l'invitation du club : « Dîner du club », demain 20 h",
-      fields: [{ name: "calendar/respond_event", value: "event : e11\nresponse : accepted", detail: true }],
+      id: "alloc",
+      component: "Chart",
+      kind: "stack",
+      unit: "%",
+      series: [
+        { name: "Actions", points: [{ x: "Aujourd'hui", y: 64 }, { x: "Cible", y: 60 }] },
+        { name: "Obligations", points: [{ x: "Aujourd'hui", y: 26 }, { x: "Cible", y: 30 }] },
+        { name: "Liquidités", points: [{ x: "Aujourd'hui", y: 10 }, { x: "Cible", y: 10 }] },
+      ],
     },
+  ],
+  data: {
+    lignes: [
+      { nom: "ETF Monde", valeur: 24860, semaine: 2.6, an: 14.2, part: 51.5 },
+      { nom: "ETF Europe", valeur: 6040, semaine: 1.1, an: 7.9, part: 12.5 },
+      { nom: "ETF Obligations", valeur: 12510, semaine: -0.3, an: 2.1, part: 25.9 },
+      { nom: "Liquidités", valeur: 4820, semaine: 0, an: 0, part: 10.1 },
+    ],
+  },
+};
+
+const investQuote: Authored = {
+  name: "a_lire",
+  external: true,
+  components: [
+    { id: "root", component: "Column", children: ["h", "q"] },
+    { id: "h", component: "Text", variant: "subtitle", text: "À lire" },
     {
-      ref: "calls:63",
-      card: 63,
-      items: ["e17"],
-      kind: "calls",
-      state: "pending",
-      node: "day",
-      text: "Accepter l'invitation de Sam : « Brunch chez Sam »",
-      fields: [{ name: "calendar/respond_event", value: "event : e17\nresponse : accepted", detail: true }],
-    },
-    {
-      ref: "intention:64",
-      card: 64,
-      state: "pending",
-      node: "day",
-      text: "Une heure pour relire le devis de Sam",
-      why: "L'appel avec Alex est annulé : le créneau est libre.",
-      when: [{ start: at(0, "16:00"), end: at(0, "17:00") }],
+      id: "q",
+      component: "Quote",
+      text: "La banque centrale laisse ses taux inchangés et dit vouloir attendre le printemps avant toute baisse. Les marchés obligataires ont peu réagi.",
+      from: "La Lettre Éco",
+      date: at(0, "07:40"),
+      url: "https://journal.example.org/eco/taux-inchanges",
     },
   ],
 };
 
-export const sampleDays: SampleView[] = [dayView];
+const investView: SampleView = {
+  id: "invest",
+  parts: [
+    "Le PEA a pris 1,8 % cette semaine, porté par l'ETF Monde. Les actions pèsent 64 % pour une cible de 60 % : je propose de rééquilibrer 400 € vers les obligations.\n\n",
+    investFigures,
+    investChart,
+    investTable,
+    investQuote,
+  ],
+  values: {},
+  notes: {},
+  bodies: {},
+  cards: [
+    {
+      ref: "calls:71",
+      card: 71,
+      kind: "calls",
+      state: "pending",
+      node: "invest",
+      text: "Rééquilibrer le PEA : vendre 400 € d'ETF Monde, acheter 400 € d'ETF Obligations",
+      why: "Les actions dépassent la cible de 4 points depuis trois semaines.",
+      fields: [
+        { name: "Ordre 1", value: "Vendre ETF Monde, 400 € au marché" },
+        { name: "Ordre 2", value: "Acheter ETF Obligations, 400 € au marché" },
+      ],
+    },
+  ],
+};
+
+// --- The blocks gallery (?blocks) ---------------------------------------------
+
+// A section of the gallery: what the block is, what it replaces, and the
+// view that shows it (one block, as Eriphe writes it).
+export type GallerySection = { id: string; title: string; replaces: string; view: SampleView };
+
+const section = (id: string, title: string, replaces: string, block: Authored, more: Partial<SampleView> = {}): GallerySection => ({
+  id,
+  title,
+  replaces,
+  view: { id, parts: [block], values: {}, notes: {}, bodies: {}, cards: [], ...more },
+});
+
+export const gallerySections: GallerySection[] = [
+  section(
+    "g-agenda-week",
+    "Agenda : la semaine",
+    "Remplace Day et les lignes « Picnic 14:10 needs-action ». Aujourd'hui heure par heure avec la ligne de maintenant, demain en colonne, les jours suivants en petites colonnes. Les invitations sans réponse et les créneaux proposés sont des fantômes violets qui portent le Oui de leur carte.",
+    agendaBlock,
+    { values: { agenda: { events } }, cards: dayCards.map((c) => ({ ...c, node: "g-agenda-week" })) },
+  ),
+  section(
+    "g-agenda-day",
+    "Agenda : une journée",
+    "Le même bloc avec days: 1 (ou absent) : la journée seule. Un statut se dit en mots (peut-être, annulé, refusé, à répondre), jamais comme la source l'écrit.",
+    { name: "jour", sources: calendar, components: [{ id: "root", component: "Agenda", events: { "@path": "/agenda/events" } }] },
+    { values: { agenda: { events } }, cards: dayCards.map((c) => ({ ...c, node: "g-agenda-day" })) },
+  ),
+  section("g-figures", "Rangée de chiffres", "Remplace les Metric en boîtes séparées : une bande, des filets entre les chiffres, la petite courbe de leurs dernières valeurs (trend).", investFigures),
+  section(
+    "g-person",
+    "Personne",
+    "Nouveau. Remplace un Item ou des paragraphes en gras pour dire qui attend quoi : le nom, ce qu'elle est, une phrase, quelques faits en lignes. Rien ne s'ouvre ni n'appelle.",
+    {
+      name: "qui",
+      components: [
+        { id: "root", component: "Grid", size: "large", children: ["sam", "lea"] },
+        {
+          id: "sam",
+          component: "Person",
+          name: "Sam Martin",
+          detail: "Artisan, la terrasse",
+          note: "Attend ta réponse sur le devis depuis mardi.",
+          facts: [
+            { label: "Téléphone", value: "06 00 00 00 00" },
+            { label: "Mail", value: "sam@example.org" },
+            { label: "Prochain rendez-vous", value: "Mercredi, réunion de chantier" },
+          ],
+        },
+        { id: "lea", component: "Person", name: "Léa", detail: "Amie", note: "T'invite au pique-nique de midi ; son anniversaire est demain." },
+      ],
+    },
+  ),
+  section("g-quote", "Citation", "Nouveau. Remplace un Text ou un Markdown qui recopiait les mots d'un autre : un passage tel quel, qui, quand, et la page d'où il vient, en clair.", {
+    name: "cite",
+    external: true,
+    components: [
+      {
+        id: "root",
+        component: "Quote",
+        text: "Bonjour,\nVoici le devis pour la terrasse : 4 200 € posé, début possible lundi 7 décembre. Tu peux me dire avant vendredi si ça te va ?",
+        from: "Sam <sam@example.org>",
+        date: at(-1, "18:12"),
+      },
+    ],
+  }),
+  section("g-night", "Ce qui s'est passé", "Timeline revue : quand toutes les étapes ont une date, la date passe en marge. L'étape en cours n'est plus violette (le violet ne dit que ce qui attend).", nightBlock),
+  section("g-work", "Avancée d'un travail", "Progress revu : plus de pastille ; le mot, « 3 sur 5 », le nom de l'étape en cours, et la barre de ses étapes.", workBlock),
+  section("g-table", "Tableau avec écarts", "Table : une colonne change écrit l'écart signé, vert à la hausse, rouge à la baisse.", investTable),
+];
+
+export const sampleDays: SampleView[] = [dayView, investView, ...gallerySections.map((s) => s.view)];

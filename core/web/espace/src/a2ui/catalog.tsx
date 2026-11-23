@@ -11,6 +11,7 @@ import { Icon as IconView, ICON_NAMES } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
 import { BatchContext, sharedCard, SourceRows, useList, type Row } from "./lists";
 import { InlineYes } from "./inline";
+import { cleanTrend, Spark } from "./spark";
 import { useMoved, useProposals, type ProposalView } from "./proposals";
 
 // The workspace's A2UI catalog, as the page renders it: shapes, never tools.
@@ -580,10 +581,12 @@ const Metric = createComponentImplementation(
       delta: CommonSchemas.DynamicNumber.optional(),
       deltaLabel: CommonSchemas.DynamicString.optional(),
       better: z.enum(["up", "down"]).optional(),
+      trend: listOr(z.number()).optional(),
     }),
   },
   ({ props }) => {
     const { t, lang } = useWords();
+    const trend = cleanTrend(props.trend);
     const n = typeof props.value === "number" ? props.value : undefined;
     const value = n !== undefined ? number(lang, n) : str(props.value);
     const unit = str(props.unit);
@@ -608,6 +611,7 @@ const Metric = createComponentImplementation(
             {props.deltaLabel && <span className="a2-delta-label"> {props.deltaLabel}</span>}
           </p>
         )}
+        {trend.length > 1 && <Spark values={trend} />}
       </div>
     );
   },
@@ -627,26 +631,32 @@ const Progress = createComponentImplementation(
       value: CommonSchemas.DynamicNumber.optional(),
       current: CommonSchemas.DynamicNumber.optional(),
       total: CommonSchemas.DynamicNumber.optional(),
+      step: CommonSchemas.DynamicString.optional(),
     }),
   },
   ({ props }) => {
+    // Its word and, quieter, how far (« 3 sur 5 ») and the step it is at;
+    // under them, a bar of its steps: done in ink, the one in progress
+    // half drawn, those to come a track. Its tone colours the word only.
     const { t } = useWords();
     const total = Math.max(0, Math.min(PROGRESS_MAX, Math.round(num(props.total) ?? 0)));
     const done = Math.max(0, Math.min(total, Math.round(num(props.value) ?? 0)));
     const current = Math.max(0, Math.min(total - done, Math.round(num(props.current) ?? 0)));
     const said = t("espace.a2.progress", done, total) + (current ? `, ${t("espace.a2.progress.current", current)}` : "");
+    const step = str(props.step);
     return (
       <div className={`a2-progress a2-tone-${props.tone ?? "default"}`}>
-        <span className="a2-pill">{str(props.label)}</span>
+        <p className="a2-progress-head">
+          <span className="a2-progress-label">{str(props.label)}</span>
+          {total > 0 && <span className="a2-progress-count">{t("espace.a2.progress.of", done, total)}</span>}
+          {step && <span className="a2-progress-step">{step}</span>}
+        </p>
         {total > 0 && (
-          <>
-            <span className="a2-bar" role="img" aria-label={said}>
-              {Array.from({ length: total }, (_, i) => (
-                <span key={i} className={i < done ? "a2-seg-done" : i < done + current ? "a2-seg-now" : "a2-seg"} />
-              ))}
-            </span>
-            <span className="a2-progress-count" aria-hidden="true">{done}/{total}</span>
-          </>
+          <span className="a2-bar" role="img" aria-label={said}>
+            {Array.from({ length: total }, (_, i) => (
+              <span key={i} className={i < done ? "a2-seg-done" : i < done + current ? "a2-seg-now" : "a2-seg"} />
+            ))}
+          </span>
         )}
       </div>
     );
@@ -675,10 +685,19 @@ const Chart = createComponentImplementation(
   },
 );
 
-const TableColumn = z.object({ key: z.string(), label: z.string(), kind: z.enum(["text", "number", "date"]).optional() });
+const TableColumn = z.object({ key: z.string(), label: z.string(), kind: z.enum(["text", "number", "date", "change"]).optional() });
+
+// A change, in percent: its sign written, its mood a class (up is good).
+function change(lang: Lang, v: unknown): { text: string; mood: string } {
+  const n = num(v);
+  if (n === undefined) return { text: str(v), mood: "flat" };
+  const sign = n > 0 ? "+" : n < 0 ? "−" : "±";
+  return { text: `${sign}${number(lang, Math.abs(n), 1)} %`, mood: n > 0 ? "good" : n < 0 ? "bad" : "flat" };
+}
 
 function cell(lang: Lang, kind: string | undefined, v: unknown): string {
   if (v === null || v === undefined) return "";
+  if (kind === "change") return change(lang, v).text;
   if (kind === "number") {
     const n = num(v);
     return n === undefined ? str(v) : number(lang, n);
@@ -718,7 +737,9 @@ const Table = createComponentImplementation(
             {rows.map((r, i) => (
               <tr key={i}>
                 {cols.map((c) => (
-                  <td key={c.key} className={`a2-col-${c.kind ?? "text"}`}>{cell(lang, c.kind, r[c.key])}</td>
+                  <td key={c.key} className={`a2-col-${c.kind ?? "text"}${c.kind === "change" ? ` a2-delta-${change(lang, r[c.key]).mood}` : ""}`}>
+                    {cell(lang, c.kind, r[c.key])}
+                  </td>
                 ))}
               </tr>
             ))}
@@ -744,20 +765,28 @@ const Timeline = createComponentImplementation(
     const items = (Array.isArray(props.items) ? props.items : []).filter(
       (it): it is z.infer<typeof TimelineItem> => !!it && typeof it === "object" && typeof it.label === "string",
     );
+    // Every step dated: what happened, its date in the margin (its time
+    // alone when it is today's).
+    const dated = items.length > 1 && items.every((it) => wall(it.date));
     return (
-      <ol className="a2-timeline">
+      <ol className={`a2-timeline${dated ? " a2-timeline-dated" : ""}`}>
         {items.map((it, i) => {
           const state = STATES.includes(it.state) ? it.state : "pending";
           const w = wall(it.date);
           return (
             <li key={i} className={`a2-step a2-step-${state}`} aria-current={state === "current" ? "step" : undefined}>
+              {dated && w && (
+                <time className="a2-step-when" dateTime={it.date}>
+                  {sent(lang, it.date!)}
+                </time>
+              )}
               <span className="a2-step-dot" aria-hidden="true">
                 {state === "done" ? <IconView name="check" /> : state === "failed" ? <IconView name="close" /> : null}
               </span>
               <span className="a2-step-body">
                 <span className="a2-step-label">{it.label}</span>
                 <span className="sr-only">, {t(`espace.a2.step.${state}`)}</span>
-                {w && <span className="a2-step-date"> {when(lang, w)}</span>}
+                {!dated && w && <span className="a2-step-date"> {when(lang, w)}</span>}
                 {it.detail && <span className="a2-step-detail">{it.detail}</span>}
               </span>
             </li>
@@ -872,6 +901,101 @@ const Message = createComponentImplementation(
           )}
         </div>
       </article>
+    );
+  },
+);
+
+// initials: what a person's circle shows, one or two letters of their name.
+export function initials(name: string): string {
+  const words = nameOf(name).split(/[\s.\-_]+/).filter((w) => /\p{L}/u.test(w));
+  return (words.length > 1 ? words[0][0] + words[words.length - 1][0] : (words[0] ?? "?").slice(0, 1)).toUpperCase();
+}
+
+const Fact = z.object({ label: z.string(), value: z.string() });
+
+// Person: a name and what they are to the user, a sentence of where things
+// stand with them, and a few facts as lines (a phone, a next meeting).
+// Nothing in it opens or calls: a fact is text, selectable.
+const Person = createComponentImplementation(
+  {
+    name: "Person",
+    schema: z.object({
+      name: CommonSchemas.DynamicString,
+      detail: CommonSchemas.DynamicString.optional(),
+      note: CommonSchemas.DynamicString.optional(),
+      facts: listOr(Fact).optional(),
+    }),
+  },
+  ({ props }) => {
+    const id = useId();
+    const name = nameOf(str(props.name));
+    const facts = (Array.isArray(props.facts) ? props.facts : []).filter((f): f is z.infer<typeof Fact> => !!f && typeof f.label === "string" && typeof f.value === "string").slice(0, 8);
+    return (
+      <section className="a2-person" aria-labelledby={id}>
+        <span className="a2-person-face" aria-hidden="true">{initials(name)}</span>
+        <div className="a2-person-main">
+          <p className="a2-person-head">
+            <span id={id} className="a2-person-name">{name}</span>
+            {props.detail && <span className="a2-person-detail">{props.detail}</span>}
+          </p>
+          {props.note && <p className="a2-person-note">{props.note}</p>}
+          {facts.length > 0 && (
+            <dl className="a2-person-facts">
+              {facts.map((f, i) => (
+                <div key={i}>
+                  <dt>{f.label}</dt>
+                  <dd>{f.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      </section>
+    );
+  },
+);
+
+// Quote: someone else's words, as they wrote them, and who and when; the
+// page they come from shown in clear, opened on a click only, as a Link's.
+const Quote = createComponentImplementation(
+  {
+    name: "Quote",
+    schema: z.object({
+      text: CommonSchemas.DynamicString,
+      from: CommonSchemas.DynamicString.optional(),
+      date: CommonSchemas.DynamicString.optional(),
+      url: z.union([z.string(), CommonSchemas.DataBinding]).optional(),
+    }),
+  },
+  ({ props, context }) => {
+    const { t, lang } = useWords();
+    const from = nameOf(str(props.from)), date = str(props.date);
+    const u = linkTo(str(props.url));
+    // As a Link: the whole address when the block shows external content.
+    const whole = external(context.dataContext.surface);
+    return (
+      <figure className="a2-quote">
+        <blockquote className="a2-quote-text" cite={u?.href}>
+          {str(props.text)}
+        </blockquote>
+        {(from || date || u) && (
+          <figcaption className="a2-quote-from">
+            {from && <span className="a2-quote-who">{from}</span>}
+            {date && wall(date) && (
+              <time className="a2-quote-when" dateTime={date}>
+                {sent(lang, date)}
+              </time>
+            )}
+            {u && (
+              <a className="a2-link a2-quote-link" href={u.href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" title={u.href}>
+                <IconView name="link" />
+                <span className="a2-link-host">{whole ? u.href : u.host}</span>
+                <span className="sr-only"> {t("espace.a2.newtab")}</span>
+              </a>
+            )}
+          </figcaption>
+        )}
+      </figure>
     );
   },
 );
@@ -1015,6 +1139,8 @@ export const components: ReactComponentImplementation[] = [
   Timeline,
   Item,
   Message,
+  Person,
+  Quote,
   Agenda,
   Alert,
   Placeholder,

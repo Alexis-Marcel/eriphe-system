@@ -4,6 +4,7 @@ import { createAdapter } from "./a2ui/adapter";
 import { galleryFixtures, sampleOrb, sampleProposals } from "./a2ui/fixtures";
 import { coreProposals, ProposalsContext } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
+import { BlocksGallery } from "./doc/BlocksGallery";
 import { tab, type Boot } from "./data/api";
 import { startPresence } from "./data/presence";
 import { sample } from "./data/sample";
@@ -33,7 +34,9 @@ export function openAsked(search: string): string | null {
 
 export function App({ boot }: { boot: Boot }) {
   const { lang } = useWords();
-  const [gallery] = useState(() => new URLSearchParams(location.search).has("gallery"));
+  // ?blocks (prototype #730): the new blocks, a page each.
+  const [blocks] = useState(() => new URLSearchParams(location.search).has("blocks"));
+  const [gallery] = useState(() => blocks || new URLSearchParams(location.search).has("gallery"));
   const proposals = useMemo(() => (boot.live ? coreProposals : sampleProposals(lang)), [boot.live, lang]);
 
   useEffect(() => {
@@ -72,7 +75,7 @@ export function App({ boot }: { boot: Boot }) {
   const narrow = useNarrow();
   useEffect(() => applyTheme(theme), [theme]);
 
-  if (gallery) return <Gallery />;
+  if (gallery) return blocks ? <BlocksGallery /> : <Gallery />;
   return (
     <ProposalsContext.Provider value={proposals}>
       <MotionConfig reducedMotion="user">

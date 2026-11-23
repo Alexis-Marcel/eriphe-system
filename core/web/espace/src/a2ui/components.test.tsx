@@ -104,7 +104,7 @@ const MARK: Record<string, string> = {
   Column: ".a2-column", List: ".a2-list", Card: ".a2-card", Tabs: ".a2-tabs", Fold: ".a2-fold", Divider: "hr.a2-divider",
   Button: "button.a2-button", Choice: "fieldset.a2-choice", TextField: ".a2-field input[type=text]",
   DateField: ".a2-field input[type=datetime-local]", Metric: ".a2-metric", Progress: ".a2-progress", Chart: ".a2-chart", Table: "table.a2-table",
-  Timeline: "ol.a2-timeline", Item: ".a2-item", Message: "article.a2-message", Agenda: ".a2-agenda",
+  Timeline: "ol.a2-timeline", Item: ".a2-item", Message: "article.a2-message", Agenda: ".a2-agenda", Person: "section.a2-person", Quote: "figure.a2-quote",
   Alert: ".a2-alert", Placeholder: ".a2-placeholder",
 };
 
@@ -159,7 +159,7 @@ for (const lang of ["fr", "en"] as const) {
       expect(text(".a2-agenda-hours .a2-agenda-date")).toBe(fr ? "jeudi 12 novembre" : "Thursday 12 November");
       expect($$(".a2-metric-value").map((n) => n.textContent)).toEqual(fr ? ["37 %", "1,2 To", "74,5 kWh"] : ["37 %", "1.2 TB", "74.5 kWh"]);
       expect($$(".a2-table tbody tr:first-child td").map((n) => n.textContent)).toEqual(
-        fr ? ["Formulaire de contact", "4", "14 nov."] : ["Contact form", "4", "14 Nov"],
+        fr ? ["Formulaire de contact", "4", "14 nov.", "+2,5 %"] : ["Contact form", "4", "14 Nov", "+2.5 %"],
       );
       // The functions: formatString, formatDate, formatRelative.
       const captions = $$(".a2-text-caption").map((n) => n.textContent);
@@ -377,6 +377,57 @@ describe("the catalog's components", () => {
     expect($$(".a2-chart")[1].querySelectorAll("polyline")).toHaveLength(1);
   });
 
+  it("show a person: initials, what they are, facts as lines", async () => {
+    await mount("en");
+    const [sam, lea] = $$(".a2-person");
+    expect(sam.querySelector(".a2-person-face")?.textContent).toBe("SM");
+    expect(sam.querySelector(".a2-person-name")?.textContent).toBe("Sam Martin");
+    expect(sam.getAttribute("aria-labelledby")).toBe(sam.querySelector(".a2-person-name")?.id);
+    expect([...sam.querySelectorAll(".a2-person-facts dt")].map((n) => n.textContent)).toEqual(["Phone", "Next meeting"]);
+    expect(sam.querySelector("a, button")).toBeNull();
+    expect(lea.querySelector(".a2-person-face")?.textContent).toBe("L");
+    expect(lea.querySelector(".a2-person-facts")).toBeNull();
+  });
+
+  it("quote someone's words, who and when, the page in clear", async () => {
+    await mount("fr");
+    const q = $("figure.a2-quote");
+    expect(q.querySelector("blockquote")?.textContent).toBe("Tu peux me dire avant vendredi si ça te va ?");
+    expect(q.querySelector(".a2-quote-who")?.textContent).toBe("Sam");
+    expect(q.querySelector(".a2-quote-when")?.textContent).toBe("11 nov., 18 h 12");
+    const a = q.querySelector("a")!;
+    expect(a.getAttribute("href")).toBe("https://example.org/devis");
+    expect(a.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(a.querySelector(".a2-link-host")?.textContent).toBe("example.org");
+  });
+
+  it("draw a figure's trend, a work's step, a table's change", async () => {
+    await mount("fr");
+    expect($$(".a2-metric svg.a2-spark")).toHaveLength(1);
+    expect($(".a2-spark .a2-spark-line").getAttribute("points")?.split(" ")).toHaveLength(7);
+    expect(text(".a2-progress-count")).toBe("2 sur 5");
+    expect(text(".a2-progress-step")).toBe("Relecture");
+    expect($(".a2-pill")).toBeNull();
+    const changes = $$("td.a2-col-change");
+    expect(changes.map((c) => c.textContent)).toEqual(["+2,5 %", "−1,3 %", "±0,0 %"].slice(0, changes.length));
+    expect(changes.map((c) => c.className.match(/a2-delta-(\w+)/)?.[1])).toEqual(["good", "bad", "flat"].slice(0, changes.length));
+  });
+
+  it("put the dates of what happened in the margin", async () => {
+    await mount("fr", one([
+      {
+        id: "root",
+        component: "Timeline",
+        items: [
+          { label: "Sauvegarde", state: "done", date: "2026-11-12T02:10:00" },
+          { label: "Tri des mails", state: "failed", date: "2026-11-11T06:30:00" },
+        ],
+      },
+    ]));
+    expect($(".a2-timeline").className).toContain("a2-timeline-dated");
+    expect($$(".a2-step-when").map((n) => n.textContent)).toEqual(["02 h 10", "11 nov., 06 h 30"]);
+    expect($(".a2-step-date")).toBeNull();
+  });
   it("show a step's state and its date", async () => {
     await mount("fr");
     expect($$("[data-surface=gallery-project] .a2-step").map((s) => s.className.replace("a2-step a2-step-", ""))).toEqual(["done", "done", "current", "pending"]);

@@ -103,7 +103,7 @@ export function InlineYes({ refText, where, say, left }: { refText: string; wher
           <span className="sr-only">{t("espace.a2.proposal.tainted")}</span>
         </span>
       )}
-      {say && <span className="a2-inline-what">{p.text}</span>}
+      {say && p.text !== yesWord && <span className="a2-inline-what">{p.text}</span>}
       {shared > 0 && (
         <span className="a2-inline-shared" title={t("espace.row.shared", shared)}>
           <IconView name="link" />

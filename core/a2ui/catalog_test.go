@@ -12,7 +12,7 @@ import (
 // order: a new one is a decision, not a side effect.
 func TestCatalogComponents(t *testing.T) {
 	want := []string{"Text", "Markdown", "Image", "Icon", "Link", "Code", "Row", "Column", "List", "Grid", "Card", "Tabs", "Fold", "Divider",
-		"Button", "Choice", "TextField", "DateField", "Metric", "Progress", "Chart", "Table", "Timeline", "Item", "Message", "Agenda",
+		"Button", "Choice", "TextField", "DateField", "Metric", "Progress", "Chart", "Table", "Timeline", "Item", "Message", "Person", "Quote", "Agenda",
 		"Alert", "Placeholder"}
 	c := Eriphe()
 	if got := c.Components(); !slices.Equal(got, want) {

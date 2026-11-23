@@ -203,7 +203,10 @@ export function sampleCards(): {
       return true;
     },
     // the cards dated on a day that still wait: an Agenda's ghosts
-    day: (date) => views.flatMap((v) => v.cards).filter((c) => c.state === "pending" && c.when?.some((w) => w.start.startsWith(date))).map((c) => ({ ...c })),
+    day: (date) => {
+      const dated = views.flatMap((v) => v.cards).filter((c) => c.state === "pending" && c.when?.some((w) => w.start.startsWith(date)));
+      return dated.filter((c, i) => dated.findIndex((d) => d.ref === c.ref) === i).map((c) => ({ ...c }));
+    },
     follow: (on) => {
       followers.add(on);
       return () => followers.delete(on);
