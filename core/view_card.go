@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
@@ -52,15 +54,16 @@ const viewProposalsSchema = `CREATE TABLE IF NOT EXISTS view_proposals (
 func init() { extraSchema = append(extraSchema, viewProposalsSchema) }
 
 type proposeViewIn struct {
-	Title   string          `json:"title" jsonschema:"a short name of what it shows (Mes mails, Mon portefeuille), never the user's sentence"`
-	Goal    string          `json:"goal,omitempty" jsonschema:"what it is for and the user's choices: the card shows it, the skill's runs read it"`
+	Title   string          `json:"title" jsonschema:"a short name of what it shows (Ma journée, Mes mails), never the user's sentence nor its subject's title"`
+	Goal    string          `json:"goal,omitempty" jsonschema:"what it is for and the user's choices: the skill's runs read it"`
 	Body    string          `json:"body" jsonschema:"its text and blocks (catalog_read)"`
 	Monitor *writeMonitorIn `json:"monitor,omitempty" jsonschema:"write_monitor's fields; a block reads it by its name"`
 	Skill   *writeSkillIn   `json:"skill,omitempty" jsonschema:"write_skill's fields, without node; its when keys on the monitor's name"`
+	Node    string          `json:"node,omitempty" jsonschema:"to change a view proposed before: the id of its draft, as propose_view gave it (node), never the subject's"`
 }
 
 func registerViewTool(s *mcp.Server, c *core) {
-	tool(s, "propose_view", "Propose a view: a standing node whose blocks code keeps fresh, the monitor that detects what comes and the skill that works in the node when it does, checked now and shown on one card: one yes makes them all, nothing before. Asked for a page kept up to date, propose it at once with sensible defaults, no questions first: its card shows the page. Reuse a monitor or a skill that does it already, by its name. From a subject, place its card in its document with a card block (the ref this gives); at the home, it waits above the bar.",
+	tool(s, "propose_view", "Propose a view: a standing node whose blocks code keeps fresh, the monitor that detects what comes and the skill that works in the node when it does. Its node opens at once as a draft linked to the turn's subject, showing the real page; its card waits on it. Yes makes it standing with its monitor and its skill, and the subject done; no archives the draft. Asked for a page kept up to date, propose it at once with sensible defaults, no questions first. To change it, call again with node. Reuse a monitor or a skill that does it already, by its name.",
 		func(ctx context.Context, in proposeViewIn) (map[string]any, error) {
 			return c.proposeView(in, c.turnTaint())
 		})
@@ -80,12 +83,22 @@ type viewProposal struct {
 	parsed            *nodefile.Node
 }
 
-// proposeView checks a view and makes its card.
+// proposeView checks a view, opens its node as a draft and makes its
+// card, which waits on the draft (the kind's node, proposal_kinds.go).
+// Called again with the draft's id, it rewrites the same node and the
+// same proposal: its card says the new one.
 func (c *core) proposeView(in proposeViewIn, tainted []string) (map[string]any, error) {
 	if c.nodes == nil {
 		return nil, errors.New("no node store")
 	}
-	v := viewProposal{Node: c.nodes.NewID(), Title: strings.TrimSpace(in.Title), Goal: strings.TrimSpace(in.Goal), Body: in.Body}
+	var was viewProposal
+	if id := strings.TrimSpace(in.Node); id != "" {
+		var err error
+		if was, err = c.viewDraft(id); err != nil {
+			return nil, fmt.Errorf("%s is not a view's draft waiting for its card: node is the draft propose_view gave, never the subject; leave it out to propose a new view, titled other than its subject", id)
+		}
+	}
+	v := viewProposal{Node: cmpOr(was.Node, c.nodes.NewID()), Title: strings.TrimSpace(in.Title), Goal: strings.TrimSpace(in.Goal), Body: in.Body}
 	if v.Title == "" {
 		return nil, errors.New("a title is needed")
 	}
@@ -100,7 +113,8 @@ func (c *core) proposeView(in proposeViewIn, tainted []string) (map[string]any, 
 	// Its blocks are checked as a task's are (nodeGuard): what they ask,
 	// what they link; each source a catalog server's, or a monitor the
 	// user approved, or the view's own.
-	if _, err := c.nodeGuard(n, blockNames(n), c.viewSourceOK(monitorName)); err != nil {
+	sourceOK := c.viewSourceOK(monitorName)
+	if _, err := c.nodeGuard(n, blockNames(n), sourceOK); err != nil {
 		return nil, fmt.Errorf("the node: %w", err)
 	}
 	if in.Monitor != nil {
@@ -130,28 +144,134 @@ func (c *core) proposeView(in proposeViewIn, tainted []string) (map[string]any, 
 		return nil, err
 	}
 	v.Tainted = strings.Join(tainted, ", ")
-	if err := c.nodes.Check(c.viewNew(v)); err != nil {
-		return nil, fmt.Errorf("the node: %w", err)
-	}
 	var spec string
 	if v.Spec != nil {
 		raw, _ := json.Marshal(v.Spec)
 		spec = string(raw)
 	}
-	res, err := c.store.db.Exec(`INSERT INTO view_proposals (node, title, goal, body, monitor, spec, skill, md, tainted, state, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		v.Node, v.Title, v.Goal, v.Body, v.Monitor, spec, v.Skill, v.MD, v.Tainted, viewProposed, time.Now().Unix())
+	if was.ID == 0 {
+		if err := c.openDraft(v, len(tainted) > 0); err != nil {
+			return nil, fmt.Errorf("the node: %w", err)
+		}
+		res, err := c.store.db.Exec(`INSERT INTO view_proposals (node, title, goal, body, monitor, spec, skill, md, tainted, state, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			v.Node, v.Title, v.Goal, v.Body, v.Monitor, spec, v.Skill, v.MD, v.Tainted, viewProposed, time.Now().Unix())
+		if err != nil {
+			return nil, err
+		}
+		v.ID, _ = res.LastInsertId()
+	} else {
+		v.ID = was.ID
+		if err := c.rewriteDraft(v, len(tainted) > 0, sourceOK); err != nil {
+			return nil, fmt.Errorf("the node: %w", err)
+		}
+		if _, err := c.store.db.Exec(`UPDATE view_proposals SET title = ?, goal = ?, body = ?, monitor = ?, spec = ?, skill = ?, md = ?, tainted = ? WHERE id = ? AND state = ?`,
+			v.Title, v.Goal, v.Body, v.Monitor, spec, v.Skill, v.MD, v.Tainted, v.ID, viewProposed); err != nil {
+			return nil, err
+		}
+	}
+	if len(n.Blocks()) > 0 {
+		c.readNodeLater(context.Background(), v.Node, nil) // its page shows real data at once (node_live.go)
+	}
+	card := c.cardProposed(cardViewKind, v.ID)
+	if was.ID != 0 { // the same card, saying the new proposal
+		p := c.proposalOf(cardViewKind, v.ID)
+		c.store.db.Exec(`UPDATE convo_cards SET text = ? WHERE ref = ? AND state = ?`, p.Text(c.userLang()), card, cardPending)
+		c.proposalMoved(card)
+	}
+	c.showDraft(v.Node)
+	return map[string]any{"result": "its draft is open, showing the page, and its card waits on it: the user's yes makes it standing, with its monitor and its skill",
+		"node": v.Node, "card": card, "note": "Nothing to place: talk about it in the subject; to change it, call propose_view again with node."}, nil
+}
+
+// showDraft puts a view's draft in front of the user, in a turn that
+// answers them. Proposed from a subject, the subject takes the exchange
+// when it was asked at the home (found by node_find, say, never shown),
+// and the draft opens beside it; with no subject, the draft is the
+// subject and takes the exchange itself.
+func (c *core) showDraft(id string) {
+	subject := c.turn.aboutNode()
+	if subject == id {
+		subject = ""
+	}
+	if subject != "" {
+		if sum, err := c.nodes.Get(subject); err != nil || !sum.Archived.IsZero() {
+			subject = ""
+		}
+	}
+	if subject == "" {
+		c.turn.about(id) // the turn is about it from now on, as one node_open opened
+		if !c.moveHomeTurn(id) && c.turnAnswersUser() {
+			c.showNode(id, byBrain, false)
+		}
+		return
+	}
+	c.moveHomeTurn(subject) // asked at the home: the exchange goes on in the subject
+	if c.turnAnswersUser() {
+		c.showNode(id, byBrain, false) // beside it, the bar where it is
+	}
+}
+
+// viewDraft is the proposal whose draft is node id, while its card waits.
+func (c *core) viewDraft(id string) (viewProposal, error) {
+	var pid int64
+	if err := c.store.db.QueryRow(`SELECT id FROM view_proposals WHERE node = ? AND state = ? ORDER BY id DESC LIMIT 1`, id, viewProposed).Scan(&pid); err != nil {
+		return viewProposal{}, err
+	}
+	if sum, err := c.nodes.Get(id); err != nil || !sum.Archived.IsZero() {
+		return viewProposal{}, errors.New("its draft is gone")
+	}
+	return c.viewOf(pid)
+}
+
+// openDraft makes a view's node as it waits for its card: a work node of
+// the brain's, linked to the subject the turn is about, so that the graph
+// draws it beside it (a link, not a child: the view outlives its subject).
+// Its title is trusted as any the brain writes, marked when the turn read
+// outside content; the user's yes vouches for it.
+func (c *core) openDraft(v viewProposal, tainted bool) error {
+	nw := nodestore.New{ID: v.Node, Title: v.Title, Goal: v.Goal, Body: v.Body, Lifetime: nodefile.Work,
+		External: tainted, OpenedBy: c.turnOrigin(), Author: byBrain}
+	if subj := c.turn.aboutNode(); subj != "" {
+		if sum, err := c.nodes.Get(subj); err == nil && sum.Archived.IsZero() {
+			nw.Links = []string{subj}
+		}
+	}
+	d, err := c.nodes.Create(nw)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	id, _ := res.LastInsertId()
-	card := c.cardProposed(cardViewKind, id)
-	out := map[string]any{"result": "proposed; it waits for the user's yes on its card, then the node, its monitor and its skill are made at once", "node": v.Node, "card": card}
-	if c.turn.aboutNode() != "" {
-		out["place"] = cardPlaceNote(card)
-	} else { // at the home: no node holds it (web_orb.go's unheldCards)
-		out["place"] = "It waits above the bar, in front of the user: nothing to place."
+	// Its blocks that read a server not trusted are external at once; the
+	// first read marks them too (fileSnapshots).
+	if err := c.externalSources(d, byBrain); err != nil {
+		log.Printf("view draft %s: %v", v.Node, err)
 	}
-	return out, nil
+	return nil
+}
+
+// rewriteDraft writes a view proposed again into its draft: its title,
+// goal and body, checked as node_write and node_set check them.
+func (c *core) rewriteDraft(v viewProposal, tainted bool, sourceOK func(nodefile.Source) error) error {
+	cur, err := c.nodes.Read(v.Node, 0)
+	if err != nil {
+		return err
+	}
+	d, err := c.authorWrite(v.Node, cur.Version.Hash, byBrain, tainted, sourceOK, func(n *nodefile.Node) error {
+		if n.Meta.Title != v.Title {
+			n.Meta.Title = v.Title
+			if !tainted {
+				n.VouchTitle() // a turn that read nothing outside stands for it
+			}
+		}
+		n.Meta.Goal = v.Goal
+		return n.AuthorBody(v.Body)
+	})
+	if err != nil {
+		return err
+	}
+	if err := c.externalSources(d, byBrain); err != nil {
+		log.Printf("view draft %s: %v", v.Node, err)
+	}
+	return nil
 }
 
 // viewSourceOK is the check of a view's sources: a catalog server's tool
@@ -274,6 +394,9 @@ func (c *core) viewFields(v viewProposal, lang string) []cardField {
 	}
 	if v.manifest != nil {
 		m := *v.manifest
+		if d := strings.TrimSpace(m.Description); d != "" {
+			fs = append(fs, cardField{Name: v.Skill + " · " + tr(lang, "card.view.does"), Value: truncate(d, cardValueMax)})
+		}
 		if m.Trigger != nil {
 			st := *m.Trigger
 			st.Node = "" // the node is the card's
@@ -292,56 +415,67 @@ func (c *core) viewFields(v viewProposal, lang string) []cardField {
 	return fs
 }
 
-// viewSummary is what a view's yes makes, in plain sentences of code's,
-// from what was checked: its page, how its monitor looks, what its skill
-// does each time and how it may tell the user.
+// viewSummary is what will run by itself once the user says yes, in one
+// line of code's words, from what was checked: how often its monitor
+// looks, when its skill runs on a schedule (« Toutes les 15 min · chaque
+// jour à 7 h 30 »). The draft's page is the preview; the rest is under
+// Détails (viewFields).
 func viewSummary(v viewProposal, lang string) []string {
-	out := []string{fmt.Sprintf(tr(lang, "card.view.sum.page"), v.Title)}
+	var parts []string
 	if s := v.Spec; s != nil {
-		every := span(time.Duration(s.Every) * time.Minute)
-		switch {
-		case s.Way == wayListen:
-			out = append(out, tr(lang, "card.view.sum.listen"))
-		case s.Cond == condNew:
-			out = append(out, fmt.Sprintf(tr(lang, "card.view.sum.new"), every))
-		default:
-			out = append(out, fmt.Sprintf(tr(lang, "card.view.sum.changed"), every))
+		if s.Way == wayListen {
+			parts = append(parts, tr(lang, "card.view.line.listen"))
+		} else {
+			parts = append(parts, fmt.Sprintf(tr(lang, "card.view.line.every"), span(time.Duration(s.Every)*time.Minute)))
 		}
 	}
-	if m := v.manifest; m != nil {
-		if d := strings.TrimSpace(m.Description); d != "" {
-			if timeLed(d) {
-				out = append(out, d) // it says when already: « À chaque … »
-			} else {
-				out = append(out, fmt.Sprintf(tr(lang, "card.view.sum.skill"), d))
-			}
-		}
-		if m.Trigger != nil {
-			out = append(out, tr(lang, "card.view.sum.tells"))
-			if m.Trigger.Urgent != "" {
-				out = append(out, fmt.Sprintf(tr(lang, "card.view.sum.urgent"), m.Trigger.Urgent))
-			}
-		}
+	if m := v.manifest; m != nil && m.Trigger != nil && m.Trigger.Schedule != nil {
+		parts = append(parts, scheduleWords(*m.Trigger.Schedule, lang))
 	}
-	return out
+	if len(parts) == 0 {
+		parts = append(parts, tr(lang, "card.view.line.kept"))
+	}
+	line := strings.Join(parts, " · ")
+	if r, n := utf8.DecodeRuneInString(line); n > 0 {
+		line = string(unicode.ToUpper(r)) + line[n:]
+	}
+	return []string{line}
 }
 
-// timeLeads are how a sentence that says when it runs starts, in French
-// or English: the skill's description is the brain's words, in the
-// user's language whatever the card's.
-var timeLeads = []string{"à chaque", "a chaque", "chaque ", "quand ", "lorsqu", "dès ", "des qu", "à la ", "à l'", "à l’",
-	"each ", "every ", "when", "on each", "on every", "as soon", "after each", "after every"}
-
-// timeLed tells a description that starts by saying when it runs: the
-// card's « À chaque fois : » would say it twice.
-func timeLed(d string) bool {
-	d = strings.ToLower(d)
-	for _, lead := range timeLeads {
-		if strings.HasPrefix(d, lead) {
-			return true
+// scheduleWords says a schedule in a few words: its days, then its times
+// (« en semaine à 7 h 30 », « every day at 07:30 »), or how many times a
+// day when they are many.
+func scheduleWords(r recurrence, lang string) string {
+	var days []string
+	for d := time.Sunday; d <= time.Saturday; d++ {
+		if r.Days[d] {
+			days = append(days, tr(lang, "card.view.day."+strings.ToLower(d.String())))
 		}
 	}
-	return false
+	when := ""
+	weekdays := r.Days[time.Monday] && r.Days[time.Tuesday] && r.Days[time.Wednesday] && r.Days[time.Thursday] && r.Days[time.Friday]
+	switch {
+	case len(days) == 7:
+		when = tr(lang, "card.view.days.all")
+	case len(days) == 5 && weekdays:
+		when = tr(lang, "card.view.days.week")
+	case len(days) == 2 && r.Days[time.Saturday] && r.Days[time.Sunday]:
+		when = tr(lang, "card.view.days.weekend")
+	default:
+		when = fmt.Sprintf(tr(lang, "card.view.days.some"), strings.Join(days, ", "))
+	}
+	if len(r.Times) > 3 {
+		return when + " " + fmt.Sprintf(tr(lang, "card.view.times.many"), len(r.Times))
+	}
+	var times []string
+	for _, m := range r.Times {
+		if m%60 == 0 {
+			times = append(times, fmt.Sprintf(tr(lang, "card.view.clock.hour"), m/60))
+		} else {
+			times = append(times, fmt.Sprintf(tr(lang, "card.view.clock"), m/60, m%60))
+		}
+	}
+	return when + " " + fmt.Sprintf(tr(lang, "card.view.times.at"), strings.Join(times, ", "))
 }
 
 // viewSourceText is what a block reads, in a word.
@@ -372,34 +506,51 @@ func (c *core) proposedViews() []int64 {
 	return out
 }
 
-// decideView answers a view's card: yes makes the monitor, then the
-// skill, then the node, all approved by this one answer. Everything that
-// could refuse is checked first; a step that still fails takes back those
-// before (the monitor deleted, the skill dropped: the node, made last, is
-// never taken back), and the card waits still. No makes none.
+// decideView answers a view's card, which waits on its draft. Yes makes
+// the monitor, then the skill, then turns the draft into the standing
+// view, all approved by this one answer, and marks done the subjects it
+// was proposed from (it stays linked to them). Everything that could
+// refuse is checked first; a step that still fails takes back those before
+// (the monitor deleted, the skill dropped), and the card waits still. No
+// makes none and archives the draft: the user's answer, as their archive.
+// Called with cardMu held (decideCardWith): no withdraws the draft's other
+// cards itself, as an archive would (withdrawRef); tasks working under the
+// draft are not stopped (a draft opens none).
 func (c *core) decideView(id int64, approve bool) error {
 	v, err := c.viewOf(id)
 	if err != nil || v.State != viewProposed {
 		return errCardDecided
 	}
 	if !approve {
-		_, err := c.store.db.Exec(`UPDATE view_proposals SET state = ? WHERE id = ?`, viewRejected, id)
-		return err
-	}
-	nw := c.viewNew(v)
-	nw.OpenedBy = &nodefile.Origin{By: nodefile.OpenedUser, Card: fmt.Sprintf("view:%d", id)} // their yes on its card
-	// linked to the subjects its card was raised in: on the graph it sits
-	// beside them
-	for _, n := range c.cardNodes(proposalRef(cardViewKind, id)) {
-		if sum, err := c.nodes.Get(n); err == nil && sum.Archived.IsZero() {
-			nw.Links = append(nw.Links, n)
+		if _, err := c.store.db.Exec(`UPDATE view_proposals SET state = ? WHERE id = ?`, viewRejected, id); err != nil {
+			return err
 		}
+		if sum, err := c.nodes.Get(v.Node); err == nil && sum.Archived.IsZero() {
+			ids, _ := c.nodes.Below(v.Node)
+			if err := c.nodes.Archive(v.Node, byUser); err != nil {
+				log.Printf("view %d: its draft %s: %v", id, v.Node, err)
+			}
+			// The other cards that wait on it go with it, as withdrawCards
+			// does on an archive (cardMu is held already).
+			self := proposalRef(cardViewKind, id)
+			for _, nid := range ids {
+				for _, ref := range c.nodeCardRefs(nid) {
+					if ref != self && !c.cardHeld(ref) {
+						c.withdrawRef(context.Background(), ref, cardByArchive)
+					}
+				}
+				c.linkedNodeGone(nid)
+				c.nodeMoved(nid, true)
+			}
+		}
+		return nil
+	}
+	sum, err := c.nodes.Get(v.Node)
+	if err != nil || !sum.Archived.IsZero() {
+		return errCardDecided // its draft is gone: the card goes with it (withdrawCards)
 	}
 	if err := c.viewFree(v.Monitor, v.Skill); err != nil {
 		return err
-	}
-	if err := c.nodes.Check(nw); err != nil {
-		return fmt.Errorf("the node: %w", err)
 	}
 	var monitorID int64
 	if v.Spec != nil {
@@ -432,27 +583,34 @@ func (c *core) decideView(id int64, approve bool) error {
 		}
 		c.store.set(skillFiredKey+k.Name, "")
 	}
-	d, err := c.nodes.Create(nw)
+	d, err := c.nodes.Read(v.Node, 0)
+	if err == nil {
+		d, err = c.nodes.Change(v.Node, d.Version.Hash, byUser, func(n *nodefile.Node) error {
+			n.Meta.Lifetime = nodefile.Standing
+			n.Meta.OpenedBy = &nodefile.Origin{By: nodefile.OpenedUser, Card: fmt.Sprintf("view:%d", id)} // what stands is their yes's
+			if strings.TrimSpace(n.Meta.Title) == v.Title {
+				n.VouchTitle() // the title their yes approved: the card showed it
+			}
+			return nil
+		})
+	}
 	if err != nil {
 		undoSkill()
 		undoMonitor()
 		return fmt.Errorf("the node: %w", err)
 	}
-	// Its blocks that read a server not trusted are external at once; the
-	// first read marks them too (fileSnapshots).
-	if err := c.externalSources(d, nodeByCode); err != nil {
-		log.Printf("view %d: node %s: %v", id, v.Node, err)
-	}
 	_, err = c.store.db.Exec(`UPDATE view_proposals SET state = ? WHERE id = ?`, viewApproved, id)
-	c.readNodeLater(context.Background(), v.Node, nil) // its blocks read at once (node_live.go)
+	for _, subj := range d.Node.Meta.Links { // the subject it came from: its goal is met
+		if s, e := c.nodes.Get(subj); e == nil && s.Archived.IsZero() && s.Done.IsZero() && s.Lifetime == nodefile.Work {
+			if _, e := c.setNodeDone(s, true, byUser); e != nil {
+				log.Printf("view %d: its subject %s: %v", id, subj, e)
+			}
+		}
+	}
+	c.nodeMoved(v.Node, false)
+	c.readNodeLater(context.Background(), v.Node, nil) // its blocks read at once, its monitor's too (node_live.go)
 	c.showNode(v.Node, nodeByCode, false)              // the view opens in front of the user (node_show.go)
 	return err
-}
-
-// viewNew is the node a view makes.
-func (c *core) viewNew(v viewProposal) nodestore.New {
-	return nodestore.New{ID: v.Node, Title: v.Title, Goal: v.Goal, Body: v.Body, Lifetime: nodefile.Standing,
-		External: v.Tainted != "", TitleTrusted: true, Author: "user"} // its title, the user approved: the card showed it
 }
 
 // trustViewTitles: a view's node made before titles were trusted

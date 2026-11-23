@@ -309,22 +309,28 @@ test("the steps of the scenario", async ({ page, request }) => {
   const defaults = watch.getByRole("button", { name: "Fais comme tu proposes" });
   await expect(watch.getByRole("button", { name: "Toutes, et réveille-moi la nuit pour la prod" })).toBeVisible();
   await defaults.click();
-  // The view's card waits for the user's yes: the orb points at it.
-  await expect(said).toContainText("Voici la vue");
+  // The view is proposed as a draft of its own, opened beside the
+  // subject: its card waits on it for the user's yes, and the orb, beside
+  // the draft, points at it.
+  await expect(said).toContainText("Il me faut ton oui ici.");
   await expect(words).toHaveClass(/wait/);
-  // The document says where things stand: the questions and their
-  // buttons gone, the choices written, the card placed under them.
+  const draft = pageOf("Mes mails");
+  await expect(draft).toBeVisible();
+  // The subject says where things stand: the questions and their
+  // buttons gone, the choices written, the draft linked; no card in it.
   await expect(defaults).toHaveCount(0);
   await expect(watch).not.toContainText("Par défaut au brief");
   await expect(watch).toContainText("Ce qu'on a décidé");
-  // The view's card says plainly what its yes makes; its technical words,
-  // the skill's instructions drawn as Markdown, are one click away.
-  const viewCard = watch.locator(".pg-body .pg-card");
+  await expect(watch.locator(".pg-foot")).toHaveCount(0);
+  // The draft's card says in one line what will run by itself, the page
+  // above it its preview; its technical words, the skill's instructions
+  // drawn as Markdown, are one click away.
+  const viewCard = draft.locator(".pg-foot .a2-proposal");
+  await expect(viewCard).toHaveCount(1);
   await expect(viewCard).toContainText("Mes mails");
   await expect(viewCard).toContainText("prévenu au brief, jamais la nuit");
-  await expect(viewCard.locator(".a2-proposal-summary")).toContainText("Une page « Mes mails »");
-  await expect(viewCard.locator(".a2-proposal-summary")).toContainText("Regarde toutes les 5 min s'il y a du nouveau");
-  await expect(watch.locator(".pg-foot")).toHaveCount(0);
+  await expect(viewCard.locator(".a2-proposal-summary")).toHaveText("Toutes les 5 min");
+  await expect(draft).toContainText("Les mails qui demandent une réponse.");
   const details = viewCard.locator("details.a2-proposal-details");
   await expect(details.locator(".a2-proposal-md")).toBeHidden();
   await shot(page, "view-card");
@@ -336,7 +342,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   // On a laptop's screen, where two pages side by side do not fit.
   await page.setViewportSize({ width: 1180, height: 720 });
   await viewCard.getByRole("button", { name: "Oui" }).click();
-  await expect(bubble("Mes mails")).toBeVisible();
+  await expect(page.locator(".gr-node.standing", { has: page.locator('.gr-core[aria-label="Mes mails"]') })).toHaveCount(1);
   await expect(pageOf("Mes mails")).toBeVisible();
   // Opened beside the subject, the view's page takes free room next to
   // it: the two never overlap, the new one is framed whole, its head on
@@ -437,16 +443,19 @@ test("the steps of the scenario", async ({ page, request }) => {
   await page.keyboard.press("Escape");
   await shot(page, "chosen-calls");
 
-  // 15. A card no page holds (proposed at the home, no subject opened)
-  // waits above the bar, with its Oui; answered, it leaves it.
+  // 15. A view proposed at the home, no subject opened: its draft is the
+  // subject, opened in front with its card at its foot, never above the
+  // bar; answered, the card leaves and the page stands.
   await home(page);
   await say("Propose-moi une vue de l'agenda.");
   await expect(said).toContainText("Voici la vue de ton agenda");
-  const loose = page.locator(".cs-aside .cs-cards");
-  await expect(loose).toContainText("Mon agenda");
-  await loose.getByRole("button", { name: "Oui" }).click();
+  const agenda = pageOf("Mon agenda");
+  await expect(agenda).toBeVisible();
   await expect(page.locator(".cs-cards")).toHaveCount(0);
-  await expect(bubble("Mon agenda")).toBeVisible();
+  const agendaCard = agenda.locator(".pg-foot .a2-proposal");
+  await agendaCard.getByRole("button", { name: "Oui" }).click();
+  await expect(agendaCard).toHaveCount(0);
+  await expect(page.locator(".gr-node.standing", { has: page.locator('.gr-core[aria-label="Mon agenda"]') })).toHaveCount(1);
 
   // 16. Asked on the side: its node is born on the graph, not opened, and
   // the bar stays at the home.

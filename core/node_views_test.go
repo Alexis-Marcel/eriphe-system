@@ -100,9 +100,9 @@ func cardsOf(c *core, kind string) []proposal {
 	return out
 }
 
-// « Surveille mes mails »: one card shows the standing node, its monitor
-// and its skill; nothing exists before the yes, and the yes makes all
-// three. A mail comes: the monitor wakes the skill, whose run works in the
+// « Surveille mes mails »: its node opens at once as a draft showing the
+// page, and one card on it shows its monitor and its skill; neither exists
+// before the yes, and the yes makes them and the draft standing. A mail comes: the monitor wakes the skill, whose run works in the
 // standing node: it notes the mail, opens « Répondre à Sam » with a draft,
 // and its send is kept for a « Send? » card on the mail. Nothing is sent
 // before that yes.
@@ -123,8 +123,8 @@ func TestMailViewOneYes(t *testing.T) {
 	if !nodefile.IDOK(node) {
 		t.Fatalf("out %v", out)
 	}
-	if _, err := c.nodes.Get(node); err == nil {
-		t.Fatal("the node exists before the yes")
+	if sum, err := c.nodes.Get(node); err != nil || sum.Lifetime != nodefile.Work {
+		t.Fatalf("the draft is not open before the yes: %+v %v", sum, err)
 	}
 	if _, err := c.monitorNamed("mails"); err == nil {
 		t.Fatal("the monitor exists before the yes")
@@ -146,16 +146,17 @@ func TestMailViewOneYes(t *testing.T) {
 	if !strings.Contains(v.Text("fr"), "Mes mails") {
 		t.Errorf("text %q", v.Text("fr"))
 	}
-	// The card leads with what the yes makes, in plain words; its
-	// technical words are all under Détails, the instructions as Markdown.
-	said := strings.Join(v.SummaryIn("fr"), "\n")
-	for _, want := range []string{"Une page « Mes mails »", "toutes les 1 min s'il y a du nouveau", "À chaque fois : Trie les mails reçus.", "Te prévient de ce qui compte"} {
-		if !strings.Contains(said, want) {
-			t.Errorf("the summary lacks %q:\n%s", want, said)
-		}
+	// The card says in one line what will run by itself (the page is the
+	// preview); its technical words are all under Détails, the
+	// instructions as Markdown.
+	if said := v.SummaryIn("fr"); !slices.Equal(said, []string{"Toutes les 1 min"}) {
+		t.Errorf("the summary: %q", said)
 	}
-	if en := strings.Join(v.SummaryIn("en"), "\n"); !strings.Contains(en, "Checks every 1 min for anything new") {
-		t.Errorf("the English summary:\n%s", en)
+	if en := v.SummaryIn("en"); !slices.Equal(en, []string{"Every 1 min"}) {
+		t.Errorf("the English summary: %q", en)
+	}
+	if !strings.Contains(string(fields), "Trie les mails reçus.") {
+		t.Errorf("what its skill does is not under Détails: %s", fields)
 	}
 	for _, f := range v.FieldsIn("fr") {
 		if !f.Detail {
@@ -484,7 +485,8 @@ func TestUntrustedSourceMarksExternal(t *testing.T) {
 }
 
 // A view's yes makes all three or none: a skill taken meanwhile takes
-// back the node and the monitor, and the card still waits. No makes none.
+// back the monitor, the draft stays a draft, and the card still waits. No
+// makes none and archives the draft.
 // A view's blocks are checked as a task's: a source out of the catalog is
 // refused before any card.
 func TestViewAllOrNothing(t *testing.T) {
@@ -505,8 +507,8 @@ func TestViewAllOrNothing(t *testing.T) {
 	if err := c.decideProposal(context.Background(), cardViewKind, v.ID, true); err == nil {
 		t.Fatal("a view made over a skill taken")
 	}
-	if sum, err := c.nodes.Get(node); err == nil && sum.Archived.IsZero() {
-		t.Fatalf("the node stayed: %+v", sum)
+	if sum, err := c.nodes.Get(node); err != nil || !sum.Archived.IsZero() || sum.Lifetime != nodefile.Work {
+		t.Fatalf("the draft did not stay a draft: %+v %v", sum, err)
 	}
 	if _, err := c.monitorNamed("cpu"); err == nil {
 		t.Fatal("the monitor stayed")
@@ -520,9 +522,12 @@ func TestViewAllOrNothing(t *testing.T) {
 	if p := c.proposalOf(cardViewKind, v.ID); p.Pending || p.Outcome != cardRejected {
 		t.Fatalf("after no %+v", p)
 	}
+	if sum, err := c.nodes.Get(node); err != nil || sum.Archived.IsZero() {
+		t.Fatalf("no left the draft: %+v %v", sum, err)
+	}
 
 	// A step that fails after the first write: the monitor made is taken
-	// back, no node is made, the card waits, and a yes later makes all.
+	// back, the draft stays one, the card waits, and a yes later makes all.
 	c.store.deleteSkill("prod")
 	out, isErr = callBrainTool(t, c, "propose_view", in)
 	if isErr {
@@ -538,14 +543,14 @@ func TestViewAllOrNothing(t *testing.T) {
 	if _, err := c.monitorNamed("cpu"); err == nil {
 		t.Fatal("the monitor stayed")
 	}
-	if _, err := c.nodes.Get(node); err == nil {
-		t.Fatal("the node was made")
+	if sum, err := c.nodes.Get(node); err != nil || sum.Lifetime != nodefile.Work {
+		t.Fatalf("the draft changed: %+v %v", sum, err)
 	}
 	if err := c.decideProposal(context.Background(), cardViewKind, v.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.nodes.Get(node); err != nil {
-		t.Fatalf("the node, at the second yes: %v", err)
+	if sum, err := c.nodes.Get(node); err != nil || sum.Lifetime != nodefile.Standing {
+		t.Fatalf("the node, at the second yes: %+v %v", sum, err)
 	}
 
 	in["body"] = "```eriphe:block etat\n" + `{"components": {"component": "Text", "text": {"@path": "/x/v"}}, "sources": {"x": {"tool": "nowhere/read"}}}` + "\n```\n"
@@ -674,22 +679,31 @@ func TestViewCardWords(t *testing.T) {
 	}
 }
 
-// A view's summary says each way it may run and tell: an incoming
-// address, an urgent text, no skill at all.
+// A view's summary is one line of what runs by itself: how often its
+// monitor looks, when its skill runs on a schedule; a page alone is kept
+// up to date.
 func TestViewSummary(t *testing.T) {
-	listen := viewProposal{Title: "Ma prod", Spec: &monitorSpec{Way: wayListen},
-		manifest: &skillManifest{Description: "Regarde l'alerte.", Trigger: &skillTrigger{Urgent: "Prod en panne"}}}
-	got := strings.Join(viewSummary(listen, "fr"), "\n")
-	for _, want := range []string{"Une page « Ma prod »", "dès qu'un événement arrive", "À chaque fois : Regarde l'alerte.", "à toute heure avec « Prod en panne »"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("lacks %q:\n%s", want, got)
+	day, err := parseSchedule("daily 07:30")
+	if err != nil {
+		t.Fatal(err)
+	}
+	week, _ := parseSchedule("weekdays 08:00,18:00")
+	some, _ := parseSchedule("monday,thursday 09:00")
+	for _, tc := range []struct {
+		lang string
+		v    viewProposal
+		want string
+	}{
+		{"fr", viewProposal{Spec: &monitorSpec{Every: 15}, manifest: &skillManifest{Trigger: &skillTrigger{Schedule: &day}}}, "Toutes les 15 min · chaque jour à 7 h 30"},
+		{"en", viewProposal{Spec: &monitorSpec{Every: 15}, manifest: &skillManifest{Trigger: &skillTrigger{Schedule: &day}}}, "Every 15 min · every day at 7:30"},
+		{"fr", viewProposal{Spec: &monitorSpec{Way: wayListen}}, "À chaque événement"},
+		{"fr", viewProposal{manifest: &skillManifest{Trigger: &skillTrigger{Schedule: &week}}}, "En semaine à 8 h, 18 h"},
+		{"en", viewProposal{manifest: &skillManifest{Trigger: &skillTrigger{Schedule: &some}}}, "On Monday, Thursday at 9:00"},
+		{"en", viewProposal{Spec: &monitorSpec{Every: 60, Cond: condChanged}}, "Every 1 h"},
+		{"fr", viewProposal{Title: "Seule"}, "Tenue à jour"},
+	} {
+		if got := viewSummary(tc.v, tc.lang); !slices.Equal(got, []string{tc.want}) {
+			t.Errorf("%s: %q, want %q", tc.lang, got, tc.want)
 		}
-	}
-	changed := viewProposal{Title: "PR", Spec: &monitorSpec{Every: 60, Cond: condChanged}}
-	if got := viewSummary(changed, "en"); len(got) != 2 || got[1] != "Checks every 1 h whether something changed" {
-		t.Errorf("summary %q", got)
-	}
-	if got := viewSummary(viewProposal{Title: "Seule"}, "fr"); len(got) != 1 {
-		t.Errorf("a view alone: %q", got)
 	}
 }

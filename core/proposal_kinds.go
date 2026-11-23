@@ -148,6 +148,11 @@ func init() {
 			withdraw: func(c *core, _ context.Context, id int64) error {
 				_, err := c.store.db.Exec(`UPDATE view_proposals SET state = ? WHERE id = ? AND state = ?`, viewDropped, id, viewProposed)
 				return err
+			},
+			node: func(c *core, id int64) string { // its draft: the card waits on it
+				var node string
+				c.store.db.QueryRow(`SELECT node FROM view_proposals WHERE id = ?`, id).Scan(&node)
+				return node
 			}},
 	}
 	for _, k := range proposalKinds {
