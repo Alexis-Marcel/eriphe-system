@@ -588,7 +588,7 @@ export function Quote({ p }: { p: Row }) {
       <blockquote>{str(p.text)}</blockquote>
       <figcaption>
         <b>{nameOf(str(p.from))}</b>
-        {p.date ? ` · ${relative("fr", p.date)}` : ""}
+        {p.date ? ` · ${new Date(str(p.date)) > new Date() ? new Date(str(p.date)).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : relative("fr", p.date)}` : ""}
         {p.url ? <span className="bv-quote-url"> · {new URL(str(p.url)).host}</span> : null}
       </figcaption>
     </figure>
