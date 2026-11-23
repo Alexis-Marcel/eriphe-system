@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -94,6 +95,7 @@ type scenario struct {
 	tasks  map[string]string // each worker task's role: style, plan, research, check
 	finish map[string]chan struct{}
 	turns  [][]string // the user's lines of each of the brain's turns (waiting.spec.ts)
+	failed bool       // the live bench: the plan's first try has failed (liveWork)
 
 	// live, for the nodes' bench (nodes_bench_live_test.go): the brain is
 	// a real model, started by eriphe-core as on an install, and the
@@ -210,7 +212,8 @@ func (sc *scenario) seed() {
 		time.Sleep(time.Second)
 	}
 	mk("day", nodestore.New{Title: "Ma journée", Lifetime: nodefile.Standing, Body: "Ce qui se passe aujourd'hui.\n"})
-	mk("substack", nodestore.New{Title: "Substack", Lifetime: nodefile.Standing, Goal: "Lancer la newsletter", Body: "La newsletter : des articles sur le métier.\n"})
+	mk("substack", nodestore.New{Title: "Substack", Lifetime: nodefile.Standing, Goal: "Lancer la newsletter", Body: "La newsletter : des articles sur le métier de développeur, un par semaine.\n\n" +
+		"Les articles qui marchent le mieux : « Dix ans de code », « Ce que m'a appris ma première panne », « Le métier change ».\n"})
 	mk("mails", nodestore.New{Title: "Mails", Lifetime: nodefile.Standing, Body: "Les mails qui comptent.\n"})
 	sc.c.store.addMessage(roleBrain, "Bonjour. Rien ne t'attend ce matin.", true)
 }
@@ -221,13 +224,14 @@ type scenarioTools struct {
 	mu      sync.Mutex
 	lit     []string
 	sent    []string
-	moved   [][]string // move: the ids of each call (view-rows.spec.ts)
-	deleted [][]string // supprimer: the ids of each call (sections.spec.ts)
-	read    []string   // lire: the id of each call (sources-open.spec.ts)
-	trashed []string   // trash: "<account>:<ids>" of each call (view-bilan.spec.ts)
-	replied []string   // repondre: the id of each call (view-bilan.spec.ts)
-	purged  []string   // purger: the ids it deleted (view-refresh.spec.ts)
-	kw      float64    // conso: the house's consumption (view-glance.spec.ts)
+	moved   [][]string       // move: the ids of each call (view-rows.spec.ts)
+	deleted [][]string       // supprimer: the ids of each call (sections.spec.ts)
+	read    []string         // lire: the id of each call (sources-open.spec.ts)
+	trashed []string         // trash: "<account>:<ids>" of each call (view-bilan.spec.ts)
+	replied []string         // repondre: the id of each call (view-bilan.spec.ts)
+	purged  []string         // purger: the ids it deleted (view-refresh.spec.ts)
+	kw      float64          // conso: the house's consumption (view-glance.spec.ts)
+	arrived []map[string]any // recus: the mails that came after the received (the live bench)
 	// veille: the news watch's server, whose tool changes after it was
 	// added (tools.spec.ts).
 	veille *mcp.Server
@@ -254,6 +258,15 @@ var bilan = []map[string]any{
 	{"id": "j3", "subject": "Votre colis est bloqué", "from": "colis@example.net", "account": "perso", "date": "2026-11-18T12:00:00Z", "body": "Payez 1,99 € pour le débloquer."},
 	{"id": "i1", "subject": "Facture d'électricité", "from": "energie@example.org", "account": "perso", "date": "2026-11-18T09:00:00Z", "body": "62 €, prélevés le 5 décembre."},
 	{"id": "i2", "subject": "Entraînement de samedi", "from": "club@example.org", "account": "travail", "date": "2026-11-17T18:00:00Z", "body": "Avancé à 9 h."},
+}
+
+// received are the mails recus lists, lire reads whole: the urgent one
+// the mails' skill sorted (scenario.mail) among them, so that a reply to
+// it finds it.
+var received = []map[string]any{
+	{"id": "m1", "subject": "Facture d'octobre", "from": "facturation@example.org", "date": "2026-11-20T07:00:00Z", "body": "Votre facture d'octobre : 38 €."},
+	{"id": "m2", "subject": "La prod renvoie des 500", "from": "Sam <sam@example.org>", "date": "2026-11-20T10:05:00Z",
+		"body": "Bonjour,\n\nL'app de production renvoie des erreurs 500 depuis 10 h. Tu peux regarder ?\n\nSam"},
 }
 
 // courrier is the mailbox of the view a call to approve lands on
@@ -338,9 +351,13 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 	case "mail":
 		mcp.AddTool(s, &mcp.Tool{Name: "recus", Description: "Les mails reçus", Annotations: read},
 			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
-				return nil, map[string]any{"messages": []any{
-					map[string]any{"id": "m1", "subject": "Facture d'octobre", "from": "facturation@example.org"},
-				}}, nil
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				msgs := []any{}
+				for _, m := range append(slices.Clone(received), f.arrived...) {
+					msgs = append(msgs, map[string]any{"id": m["id"], "subject": m["subject"], "from": m["from"], "date": m["date"]})
+				}
+				return nil, map[string]any{"messages": msgs}, nil
 			})
 		mcp.AddTool(s, &mcp.Tool{Name: "boite", Description: "La boîte de réception", Annotations: read},
 			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
@@ -450,6 +467,11 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				f.mu.Lock()
 				defer f.mu.Unlock()
 				f.read = append(f.read, in.ID)
+				for _, m := range append(slices.Clone(received), f.arrived...) {
+					if m["id"] == in.ID {
+						return nil, m, nil
+					}
+				}
 				return nil, map[string]any{"subject": "Ordre du jour", "from": "Sam <sam@example.org>", "date": "2026-11-20T09:00:00Z",
 					"body": "Bonjour,\nvoici l'ordre du jour de " + in.ID + "."}, nil
 			})
@@ -555,8 +577,8 @@ func (sc *scenario) play(a deviceAssignment) {
 		sc.report(a.ID, deviceReport{State: stateStopped})
 		return
 	}
-	if t.Kind == "brain" && sc.live != nil {
-		sc.live.assign(a)
+	if sc.live != nil && (t.Kind == "brain" || sc.c.runOfTask(a.ID) != nil) {
+		sc.live.assign(a) // the brain, and a skill's run: the bench's model
 		return
 	}
 	if t.Kind == "brain" {
@@ -581,6 +603,9 @@ func (sc *scenario) play(a deviceAssignment) {
 	_, known := sc.tasks[a.ID]
 	if !known {
 		sc.tasks[a.ID] = workerRole(t)
+		for _, it := range a.Inbox {
+			sc.inbox[a.ID] = max(sc.inbox[a.ID], it.Seq) // what it starts with
+		}
 	}
 	sc.mu.Unlock()
 	if !known {
@@ -589,6 +614,22 @@ func (sc *scenario) play(a deviceAssignment) {
 			go sc.liveWork(a.ID, t)
 		} else {
 			go sc.work(a.ID, workerRole(t))
+		}
+		return
+	}
+	if sc.live == nil {
+		return
+	}
+	// The live bench: a message to a worker that finished its turn (a
+	// step's retry) is a new turn of its work.
+	for _, it := range a.Inbox {
+		sc.mu.Lock()
+		done := it.Kind != "message" || it.Seq <= sc.inbox[a.ID]
+		sc.inbox[a.ID] = max(sc.inbox[a.ID], it.Seq)
+		sc.mu.Unlock()
+		if !done {
+			sc.report(a.ID, deviceReport{State: stateRunning, Delivered: it.Seq})
+			go sc.liveWork(a.ID, t)
 		}
 	}
 }
@@ -1166,9 +1207,8 @@ func (sc *scenario) handleTurns(rw http.ResponseWriter, r *http.Request) {
 // into one (call_fold.go).
 func (sc *scenario) handleProposals(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
-	found, _ := c.nodes.Find("Mes mails", false, 10)
 	node := ""
-	for _, s := range found {
+	for _, s := range liveSummaries(sc.t, c) {
 		if s.Title == "Mes mails" {
 			node = s.ID
 		}
@@ -1543,7 +1583,8 @@ func (sc *scenario) mail() (string, error) {
 	c := sc.c
 	d, err := c.nodes.Create(nodestore.New{Title: "Urgent : la prod renvoie des 500", Parent: sc.nodes["mails"], External: true, Author: "skill:mails",
 		OpenedBy: &nodefile.Origin{By: nodefile.OpenedSkill, Skill: "mails-trier", On: "monitor:mails-recus", Node: sc.nodes["mails"]},
-		Body:     "**Tri** : urgent. Sam (sam@example.org) écrit que l'app de production renvoie des erreurs 500 depuis 10 h.\n\n**Brouillon** : À écrire.\n"})
+		Body: "**Tri** : urgent. Sam (sam@example.org) écrit que l'app de production renvoie des erreurs 500 depuis 10 h.\n\n" +
+			"**Mail** : « La prod renvoie des 500 », id m2 (mail/recus).\n\n**Brouillon** : À écrire.\n"})
 	if err != nil {
 		return "", err
 	}
@@ -1563,22 +1604,35 @@ func nodeAsks(c *core, id string) bool {
 	if err != nil {
 		return false
 	}
-	for _, b := range d.Node.Blocks() {
-		var list []struct {
-			Action struct {
-				Event struct {
-					Name string `json:"name"`
-				} `json:"event"`
-			} `json:"action"`
-		}
-		json.Unmarshal(b.Components, &list)
-		for _, comp := range list {
-			if comp.Action.Event.Name == "ask" {
-				return true
-			}
+	return slices.ContainsFunc(d.Node.Blocks(), func(b *nodefile.Block) bool { return blockAsks(b.Components) })
+}
+
+// blockAsks tells a block's components that hold a button's ask.
+func blockAsks(components json.RawMessage) bool {
+	var list []struct {
+		Action struct {
+			Event struct {
+				Name string `json:"name"`
+			} `json:"event"`
+		} `json:"action"`
+	}
+	json.Unmarshal(components, &list)
+	for _, comp := range list {
+		if comp.Action.Event.Name == a2ui.ActionAsk {
+			return true
 		}
 	}
 	return false
+}
+
+// liveSummaries are the graph's nodes now.
+func liveSummaries(t testing.TB, c *core) []nodestore.Summary {
+	t.Helper()
+	all, err := c.nodes.Graph()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return all
 }
 
 // prodNotes is the Production page's long document: paragraphs and a
