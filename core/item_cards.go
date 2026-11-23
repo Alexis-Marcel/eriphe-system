@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"slices"
-	"sync"
 	"time"
 )
 
@@ -418,15 +417,11 @@ func (c *core) itemCardMoved(batch int64) {
 			return // not decided: one folded away, or a run still open
 		}
 	}
-	key := fmt.Sprintf("item_card_settled:%d", batch)
-	itemSettleMu.Lock()
-	settled := c.store.get(key) != ""
-	if !settled {
-		c.store.set(key, "1")
-	}
-	itemSettleMu.Unlock()
-	if settled {
-		return // its decision and its call's end may both come here
+	// Once: its decision and its call's end may both come here. The mark
+	// is its first call's (the batch's own row), gone with it.
+	res, err := c.store.db.Exec(`UPDATE access_asks SET settled = 1 WHERE id = ? AND settled = 0`, batch)
+	if n, _ := rowsOf(res, err); n != 1 {
+		return
 	}
 	// Done once its yes ran, every call well: one failed leaves the item
 	// as it was (its card leaves the row all the same, decided).
@@ -459,9 +454,6 @@ func (c *core) itemDoneByCode(node, source, item string) {
 
 // itemDone is the state of an item whose matter is over (item_note's done).
 const itemDone = "done"
-
-// itemSettleMu makes an item's card settle once.
-var itemSettleMu sync.Mutex
 
 // itemCallDone keeps how a call on an item went in its node's trace,
 // once decided: not a run's (its note keeps it); one that failed is

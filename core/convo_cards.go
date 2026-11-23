@@ -30,14 +30,16 @@ import (
 //     anything else that goes to the user, under a message of eriphe-core's,
 //     a few at a time (attention.go).
 //   - A card that stops a task (blocksATask) never waits for a good moment:
-//     if its turn wrote nothing, as when the turn failed, it goes with the
-//     brain's next message, whatever the hour.
+//     if its turn wrote nothing, as when the turn failed, the queue
+//     delivers it at once, whatever the hour (its weight); one still queued
+//     goes with the brain's next message (claimBlockingCards).
+//   - A card's state is the one truth of what waits: its proposal moves it
+//     the moment it moves, wherever it was answered (settleCards).
 //   - The brain never approves: no tool of its decides a card. A plain
 //     "oui" or "non" of the user's may, under strict rules (resolveByText).
 //
-// A task's raw permissions (a held tool's) keep their own cards,
-// at the end of the conversation (pending); what the grid asks is a card
-// here (access_card.go).
+// What a task asks of the user (what the grid asks, the release of a tool
+// lent held back) is a card here too (access_card.go).
 
 const convoCardsSchema = `CREATE TABLE IF NOT EXISTS convo_cards (
 	id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,8 +74,6 @@ const (
 
 	cardTextAnswer = 30 * time.Minute // a plain yes or no answers a card this recent only
 )
-
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardSetting, cardTaskStart, cardUnlearn, cardAccess, cardSkill, cardRunCalls, cardCalls, cardMonitor, cardViewKind}
 
 // cardUnlearn is an undo of the learning journal the brain proposed on a
 // tainted turn (learning_tools.go).
@@ -213,90 +213,8 @@ func (p proposal) Text(lang string) string {
 // proposalOf reads a proposal; a missing one is gone.
 func (c *core) proposalOf(kind string, id int64) proposal {
 	p := proposal{Kind: kind, ID: id, Outcome: cardGone}
-	switch kind {
-	case cardMemory:
-		if c.mem == nil {
-			return p
-		}
-		x, err := c.mem.memory(id)
-		if err != nil {
-			return p
-		}
-		p.Pending, p.Extracted = x.Status == memProposed, x.SourceKind == srcExtraction
-		p.Tainted = externalWhy(x.Trust, x.Flags, x.SourceRef)
-		switch x.Status {
-		case memDeleted:
-			p.Outcome = cardRejected
-		case memActive, memArchived:
-			p.Outcome = cardApproved
-		}
-		p.text = func(string) string { return x.Text }
-	case cardIntention:
-		if c.mem == nil {
-			return p
-		}
-		x, err := c.mem.intention(id)
-		if err != nil {
-			return p
-		}
-		p.Pending, p.Extracted = x.State == intentProposed, x.SourceKind == srcExtraction
-		p.Tainted = externalWhy(x.Trust, x.Flags, x.SourceRef)
-		p.Outcome = cardApproved
-		if x.State == intentCancelled {
-			p.Outcome = cardRejected
-		}
-		p.text = func(lang string) string {
-			if x.DueAt.IsZero() {
-				return x.Text
-			}
-			return x.Text + " · " + x.DueAt.In(c.notifyZone()).Format("2006-01-02 15:04")
-		}
-	case cardRule:
-		r, err := c.notifyRule(id)
-		if err != nil {
-			return p
-		}
-		p.Pending, p.Tainted, p.Why, p.Outcome = r.State == ruleProposed, r.Tainted, r.Why, cardApproved
-		p.text = func(lang string) string { return ruleText(r, lang) }
-	case cardSetting:
-		var name, value, why, tainted string
-		err := c.store.db.QueryRow(`SELECT name, value, why, tainted FROM setting_proposals WHERE id = ?`, id).Scan(&name, &value, &why, &tainted)
-		if err != nil {
-			return p
-		}
-		p.Pending, p.Tainted, p.Why = true, tainted, why
-		p.text = func(lang string) string { return tr(lang, "setting.name."+name) + " : " + value }
-	case cardTaskStart:
-		return c.taskStartProposal(p) // task_start.go
-	case cardAccess:
-		return c.accessProposal(p) // access_card.go
-	case cardSkill:
-		return c.skillProposal(p) // skill_write.go
-	case cardRunCalls:
-		return c.runCallsProposal(p) // skill_cards.go
-	case cardCalls:
-		return c.callsProposal(p) // item_cards.go
-	case cardMonitor:
-		return c.monitorProposal(p) // monitors.go
-	case cardViewKind:
-		return c.viewProposalOf(p) // view_card.go
-	case cardUnlearn:
-		if c.mem == nil {
-			return p
-		}
-		e, err := c.mem.learning(id)
-		if err != nil {
-			return p
-		}
-		p.Pending, p.Why = e.Undo == undoProposed && e.Status != learnReverted, e.UndoWhy
-		p.Outcome = cardApproved
-		if e.Undo == undoRejected {
-			p.Outcome = cardRejected
-		}
-		if e.Trust == trustExternal {
-			p.Tainted = "external:" + e.Target()
-		}
-		p.text = func(lang string) string { return fmt.Sprintf(tr(lang, "card.unlearn"), learnedSummary(e, lang)) }
+	if k, ok := kindsOf[kind]; ok {
+		return k.read(c, p)
 	}
 	return p
 }
@@ -341,79 +259,10 @@ func ruleBoundsText(r notifyRule, lang string) string {
 // pendingProposals lists every proposal that waits, oldest first by kind.
 func (c *core) pendingProposals() []proposal {
 	var out []proposal
-	add := func(kind string, id int64) {
-		if p := c.proposalOf(kind, id); p.Pending {
-			out = append(out, p)
-		}
-	}
-	if m := c.mem; m != nil {
-		// The extraction's proposals get no card: they wait in À valider
-		// and expire undecided (memory_extract.go).
-		if xs, err := m.list(`status = 'proposed' AND source_kind != ?`, []any{srcExtraction}, `recorded_at, id`, 200); err == nil {
-			for _, x := range xs {
-				add(cardMemory, x.ID)
-			}
-		}
-		if xs, err := m.intentions(intentProposed); err == nil {
-			for _, x := range xs {
-				add(cardIntention, x.ID)
-			}
-		}
-	}
-	if rs, err := c.notifyRules(ruleProposed); err == nil {
-		for _, r := range rs {
-			add(cardRule, r.ID)
-		}
-	}
-	if ps, err := c.settingProposals(); err == nil {
-		for _, s := range ps {
-			add(cardSetting, s.ID)
-		}
-	}
-	for _, id := range c.proposedStarts() { // task_start.go
-		add(cardTaskStart, id)
-	}
-	for _, id := range c.proposedAccess() {
-		add(cardAccess, id)
-	}
-	if rows, err := c.store.db.Query(`SELECT rowid FROM skills WHERE pending != '' AND source = ?`, skillFromEriphe); err == nil {
-		var ids []int64
-		for rows.Next() {
-			var id int64
-			if rows.Scan(&id) == nil {
-				ids = append(ids, id)
-			}
-		}
-		rows.Close()
-		for _, id := range ids {
-			add(cardSkill, id)
-		}
-	}
-	for _, id := range c.runsWithCalls() {
-		add(cardRunCalls, id)
-	}
-	for _, id := range c.proposedBatches() {
-		add(cardCalls, id)
-	}
-	for _, id := range c.proposedMonitors() {
-		add(cardMonitor, id)
-	}
-	for _, id := range c.proposedViews() {
-		add(cardViewKind, id)
-	}
-	if m := c.mem; m != nil {
-		rows, err := m.db.Query(`SELECT id FROM learning_log WHERE undo = ? AND status != ? ORDER BY id`, undoProposed, learnReverted)
-		if err == nil {
-			var ids []int64
-			for rows.Next() {
-				var id int64
-				if rows.Scan(&id) == nil {
-					ids = append(ids, id)
-				}
-			}
-			rows.Close()
-			for _, id := range ids {
-				add(cardUnlearn, id)
+	for _, kind := range proposalKinds {
+		for _, id := range kindsOf[kind].waiting(c) {
+			if p := c.proposalOf(kind, id); p.Pending {
+				out = append(out, p)
 			}
 		}
 	}
@@ -426,54 +275,18 @@ func (c *core) pendingProposals() []proposal {
 // proposal that no longer waits: an answer never touches what is already
 // in force.
 func (c *core) decideProposal(ctx context.Context, kind string, id int64, approve bool) error {
-	p := c.proposalOf(kind, id)
-	if !p.Pending {
+	k, ok := kindsOf[kind]
+	if !ok {
+		return fmt.Errorf("no proposal kind %q", kind)
+	}
+	if !c.proposalOf(kind, id).Pending {
 		return errCardDecided
 	}
-	switch kind {
-	case cardMemory:
-		if approve {
-			_, err := c.mem.approve(id, "owner")
-			return err
-		}
-		return c.mem.forget(id, "owner", "rejected")
-	case cardIntention:
-		ch, action := intentionChange{State: intentOpen}, "approve"
-		if !approve {
-			ch, action = intentionChange{State: intentCancelled}, "reject"
-		}
-		_, err := c.mem.changeIntention(id, ch, "owner", action)
+	if err := k.decides(c, ctx, id, approve); err != nil {
 		return err
-	case cardRule:
-		if approve {
-			_, err := c.approveNotifyRule(id)
-			return err
-		}
-		return c.deleteNotifyRule(id)
-	case cardSetting:
-		return c.decideSetting(id, approve)
-	case cardTaskStart:
-		return c.decideTaskStart(id, approve)
-	case cardAccess:
-		return c.decideAccess(ctx, id, approve)
-	case cardSkill:
-		return c.decideSkill(id, approve)
-	case cardRunCalls:
-		return c.decideRunCalls(ctx, id, approve)
-	case cardCalls:
-		return c.decideCalls(ctx, id, approve)
-	case cardMonitor:
-		return c.decideMonitor(id, approve)
-	case cardViewKind:
-		return c.decideView(id, approve)
-	case cardUnlearn:
-		if approve {
-			_, err := c.unlearn(id, "owner", p.Why, nil)
-			return err
-		}
-		return c.mem.setUndo(id, undoRejected, p.Why)
 	}
-	return fmt.Errorf("no proposal kind %q", kind)
+	c.settleRef(proposalRef(kind, id)) // its card, at once (decideCardWith then says who)
+	return nil
 }
 
 var (
@@ -561,11 +374,87 @@ func (c *core) cardAgain(p proposal) {
 
 // syncCards gives every waiting proposal without a waiting card one,
 // queued, linked to the node it belongs to (one raised before it was
-// linked waits there too).
+// linked waits there too). Only at start (reconcileCards): a proposal
+// gets its card where it is made.
 func (c *core) syncCards() {
-	c.foldCalls() // same-kind calls cards made before (call_fold.go)
 	for _, p := range c.pendingProposals() {
 		c.syncCard(p)
+	}
+}
+
+// cardQueued gives a proposal made outside a turn, by no one who shows it
+// (the memory's extraction), its card, queued: the attention queue
+// delivers it at its card's weight (attendQueuedCards).
+func (c *core) cardQueued(kind string, id int64) {
+	p := c.proposalOf(kind, id)
+	if !p.Pending {
+		return
+	}
+	c.syncCard(p)
+	c.attendQueuedCards()
+}
+
+// reconcileCards puts the cards in step with their proposals once, when
+// eriphe-core starts: a proposal and its card are written one after the
+// other, not in one transaction, so a stop between the two leaves them
+// apart; and what was queued waits in the attention queue again. Past
+// that, each proposal moves its card the moment it moves (settleCards).
+func (c *core) reconcileCards() {
+	c.syncCards()
+	c.settleCards()
+	c.attendQueuedCards()
+}
+
+// settleCards reads the waiting cards of kinds (of all kinds when none)
+// again against their proposals: a proposal decided elsewhere, or gone,
+// is said so on its card at once, it leaves the attention queue, and its
+// nodes stop waiting on it (proposalMoved). Whatever moves a proposal
+// other than its card calls it: a task's state, the memory's store, a
+// page. It takes no lock: decideCardWith calls it too, through a
+// decider.
+func (c *core) settleCards(kinds ...string) {
+	where, args := `state = ?`, []any{cardPending}
+	if len(kinds) > 0 {
+		where += ` AND kind IN (?` + strings.Repeat(`, ?`, len(kinds)-1) + `)`
+		for _, k := range kinds {
+			args = append(args, k)
+		}
+	}
+	xs, err := c.cardsWhere(where, args...)
+	if err != nil {
+		return
+	}
+	for _, x := range xs {
+		c.settleCard(x)
+	}
+}
+
+// settleRef settles the waiting card of one proposal.
+func (c *core) settleRef(ref string) {
+	xs, err := c.cardsWhere(`ref = ? AND state = ?`, ref, cardPending)
+	if err != nil {
+		return
+	}
+	for _, x := range xs {
+		c.settleCard(x)
+	}
+}
+
+// settleCard says on a waiting card what came of its proposal, if it no
+// longer waits.
+func (c *core) settleCard(x convoCard) {
+	kind, id, ok := parseProposalRef(x.Ref)
+	if !ok || x.State != cardPending {
+		return
+	}
+	p := c.proposalOf(kind, id)
+	if p.Pending {
+		return
+	}
+	res, err := c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ? WHERE id = ? AND state = ?`, p.Outcome, time.Now().Unix(), x.ID, cardPending)
+	if n, _ := rowsOf(res, err); n > 0 {
+		c.attentionDone(cardItemRef(x.ID))
+		c.proposalMoved(x.Ref)
 	}
 }
 
@@ -617,32 +506,28 @@ func (c *core) claimBlockingCards() {
 
 // cardsTurnEnded attaches what the brain proposed after its last message
 // to that message; without one in the turn, its cards go back to the
-// queue. Called with relayMu held.
+// queue, which delivers them (attendQueuedCards). Called with relayMu
+// held.
 func (c *core) cardsTurnEnded() {
 	if c.brainSeqOfTurn > 0 {
 		c.attachTurnCards(c.brainSeqOfTurn)
-	} else {
-		c.store.db.Exec(`UPDATE convo_cards SET turn = 0 WHERE seq = 0 AND turn = 1`)
+	} else if res, err := c.store.db.Exec(`UPDATE convo_cards SET turn = 0 WHERE seq = 0 AND turn = 1`); err == nil {
+		if n, _ := res.RowsAffected(); n > 0 {
+			c.attendQueuedCards()
+		}
 	}
 	c.brainSeqOfTurn = 0
 }
 
-// liveCard reads a card's proposal and keeps its state: a proposal decided
-// elsewhere, or gone, is said so on its card.
+// liveCard is a card with its proposal, read now. The card's state is the
+// one truth of whether it waits: its proposal moves it when it moves
+// (settleCards).
 func (c *core) liveCard(x convoCard) (convoCard, proposal) {
 	kind, id, ok := parseProposalRef(x.Ref)
 	if !ok {
 		return x, proposal{}
 	}
-	p := c.proposalOf(kind, id)
-	if x.State == cardPending && !p.Pending {
-		x.State = p.Outcome
-		res, err := c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ? WHERE id = ? AND state = ?`, x.State, time.Now().Unix(), x.ID, cardPending)
-		if n, _ := rowsOf(res, err); n > 0 {
-			c.proposalMoved(x.Ref)
-		}
-	}
-	return x, p
+	return x, c.proposalOf(kind, id)
 }
 
 // decideCard is a card's Oui or ✕: its proposal's own approval.
@@ -668,13 +553,10 @@ func (c *core) decideCardWith(ctx context.Context, id int64, approve bool, by st
 	}
 	kind, pid, _ := parseProposalRef(x.Ref)
 	if err := decide(kind, pid); err != nil {
+		if errors.Is(err, errCardDecided) {
+			c.settleCard(x) // moved where its card did not hear of it
+		}
 		return x, err
-	}
-	if kind == cardTaskStart && !approve && by != "text" {
-		c.taskStartDeclined(pid) // a "non" in words is told with the message
-	}
-	if kind == cardAccess && by != "text" {
-		c.accessDecidedTold(pid, approve)
 	}
 	x.State, x.Decided, x.By = cardRejected, time.Now(), by
 	if approve {
@@ -684,8 +566,8 @@ func (c *core) decideCardWith(ctx context.Context, id int64, approve bool, by st
 	c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = ? WHERE id = ?`, x.State, x.Decided.Unix(), by, id)
 	c.callsDecided(x)      // its words as decided, what still waits on a new card (call_fold.go)
 	c.proposalMoved(x.Ref) // and the nodes it is linked to
-	if kind == cardCalls {
-		c.itemCardMoved(pid) // its item's row (item_cards.go)
+	if after := kindsOf[kind].decided; after != nil {
+		after(c, pid, approve, by) // whom its kind tells (proposal_kinds.go)
 	}
 	log.Printf("cards: %s %s by %s", x.Ref, x.State, by)
 	return x, nil
@@ -780,7 +662,7 @@ func (c *core) resolveByText(ctx context.Context, seq int) (convoCard, bool) {
 	if !ok || me.Time.Sub(brain.Time) > cardTextAnswer {
 		return none, false
 	}
-	if c.store.get(taintKey(brain.Seq)) != "" {
+	if c.store.msgTaint(brain.Seq) != "" {
 		return none, false // written in a tainted turn: the buttons only
 	}
 	cards, err := c.cardsWhere(`seq = ?`, brain.Seq)
@@ -791,7 +673,7 @@ func (c *core) resolveByText(ctx context.Context, seq int) (convoCard, bool) {
 	if x.State != cardPending || p.Tainted != "" || x.Kind == cardAccess || x.Kind == cardCalls {
 		return none, false // an access card comes at any moment, an item's is answered on its row: a yes may be for something else, so their buttons only
 	}
-	x, err = c.decideCard(ctx, x.ID, yes, "text")
+	x, err = c.decideCard(ctx, x.ID, yes, byText)
 	if err != nil {
 		return none, false
 	}
@@ -929,29 +811,8 @@ func (c *core) withdrawRef(ctx context.Context, ref, by string) bool {
 // for withdrawn (withdrawAsk); another kind is answered no through its own
 // approval, which only records it.
 func (c *core) withdrawProposal(ctx context.Context, kind string, id int64) error {
-	switch kind {
-	case cardViewKind:
-		_, err := c.store.db.Exec(`UPDATE view_proposals SET state = ? WHERE id = ? AND state = ?`, viewDropped, id, viewProposed)
-		return err
-	case cardMemory:
-		return c.mem.forget(id, "owner", "withdrawn: its node was archived")
-	case cardAccess:
-		a, err := c.accessAskOf(id)
-		if err != nil {
-			return errCardDecided
-		}
-		c.withdrawAsk(ctx, a)
-		return nil
-	case cardCalls:
-		for _, a := range c.batchAsks(id) {
-			c.withdrawAsk(ctx, a)
-		}
-		return nil
-	case cardRunCalls:
-		for _, a := range c.runAsks(id) {
-			c.withdrawAsk(ctx, a)
-		}
-		return nil
+	if k, ok := kindsOf[kind]; ok && k.withdraw != nil {
+		return k.withdraw(c, ctx, id)
 	}
 	return c.decideProposal(ctx, kind, id, false)
 }
@@ -967,7 +828,7 @@ func (c *core) withdrawAsk(ctx context.Context, a accessQuestion) {
 		return
 	}
 	log.Printf("access ask %d: withdrawn, its node archived", a.ID)
-	if a.Call == "" && len(a.Refs) == 0 {
-		c.settleWaiting(ctx, a, false)
+	if a.Call == "" {
+		c.settleWaiting(ctx, a, false) // the task's calls that waited on it (an access, a release): refused
 	}
 }

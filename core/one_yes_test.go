@@ -25,11 +25,12 @@ func TestOneWayToSayYes(t *testing.T) {
 		"decideCalls":       {"decideProposal"},
 		"decideRunCalls":    {"decideProposal"},
 		"decideAccess":      {"decideProposal", "decideCalls", "decideRunCalls", "decideCallsChosen"},
-		"decideSetting":     {"decideProposal"},
-		"decideSkill":       {"decideProposal"},
-		"decideMonitor":     {"decideProposal"},
-		"decideView":        {"decideProposal"},
-		"decideTaskStart":   {"decideProposal"},
+		"decides":           {"decideProposal"}, // a kind's decider, from its row (proposal_kinds.go)
+		"decideSetting":     {"init"},           // the rows of kindsOf
+		"decideSkill":       {"init"},
+		"decideMonitor":     {"init"},
+		"decideView":        {"init"},
+		"decideTaskStart":   {"init"},
 	}
 	files, _ := filepath.Glob("*.go")
 	fset := token.NewFileSet()

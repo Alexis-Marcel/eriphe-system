@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS access_asks (
 	source        TEXT NOT NULL DEFAULT '',   -- with item: the node's source that lists it
 	item          TEXT NOT NULL DEFAULT '',   -- the item's id in that source
 	batch         INTEGER NOT NULL DEFAULT 0,  -- the card it is on, kind calls: its first call's id
-	labels        TEXT NOT NULL DEFAULT ''); -- the items it acts on, as its node listed them when kept: JSON (call_words.go)`
+	labels        TEXT NOT NULL DEFAULT '',   -- the items it acts on, as its node listed them when kept: JSON (call_words.go)
+	settled       INTEGER NOT NULL DEFAULT 0); -- a calls card's first call: its item settled once decided (item_cards.go's itemCardMoved)`
 
 func init() {
 	extraSchema = append(extraSchema, accessCardSchema)
@@ -296,6 +297,43 @@ func (c *core) askTaskAccess(t *TaskRow, pid, tool string, input map[string]any,
 		id = c.newAccessAsk(accessQuestion{TaskID: t.ID, Permission: pid, Need: n, Tainted: c.store.get(taskTaintKey(t.ID))})
 	}
 	c.store.set(accessWaitKey(t.ID, pid), fmt.Sprint(id))
+}
+
+// askHeldCall asks the release of the held tools a task's call needs, on
+// a card, the moment it calls one: what waits for the user is always a
+// card (node_status.go). The same release asked again is the same card;
+// the request waits on it (settleWaiting answers it).
+func (c *core) askHeldCall(t *TaskRow, pid, tool string) {
+	c.store.markUserOnly(t.ID, pid, heldReason)
+	server, name, _ := splitToolName(tool)
+	if u := c.pool.get(server); u != nil {
+		if real := u.toolByClaudeName(name); real != nil {
+			name = real.Name // a ref names the tool as its server does
+		}
+	}
+	var refs []string
+	for _, e := range t.Resources {
+		if e.Kind == resTool && e.Hold && grantAllows([]string{e.Ref}, server, name) {
+			refs = append(refs, e.Ref)
+		}
+	}
+	if len(refs) == 0 {
+		return
+	}
+	id := c.releaseAsk(accessQuestion{TaskID: t.ID, Permission: pid, Refs: refs, Tainted: c.store.get(taskTaintKey(t.ID))})
+	c.store.set(accessWaitKey(t.ID, pid), fmt.Sprint(id))
+}
+
+// releaseAsk is the card that asks to release a task's held tools: the
+// one that already waits for the same, else a new one.
+func (c *core) releaseAsk(a accessQuestion) int64 {
+	a.Refs = slices.Sorted(slices.Values(a.Refs)) // the same, in any order
+	raw, _ := json.Marshal(a.Refs)
+	var id int64
+	if c.store.db.QueryRow(`SELECT id FROM access_asks WHERE task_id = ? AND refs = ? AND state = ?`, a.TaskID, string(raw), startProposed).Scan(&id) == nil {
+		return id
+	}
+	return c.newAccessAsk(a)
 }
 
 // brainCardWaits answers the brain's call at once: a card never holds it.
@@ -687,6 +725,7 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 		}
 		c.store.logDecision(a.TaskID, "", "release "+strings.Join(a.Refs, ", "), nil, decideDeny, byUser, "refusé sur la carte")
 		c.traceTask(a.TaskID, byUser, fmt.Sprintf(tr(c.userLang(), "tasknode.kept"), strings.Join(a.Refs, ", ")), "")
+		c.settleWaiting(ctx, a, false) // the calls that waited on it: refused
 		return nil
 	case a.Call != "":
 		if approve {
@@ -722,8 +761,9 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 
 // settleWaiting answers the requests of a task once a card is decided: on a
 // yes, every request of the user's the policy now allows; on a no, those
-// waiting on this card. What still waits and has no card left shows as a
-// permission.
+// waiting on this card. One that waited on this card and that the policy
+// does not allow even now is decided again, as when it came: another
+// card, or the policy's answer. Nothing waits without a card.
 func (c *core) settleWaiting(ctx context.Context, a accessQuestion, approve bool) {
 	st, err := c.status(a.TaskID, 0)
 	if err != nil {
@@ -744,6 +784,9 @@ func (c *core) settleWaiting(ctx context.Context, a accessQuestion, approve bool
 		case approve:
 			d, _ := c.decideTask(st.Task, tool, input)
 			if allow = d == decideAllow; !allow {
+				if onThis {
+					c.applyPolicy(a.TaskID, []EventRow{{Type: "permission", Data: p}})
+				}
 				continue
 			}
 		case onThis:
@@ -787,7 +830,7 @@ func (c *core) releaseTools(id string, refs []string) (string, error) {
 	if len(asked) == 0 {
 		return "", errors.New("release: name the held tools to release")
 	}
-	c.newAccessAsk(accessQuestion{TaskID: id, Refs: asked, Tainted: strings.Join(c.turnTaint(), ", ")})
+	c.releaseAsk(accessQuestion{TaskID: id, Refs: asked, Tainted: strings.Join(c.turnTaint(), ", ")})
 	return "asked " + c.conf().User + " on a card to release " + strings.Join(asked, ", ") + ": nothing is released until they answer; you will be told", nil
 }
 

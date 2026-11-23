@@ -36,7 +36,7 @@ func taskIn(c *core, id, state string) (string, error) {
 }
 
 // setStatus gives node id a status as code would: a step running (no
-// task listed beside the test's own), a task waiting for a permission,
+// task listed beside the test's own), a card waiting on it,
 // its file done; nothing for idle.
 func setStatus(t *testing.T, c *core, id, status string) {
 	t.Helper()
@@ -50,8 +50,15 @@ func fakeStatus(c *core, id, status string) error {
 	switch status {
 	case nodeRunning:
 		_, err = c.store.db.Exec(`INSERT INTO node_steps (node, parent, n, key, spec, status, opener) VALUES (?, 'elsewhere', 1, 'k', '{}', ?, 'brain')`, id, stepRunning)
-	case nodeWaits:
-		_, err = taskIn(c, id, stateWaitingPermission)
+	case nodeWaits: // a card waits on it: the one way a node waits for the user
+		// A card of no kind of proposals: the status counts it, nothing
+		// settles it, and no page draws it (it has nothing to approve).
+		var n int64
+		c.store.db.QueryRow(`SELECT COUNT(*) FROM convo_cards`).Scan(&n)
+		ref := fmt.Sprintf("fake:%d", n+1)
+		if _, err = c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, text, created) VALUES (?, 'fake', 'x', 1)`, ref); err == nil {
+			_, err = c.store.db.Exec(`INSERT INTO node_cards (node, ref, created) VALUES (?, ?, 1)`, id, ref)
+		}
 	case nodeDone:
 		_, err = c.nodes.SetDone(id, true, byUser)
 	}
@@ -87,7 +94,7 @@ func TestNodeStatusOf(t *testing.T) {
 	}
 	facts := statusFacts{
 		cards:   map[string]bool{"card": true, "card-run": true, "card-done": true, "card-gone": true},
-		tasks:   map[string]string{"run": nodeRunning, "held": nodeWaits, "card-run": nodeRunning, "gone-run": nodeRunning},
+		tasks:   map[string]bool{"run": true, "card-run": true, "gone-run": true},
 		steps:   map[string]string{"step-run": stepRunning, "step-ok": stepAccepted, "step-drop": stepDropped, "step-failed": stepFailed, "result": stepAccepted},
 		results: map[string]bool{"result": true, "work-alone": true},
 		settled: map[string]bool{"step-ok": true, "step-drop": true, "work": true},
@@ -103,7 +110,7 @@ func TestNodeStatusOf(t *testing.T) {
 		{"a card waits on it while it runs", "card-run", false, false, nodeWaits},
 		{"a card waits on a node said done", "card-done", true, false, nodeWaits},
 		{"a task works in it", "run", false, false, nodeRunning},
-		{"a task held for its start or a permission", "held", false, false, nodeWaits},
+		{"a task held for its start: its card waits, nothing else", "held", false, false, nodeIdle},
 		{"a task that ended (failed, stopped, lost) or whose turn ended", "ended", false, false, nodeIdle},
 		{"its file says done", "ended", true, false, nodeDone},
 		{"a step whose task runs", "step-run", false, false, nodeRunning},
@@ -140,8 +147,8 @@ func TestNodeStatusFromRecords(t *testing.T) {
 		t.Fatalf("its task runs: %s", s)
 	}
 	c.store.updateTask(task, map[string]any{"state": stateWaitingPermission})
-	if s := nodeStatusNow(t, c, id); s != nodeWaits {
-		t.Fatalf("its task waits for a permission: %s", s)
+	if s := nodeStatusNow(t, c, id); s != nodeRunning {
+		t.Fatalf("its task waits for a permission, no card asks it: %s", s)
 	}
 	c.store.updateTask(task, map[string]any{"state": stateFailed})
 	if s := nodeStatusNow(t, c, id); s != nodeIdle {
@@ -149,8 +156,8 @@ func TestNodeStatusFromRecords(t *testing.T) {
 	}
 	held := workIn(t, c, id, statePending)
 	c.store.updateTask(held, map[string]any{"desired": desiredHeld})
-	if s := nodeStatusNow(t, c, id); s != nodeWaits {
-		t.Fatalf("its task held for its start: %s", s)
+	if s := nodeStatusNow(t, c, id); s != nodeIdle {
+		t.Fatalf("its task held for its start, no card linked: %s", s)
 	}
 	c.store.updateTask(held, map[string]any{"state": stateStopped})
 
@@ -212,6 +219,8 @@ func TestNodeFindAgreesWithGraph(t *testing.T) {
 	workIn(t, c, runs, stateRunning)
 	waits := mustNode(t, c, nodestore.New{Title: "Devis"})
 	workIn(t, c, waits, stateWaitingPermission)
+	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, text, created) VALUES ('access:9', 'access', 'x', 1)`)
+	c.store.db.Exec(`INSERT INTO node_cards (node, ref, created) VALUES (?, 'access:9', 1)`, waits)
 	done := mustNode(t, c, nodestore.New{Title: "Fini"})
 	c.nodes.SetDone(done, true, byUser)
 	idle := mustNode(t, c, nodestore.New{Title: "Au repos"})

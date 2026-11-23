@@ -491,6 +491,9 @@ func (w *web) nodeCards(id, lang string) []proposalView {
 			continue
 		}
 		x, p := w.c.liveCard(xs[0])
+		if p.Kind == "" {
+			continue // no proposal of any kind: nothing to draw or answer
+		}
 		out = append(out, w.proposalView(x, p, lang))
 	}
 	return out

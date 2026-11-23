@@ -122,7 +122,7 @@ func (c *core) handleChannelIn(w http.ResponseWriter, r *http.Request) {
 		if ch.Trusted {
 			c.resolveByText(r.Context(), int(seq)) // "oui" to the question just asked (convo_cards.go)
 		} else {
-			err = c.store.set(taintKey(int(seq)), channelTaint(ch.Name))
+			err = c.store.setMsgTaint(int(seq), channelTaint(ch.Name))
 		}
 	}
 	if err != nil {

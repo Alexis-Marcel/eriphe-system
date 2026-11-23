@@ -62,7 +62,7 @@ func TestFailedYesLeavesThePage(t *testing.T) {
 	if d, err := c.nodes.Read(node, 0); err != nil || !d.Node.Meta.External {
 		t.Error("an untrusted tool's words in the trace, its node not marked external")
 	}
-	if why := c.store.get(taintKey(lastUserAct(t, c))); why == "" {
+	if why := c.store.msgTaint(lastUserAct(t, c)); why == "" {
 		t.Error("an untrusted tool's words reach the brain untainted")
 	}
 	told := yesTold(t, c)

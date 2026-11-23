@@ -239,5 +239,5 @@ func channelTaint(name string) string { return channelTaintPrefx + name }
 // fromUntrusted tells whether message seq came through a channel the user
 // did not trust: maybe not their words.
 func (c *core) fromUntrusted(seq int) bool {
-	return strings.HasPrefix(c.store.get(taintKey(seq)), channelTaintPrefx)
+	return strings.HasPrefix(c.store.msgTaint(seq), channelTaintPrefx)
 }

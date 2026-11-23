@@ -317,7 +317,7 @@ func (m *memStore) addIntention(x *Intention, who string) (*Intention, error) {
 	if err := insertIntention(tx, x, now, who, ""); err != nil {
 		return nil, err
 	}
-	return x, tx.Commit()
+	return x, m.commitIntention(tx)
 }
 
 // intentionChange is a typed patch: a move to another state, a snooze, a
@@ -416,7 +416,7 @@ func (m *memStore) changeIntention(id int64, ch intentionChange, who, why string
 	if err := intentionLog(tx, id, now, who, "change", from, x.State, strings.Join(detail, "; ")); err != nil {
 		return nil, err
 	}
-	return x, tx.Commit()
+	return x, m.commitIntention(tx)
 }
 
 // tickIntentions is the minute timer's work, without a model: open
@@ -478,7 +478,7 @@ func (m *memStore) becomeDue(id int64, who, why string) (*Intention, error) {
 	if err := intentionLog(tx, id, now, who, "due", from, intentDue, why); err != nil {
 		return nil, err
 	}
-	return x, tx.Commit()
+	return x, m.commitIntention(tx)
 }
 
 // toSurface are the due intentions the brain has not been told of yet, or

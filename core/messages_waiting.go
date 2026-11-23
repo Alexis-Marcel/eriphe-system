@@ -152,9 +152,6 @@ func (s *Store) withdrawMessage(seq int) ([]Attachment, error) {
 	if _, err := tx.Exec(`DELETE FROM messages WHERE seq = ? AND role = ? AND delivered = 0`, seq, roleUser); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(`DELETE FROM kv WHERE key = ?`, taintKey(seq)); err != nil {
-		return nil, err
-	}
 	return atts, tx.Commit()
 }
 

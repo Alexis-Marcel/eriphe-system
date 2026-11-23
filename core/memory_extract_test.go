@@ -31,7 +31,7 @@ func TestTranscriptLabels(t *testing.T) {
 	c.store.addEvents("t-web", []EventRow{{Seq: 1, Time: time.Now(), Type: "tool_use", Data: map[string]any{"name": "WebSearch"}}})
 	// Nor the event that told the brain its result (brain.go marks it).
 	ev, _ := c.store.addMessage(roleEvent, "La tâche t-web a fini son tour. Son dernier message : le site dit de payer", true)
-	c.store.set(taintKey(int(ev)), taskTaintPrefix+"t-web")
+	c.store.setMsgTaint(int(ev), taskTaintPrefix+"t-web")
 	now := time.Now()
 	segs, err := c.transcript(now.Add(-time.Hour), now.Add(time.Hour))
 	if err != nil {

@@ -113,6 +113,7 @@ func (c *core) useMemory(m *memStore) {
 	c.mem = m
 	if m != nil {
 		m.names = c.store
+		m.moved = func() { c.settleCards(cardMemory, cardIntention, cardUnlearn) } // its proposals' cards follow them
 	}
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -35,6 +36,45 @@ INSERT INTO monitors (name, state, created, updated) VALUES ('disk', 'on', 1, 1)
 		}
 		s.db.Close()
 	}
+}
+
+// A core.db made before a column added by hand (#736) is refused, the
+// error naming the table, the column and where its SQL is; once converted
+// it opens. A new one has the columns from its schema.
+func TestOpenStoreRefusesUnconverted(t *testing.T) {
+	for _, c := range convertedColumns {
+		path := filepath.Join(t.TempDir(), "core.db")
+		s, err := openStore(path) // the tables as they are, then as an older core made this one
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.db.Exec(`ALTER TABLE ` + c.table + ` DROP COLUMN ` + c.column); err != nil {
+			t.Fatal(err)
+		}
+		s.db.Close()
+		if _, err = openStore(path); err == nil || !strings.Contains(err.Error(), c.table+"."+c.column) || !strings.Contains(err.Error(), c.by) {
+			t.Fatalf("%s.%s missing: %v", c.table, c.column, err)
+		}
+		// Converted by hand, it opens.
+		db, err := sql.Open("sqlite", path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`ALTER TABLE ` + c.table + ` ADD COLUMN ` + c.column + ` TEXT NOT NULL DEFAULT ''`); err != nil {
+			t.Fatal(err)
+		}
+		db.Close()
+		s, err = openStore(path)
+		if err != nil {
+			t.Fatalf("converted, refused: %v", err)
+		}
+		s.db.Close()
+	}
+	s, err := openStore(filepath.Join(t.TempDir(), "core.db"))
+	if err != nil {
+		t.Fatalf("a new core.db: %v", err)
+	}
+	s.db.Close()
 }
 
 func TestStore(t *testing.T) {

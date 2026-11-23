@@ -12,7 +12,7 @@ import (
 
 // newMailCore is a core whose catalog has a mail server at access (reads
 // free when empty): a read, an action that stays in the mailbox, and a send.
-func newMailCore(t *testing.T, access string) *core {
+func newMailCore(t *testing.T, access string, opts ...func(*core)) *core {
 	t.Helper()
 	store, err := openStore(filepath.Join(t.TempDir(), "core.db"))
 	if err != nil {
@@ -44,6 +44,9 @@ func newMailCore(t *testing.T, access string) *core {
 			return nil, err
 		}
 		return ct, nil
+	}
+	for _, o := range opts {
+		o(c) // before its pool runs (withGraph)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -136,7 +139,7 @@ func TestTurnFromUser(t *testing.T) {
 		t.Error("an event's turn is the user's")
 	}
 	auto, _ := c.store.addMessageVia(roleUser, "lumière", "Home Assistant", true)
-	c.store.set(taintKey(int(auto)), channelTaint("Home Assistant"))
+	c.store.setMsgTaint(int(auto), channelTaint("Home Assistant"))
 	c.turn.start(int(auto), int(auto), 0)
 	if c.turnFromUser() {
 		t.Error("an untrusted channel's turn is the user's")

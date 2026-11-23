@@ -270,8 +270,8 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 				left = true
 				continue
 			}
-			if reason == heldReason {
-				c.store.markUserOnly(id, pid, reason) // it waits for its release, on its card
+			if reason == heldReason && t != nil {
+				c.askHeldCall(t, pid, tool) // it waits for its release, on its card (access_card.go)
 				left = true
 				continue
 			}

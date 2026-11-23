@@ -692,6 +692,9 @@ func (c *core) stop(ctx context.Context, id string) error {
 	if err := c.store.updateTask(id, fields); err != nil {
 		return err
 	}
+	if t.State == statePending {
+		c.taskNodeMoved(id, stateStopped) // a held start's card goes with it (node_status.go)
+	}
 	c.bump()
 	return nil
 }

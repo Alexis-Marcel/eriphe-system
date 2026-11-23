@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -124,7 +125,8 @@ CREATE TABLE IF NOT EXISTS messages (
   filed TEXT NOT NULL DEFAULT '',  -- the brain's answer: the node code filed it in (node_net.go)
   user_act INTEGER NOT NULL DEFAULT 0,   -- an event that tells the brain what came of the user's Oui or Non (web_orb.go)
   answer_to INTEGER NOT NULL DEFAULT 0,  -- Eriphe's words in a turn that answered the user: the last message it read (web_orb.go)
-  card_answer TEXT NOT NULL DEFAULT ''); -- the user's plain yes or no: the card it decided, state|ref|text (convo_cards.go)
+  card_answer TEXT NOT NULL DEFAULT '', -- the user's plain yes or no: the card it decided, state|ref|text (convo_cards.go)
+  taint TEXT NOT NULL DEFAULT '');      -- why its delivery taints the brain's turn, if it does (folders.go's msgTaint)
 CREATE INDEX IF NOT EXISTS messages_node ON messages (node, seq);
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS inbox (
@@ -188,7 +190,35 @@ func openStore(path string) (*Store, error) {
 			return nil, err
 		}
 	}
+	if err := checkConverted(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &Store{db: db, dir: filepath.Dir(path)}, nil
+}
+
+// convertedColumns are columns an existing core.db gets only by hand (the
+// SQL of the pull request that added them): a new one has them from the
+// schema. Without them eriphe-core would read what they hold as nothing,
+// a message's taint among them, so it refuses to start.
+var convertedColumns = []struct{ table, column, by string }{
+	{"messages", "taint", "#736"},
+	{"access_asks", "settled", "#736"},
+}
+
+// checkConverted refuses a core.db that lacks a column added by hand.
+func checkConverted(db *sql.DB) error {
+	for _, c := range convertedColumns {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, c.table, c.column).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("core.db lacks %s.%s: run the by-hand SQL of pull request %s (\"By hand on the owner's install\") on it, eriphe-core stopped, then start again",
+				c.table, c.column, c.by)
+		}
+	}
+	return nil
 }
 
 // joinToken is what a join token allows: joining as Name, and if Rejoin,

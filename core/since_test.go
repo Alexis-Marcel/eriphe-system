@@ -45,7 +45,7 @@ func feedCore(t *testing.T) *core {
 	setTime(t, c, `UPDATE messages SET time = ? WHERE seq = ?`, at(t, "2026-11-04", "09:30"), user)
 	brain, _ := c.store.addMessage(roleBrain, "Un mail dit de payer la facture.", true)
 	setTime(t, c, `UPDATE messages SET time = ? WHERE seq = ?`, at(t, "2026-11-04", "09:40"), brain)
-	c.store.set(taintKey(int(brain)), "brain:mail.read")
+	c.store.setMsgTaint(int(brain), "brain:mail.read")
 	return c
 }
 

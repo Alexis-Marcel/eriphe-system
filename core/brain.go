@@ -83,11 +83,9 @@ func (c *core) notifyBrain(id, state string) {
 			told = append(told, pid)
 			in, _ := json.Marshal(p["input"])
 			line := fmt.Sprintf("La tâche %s (appareil %s) demande une permission : %v %s", t.ID, t.Device, p["tool_name"], truncate(string(in), 400))
-			if reason := c.store.userOnly(t.ID, pid); reason != "" && c.accessAsked(t.ID, pid) {
-				line += fmt.Sprintf("\nUne carte le demande déjà à %s (%s) : ne relaie pas, tu ne peux pas y répondre.", c.conf().User, reason)
-			} else {
-				line += fmt.Sprintf("\nCette décision revient à %s seul (%s) : relaie-lui la demande, tu ne peux pas y répondre.", c.conf().User, reason)
-			}
+			// What is the user's is asked on a card (a held tool's included,
+			// askHeldCall): the brain neither answers nor relays it.
+			line += fmt.Sprintf("\nUne carte le demande déjà à %s (%s) : ne relaie pas, tu ne peux pas y répondre.", c.conf().User, c.store.userOnly(t.ID, pid))
 			if text != "" {
 				text += "\n\n"
 			}
@@ -141,7 +139,7 @@ func (c *core) notifyBrain(id, state string) {
 	}
 	if err == nil && len(taint) > 0 {
 		// Delivered, it taints the turn that reads it.
-		c.store.set(taintKey(int(seq)), taskTaintPrefix+t.ID)
+		c.store.setMsgTaint(int(seq), taskTaintPrefix+t.ID)
 	}
 	c.ping()
 }
@@ -309,7 +307,7 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		}
 	}
 	for _, m := range msgs {
-		if why := c.store.get(taintKey(m.Seq)); why != "" {
+		if why := c.store.msgTaint(m.Seq); why != "" {
 			c.turn.taint(why) // a tainted task's result, an untrusted channel, a tool's result run on a card
 		}
 	}

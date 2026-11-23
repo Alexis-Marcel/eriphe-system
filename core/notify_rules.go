@@ -366,6 +366,7 @@ func (c *core) approveNotifyRule(id int64) (notifyRule, error) {
 		return r, err
 	}
 	r.State = ruleActive
+	defer c.settleCards(cardRule) // its proposal is gone: approved
 	return c.addNotifyRule(r)
 }
 
@@ -377,6 +378,7 @@ func (c *core) deleteNotifyRule(id int64) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("no rule %d", id)
 	}
+	c.settleCards(cardRule) // a proposed one's card says so
 	return nil
 }
 

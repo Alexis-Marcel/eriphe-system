@@ -473,10 +473,21 @@ func folderInstructions(fs []*Folder) string {
 	return b.String()
 }
 
-// taintKey marks a message whose delivery taints the brain's turn: the
-// result of a tainted task (brain.go, task_taint.go), a message from a
-// channel not trusted, a tool's result run on a card.
-func taintKey(seq int) string { return fmt.Sprintf("taint_msg:%d", seq) }
+// msgTaint is why a message's delivery taints the brain's turn, "" when it
+// does not: the result of a tainted task (brain.go, task_taint.go), a
+// message from a channel not trusted, a tool's result run on a card. It is
+// the message's own column, gone with it.
+func (s *Store) msgTaint(seq int) string {
+	var why string
+	s.db.QueryRow(`SELECT taint FROM messages WHERE seq = ?`, seq).Scan(&why)
+	return why
+}
+
+// setMsgTaint marks a message whose delivery taints the brain's turn.
+func (s *Store) setMsgTaint(seq int, why string) error {
+	_, err := s.db.Exec(`UPDATE messages SET taint = ? WHERE seq = ?`, why, seq)
+	return err
+}
 
 // Sources of a folder: a machine (this file), or a tool's place
 // (places.go). Both are Folders with a name and an access, listed

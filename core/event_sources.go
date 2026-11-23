@@ -25,9 +25,11 @@ const (
 )
 
 // runEvents is the journal's timer: the user's return, the attention
-// queue's breakpoints and caps (attention.go), and the purge.
+// queue's breakpoints and caps (attention.go), and the purge. The cards
+// are put in step once, at start (reconcileCards); none waits on it after.
 func (c *core) runEvents(ctx context.Context) {
 	c.subscribeEvents(c.attentionOnEvent)
+	c.reconcileCards()
 	tick := time.NewTicker(eventsTickEvery)
 	defer tick.Stop()
 	var purged time.Time
@@ -35,7 +37,6 @@ func (c *core) runEvents(ctx context.Context) {
 		now := c.notifyTime()
 		c.tickReturned(now)
 		c.attentionBreak(breakCap, now)
-		c.attendQueuedCards() // proposals waiting without a card in front of the user (attention.go)
 		if now.Sub(purged) >= eventsPurgeEvery {
 			c.purgeEvents(now)
 			purged = now

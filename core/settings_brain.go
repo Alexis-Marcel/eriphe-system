@@ -252,7 +252,11 @@ func (c *core) proposeSetting(p settingProposal) (int64, error) {
 		return 0, err
 	}
 	id, _ := res.LastInsertId()
-	return id, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	c.settleCards(cardSetting) // the one it replaced
+	return id, nil
 }
 
 func (c *core) settingProposals() ([]settingProposal, error) {

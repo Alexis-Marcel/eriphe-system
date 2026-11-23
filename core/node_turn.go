@@ -331,24 +331,12 @@ func (c *core) cardNodeOf(source, ref string) string {
 	return ""
 }
 
-// proposalNode is the node a proposal of a task's belongs to: a calls
-// card's (its calls' node: their item's, else their run's), a run's card
-// (the node its run works in), an access card's (its call's node, else
-// its task's); "" for any other.
+// proposalNode is the node a proposal belongs to by its records, whoever
+// raised it (its kind's node, proposal_kinds.go): a task's access, a
+// run's calls, an item's; "" for any other.
 func (c *core) proposalNode(kind string, id int64) string {
-	switch kind {
-	case cardCalls:
-		if asks := c.batchAsks(id); len(asks) > 0 {
-			return cmpOr(asks[0].Node, c.taskNode(asks[0].TaskID))
-		}
-	case cardRunCalls:
-		if r := c.runByID(id); r != nil {
-			return c.taskNode(r.Task)
-		}
-	case cardAccess:
-		if a, err := c.accessAskOf(id); err == nil {
-			return cmpOr(a.Node, c.taskNode(a.TaskID))
-		}
+	if k, ok := kindsOf[kind]; ok && k.node != nil {
+		return k.node(c, id)
 	}
 	return ""
 }
