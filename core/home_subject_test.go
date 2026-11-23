@@ -73,12 +73,12 @@ func TestHomeSubjectTakesTheExchange(t *testing.T) {
 		t.Errorf("the answer about the card was filed: %+v", m)
 	}
 	ref := proposalRef(cardViewKind, 1)
-	if !slices.Contains(c.cardNodes(ref), subject) || !cardWaitsOn(c, subject) {
-		t.Fatalf("the view's card does not wait on its subject: %v", c.cardNodes(ref))
+	if !slices.Equal(c.cardNodes(ref), []string{view}) || !cardWaitsOn(c, view) || cardWaitsOn(c, subject) {
+		t.Fatalf("the view's card does not wait on its draft alone: %v", c.cardNodes(ref))
 	}
 	w := &web{c: c}
-	if x, _ := w.orbFor("", false); len(x.Cards) != 0 || x.Wait == nil || x.Wait.Node != subject {
-		t.Errorf("a card its subject holds is above the bar too, or the orb does not point at it: %v %+v", x.Cards, x.Wait)
+	if x, _ := w.orbFor("", false); len(x.Cards) != 0 || x.Wait == nil || x.Wait.Node != view {
+		t.Errorf("a card its draft holds is above the bar too, or the orb does not point at it: %v %+v", x.Cards, x.Wait)
 	}
 	if _, err := c.decideCard(context.Background(), cardOfRef(t, c, ref).ID, true, "web"); err != nil {
 		t.Fatal(err)
@@ -86,40 +86,48 @@ func TestHomeSubjectTakesTheExchange(t *testing.T) {
 	if sum, err := c.nodes.Get(view); err != nil || sum.Lifetime != "standing" {
 		t.Fatalf("the view's node: %+v %v", sum, err)
 	} else if !slices.Equal(sum.Links, []string{subject}) {
-		t.Errorf("the view is not linked to the subject its card came from: %v", sum.Links)
+		t.Errorf("the view is not linked to the subject it came from: %v", sum.Links)
+	}
+	if sum, _ := c.nodes.Get(subject); sum.Done.IsZero() {
+		t.Error("the subject is not done once its view is made")
 	}
 	if x, _ := c.lastShown(); x.Node != view || x.Talk {
 		t.Errorf("the view does not open beside: %+v", x)
 	}
 }
 
-// The incident: a view proposed at the home, its subject never opened.
-// Its card waits above the bar, wherever it talks, until it is decided,
-// and the long answer about it is no new node.
-func TestHomeCardShowsAboveTheBar(t *testing.T) {
+// A view proposed at the home, no subject opened first: its draft is the
+// subject. It opens with the bar in it, its card waits on it, never above
+// the bar, and the long answer about it stays in it.
+func TestHomeViewDraftTakesTheExchange(t *testing.T) {
 	c, answer := netCore(t, "Tu peux garder un œil sur mes mails ?", "")
-	if _, err := c.proposeView(proposeViewIn{Title: "Mes mails", Body: "Les mails.\n"}, nil); err != nil {
+	out, err := c.proposeView(proposeViewIn{Title: "Mes mails", Body: "Les mails.\n"}, nil)
+	if err != nil {
 		t.Fatal(err)
+	}
+	draft := out["node"].(string)
+	if x, ok := c.lastShown(); !ok || x.Node != draft || !x.Talk {
+		t.Errorf("the draft is not opened with the bar: %+v", x)
 	}
 	answer(longAnswer)
 	m := lastBrainMessage(t, c)
-	if m.Filed != "" || m.Node != "" {
-		t.Errorf("the answer that proposes the view was filed: %+v", m)
+	if m.Filed != "" || m.Node != draft {
+		t.Errorf("the answer that proposes the view: %+v", m)
 	}
 	ref := proposalRef(cardViewKind, 1)
 	x := cardOfRef(t, c, ref)
-	if x.Seq != m.Seq || len(c.cardNodes(ref)) != 0 {
+	if !slices.Equal(c.cardNodes(ref), []string{draft}) {
 		t.Fatalf("card %+v, nodes %v", x, c.cardNodes(ref))
 	}
 	w := &web{c: c}
-	if ex, _ := w.orbFor("", false); !slices.Equal(ex.Cards, []string{ref}) || ex.Wait != nil {
-		t.Errorf("orb: cards %v, wait %+v", ex.Cards, ex.Wait)
+	if ex, _ := w.orbFor("", false); len(ex.Cards) != 0 {
+		t.Errorf("orb: cards above the bar %v", ex.Cards)
 	}
 	if _, err := c.decideCard(context.Background(), x.ID, false, "web"); err != nil {
 		t.Fatal(err)
 	}
-	if ex, _ := w.orbFor("", false); len(ex.Cards) != 0 {
-		t.Errorf("a decided card still waits: %v", ex.Cards)
+	if sum, _ := c.nodes.Get(draft); sum.Archived.IsZero() {
+		t.Error("no left the draft in the graph")
 	}
 }
 

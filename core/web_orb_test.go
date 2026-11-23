@@ -145,13 +145,15 @@ func TestOrbWait(t *testing.T) {
 		t.Fatal(err)
 	}
 	subject := out["id"].(string)
-	if _, err := c.proposeView(proposeViewIn{Title: "Mes mails", Body: "Les mails.\n"}, nil); err != nil {
+	res, err := c.proposeView(proposeViewIn{Title: "Mes mails", Body: "Les mails.\n"}, nil)
+	if err != nil {
 		t.Fatal(err)
 	}
+	draft := res["node"].(string) // the card waits on the view's draft
 	answer("Dis oui sur sa carte.")
 	w := &web{c: c}
 	x, _ := w.orbFor("", false)
-	if x.Wait == nil || x.Wait.Node != subject || len(x.Cards) != 0 {
+	if x.Wait == nil || x.Wait.Node != draft || len(x.Cards) != 0 {
 		t.Fatalf("wait %+v, cards %v", x.Wait, x.Cards)
 	}
 	// The user writes again: the card waits in its page, the orb moves on.
@@ -172,9 +174,11 @@ func TestOrbWait(t *testing.T) {
 	ev, _ := c.store.addMessage(roleEvent, "Un nouveau mail.", true)
 	c.turn.goOn(int(ev), int(ev), 0, nil)
 	c.turnNode(subject)
-	if _, err := c.proposeView(proposeViewIn{Title: "Mes mails urgents", Body: "Les urgents.\n"}, nil); err != nil {
+	res, err = c.proposeView(proposeViewIn{Title: "Mes mails urgents", Body: "Les urgents.\n"}, nil)
+	if err != nil {
 		t.Fatal(err)
 	}
+	urgent := res["node"].(string)
 	if x, _ = w.orbFor("", true); x.Wait != nil {
 		t.Errorf("the orb points at a card raised unasked, in the turn: %+v", x.Wait)
 	}
@@ -182,7 +186,7 @@ func TestOrbWait(t *testing.T) {
 	if x, _ = w.orbFor("", false); x.Wait != nil || x.Answer == nil || x.Answer.Text != "Dis oui sur sa carte." {
 		t.Errorf("the orb points at a card raised unasked: %+v", x)
 	}
-	if ids, _ := c.cardsWhere(`state = ?`, cardPending); len(ids) != 1 || !cardWaitsOn(c, subject) {
+	if ids, _ := c.cardsWhere(`state = ?`, cardPending); len(ids) != 1 || !cardWaitsOn(c, urgent) {
 		t.Errorf("the card raised unasked does not wait in its page: %v", ids)
 	}
 }

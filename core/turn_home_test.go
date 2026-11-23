@@ -28,11 +28,9 @@ func TestTurnHomeCardWaitsAboveTheBar(t *testing.T) {
 	if c.turnSource() != "" || !c.turn.answersAtHome() {
 		t.Fatalf("the turn is still about %q", c.turnSource())
 	}
-	if _, err := c.proposeView(proposeViewIn{Title: "Mes films", Body: "Les films.\n"}, nil); err != nil {
-		t.Fatal(err)
-	}
+	r := proposedRule(t, c, "films", "")
 	answer("Tu me donnes ton accord pour films ?\n\nJe lance la recherche dès que tu valides la carte.")
-	ref := proposalRef(cardViewKind, 1)
+	ref := proposalRef(cardRule, r.ID)
 	if nodes := c.cardNodes(ref); len(nodes) != 0 {
 		t.Errorf("the card waits in the unrelated node: %v", nodes)
 	}
@@ -60,10 +58,8 @@ func TestTurnCardShowsItsNode(t *testing.T) {
 	}
 	id := n.Node.Meta.ID
 	c.turnNode(id)
-	if _, err := c.proposeView(proposeViewIn{Title: "Mes films", Body: "Les films.\n"}, nil); err != nil {
-		t.Fatal(err)
-	}
-	if nodes := c.cardNodes(proposalRef(cardViewKind, 1)); !slices.Equal(nodes, []string{id}) {
+	r := proposedRule(t, c, "films", "")
+	if nodes := c.cardNodes(proposalRef(cardRule, r.ID)); !slices.Equal(nodes, []string{id}) {
 		t.Fatalf("the card's nodes: %v", nodes)
 	}
 	if x, _ := c.lastShown(); x.Node == id {

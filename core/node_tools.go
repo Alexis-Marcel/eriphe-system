@@ -98,7 +98,7 @@ type settleIn struct {
 }
 
 func registerNodeTools(s *mcp.Server, c *core) {
-	tool(s, "node_open", "Open a node on the user's graph: one piece of work and its result. It opens in front of the user (asked from the home, the bar moves into it; from a node, beside it), or in the background with aside. With parent, a part of that node; with steps, its work cut in steps, each a child an agent runs, accepted by Eriphe on its proof. What the user follows continuously is a view: only propose_view makes one.",
+	tool(s, "node_open", "Open a node on the user's graph: one piece of work and its result. For a new subject, your first call, before any read: a short title, a one-line « En cours : … » body, filled as the work goes. It opens in front of the user (asked from the home, the bar moves into it; from a node, beside it), or in the background with aside. With parent, a part of that node; with steps, its work cut in steps, each a child an agent runs, accepted by Eriphe on its proof. What the user follows continuously is a view: only propose_view makes one.",
 		func(ctx context.Context, in brainNodeOpenIn) (map[string]any, error) { return c.brainNodeOpen(ctx, in) })
 	tool(s, "node_find", "Find nodes by words of their title, goal, text or blocks; without words, those running or waiting for the user, then the last changed; with archived, the archived ones too. Each gives its id, status (running, waits, done, idle), parent and when it changed; a title written after an external read is quoted only with include_external, which taints the turn.",
 		func(ctx context.Context, in nodeFindIn) (map[string]any, error) { return c.brainNodeFind(in) })

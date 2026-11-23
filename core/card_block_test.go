@@ -22,16 +22,8 @@ func TestCardBlock(t *testing.T) {
 	propose := func(title, node string) string {
 		t.Helper()
 		c.turn.start(0, 0, 0)
-		c.turn.about(node) // proposed from the subject: placed in it
-		out, err := c.proposeView(proposeViewIn{Title: title, Body: title + ".\n"}, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		ref, _ := out["card"].(string)
-		if ref == "" || !strings.Contains(fmtJSON(out), `{\"card\": \"`+ref+`\"}`) {
-			t.Fatalf("the tool gives no card to place: %v", out)
-		}
-		c.cardRaisedFor(nodeRef(node), ref)
+		c.turn.about(node) // proposed from the subject: placed in it (a rule: no node of its own)
+		ref := proposalRef(cardRule, proposedRule(t, c, title, "").ID)
 		return ref
 	}
 	mine := propose("Mes mails", subject)

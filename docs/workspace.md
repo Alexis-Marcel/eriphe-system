@@ -152,10 +152,14 @@ Write to Eriphe, in the bar:
 
 > Show me this week's unread mails.
 
-Eriphe answers by **showing**: the subject's page opens in front of you with what you need to know,
-like a dashboard, and the conversation goes on there. Asked from the home, the bar moves into
-that page; asked from a page, the new one opens beside it. Only a short answer ("done", the time,
-a figure) stays with the orb.
+Eriphe first decides **where** the answer goes. A quick question ("what time is it in Tokyo?",
+"what's my next appointment?") or a simple action is answered in one line by the orb, with no new
+bubble. What is about the page you are on is answered there. Anything else is a subject: its bubble
+appears within seconds, before Eriphe reads anything, saying what it is doing, and fills as the
+work goes, written by Eriphe or by the agents working under it. Eriphe answers by **showing**: the
+subject's page opens in front of you with what you need to know, like a dashboard, and the
+conversation goes on there. Asked from the home, the bar moves into that page; asked from a page,
+the new one opens beside it.
 
 Each exchange rewrites the subject's page: the questions you answered go, what you chose is written
 under « What we decided », and what comes next shows. When a part of it moves on in a bubble of its
@@ -186,10 +190,13 @@ What you want to follow all the time ("keep an eye on my mail", "follow the prod
 keeps up to date. It can come with a monitor that sees what arrives and a skill that works in the
 view when it does: the skill reads each new item, notes what you should know of it, and prepares
 what it asks of you (a draft and its card). Eriphe shows it first: asked for a page kept up to
-date ("can you follow and manage my days?", "keep an eye on my mail"), it proposes the whole view
-at once on **one card**, with sensible defaults (what it remembers refines them), no questions
-before: its page (your day as an agenda), the monitor and the skill together, the card recalling
-its choices, and nothing exists before your yes. Your yes opens the view. Its page says its
+date ("can you follow and manage my days?", "keep an eye on my mail"), it opens the subject at once
+(a bubble that says what it is doing), then the view as a **draft** beside it, in the same turn,
+with sensible defaults (what it remembers refines them), no questions before: the draft is the
+real page (your day as an agenda), its card says in one line what will run by itself ("Every 15
+min · every day at 7:30"), and neither the monitor nor the skill exists before your yes. You talk
+about it in the subject; what you change, Eriphe proposes again on the same draft. Your yes makes it
+the view and closes the subject, which stays linked; your no archives the draft. Its page says its
 choices in a line ("I only tell you at the brief, never at night") and offers the likely changes
 as buttons ("Add my mail"); you change them after, never through a questionnaire first. Your day is a view like any other: Eriphe never makes one on its own. What you said matters
 to you is remembered as a preference; when to tell you is a notification rule.

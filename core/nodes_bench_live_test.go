@@ -54,7 +54,8 @@ import (
 // run breaks one of the bars (benchBars): a lost reply, a duplicate node,
 // more than one write refused for its grammar or the catalog, a view that
 // is not valid, more than benchTurns turns of the user's, a page asked for
-// (the mails, the day) not shown first: no card in its turn, or questions.
+// (the mails, the day) not shown first: its subject not opened before any
+// read, no draft and card in its turn, or questions.
 func TestNodesBenchLive(t *testing.T) {
 	if os.Getenv("ERIPHE_LIVE_NODES") == "" {
 		t.Skip("set ERIPHE_LIVE_NODES=1 to play the epic's scenario on a real model")
@@ -102,6 +103,7 @@ var benchMetrics = []struct{ key, want string }{
 	{"wake lines filed by the net", "-"},
 	{"stuck steps", "0"},
 	{"light: one call, no node", "yes"},
+	{"quick question: no node", "yes"},
 	{"turn_home on the agenda", "yes"},
 	{"agenda: day page written, shown", "yes"},
 	{"work cut in steps", "≥ 2"},
@@ -118,7 +120,10 @@ var benchMetrics = []struct{ key, want string }{
 	{"node_set parent", "yes"},
 	{"links written / resolved", "n / n"},
 	{"glance set", "yes"},
+	{"watch: subject first", "yes"},
+	{"watch: first node (s)", "-"},
 	{"watch: card in the first turn", "yes"},
+	{"watch: draft beside its subject", "yes"},
 	{"watch: no questionnaire", "yes"},
 	{"watch: changes offered (ask)", "-"},
 	{"view approved", "yes"},
@@ -127,7 +132,10 @@ var benchMetrics = []struct{ key, want string }{
 	{"view: batch", "yes"},
 	{"skill: item_note", "≥ 1"},
 	{"skill: card on a row", "-"},
+	{"day: subject first", "yes"},
+	{"day: first node (s)", "-"},
 	{"day: card in the first turn", "yes"},
+	{"day: draft beside its subject", "yes"},
 	{"day: no questionnaire", "yes"},
 	{"day: changes offered (ask)", "-"},
 	{"day: short titles", "yes"},
@@ -278,6 +286,10 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 	b.s.yes("light: one call, no node", lit && len(b.born) == 0 && !strings.Contains(string(trace), "maison/allumer"),
 		fmt.Sprintf("lit %v, nodes born %q", lit, b.born))
 
+	// 1b. A quick question at the home: answered in the orb, no node.
+	b.say("Il est quelle heure à Tokyo ?", "", turnNoNode)
+	b.s.yes("quick question: no node", len(b.born) == 0 && !b.called("node_open"), fmt.Sprintf("nodes born %q", b.born))
+
 	// 2. On « Substack »: a work, its steps « Style » then « Plan ».
 	b.say("Analyse le style des articles qui marchent, puis propose-moi un plan du premier article.", substack, turnWork)
 	work, steps := b.work(substack)
@@ -363,8 +375,9 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 	b.say("Garde un œil sur la consommation de la maison : je veux voir quand elle dépasse 10 kW.", "", turnWork)
 	b.s.yes("glance set", b.glance("maison/conso"), "no glance reads maison/conso")
 
-	// 12. Setting up a mail watch shows it first: the view's card in the
-	// same turn, with sensible defaults, its choices adjustable after
+	// 12. Setting up a mail watch shows it first: its subject opens before
+	// anything is read, then the view's draft beside it with its card in
+	// the same turn, with sensible defaults, its choices adjustable after
 	// (ask buttons, in a tainted turn too), never a questionnaire before.
 	b.say("Tu peux garder un œil sur mes mails, m'aider à les gérer et me proposer des actions à faire.", "", turnWork)
 	b.scoreShownFirst("watch", "")
@@ -374,9 +387,10 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 	b.runSkill(view)
 
 	// 13. The day asked to be followed, at the home, as on a fresh install
-	// (the seed's day page archived first): its view's card in that turn,
-	// an Agenda on it, no questionnaire, no title made of the sentence. The
-	// last turn: the replay checks it again (nodes_replay_test.go).
+	// (the seed's day page archived first): its subject opens first, then
+	// its view's draft beside it, its card in that turn, an Agenda on it, no
+	// questionnaire, no title made of the sentence. The last turn: the
+	// replay checks it again (nodes_replay_test.go).
 	if err := sc.c.archiveNode(ctx, day, byUser); err != nil {
 		b.note("day: " + err.Error())
 	}
@@ -413,6 +427,7 @@ type bench struct {
 	allowed map[string]bool // the nodes that may be: the seed, the mail, those born of new work
 	counted map[int]bool    // the answers already counted as filed by the net
 	turn    int             // the user's turns so far
+	saidAt  time.Time       // when the last turn's message was said
 	born    []string        // the titles born in the last turn
 	bornIDs []string
 
@@ -527,6 +542,7 @@ func (b *bench) say(text, node, may string) {
 	c := b.sc.c
 	b.mu.Lock()
 	b.turn++
+	b.saidAt = time.Now()
 	b.mu.Unlock()
 	before := b.liveNodes()
 	seq, err := c.store.addUserMessage(text, nil, node)
@@ -864,16 +880,30 @@ func (b *bench) glance(tool string) bool {
 }
 
 // scoreShownFirst scores a page asked for, kept up to date, in the last
-// turn (its rows are what's « … »): its view proposed in that very turn,
-// no questionnaire written in it nor said, the changes offered by ask
+// turn (its rows are what's « … »): its subject reached first, before
+// anything is read (node_find alone may come before: node_open, or
+// node_show of the node that holds it), and how long it took to appear;
+// its view proposed in that very turn as a draft linked to the subject; no
+// questionnaire written in it nor said, the changes offered by ask
 // buttons; with the user's sentence, no title made of it. A page not
-// proposed, or asked about first, breaks a bar.
+// proposed, a subject not first, or questions asked first, break a bar.
 func (b *bench) scoreShownFirst(what, sentence string) {
-	proposed, asked, asks := false, false, false
+	proposed, beside, asked, asks := false, false, false, false
+	first, firstAt := "", time.Duration(0)
 	var titles []string
 	for _, x := range b.turnCalls(b.turn) {
+		if first == "" && x.tool != "node_find" && x.tool != "turn_home" {
+			first = x.tool
+			if x.err == "" && (x.tool == "node_open" || x.tool == "node_show") {
+				firstAt = x.endAt.Sub(b.saidAt)
+			}
+		}
 		if x.tool == "propose_view" && x.err == "" {
 			proposed = true
+			if node, _ := x.out["node"].(string); node != "" {
+				sum, err := b.sc.c.nodes.Get(node)
+				beside = beside || err == nil && x.about != "" && x.about != node && slices.Contains(sum.Links, x.about)
+			}
 		}
 		if !slices.Contains(benchWrites, x.tool) || x.err != "" {
 			continue
@@ -894,10 +924,18 @@ func (b *bench) scoreShownFirst(what, sentence string) {
 	if said, ok := b.lastAnswer(); ok && questionnaire(said.Text) {
 		asked = true
 	}
+	subjectFirst := firstAt > 0
+	b.s.yes(what+": subject first", subjectFirst, fmt.Sprintf("the turn's first call is %q", first))
+	if subjectFirst {
+		b.s.set(what+": first node (s)", fmt.Sprintf("%.1f", firstAt.Seconds()), true)
+	} else {
+		b.s.set(what+": first node (s)", "-", true)
+	}
 	b.s.yes(what+": card in the first turn", proposed, "no view proposed in the turn it was asked")
+	b.s.yes(what+": draft beside its subject", beside, "the view's draft is not linked to the turn's subject")
 	b.s.yes(what+": no questionnaire", !asked, "questions asked before the page was shown")
 	b.s.set(what+": changes offered (ask)", yesNo(asks), true)
-	if !proposed || asked {
+	if !proposed || asked || !subjectFirst {
 		b.s.notShown = append(b.s.notShown, what)
 	}
 	if sentence == "" {

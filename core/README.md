@@ -717,9 +717,9 @@ whatever address it dials) and one client certificate per device.
 | `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task with a node, the reply goes to its node's trace (« Eriphe a répondu : … »), so the user can see and contradict it; display only |
 | `stop_task` | stop the agent |
 | `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
-| `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)); asked for a page kept up to date, the brain calls it at once with sensible defaults, no questions first (the card shows the page; its choices are changed after, by ask buttons); returns the card's ref (`card`), to place in the subject's document, else it waits above the bar |
+| `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)); its node opens at once as a draft linked to the turn's subject, showing the real page, the card waiting on it; asked for a page kept up to date, the brain opens the subject first, then calls it in the same turn with sensible defaults, no questions first (its choices are changed after, by ask buttons); with `node`, the same draft is rewritten and its card says the new proposal; returns the draft (`node`) and the card's ref (`card`) |
 | `catalog_read`, `sources_read` | the whole grammar of a node's block (components, sources, items, sections, glance) and what a block may read ([The catalog tools](#the-catalog-tools-node_cataloggo)) |
-| `node_open` | open a work node: `title`, `parent` (a child of that node), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); its `title` a short name of what it is about, never the user's sentence; written in a tainted turn, the node is external and its title marked; a standing node, a view, is made only by `propose_view`, on the user's yes; the same `openNode` as a task's `node_open`; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
+| `node_open` | open a work node, for a new subject the brain's first call, before any read (a short title, a one-line « En cours : … » body, filled as the work goes): `title`, `parent` (a child of that node), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); its `title` a short name of what it is about, never the user's sentence; written in a tainted turn, the node is external and its title marked; a standing node, a view, is made only by `propose_view` (its draft a work node until the user's yes); the same `openNode` as a task's `node_open`; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_find` | find nodes by words of their title, goal, text or blocks (any word of three letters or more is enough, the nodes that hold the most first), each with its `status`; with no words, those running or waiting, then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does) |
 | `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, `backlinks` (the live nodes that link it, by their text or code), done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
 | `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying `external` (code's field); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
@@ -935,13 +935,21 @@ The node of the graph is the one object the user sees (#625, #632): one per matt
 until deployed, an appointment, a research), its doc saying where the matter stands, its trace
 what happened in it ([Node store](#node-store-nodestore-nodesgo)).
 
+- **Routing first.** The first seconds of a turn decide where its answer goes (the prompt's
+  « D'abord, où ») : a simple answer (a fact, a light action) in one line and no node, at the home
+  or in the open node; in the open node; or a new subject, alone or linked to another. For a new
+  subject the brain's first call is `node_open`, before any read, `recall` or search (`node_find`
+  alone may come before, to take up the node that holds it): a short title and a one-line « En
+  cours : … », so the user sees it appear within seconds; the brain, or the tasks that work under it
+  (their nodes are its children; the brain writes their result into the subject on their wake),
+  fills it as the work goes.
 - **Tools.** The brain finds a node before it opens another (`node_find`), opens one at once, with
   no card (`node_open`: a piece of work; what the user follows continuously, never done, is a view
-  only `propose_view` makes, on their yes), reads it (`node_read`: its version's `hash`), writes it on the version it read
+  only `propose_view` makes, standing on their yes), reads it (`node_read`: its version's `hash`), writes it on the version it read
   (`node_write`, `node_edit`, refused when stale: `ErrConflict`), sets its title, goal, `parent` or `done`
   (`node_set`) and opens its page on the user's screen (`node_show`). It links nodes in their
   text, `[[Title]]` ([links between nodes](../docs/node-format.md#links-between-nodes)): there is no
-  link tool; front-matter `links` are code's alone (a view decided from a card). Each
+  link tool; front-matter `links` are code's alone (a view's draft, linked to its subject). Each
   checks the node exists (`no node <id>: node_find finds it`) and refuses an archived one
   (`ErrArchived`); a body carrying a block's external is refused
   (`nodefile`'s author API: those are code's). There is **no archive tool**: archiving is the
@@ -960,12 +968,12 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   read. On a write, `nodeGuard` refuses a card that is not one of the node's (`nodeHasCard`: linked
   by `node_cards`, waiting or not); a tainted turn places one too: the block is a ref alone, never
   marked external (a card drawn from external content carries its own badge); a new node (`node_open`,
-  a view's body) holds no card yet. The block never carries what the card says: the page
+  a view's draft) holds no card yet, and a view's card waits on its draft, never placed in its subject. The block never carries what the card says: the page
   (`nodePageOf`, `placedCard`) draws the card from the records (pending, decided,
   `gone`), only for the node's own card and a block not external; anything else is sent without
   it and the page says « Carte introuvable », with no Oui or Non. A placed card leaves the page's
   foot (`cards`); an unplaced one waits there. The propose tools return the card's ref (`card`:
-  `cardProposed`), and `propose_view` says how to place it (`cardPlaceNote`).
+  `cardProposed`), and say how to place it (`cardPlaceNote`); `propose_view`'s card waits on its draft.
 - **The page's foot only asks.** `nodePageOf` sends at the foot (`cards`) only the cards that still
   ask something (`pendingAsks`: pending, or approved with its call running) and that no
   row answers (any card told on a List's row, `placed`); the decided ones (done, failed, declined,
@@ -1375,23 +1383,32 @@ composes each one from the catalog.
   after the channel's message would go with it. Decided and run, the card says what was done and what was left (`doneText`: « 4 déplacés, 1 laissé »). A card of one call keeps the words of `call_words.go`. Non
   refuses every call. On its own node's page, a card's origin, its skill and what Oui does in
   general are under Détails; the « extérieur » badge stays.
-- **One card** (`view_card.go`, kind `view`, table `view_proposals`): `propose_view` checks the
+- **A draft, then one card** (`view_card.go`, kind `view`, table `view_proposals`): `propose_view` checks the
   node (its body as a task's blocks are: the actions' grammar, an ask in its own words, no
   Link to a source's value; each source a catalog server's, an approved monitor, or the view's
   own), the monitor (`write_monitor`'s checks, its name free) and the skill (`write_skill`'s, its
-  name free, with `when`; code writes its `node:`, the id given beforehand). The card leads with a
-  summary code writes from what it checked (`viewSummary`: the page, how often the monitor looks,
-  what the skill does each time, its description, alone when it says already when it runs
-(« À chaque … », "Each …"), how it may tell the user, its urgent text), then,
-  under « Détails » (fields marked `detail`), the node's blocks with what each reads, what the
-  monitor does, and when the skill runs, with the repositories its steps may borrow, and its
-  instructions (marked `markdown`, drawn as Markdown); the view's `goal` is its why, where the brain says
-  the choices it proposed it with, sensible defaults the user changes after, never asked first
-  (scope, what matters, when to tell: the prompt's « Ce qui tournera seul, montre-le d'abord »). One yes makes the node (standing, by `user`), the
-  monitor (on) and the skill (approved), in that order; one that fails takes back those before,
-  and the card waits still. No makes none; archiving the node it waits on drops it (`dropped`,
-  its card `gone`). Written on a tainted turn, the card says so and the
-  node is external. A monitor or skill name taken is refused with what to do: a monitor for the
+  name free, with `when`; code writes its `node:`, the draft's id). Then it opens the view's node
+  at once as a **draft** (`openDraft`): a work node of the brain's, linked (front-matter `links`,
+  an edge on the graph; not a child: the view outlives its subject) to the node the turn is about,
+  its body the page itself, its sources read at once (`readNodeLater`), opened beside the subject
+  (from the home, with the bar in it). Its card waits on the draft (the kind's `node`, so
+  `node_cards` links it there and the draft has the halo of what waits), never on the subject.
+  Called again with `node`, the draft (`viewDraft`: its proposal still waiting) is rewritten
+  (`rewriteDraft`, checked as `node_write` and `node_set` are) and the same proposal updated: the
+  same card, saying the new one. The card is short: one line code writes from what it checked
+  (`viewSummary`: how often the monitor looks, when the skill runs on a schedule, « Toutes les 15
+  min · chaque jour à 7 h 30 »; the page is the preview), then, under « Détails » (fields marked
+  `detail`), the node's blocks with what each reads, what the monitor does, what the skill does,
+  when it runs, with the repositories its steps may borrow, and its instructions (marked
+  `markdown`, drawn as Markdown); the view's `goal` is its why, where the brain says the choices it
+  proposed it with, sensible defaults the user changes after, never asked first (the prompt's « Ce
+  qui tournera seul, montre-le d'abord »). One yes (`decideView`, through `decideCardWith` as any
+  card) makes the monitor (on) and the skill (approved), then turns the draft standing (opened by
+  `user`, its card's; its title vouched for while it is the one proposed), and marks done the work
+  nodes it links (its subject: `setNodeDone`); one step that fails takes back those before, the
+  draft stays one, and the card waits still. No makes none and archives the draft. Archiving the
+  draft drops it (`dropped`, its card `gone`). Written on a tainted turn, the card says so and the
+  draft is external. A monitor or skill name taken is refused with what to do: a monitor for the
   same thing is read by its name (leave `monitor` out), never written again under another name.
   The yes opens the view's node (`showNode`).
 
@@ -3590,13 +3607,16 @@ taint or a stale version), the turn's node left with `turn_home`, the day's page
 a step's failure settled with `node_settle`, a tainted turn (tainted, the title it opened marked,
 its `run_task` under the turn's node), the reply sent on its card, a child reused, an aside opened
 below its subject without being shown, `node_set parent`, `[[links]]` written and resolved, a
-glance, a mail watch shown first (its view's card in the turn it is asked, no questionnaire, the
+glance, a mail watch shown first (its subject opened before any read, with how long it took to
+appear, its view's draft linked to it and its card in the turn it is asked, no questionnaire, the
 changes offered by ask buttons), approved and valid (its bilan lead, items in sections; its batch
 reported), the view's skill noting the new mail (`item_note`) and the cards on its rows, and, last,
 « Tu peux suivre et gérer mes journées ? » asked at the home (the seed's day page archived): its
-view's card in that turn, no questionnaire, no title made of the sentence. The test fails on a lost
+subject first, its view's draft beside it and its card in that turn, no questionnaire, no title made
+of the sentence. A quick question at the home (« Il est quelle heure à Tokyo ? ») opens no node. The test fails on a lost
 reply, a duplicate node, more than one write refused for its grammar or the catalog, a view that is
-not valid, more than 15 turns, or a page asked for not shown first; the rest is reported.
+not valid, more than 15 turns, or a page asked for not shown first (its subject not first, no draft
+and card in its turn, or questions); the rest is reported.
 
 ```sh
 ERIPHE_LIVE_NODES=1 ERIPHE_LIVE_NODES_RUNS=2 go test -run TestNodesBenchLive -timeout 0 -v .
@@ -3612,9 +3632,10 @@ scenario's core without a model, in CI: ids, hashes and card refs as placeholder
 code opened and a piece of text replaced (which depend on what workers wrote) left out. Each call
 must be taken or refused as it was, and what they leave must hold to the rules: a card block draws
 its card. Its last turn, « tu peux suivre et gérer mes journées ? » (written by hand after a real
-case until a run records it: asked after a recall read a mail's fact), must propose its view in
-that turn with no questionnaire; its yes makes a page whose `Agenda` reads the calendar and whose
-buttons, written in the tainted turn, ask and are marked. Record it again with `ERIPHE_LIVE_NODES_RECORD=testdata/nodes_replay.json`
+case until a run records it: the view proposed after a recall read a mail's fact), must open its
+subject first, untainted, then propose its view in that turn, its draft linked to the subject and
+its card on it, with no questionnaire; its yes makes a standing page whose `Agenda` reads the
+calendar and whose buttons, written in the tainted turn, ask and are marked, and the subject done. Record it again with `ERIPHE_LIVE_NODES_RECORD=testdata/nodes_replay.json`
 when the rules change on purpose.
 
 **A full home** (#455). The workspace says the user is
@@ -3825,7 +3846,7 @@ through `a2ui.Validate`).
   card): `GET /api/proposals/{ref}` (`web_proposals.go`) gives its kind, text, why, fields
   and state in the user's language, where it comes from (`node`, `from`) and what its Oui does
   (`yes`) when it is an [access or a start's card](#the-approval-card), and the card that answers it (404 when no card carries
-  it). A `summary` (a view's) is what its yes makes, in plain sentences of code's, shown first; a
+  it). A `summary` (a view's: one line of what will run by itself) is shown first; a
   field marked `detail` is under a collapsed « Détails », one click away and never removed, and
   one marked `markdown` (a skill's instructions) is drawn as Markdown in a box that scrolls. Its
   header says what the card asks, by its kind; it has one Oui and a discreet ✕, which answer the

@@ -236,7 +236,8 @@
     },
     "ok": true,
     "gives": {
-      "card": "$c1"
+      "card": "$c1",
+      "node": "$n7"
     }
   },
   {
@@ -246,11 +247,23 @@
     "talk": "$mails",
     "tool": "node_write",
     "args": {
-      "body": "Les mails qui comptent.\n\n## Ce qu'on a décidé\n- Tous tes comptes mail sont couverts.\n- Je lis et trie chaque mail ; pour ce qui demande quelque chose, je prépare un brouillon ou une action. Rien ne part sans ton oui sur une carte.\n- Je te préviens seulement de l'urgent, tout de suite, jamais la nuit ; le reste est dans la vue et au brief.\n\n```eriphe:block carte\n{\"card\": \"$c1\"}\n```\n",
+      "body": "Les mails qui comptent.\n\n## Ce qu'on a décidé\n- Tous tes comptes mail sont couverts.\n- Je lis et trie chaque mail ; pour ce qui demande quelque chose, je prépare un brouillon ou une action. Rien ne part sans ton oui sur une carte.\n- Je te préviens seulement de l'urgent, tout de suite, jamais la nuit ; le reste est dans la vue et au brief.\n\nLa vue proposée : [[Garder un œil sur mes mails]].\n",
       "expect": "$hash",
       "id": "$mails"
     },
     "ok": true
+  },
+  {
+    "turn": 14,
+    "tool": "node_open",
+    "args": {
+      "title": "Suivre mes journées",
+      "body": "En cours : je prépare la page de ta journée.\n"
+    },
+    "ok": true,
+    "gives": {
+      "id": "$n8"
+    }
   },
   {
     "turn": 14,
@@ -262,7 +275,9 @@
       "body": "Ta journée, tenue à jour : tes rendez-vous du jour. Je ne te préviens qu'au brief, jamais la nuit ; dis-le pour changer.\n\n```eriphe:block jour\n{\"sources\": {\"agenda\": {\"tool\": \"agenda/aujourdhui\", \"every\": 15}}, \"components\": [{\"id\": \"root\", \"component\": \"Agenda\", \"events\": {\"@path\": \"/agenda/events\"}}]}\n```\n```eriphe:block changer\n{\"components\": [{\"id\": \"root\", \"component\": \"Row\", \"children\": [\"mails\", \"matin\"]}, {\"id\": \"mails\", \"component\": \"Button\", \"label\": \"Ajouter mes mails\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": {\"@path\": \"/agenda/events/0/title\"}}}}}, {\"id\": \"matin\", \"component\": \"Button\", \"label\": \"Un point chaque matin\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Fais-moi un point chaque matin à 8 h\"}}}}]}\n```\n"
     },
     "ok": false,
-    "error": "block changer: /components/1/action/event: an ask carries your own words only: literal text, never a value bound to the data"
+    "error": "block changer: /components/1/action/event: an ask carries your own words only: literal text, never a value bound to the data",
+    "about": "$n8",
+    "talk": "$n8"
   },
   {
     "turn": 14,
@@ -275,7 +290,10 @@
     },
     "ok": true,
     "gives": {
-      "card": "$c2"
-    }
+      "card": "$c2",
+      "node": "$n9"
+    },
+    "about": "$n8",
+    "talk": "$n8"
   }
 ]

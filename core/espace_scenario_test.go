@@ -941,23 +941,23 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 	case strings.Contains(said, "Fais comme tu proposes"):
 		// The card recalls the choices: the view's goal is its why. The whole
 		// view, as a real brain composes it: its node, the monitor that looks
-		// every 5 minutes and the skill that sorts each mail. Its card is
-		// placed in the subject's document, under what was decided.
-		out := b.self("propose_view", map[string]any{"title": "Mes mails", "goal": "Toutes les boîtes ; ce qui demande une réponse ; prévenu au brief, jamais la nuit",
+		// every 5 minutes and the skill that sorts each mail. Its node opens
+		// at once as a draft beside the subject, its card on it; the
+		// subject links it under what was decided.
+		b.self("propose_view", map[string]any{"title": "Mes mails", "goal": "Toutes les boîtes ; ce qui demande une réponse ; prévenu au brief, jamais la nuit",
 			"body":    "Les mails qui demandent une réponse.\n",
 			"monitor": map[string]any{"name": "mails-recus", "server": "mail", "tool": "recus", "cond": "new", "path": "messages", "id": "id", "every": "5m"},
 			"skill": map[string]any{"name": "mails-trier", "description": "Trie chaque mail reçu et prépare une réponse à ceux qui en demandent une.",
 				"when": "monitor.new key=mails-recus", "every": "15m", "model": "small", "tools": []string{"mail"},
 				"instructions": "# Trier les mails\n\nPour **chaque** mail reçu :\n\n1. Note-le dans la page.\n2. S'il demande une réponse, ouvre un node « Répondre à … » avec un brouillon.\n\nN'envoie rien : l'envoi attend le `oui`.\n"}})
-		card, _ := out["card"].(string)
 		_, hash := b.read(node)
 		b.self("node_write", map[string]any{"id": node, "expect": hash, "body": "## Ce qu'on suit\n\nLes mails qui demandent quelque chose, triés pour toi.\n\n" +
 			"## Ce qu'on a décidé\n\n- Toutes les boîtes ; ce qui demande une réponse.\n- Prévenu au brief, jamais la nuit.\n\n" +
-			"```eriphe:block vue\n{\"card\": \"" + card + "\"}\n```\n\n## Ensuite\n\nTon oui sur la carte crée la vue.\n"})
+			"## Ensuite\n\nTon oui sur la carte de [[Mes mails]] crée la vue.\n"})
 		return "Voici la vue : dis oui sur sa carte et elle s'ouvre."
 	case strings.Contains(said, "vue de l'agenda"):
-		// Proposed at the home with no subject opened: its card waits
-		// above the bar (web_orb.go's unheldCards).
+		// Proposed at the home with no subject opened: its draft is the
+		// subject, opened with the bar in it, its card at its foot.
 		b.self("propose_view", map[string]any{"title": "Mon agenda", "body": "Les rendez-vous du jour.\n"})
 		return "Voici la vue de ton agenda : dis oui sur sa carte."
 	case strings.Contains(said, "à part"):
