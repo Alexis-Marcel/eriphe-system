@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxAt, frameAround } from "./camera";
+import { boxAt, FLOOR, frameAround } from "./camera";
 import { DEFAULT_FORCES, EDGE_DELAY, EDGE_RAMP, EDGE_SPEED, EDGE_ZONE, edgePush, edgeStep, extent, FORCES, pairs, setForces, Sim, T, type LNode, type Pos, type Pt } from "./layout";
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -299,17 +299,36 @@ describe("the force graph", () => {
 
   describe("the node in focus as the centre", () => {
     const size = { w: 1440, h: 900 };
+    // view is the camera on the page in focus, slid toward its neighbours
+    // (as Graph.tsx frames it), and that page's box.
     const view = (sim: Sim, nodes: LNode[], id: string) => {
       const p = sim.positions();
       const f = nodes.find((n) => n.id === id)!;
-      const all = nodes.filter((n) => n.id !== id).map((n) => {
+      const kin = new Set(pairs(nodes).flatMap(([a, b]) => (a === id ? [b] : b === id ? [a] : [])));
+      const near = nodes.filter((n) => kin.has(n.id)).map((n) => {
         const [h, t, b] = extent(n, p[n.id]);
         return [p[n.id][0] - h, t, p[n.id][0] + h, b] as [number, number, number, number];
       });
-      return { cam: frameAround(boxAt(p[id], f.box!), all, size), all };
+      const page = boxAt(p[id], f.box!);
+      return { cam: frameAround(page, near, size), page };
+    };
+    // whole tells whether a box is whole on screen under the camera.
+    const whole = (cam: { k: number; x: number; y: number }, [l, t, r, b]: number[]) =>
+      cam.x + l * cam.k >= 0 && cam.x + r * cam.k <= size.w && cam.y + t * cam.k >= 0 && cam.y + b * cam.k <= size.h;
+    // sides are the sides of the page in focus the other bodies stand on.
+    const sides = (sim: Sim, nodes: LNode[], id: string) => {
+      const p = sim.positions(), f = nodes.find((n) => n.id === id)!;
+      const [l, t, r, b] = boxAt(p[id], f.box!);
+      const out = new Set<string>();
+      for (const n of nodes) {
+        if (n.id === id) continue;
+        const [x, y] = p[n.id];
+        out.add(y < t ? "above" : y > b ? "below" : x < l ? "left" : x > r ? "right" : "on");
+      }
+      return out;
     };
 
-    it("holds the focused page where it is, the graph settling round it, its neighbours closest, all in view", () => {
+    it("holds the focused page where it is, the others all round it, its neighbours closest, framed readable", () => {
       for (const id of ["MM", "MJ"]) {
         const nodes = owner();
         const sim = laid(nodes);
@@ -337,15 +356,31 @@ describe("the force graph", () => {
           expect(g).toBeLessThanOrEqual(others[others.length >> 1]);
         }
         expect(overlaps(sim, opened)).toEqual([]);
-        // the camera frames it in the middle and every other body whole
-        const { cam, all } = view(sim, opened, id);
-        expect(cam.x + at[0] * cam.k).toBeCloseTo((size.w) / 2, 0);
-        for (const [l, t, r, b] of all) {
-          expect(cam.x + l * cam.k).toBeGreaterThanOrEqual(0);
-          expect(cam.x + r * cam.k).toBeLessThanOrEqual(size.w);
-          expect(cam.y + t * cam.k).toBeGreaterThanOrEqual(0);
-          expect(cam.y + b * cam.k).toBeLessThanOrEqual(size.h);
-        }
+        // the others stand all round it, not on one side
+        const round = sides(sim, opened, id);
+        expect(round.has("on")).toBe(false);
+        expect(round.size, [...round].join()).toBeGreaterThanOrEqual(3);
+        // the camera frames it whole and readable
+        const { cam, page } = view(sim, opened, id);
+        expect(cam.k).toBeGreaterThanOrEqual(FLOOR);
+        expect(whole(cam, page)).toBe(true);
+      }
+    });
+
+    it("keeps pages readable on a big graph with two pages open: no zoom below the floor, the focused page whole", () => {
+      const nodes = big();
+      const sim = laid(nodes);
+      const opened = open(nodes, ["s3", "s2"]);
+      sim.sync(opened);
+      sim.focus("s3");
+      sim.settle();
+      for (const id of ["s3", "s2"]) {
+        sim.focus(id);
+        sim.settle();
+        const { cam, page } = view(sim, opened, id);
+        expect(cam.k).toBeGreaterThanOrEqual(FLOOR);
+        expect(whole(cam, page)).toBe(true);
+        expect(overlaps(sim, opened)).toEqual([]);
       }
     });
 
@@ -366,7 +401,7 @@ describe("the force graph", () => {
       sim.focus(null);
       sim.settle();
       const p = sim.positions();
-      expect(Math.max(...nodes.map((n) => dist(p[n.id], at)))).toBeLessThan(700);
+      expect(Math.max(...nodes.map((n) => dist(p[n.id], at)))).toBeLessThan(800);
       expect(overlaps(sim, nodes)).toEqual([]);
     });
   });

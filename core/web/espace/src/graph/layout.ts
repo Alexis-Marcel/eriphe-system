@@ -54,6 +54,7 @@ export const T = {
   cap: 40, // no body moves more than this a tick
   soft: 0.4, // collision: the share of an overlap undone a pass while warm
   passes: 2, // ... passes a tick
+  spread: 0.2, // after a focus change, the pull to a place round the node in focus, × the energy
   jam: 2, // two bodies overlapping less than this are apart (within their margins: never visible)
 };
 
@@ -186,6 +187,7 @@ export class Sim {
   private carried = new Map<string, number>(); // the held body's cluster: the share of its moves each one takes
   private focusId: string | null = null; // the node in focus: the centre, it stays where it is
   private centre: Pt = [0, 0]; // where the centre force pulls: the node in focus, else where the last one was
+  private spread = new Map<string, Pt>(); // after a focus change: the angle and distance each body heads for, round the node in focus
   private forces: Forces;
 
   constructor(forces: Forces = FORCES) {
@@ -311,8 +313,35 @@ export class Sim {
     const next = x ? x.id : null;
     if (next === this.focusId) return;
     this.focusId = next;
-    if (x) this.centre = [x.x, x.y];
+    this.spread = new Map();
+    if (x) {
+      this.centre = [x.x, x.y];
+      this.spreadRound(x);
+    }
     this.reheat();
+  }
+
+  // spreadRound gives each other body a place to head for while the graph
+  // is warm, so that they stand all round the node in focus, not on the
+  // side they came from: the same order round it as now (a cluster stays
+  // together), evenly spread, each as far as now or just past its edge.
+  // A glide: the forces and the collision settle the rest.
+  private spreadRound(f: Body): void {
+    const others = this.list
+      .filter((b) => b !== f)
+      .map((b) => ({ b, t: Math.atan2(b.y - f.y, b.x - f.x), d: Math.hypot(b.x - f.x, b.y - f.y) }))
+      .sort((p, q) => p.t - q.t);
+    const n = others.length;
+    if (n < 2) return;
+    // the even angles, turned to move the bodies least
+    let turn = 0;
+    for (let i = 0; i < n; i++) turn += Math.atan2(Math.sin(others[i].t - (i / n) * Math.PI * 2), Math.cos(others[i].t - (i / n) * Math.PI * 2));
+    turn /= n;
+    others.forEach(({ b, d }, i) => {
+      const t = turn + (i / n) * Math.PI * 2, ux = Math.cos(t), uy = Math.sin(t);
+      const r = Math.max(d, reach(f, ux, uy) + reach(b, ux, uy) + this.forces.distance);
+      this.spread.set(b.id, [t, r]);
+    });
   }
 
   // focused is the node in focus, if any.
@@ -407,6 +436,18 @@ export class Sim {
       x.vx -= (x.x - cx) * F.centre * a;
       x.vy -= (x.y - cy) * F.centre * a;
     }
+    // after a focus change, a gentle pull to the places round it
+    // (spreadRound): round it, not through it
+    if (fx)
+      for (const [id, [t1, r1]] of this.spread) {
+        const x = this.byId.get(id);
+        if (!x) continue;
+        const rx = x.x - fx.x, ry = x.y - fx.y, r = Math.max(1, Math.hypot(rx, ry)), t = Math.atan2(ry, rx);
+        const turn = Math.atan2(Math.sin(t1 - t), Math.cos(t1 - t));
+        const ux = rx / r, uy = ry / r;
+        x.vx += (-uy * turn * r + ux * (r1 - r)) * T.spread * a;
+        x.vy += (ux * turn * r + uy * (r1 - r)) * T.spread * a;
+      }
     // move: what is held or in focus stays
     for (const x of L) {
       if (this.fixed(x)) {
@@ -431,6 +472,7 @@ export class Sim {
   // and nothing moves until the next change.
   private rest(): void {
     this.alpha = 0;
+    this.spread = new Map();
     for (let i = 0; i < 200 && this.collide(1) > T.jam; i++);
     for (const x of this.list) x.vx = x.vy = 0;
   }

@@ -324,12 +324,13 @@ export function Graph({ live }: { live: boolean }) {
     const all = bubbles.map((x) => bubbleBox(x, rp[x.id]));
     // An enlarged page in focus is framed alone and whole, at scale 1.
     if (focus && shown.includes(focus) && sizes.get(focus) === "big") return frameAlone(boxAt(rp[focus], boxOf(focus)), band);
-    if (centre && shown.includes(centre))
-      return frameAround(
-        boxAt(rp[centre], boxOf(centre)),
-        [...all, ...shown.filter((id) => id !== centre).map((id) => boxAt(rp[id], boxOf(id)))],
-        band,
-      );
+    // The page in focus as the centre: framed readable, slid toward its
+    // direct neighbours as far as it stays whole.
+    if (centre && shown.includes(centre)) {
+      const kin = new Set(links.flatMap((l) => (l.a === centre ? [l.b] : l.b === centre ? [l.a] : [])));
+      const near = list.filter((x) => kin.has(x.id) && rp[x.id]).map((x) => (shown.includes(x.id) ? boxAt(rp[x.id], boxOf(x.id)) : bubbleBox(x, rp[x.id])));
+      return frameAround(boxAt(rp[centre], boxOf(centre)), near, band);
+    }
     if (shown.length) {
       const pages = shown.map((id) => ({ id, box: boxAt(rp[id], boxOf(id)) }));
       const near = bubbles.filter((x) => lit.has(x.id)).map((x) => bubbleBox(x, rp[x.id]));
