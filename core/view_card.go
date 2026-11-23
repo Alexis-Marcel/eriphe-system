@@ -418,6 +418,7 @@ func (c *core) decideView(id int64, approve bool) error {
 		if err == nil {
 			undoSkill = func() { c.store.deleteSkill(k.Name) }
 			err = c.store.approveSkill(k.Name, k.Pending)
+			c.settleCards(cardSkill) // a version of it that waited is replaced
 		}
 		if err != nil {
 			undoSkill()

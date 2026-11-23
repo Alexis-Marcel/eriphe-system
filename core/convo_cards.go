@@ -30,14 +30,16 @@ import (
 //     anything else that goes to the user, under a message of eriphe-core's,
 //     a few at a time (attention.go).
 //   - A card that stops a task (blocksATask) never waits for a good moment:
-//     if its turn wrote nothing, as when the turn failed, it goes with the
-//     brain's next message, whatever the hour.
+//     if its turn wrote nothing, as when the turn failed, the queue
+//     delivers it at once, whatever the hour (its weight); one still queued
+//     goes with the brain's next message (claimBlockingCards).
+//   - A card's state is the one truth of what waits: its proposal moves it
+//     the moment it moves, wherever it was answered (settleCards).
 //   - The brain never approves: no tool of its decides a card. A plain
 //     "oui" or "non" of the user's may, under strict rules (resolveByText).
 //
-// A task's raw permissions (a held tool's) keep their own cards,
-// at the end of the conversation (pending); what the grid asks is a card
-// here (access_card.go).
+// What a task asks of the user (what the grid asks, the release of a tool
+// lent held back) is a card here too (access_card.go).
 
 const convoCardsSchema = `CREATE TABLE IF NOT EXISTS convo_cards (
 	id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -375,7 +377,6 @@ func (c *core) cardAgain(p proposal) {
 // linked waits there too). Only at start (reconcileCards): a proposal
 // gets its card where it is made.
 func (c *core) syncCards() {
-	c.foldCalls() // same-kind calls cards made before (call_fold.go)
 	for _, p := range c.pendingProposals() {
 		c.syncCard(p)
 	}
@@ -827,7 +828,7 @@ func (c *core) withdrawAsk(ctx context.Context, a accessQuestion) {
 		return
 	}
 	log.Printf("access ask %d: withdrawn, its node archived", a.ID)
-	if a.Call == "" && len(a.Refs) == 0 {
-		c.settleWaiting(ctx, a, false)
+	if a.Call == "" {
+		c.settleWaiting(ctx, a, false) // the task's calls that waited on it (an access, a release): refused
 	}
 }

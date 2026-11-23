@@ -587,6 +587,7 @@ func (c *core) unlearn(id int64, who, reason string, evidence []string) (*learnE
 	if err := c.store.setSkillApproved(e.Skill, e.Version, e.PrevVersion); err != nil {
 		return nil, err
 	}
+	c.settleCards(cardSkill) // a version of it that waited, gone with it
 	return c.mem.recordSkillUndo(e, who, reason, evidence)
 }
 

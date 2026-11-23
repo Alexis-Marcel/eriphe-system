@@ -327,6 +327,7 @@ func (c *core) askHeldCall(t *TaskRow, pid, tool string) {
 // releaseAsk is the card that asks to release a task's held tools: the
 // one that already waits for the same, else a new one.
 func (c *core) releaseAsk(a accessQuestion) int64 {
+	a.Refs = slices.Sorted(slices.Values(a.Refs)) // the same, in any order
 	raw, _ := json.Marshal(a.Refs)
 	var id int64
 	if c.store.db.QueryRow(`SELECT id FROM access_asks WHERE task_id = ? AND refs = ? AND state = ?`, a.TaskID, string(raw), startProposed).Scan(&id) == nil {

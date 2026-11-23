@@ -13,6 +13,33 @@ import (
 // waiting is linked to it (or a final result waits for their word), never
 // because a task is held or waits for a permission without one.
 
+// A release card withdrawn with its node (archived) refuses the calls that
+// waited on it: the task never hangs with nothing on screen.
+func TestWithdrawnReleaseRefusesItsCalls(t *testing.T) {
+	c := newMailCore(t, accessFree, func(c *core) { openGraph(t, c); c.useNodes(c.nodes) }) // before its pool runs
+	node := mustNode(t, c, nodestore.New{Title: "Tri des mails"})
+	heldTask(t, c, "t-1")
+	c.store.updateTask("t-1", map[string]any{"state": stateWaitingPermission})
+	c.store.db.Exec(`INSERT INTO task_nodes (task, node) VALUES ('t-1', ?)`, node)
+	if got := request(t, c, "t-1", "p-1", "move"); got != "user" {
+		t.Fatalf("a held tool: %s", got)
+	}
+	if err := c.nodes.Archive(node, byUser); err != nil {
+		t.Fatal(err)
+	}
+	c.withdrawCards(context.Background(), []string{node}) // as the archive does
+	if accessCards(t, c) != 0 {
+		t.Fatal("the release card still waits")
+	}
+	items, _ := c.store.inbox("t-1")
+	if !slices.ContainsFunc(items, func(it InboxItem) bool { return it.Data["id"] == "p-1" && it.Data["allow"] == false }) {
+		t.Errorf("the call that waited is not refused: %+v", items)
+	}
+	if c.accessAsked("t-1", "p-1") {
+		t.Error("the call still waits on a card")
+	}
+}
+
 // nodeToldSince tells whether the graph was told node moved after seq.
 func nodeToldSince(c *core, seq int64, node string) bool {
 	evs, _, _, _ := c.graphAfter(seq)
@@ -174,6 +201,48 @@ func TestCardAnsweredElsewhereMovesAtOnce(t *testing.T) {
 		}, func(ref string) {
 			_, id, _ := parseProposalRef(ref)
 			if err := c.deleteNotifyRule(id); err != nil {
+				t.Fatal(err)
+			}
+		}, cardGone},
+		{"a setting proposed again", func(node string) string {
+			id, err := c.proposeSetting(settingProposal{Name: setCap, Value: "3", Why: "Trop de notifications."})
+			if err != nil {
+				t.Fatal(err)
+			}
+			c.cardNow(cardSetting, id, "", nodeRef(node))
+			return proposalRef(cardSetting, id)
+		}, func(string) {
+			if _, err := c.proposeSetting(settingProposal{Name: setCap, Value: "4", Why: "Plutôt 4."}); err != nil {
+				t.Fatal(err)
+			}
+		}, cardGone},
+		{"a monitor proposed, deleted by the user", func(node string) string {
+			res, err := c.store.db.Exec(`INSERT INTO monitors (name, state, created, updated) VALUES ('disque', ?, 1, 1)`, monitorProposed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			id, _ := res.LastInsertId()
+			c.cardNow(cardMonitor, id, "", nodeRef(node))
+			return proposalRef(cardMonitor, id)
+		}, func(string) {
+			if err := c.deleteMonitor("disque"); err != nil {
+				t.Fatal(err)
+			}
+		}, cardGone},
+		{"a skill the brain wrote, deleted in Réglages", func(node string) string {
+			k, _, err := c.store.addSkillVersion(skillFiles(skillMD), skillFromEriphe)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var id int64
+			c.store.db.QueryRow(`SELECT rowid FROM skills WHERE name = ?`, k.Name).Scan(&id)
+			c.cardNow(cardSkill, id, "", nodeRef(node))
+			return proposalRef(cardSkill, id)
+		}, func(ref string) {
+			_, id, _ := parseProposalRef(ref)
+			var name string
+			c.store.db.QueryRow(`SELECT name FROM skills WHERE rowid = ?`, id).Scan(&name)
+			if err := c.deleteSkill(name, "owner"); err != nil {
 				t.Fatal(err)
 			}
 		}, cardGone},

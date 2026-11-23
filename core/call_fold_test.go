@@ -131,7 +131,7 @@ func TestFoldKeepsApartWhatDiffers(t *testing.T) {
 	for _, id := range []int64{a, other, folder, b, tool, bare} {
 		c.cardNow(cardCalls, id, "", refNode+":"+node)
 	}
-	c.syncCards()
+	c.foldCalls() // as a run's end does (skill_runs.go)
 
 	if batchOf(c, b) != a || batchOf(c, bare) != a {
 		t.Errorf("the same move did not fold: %d on %d, %d on %d", b, batchOf(c, b), bare, batchOf(c, bare))
@@ -159,7 +159,7 @@ func TestFoldKeepsApartWhatDiffers(t *testing.T) {
 		t.Errorf("the card kept %+v", xs)
 	}
 	// Folded once: the next sync changes nothing.
-	c.syncCards()
+	c.foldCalls() // as a run's end does (skill_runs.go)
 	if batchOf(c, b) != a || batchOf(c, other) != other {
 		t.Error("a second sync moved a call")
 	}
@@ -176,7 +176,7 @@ func TestChosenCallsRunAlone(t *testing.T) {
 	d := askOn(t, c, node, "mcp__monitor__move", moveMail("sam@example.org", "archive", "m3"), l("m3"))
 	stranger := askOn(t, c, node, "mcp__monitor__move", moveMail("lou@example.org", "archive", "m4"), l("m4"))
 	c.cardNow(cardCalls, a, "", refNode+":"+node)
-	c.syncCards()
+	c.foldCalls() // as a run's end does (skill_runs.go)
 	xs, _ := c.cardsWhere(`ref = ?`, proposalRef(cardCalls, a))
 	if len(xs) != 1 {
 		t.Fatalf("cards %+v", xs)
@@ -260,7 +260,7 @@ func TestCallFoldedInAfterDrawnWaitsOn(t *testing.T) {
 	a := askOn(t, c, node, "mcp__monitor__move", moveMail("sam@example.org", "archive", "m1"), l("m1"))
 	b := askOn(t, c, node, "mcp__monitor__move", moveMail("sam@example.org", "archive", "m2"), l("m2"))
 	c.cardNow(cardCalls, a, "", refNode+":"+node)
-	c.syncCards()
+	c.foldCalls() // as a run's end does (skill_runs.go)
 	xs, _ := c.cardsWhere(`ref = ?`, proposalRef(cardCalls, a))
 	if len(xs) != 1 {
 		t.Fatalf("cards %+v", xs)
@@ -268,7 +268,7 @@ func TestCallFoldedInAfterDrawnWaitsOn(t *testing.T) {
 	card := xs[0].ID
 	// Drawn with a and b; then another mail's call folds in.
 	late := askOn(t, c, node, "mcp__monitor__move", moveMail("sam@example.org", "archive", "m3"), l("m3"))
-	c.syncCards()
+	c.foldCalls() // as a run's end does (skill_runs.go)
 	if batchOf(c, late) != a {
 		t.Fatalf("the late call did not fold: %d", batchOf(c, late))
 	}
