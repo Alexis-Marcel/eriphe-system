@@ -85,6 +85,9 @@ func (c *core) readSources(ctx context.Context, srcs map[string]sourceCall, only
 }
 
 func (c *core) readOne(ctx context.Context, s sourceCall) sourceRead {
+	if s.Tool == nodeFindSource {
+		return c.readNodeFind(s.Args) // the graph itself, read by code (node_find.go)
+	}
 	spec := s.spec()
 	if why := c.blockSourceWhy(spec); why != "" {
 		return sourceRead{why: why}

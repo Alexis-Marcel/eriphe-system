@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -34,9 +35,6 @@ import (
 //     node or block, a tainted item note) taints the turn;
 //   - only the user archives: there is no archive tool.
 
-// nodeFindMax is the most nodes node_find gives.
-const nodeFindMax = 30
-
 // nodeTraceShown is the most bytes of a node's trace node_read gives:
 // its end.
 const nodeTraceShown = 6000
@@ -45,14 +43,6 @@ type brainNodeOpenIn struct {
 	nodeOpenFields
 	Parent string `json:"parent,omitempty" jsonschema:"the node it is a part of; empty for a node of its own"`
 	Aside  bool   `json:"aside,omitempty" jsonschema:"only when the user asks for it on the side: opened in the background, the bar stays where it is"`
-}
-
-type nodeFindIn struct {
-	Query    string `json:"query,omitempty" jsonschema:"words to look for; empty for the nodes at work or waiting, then the last changed"`
-	Archived bool   `json:"archived,omitempty" jsonschema:"the archived nodes too"`
-	// IncludeExternal quotes the titles written after an external read,
-	// as since does: it taints the turn.
-	IncludeExternal bool `json:"include_external,omitempty" jsonschema:"quote the titles written after an external read too: this taints the turn"`
 }
 
 type brainNodeReadIn struct {
@@ -77,7 +67,8 @@ type brainNodeSetIn struct {
 	Goal  string `json:"goal,omitempty" jsonschema:"its new goal"`
 	Done  *bool  `json:"done,omitempty" jsonschema:"true once its goal is reached; false when it comes back"`
 	// Parent is a pointer: "" moves the node to the top.
-	Parent *string `json:"parent,omitempty" jsonschema:"the node it becomes a part of, never itself nor one below it; \"\" for the top"`
+	Parent *string        `json:"parent,omitempty" jsonschema:"the node it becomes a part of, never itself nor one below it; \"\" for the top"`
+	Props  map[string]any `json:"props,omitempty" jsonschema:"properties to set: a text, a number, a date (2026-10-01), a [[link]] or a list of them; null removes one; tags is a list (cuisine/recette)"`
 }
 
 type nodeShowIn struct {
@@ -116,7 +107,7 @@ func registerNodeTools(s *mcp.Server, c *core) {
 			}
 			return c.brainNodeWrite(in.ID, in.Expect, fn)
 		})
-	tool(s, "node_set", "Change a node's title or goal, move it under another (parent; \"\" for the top), or set it done once its goal is reached (or not, when it comes back). Only the user archives.",
+	tool(s, "node_set", "Change a node's title or goal, its properties and tags (props), move it under another (parent; \"\" for the top), or set it done once its goal is reached (or not, when it comes back). Only the user archives.",
 		func(ctx context.Context, in brainNodeSetIn) (map[string]any, error) { return c.brainNodeSet(in) })
 	tool(s, "node_show", "Open a node's page on the user's screen: asked from the home, the bar moves into it; from a node, it opens beside it. It writes nothing.",
 		func(ctx context.Context, in nodeShowIn) (map[string]any, error) { return c.brainNodeShow(in) })
@@ -262,6 +253,12 @@ type nodeFound struct {
 	Done          bool   `json:"done,omitempty"`
 	Archived      bool   `json:"archived,omitempty"`
 	External      bool   `json:"external,omitempty"`
+	// Withheld: it has properties asked for (columns), not given: it is
+	// external, and include_external was not said.
+	Withheld bool `json:"withheld,omitempty"`
+	// Props are the columns asked for, written beside its fields
+	// (MarshalJSON, node_find.go).
+	Props map[string]any `json:"-"`
 }
 
 // foundNode is a node as node_find gives it; quote: its title too when it
@@ -273,47 +270,6 @@ func (c *core) foundNode(x statusNode, quote bool) nodeFound {
 		f.Title = x.Title
 	}
 	return f
-}
-
-// nodeFindTaint is what node_find makes the turn when it quotes a title
-// that may be someone else's words.
-const nodeFindTaint = "node_find.external"
-
-// brainNodeFind is node_find.
-func (c *core) brainNodeFind(in nodeFindIn) (map[string]any, error) {
-	if c.nodes == nil {
-		return nil, errNoGraph
-	}
-	var xs []statusNode
-	if q := strings.TrimSpace(in.Query); q != "" {
-		found, err := c.nodes.Find(q, in.Archived, nodeFindMax)
-		if err != nil {
-			return nil, err
-		}
-		xs = c.withStatus(found)
-	} else {
-		xs = c.activeNodes(nodeFindMax)
-		more, err := c.nodes.Recent(in.Archived, nodeFindMax)
-		if err != nil {
-			return nil, err
-		}
-		for _, x := range c.withStatus(more) {
-			if len(xs) < nodeFindMax && !slices.ContainsFunc(xs, func(y statusNode) bool { return y.ID == x.ID }) {
-				xs = append(xs, x)
-			}
-		}
-	}
-	found := make([]nodeFound, 0, len(xs))
-	quoted := false
-	for _, x := range xs {
-		f := c.foundNode(x, in.IncludeExternal)
-		quoted = quoted || f.TitleExternal && f.Title != ""
-		found = append(found, f)
-	}
-	if quoted {
-		c.turn.taint(nodeFindTaint) // someone else's words, quoted
-	}
-	return map[string]any{"nodes": found, "note": "A title written after reading external content (title_external) is quoted only with include_external, which taints the turn; node_read reads it too. Show it to the user as it is: the workspace marks it."}, nil
 }
 
 // brainNodeRead is node_read: what may be someone else's words taints the
@@ -457,8 +413,8 @@ func (c *core) brainNodeSet(in brainNodeSetIn) (map[string]any, error) {
 		return nil, fmt.Errorf("%s: %w", id, nodestore.ErrArchived)
 	}
 	title, goal := strings.TrimSpace(in.Title), strings.TrimSpace(in.Goal)
-	if title == "" && goal == "" && in.Done == nil && in.Parent == nil {
-		return nil, errors.New("title, goal, done or parent")
+	if title == "" && goal == "" && in.Done == nil && in.Parent == nil && len(in.Props) == 0 {
+		return nil, errors.New("title, goal, props, done or parent")
 	}
 	if in.Parent != nil {
 		if _, ok := c.nodeStep(id); ok {
@@ -467,7 +423,7 @@ func (c *core) brainNodeSet(in brainNodeSetIn) (map[string]any, error) {
 	}
 	c.turnNode(id)
 	out := map[string]any{"id": id}
-	if title != "" || goal != "" {
+	if title != "" || goal != "" || len(in.Props) > 0 {
 		if len([]rune(title)) > nodefile.TitleMax {
 			return nil, fmt.Errorf("a title is %d characters at most", nodefile.TitleMax)
 		}
@@ -486,8 +442,13 @@ func (c *core) brainNodeSet(in brainNodeSetIn) (map[string]any, error) {
 			if goal != "" {
 				n.Meta.Goal = goal
 			}
+			for _, k := range slices.Sorted(maps.Keys(in.Props)) {
+				if err := n.Meta.SetProp(k, in.Props[k]); err != nil {
+					return err
+				}
+			}
 			if tainted {
-				n.Meta.External = true // its title may carry what the turn read
+				n.Meta.External = true // its title and properties may carry what the turn read
 			}
 			return nil
 		})

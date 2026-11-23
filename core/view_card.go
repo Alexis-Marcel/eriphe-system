@@ -276,7 +276,7 @@ func (c *core) rewriteDraft(v viewProposal, tainted bool, sourceOK func(nodefile
 
 // viewSourceOK is the check of a view's sources: a catalog server's tool
 // or resource (read as the brain's free reads, sourceWhy), a monitor the
-// user approved, or the one the view makes.
+// user approved, the one the view makes, or node_find (node_find.go).
 func (c *core) viewSourceOK(own string) func(nodefile.Source) error {
 	return func(src nodefile.Source) error {
 		switch {
@@ -287,6 +287,8 @@ func (c *core) viewSourceOK(own string) func(nodefile.Source) error {
 			if m, err := c.monitorNamed(src.Monitor); err != nil || m.State != monitorOn {
 				return fmt.Errorf("%s is not a monitor the user approved, nor the view's own", src.Monitor)
 			}
+		case src.Tool == nodeFindSource:
+			return checkNodeFindSource(src)
 		case src.Tool != "":
 			server, _, _ := strings.Cut(src.Tool, "/")
 			if _, ok := c.conf().Servers[server]; !ok {

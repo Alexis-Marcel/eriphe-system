@@ -21,7 +21,7 @@ import (
 // schemaVersion is the schema nodes.db is at; meta.schema_version says
 // it. A file at another version is refused, never changed: delete it,
 // it is made again from the files.
-const schemaVersion = 3
+const schemaVersion = 4
 
 // refsSchema holds the [[links]] of the nodes' text: each name a node's
 // text links (its LinkKey) and the node it was resolved to, ” while no
@@ -61,6 +61,16 @@ const schema = `CREATE TABLE nodes (
 	  id TEXT NOT NULL, block TEXT NOT NULL, name TEXT NOT NULL,
 	  spec TEXT NOT NULL,                -- the source as the block says it, JSON
 	  PRIMARY KEY (id, block, name));
+	CREATE TABLE node_props (
+	  id TEXT NOT NULL, key TEXT NOT NULL, -- its name, lowercase
+	  pos INTEGER NOT NULL,              -- its place in a list; -1 for a value alone
+	  kind TEXT NOT NULL,                -- text, number or date (nodefile.Kind*)
+	  value TEXT NOT NULL,               -- as written (a tag without its #)
+	  fold TEXT NOT NULL,                -- lowercase, what an equality and a sort read
+	  num REAL,                          -- a number's
+	  PRIMARY KEY (id, key, pos));
+	CREATE INDEX node_props_fold ON node_props (key, fold);
+	CREATE INDEX node_props_num ON node_props (key, num);
 	CREATE VIRTUAL TABLE node_fts USING fts5(id UNINDEXED, title, body,
 	  tokenize='unicode61 remove_diacritics 2');`
 
@@ -146,6 +156,9 @@ func indexNode(tx querier, n *nodefile.Node, file string, raw []byte, version in
 	if err := indexRefs(tx, n); err != nil {
 		return err
 	}
+	if err := indexProps(tx, m); err != nil {
+		return err
+	}
 	for _, q := range []string{`DELETE FROM node_links WHERE id = ?`, `DELETE FROM node_sources WHERE id = ?`, `DELETE FROM node_fts WHERE id = ?`} {
 		if _, err := tx.Exec(q, m.ID); err != nil {
 			return err
@@ -173,7 +186,7 @@ func indexNode(tx querier, n *nodefile.Node, file string, raw []byte, version in
 func forget(tx execer, id string) error {
 	for _, q := range []string{`DELETE FROM nodes WHERE id = ?`, `DELETE FROM node_links WHERE id = ?`,
 		`DELETE FROM node_sources WHERE id = ?`, `DELETE FROM node_fts WHERE id = ?`,
-		`DELETE FROM node_refs WHERE id = ?`, `UPDATE node_refs SET target = '' WHERE target = ?`} {
+		`DELETE FROM node_refs WHERE id = ?`, `DELETE FROM node_props WHERE id = ?`, `UPDATE node_refs SET target = '' WHERE target = ?`} {
 		if _, err := tx.Exec(q, id); err != nil {
 			return err
 		}

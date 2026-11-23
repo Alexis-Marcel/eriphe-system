@@ -184,6 +184,30 @@ type nodePage struct {
 	Alive *pageAlive `json:"alive,omitempty"`
 	// Origin: who wanted it, as code recorded it (node_origin.go).
 	Origin pageOrigin `json:"origin"`
+	// Tags and Props: its tags and its other properties, as its version
+	// says them (nodefile/props.go), shown read-only.
+	Tags  []string   `json:"tags,omitempty"`
+	Props []pageProp `json:"props,omitempty"`
+}
+
+// pageProp is a property of a node: its name, its value or list of them,
+// and its kind (text, number, date; a list's first value's).
+type pageProp struct {
+	Key   string `json:"key"`
+	Value any    `json:"value"`
+	Kind  string `json:"kind"`
+}
+
+// pageProps are a node's tags and its other properties.
+func pageProps(m nodefile.Meta) ([]string, []pageProp) {
+	var props []pageProp
+	for _, pr := range m.Props() {
+		if strings.EqualFold(pr.Key, nodefile.TagsKey) {
+			continue
+		}
+		props = append(props, pageProp{Key: pr.Key, Value: pr.Any(), Kind: pr.Values[0].Kind})
+	}
+	return m.Tags(), props
 }
 
 // pageRef is the node a [[link]] of a page opens: its id, its title as
@@ -259,6 +283,7 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 	}
 	p.Alive = c.nodeAlive(sum, lang)
 	p.Origin = c.nodeOriginLine(d.Node.Meta.OpenedBy, lang)
+	p.Tags, p.Props = pageProps(d.Node.Meta)
 	if vs, err := c.nodes.Versions(id); err == nil {
 		if len(vs) > 1 && vs[0].N == 1 && d.Version.N != 1 {
 			if first, err := c.nodes.Read(id, 1); err == nil && strings.TrimSpace(nodeBody(first.Raw)) == "" {

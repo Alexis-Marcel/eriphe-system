@@ -80,6 +80,7 @@ type core struct {
 	props       proposalFeed           // the proposals that moved, for the workspace (card_moves.go)
 	live        nodeLive               // the live blocks being read (node_live.go)
 	fresh       sourceFresh            // the sources to read again after a change (source_fresh.go)
+	findSources atomic.Bool            // a block reads node_find: a node's change reads it again (node_find.go)
 	yeses       sync.WaitGroup         // the calls a card's yes runs, under way (runApprovedCall)
 	glances     sync.Map               // node id → its glance as the graph shows it, nil for none (node_glance.go)
 	graph       graphFeed              // what changes on the graph, for the workspace (graph_feed.go)
