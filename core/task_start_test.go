@@ -185,7 +185,7 @@ func TestTaskStartDeclined(t *testing.T) {
 		t.Fatalf("declined start: %+v", got)
 	}
 	msgs, _ := c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ?`, roleEvent)
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Text, "refusé le lancement de la tâche "+task.ID) {
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Text, "la tâche "+task.ID+" ne démarre pas") || !msgs[0].UserAct {
 		t.Fatalf("brain not told: %+v", msgs)
 	}
 	// A start stopped otherwise (stop_task) leaves its card gone.

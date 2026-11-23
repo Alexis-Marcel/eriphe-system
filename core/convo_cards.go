@@ -546,7 +546,8 @@ func (c *core) decideCardWith(ctx context.Context, id int64, approve bool, by st
 	if err != nil {
 		return x, errNoCard
 	}
-	if x, _ = c.liveCard(x); x.State != cardPending {
+	x, p := c.liveCard(x)
+	if x.State != cardPending {
 		return x, errCardDecided
 	}
 	kind, pid, _ := parseProposalRef(x.Ref)
@@ -565,8 +566,9 @@ func (c *core) decideCardWith(ctx context.Context, id int64, approve bool, by st
 	c.callsDecided(x)      // its words as decided, what still waits on a new card (call_fold.go)
 	c.proposalMoved(x.Ref) // and the nodes it is linked to
 	if after := kindsOf[kind].decided; after != nil {
-		after(c, pid, approve, by) // whom its kind tells (proposal_kinds.go)
+		after(c, pid, approve, by) // what else its kind moves (proposal_kinds.go)
 	}
+	c.cardOutcome(x, p, kind, pid, approve, by) // the brain is told what came of it (card_outcome.go)
 	log.Printf("cards: %s %s by %s", x.Ref, x.State, by)
 	return x, nil
 }
@@ -718,8 +720,12 @@ func (c *core) cardAnswerLine(seq int) string {
 	if parts[0] == cardRejected {
 		verb = "refusé"
 	}
-	return fmt.Sprintf("\n(eriphe-core : cette réponse a %s la proposition %s, « %s ». C'est déjà fait : ne la refais pas, confirme en quelques mots.)",
-		verb, parts[1], packQuote(parts[2]))
+	outcome := ""
+	if s := c.store.get(cardOutcomeKey(parts[1])); s != "" {
+		outcome = " Ce qui en est sorti : " + s // card_outcome.go
+	}
+	return fmt.Sprintf("\n(eriphe-core : cette réponse a %s la proposition %s, « %s ». C'est déjà fait : ne la refais pas, confirme en quelques mots.%s)",
+		verb, parts[1], packQuote(parts[2]), outcome)
 }
 
 // Withdrawn with their subject.

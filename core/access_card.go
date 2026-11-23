@@ -863,17 +863,3 @@ func (c *core) releaseApproved(a accessQuestion) error {
 	log.Printf("task %s: released %s by the user", a.TaskID, strings.Join(a.Refs, ", "))
 	return nil
 }
-
-// accessDecidedTold tells the brain the answer to a release it asked for,
-// so it can tell the task (a yes or no in words is told with the message).
-func (c *core) accessDecidedTold(id int64, approve bool) {
-	a, err := c.accessAskOf(id)
-	if err != nil || len(a.Refs) == 0 {
-		return
-	}
-	word := "refusé"
-	if approve {
-		word = "accepté"
-	}
-	c.nodeEvent(c.taskEventNode(a.TaskID), fmt.Sprintf("%s a %s de débloquer %s pour la tâche %s.", c.conf().User, word, strings.Join(a.Refs, ", "), a.TaskID), true) // the user's act: what the brain says of it answers them
-}
