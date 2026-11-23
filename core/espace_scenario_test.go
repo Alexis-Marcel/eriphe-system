@@ -105,6 +105,29 @@ type scenario struct {
 	live *liveBrain
 }
 
+// mailOpen is what the scenario's reads of one mail declare of what they
+// say, as the mail server's read_message does (item_open.go).
+var mailOpen = mcp.Meta{openMetaKey: map[string]any{"title": "subject", "from": "from", "date": "date", "body": "body"}}
+
+// mailSays is how a tool of the scenario's mail server says its call, as
+// the mail server's tools do (call_says.go): its sentence, the mails
+// counted, and what it did.
+func mailSays(fr, en, doneOne, doneMany, doneEn string) mcp.Meta {
+	return mcp.Meta{saysMetaKey: map[string]any{
+		"text":  map[string]any{"fr": fr, "en": en},
+		"items": map[string]any{"fr": []any{"1 mail", "{n} mails"}, "en": []any{"1 email", "{n} emails"}},
+		"done":  map[string]any{"fr": []any{"1 " + doneOne, "{n} " + doneMany}, "en": []any{"1 " + doneEn, "{n} " + doneEn}},
+	}}
+}
+
+// moveSays is the scenario's move, said as the mail server's move.
+var moveSays = mcp.Meta{saysMetaKey: map[string]any{
+	"text":   map[string]any{"fr": "Déplacer {item} vers {to}", "en": "Move {item} to {to}"},
+	"items":  map[string]any{"fr": []any{"1 mail", "{n} mails"}, "en": []any{"1 email", "{n} emails"}},
+	"done":   map[string]any{"fr": []any{"1 déplacé", "{n} déplacés"}, "en": []any{"1 moved", "{n} moved"}},
+	"values": map[string]any{"to": map[string]any{"archive": map[string]any{"fr": "les archives", "en": "the archive"}}},
+}}
+
 func newScenario(t *testing.T, ctx context.Context) *scenario {
 	return newScenarioWith(t, ctx, nil)
 }
@@ -432,7 +455,7 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				}
 				return nil, map[string]any{"messages": msgs}, nil
 			})
-		mcp.AddTool(s, &mcp.Tool{Name: "lettre", Description: "Lit un mail de la boîte en entier", Annotations: read},
+		mcp.AddTool(s, &mcp.Tool{Name: "lettre", Description: "Lit un mail de la boîte en entier", Annotations: read, Meta: mailOpen},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 				ID string `json:"id"`
 			}) (*mcp.CallToolResult, map[string]any, error) {
@@ -443,7 +466,7 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				}
 				return nil, map[string]any{}, nil
 			})
-		mcp.AddTool(s, &mcp.Tool{Name: "trash", Description: "Met des mails d'un compte à la corbeille"},
+		mcp.AddTool(s, &mcp.Tool{Name: "trash", Description: "Met des mails d'un compte à la corbeille", Meta: mailSays("Mettre {item} à la corbeille", "Move {item} to the trash", "mis à la corbeille", "mis à la corbeille", "moved to the trash")},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 				IDs     []string `json:"ids"`
 				Account string   `json:"account"`
@@ -466,7 +489,7 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				f.replied = append(f.replied, in.ID)
 				return nil, map[string]any{"ok": true}, nil
 			})
-		mcp.AddTool(s, &mcp.Tool{Name: "lire", Description: "Lit un mail en entier", Annotations: read},
+		mcp.AddTool(s, &mcp.Tool{Name: "lire", Description: "Lit un mail en entier", Annotations: read, Meta: mailOpen},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 				ID string `json:"id"`
 			}) (*mcp.CallToolResult, map[string]any, error) {
@@ -481,7 +504,7 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				return nil, map[string]any{"subject": "Ordre du jour", "from": "Sam <sam@example.org>", "date": "2026-11-20T09:00:00Z",
 					"body": "Bonjour,\nvoici l'ordre du jour de " + in.ID + "."}, nil
 			})
-		mcp.AddTool(s, &mcp.Tool{Name: "delete", Description: "Supprime des mails"},
+		mcp.AddTool(s, &mcp.Tool{Name: "delete", Description: "Supprime des mails", Meta: mailSays("Supprimer {item}", "Delete {item}", "supprimé", "supprimés", "deleted")},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 				IDs []string `json:"ids"`
 			}) (*mcp.CallToolResult, map[string]any, error) {
@@ -490,7 +513,7 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				f.deleted = append(f.deleted, slices.Clone(in.IDs))
 				return nil, map[string]any{"deleted": len(in.IDs)}, nil
 			})
-		mcp.AddTool(s, &mcp.Tool{Name: "move", Description: "Range des mails dans un dossier"},
+		mcp.AddTool(s, &mcp.Tool{Name: "move", Description: "Range des mails dans un dossier", Meta: moveSays},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 				IDs []string `json:"ids"`
 				To  string   `json:"to"`
@@ -514,7 +537,7 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				}
 				return nil, map[string]any{"messages": msgs}, nil
 			})
-		mcp.AddTool(s, &mcp.Tool{Name: "purger", Description: "Supprime des mails pour de bon"},
+		mcp.AddTool(s, &mcp.Tool{Name: "purger", Description: "Supprime des mails pour de bon", Meta: mailSays("Supprimer {item} pour de bon", "Delete {item} for good", "supprimé", "supprimés", "deleted")},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 				IDs []string `json:"ids"`
 			}) (*mcp.CallToolResult, map[string]any, error) {

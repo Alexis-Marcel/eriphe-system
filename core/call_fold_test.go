@@ -39,10 +39,10 @@ func askOn(t *testing.T, c *core, node, tool string, input map[string]any, label
 	return id
 }
 
-// moveWords is what a folded card of moves to the archive says, in plain
-// words (callPhrase): for how many.
+// moveWords is what a folded card of moves to the archive says, as the
+// tool declares it (call_says.go): for how many.
 func moveWords(n string) string {
-	return "Archiver " + n
+	return "Déplacer " + n + " vers les archives"
 }
 
 // waitTraced waits until the node's trace tells n decided moves: a call
@@ -149,13 +149,13 @@ func TestFoldKeepsApartWhatDiffers(t *testing.T) {
 		t.Errorf("the folded card is still linked: %v", ns)
 	}
 	p := c.proposalOf(cardCalls, a)
-	if got := p.Text("fr"); got != moveWords("4 éléments") {
+	if got := p.Text("fr"); got != moveWords("4 mails") {
 		t.Errorf("text %q", got)
 	}
-	if got := p.acts("fr"); len(got) != 4 || got[3] != moveWords("4 éléments") {
+	if got := p.acts("fr"); len(got) != 4 || got[3] != moveWords("4 mails") {
 		t.Errorf("acts %q", got)
 	}
-	if xs, _ := c.cardsWhere(`ref = ?`, proposalRef(cardCalls, a)); len(xs) != 1 || xs[0].Text != moveWords("4 éléments") {
+	if xs, _ := c.cardsWhere(`ref = ?`, proposalRef(cardCalls, a)); len(xs) != 1 || xs[0].Text != moveWords("4 mails") {
 		t.Errorf("the card kept %+v", xs)
 	}
 	// Folded once: the next sync changes nothing.
@@ -229,7 +229,7 @@ func TestChosenCallsRunAlone(t *testing.T) {
 	if got := p.Text("fr"); got != "2 déplacés, 1 laissé" {
 		t.Errorf("decided text %q", got)
 	}
-	if x, _ := c.card(card); x.State != cardApproved || x.Text != moveWords("2 éléments")+", 1 laissé" {
+	if x, _ := c.card(card); x.State != cardApproved || x.Text != moveWords("2 mails")+", 1 laissé" {
 		t.Errorf("the card %+v", x)
 	}
 	if code, _ := yes(url.Values{"only": {"x"}}); code != http.StatusBadRequest {
@@ -279,7 +279,7 @@ func TestCallFoldedInAfterDrawnWaitsOn(t *testing.T) {
 		t.Errorf("the late call is %s", x.State)
 	}
 	old, err := c.card(card)
-	if err != nil || old.State != cardApproved || old.Text != moveWords("1 élément")+", 1 laissé" || old.Ref == proposalRef(cardCalls, a) {
+	if err != nil || old.State != cardApproved || old.Text != moveWords("1 mail")+", 1 laissé" || old.Ref == proposalRef(cardCalls, a) {
 		t.Errorf("the decided card %+v, %v", old, err)
 	}
 	xs, _ = c.cardsWhere(`ref = ? AND state = ?`, proposalRef(cardCalls, a), cardPending)
@@ -287,7 +287,7 @@ func TestCallFoldedInAfterDrawnWaitsOn(t *testing.T) {
 		t.Fatalf("no new card for the late call: %+v", xs)
 	}
 	x, p := c.liveCard(xs[0])
-	if x.State != cardPending || p.Text("fr") != "Archiver 1 élément" {
+	if x.State != cardPending || p.Text("fr") != moveWords("1 mail") {
 		t.Errorf("the new card %+v: %q", x, p.Text("fr"))
 	}
 	if ch := p.choices("fr"); len(ch) != 1 || ch[0].ID != late {

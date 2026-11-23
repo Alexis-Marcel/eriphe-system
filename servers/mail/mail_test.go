@@ -513,6 +513,20 @@ func TestToolAnnotations(t *testing.T) {
 		}
 		// What changes or sends says its call in French and English
 		// (eriphe-core's cards).
+		// What acts on mails counts them, and says it is done, in French
+		// and English; what reads one declares its fields (eriphe-core's
+		// opened item).
+		if tool.Name == "move" || tool.Name == "trash" || tool.Name == "mark" {
+			says, _ := tool.Meta["eriphe/says"].(map[string]any)
+			items, _ := says["items"].(map[string]any)
+			done, _ := says["done"].(map[string]any)
+			if items["fr"] == nil || items["en"] == nil || done["fr"] == nil || done["en"] == nil {
+				t.Errorf("%s counts no mails: %v", tool.Name, tool.Meta)
+			}
+		}
+		if open, _ := tool.Meta["eriphe/open"].(map[string]any); tool.Name == "read_message" && (open["body"] != "body" || open["title"] != "subject") {
+			t.Errorf("read_message declares no fields: %v", tool.Meta)
+		}
 		if want[tool.Name] != "read" && !saysBoth(tool.Meta) {
 			t.Errorf("%s says its call in no French and English sentence: %v", tool.Name, tool.Meta)
 		}

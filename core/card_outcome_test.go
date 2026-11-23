@@ -67,7 +67,7 @@ func TestFailedYesLeavesThePage(t *testing.T) {
 	}
 	told := yesTold(t, c)
 	if len(told) != 1 || !strings.Contains(told[0], "n'a pas marché") || !strings.Contains(told[0], "403 Forbidden") ||
-		!strings.Contains(told[0], "propose-la à nouveau") || !strings.Contains(told[0], "Archiver") {
+		!strings.Contains(told[0], "propose-la à nouveau") || !strings.Contains(told[0], "Déplacer") {
 		t.Fatalf("the brain was told %q", told)
 	}
 	// Told once, however often the card moves again.

@@ -399,6 +399,10 @@ func TestToolAnnotations(t *testing.T) {
 		if writes := tl.Annotations == nil || !tl.Annotations.ReadOnlyHint; writes && tl.Name != "test_account" && (text["fr"] == nil || text["en"] == nil) {
 			t.Errorf("%s says its call in no French and English sentence: %v", tl.Name, tl.Meta)
 		}
+		// What reads one event declares its fields (eriphe-core's opened item).
+		if open, _ := tl.Meta["eriphe/open"].(map[string]any); tl.Name == "get_event" && (open["title"] != "title" || open["date"] != "start" || open["body"] != "description") {
+			t.Errorf("get_event declares no fields: %v", tl.Meta)
+		}
 	}
 	if len(got) != 10 {
 		t.Errorf("tools: %v", got)

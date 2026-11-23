@@ -31,12 +31,15 @@ func TestToolSays(t *testing.T) {
 		}},
 	})
 	create := declared(t, map[string]any{"text": map[string]string{"fr": "Créer « {title} »[, {start}]", "en": "Create “{title}”[, {start}]"}})
+	mails := map[string]any{"fr": []any{"1 mail", "{n} mails"}, "en": []any{"1 email", "{n} emails"}}
 	move := declared(t, map[string]any{
 		"text":   map[string]string{"fr": "Déplacer {item} vers {to}", "en": "Move {item} to {to}"},
+		"items":  mails,
 		"values": map[string]any{"to": map[string]any{"archive": map[string]string{"fr": "les archives", "en": "the archive"}}},
 	})
 	trash := declared(t, map[string]any{
-		"text": map[string]string{"fr": "Mettre {item} {junk}", "en": "Move {item} {junk}"},
+		"text":  map[string]string{"fr": "Mettre {item} {junk}", "en": "Move {item} {junk}"},
+		"items": mails,
 		"values": map[string]any{"junk": map[string]any{
 			"":     map[string]string{"fr": "à la corbeille", "en": "to the trash"},
 			"true": map[string]string{"fr": "dans les indésirables", "en": "to junk"},
@@ -52,39 +55,38 @@ func TestToolSays(t *testing.T) {
 		input  map[string]any
 		labels []itemLabel
 		n      int
-		noun   string
 		fr, en string
 	}{
 		// Its item bound by the source that listed it, whatever id the call
 		// names (an invitation's event).
-		{"respond", respond, map[string]any{"id": "ZTF8Y2FsfC91L2V2Lmljcw", "account": "sam@example.org", "response": "accept"}, picnic, 0, "event",
+		{"respond", respond, map[string]any{"id": "ZTF8Y2FsfC91L2V2Lmljcw", "account": "sam@example.org", "response": "accept"}, picnic, 0,
 			"Accepter « Picnic » · Sam, lundi 14 h 10 ⚠", "Accept “Picnic” · Sam, lundi 14 h 10 ⚠"},
-		{"respond, a word", respond, map[string]any{"id": "x", "response": "decline", "comment": "Pas dispo"}, nil, 0, "event",
+		{"respond, a word", respond, map[string]any{"id": "x", "response": "decline", "comment": "Pas dispo"}, nil, 0,
 			"Refuser l'invitation : « Pas dispo »", "Decline the invitation: “Pas dispo”"},
-		{"create", create, map[string]any{"title": "Dentiste", "start": "2026-11-24T14:10", "account": "perso"}, nil, 0, "event",
+		{"create", create, map[string]any{"title": "Dentiste", "start": "2026-11-24T14:10", "account": "perso"}, nil, 0,
 			"Créer « Dentiste », mardi 24 novembre, 14 h 10", "Create “Dentiste”, Tuesday, November 24, 14:10"},
-		{"create, an offset", create, map[string]any{"title": "Dentiste", "start": "2026-11-24T13:00:00Z"}, nil, 0, "event",
+		{"create, an offset", create, map[string]any{"title": "Dentiste", "start": "2026-11-24T13:00:00Z"}, nil, 0,
 			"Créer « Dentiste », mardi 24 novembre, 14 h", "Create “Dentiste”, Tuesday, November 24, 14:00"},
-		{"create, all day", create, map[string]any{"title": "Congés", "start": "2026-12-21"}, nil, 0, "event",
+		{"create, all day", create, map[string]any{"title": "Congés", "start": "2026-12-21"}, nil, 0,
 			"Créer « Congés », lundi 21 décembre", "Create “Congés”, Monday, December 21"},
-		{"create, no time", create, map[string]any{"title": "Dentiste"}, nil, 0, "event", "Créer « Dentiste »", "Create “Dentiste”"},
-		{"move one", move, map[string]any{"ids": []any{"m1"}, "to": "Archive"}, facture, 1, "mail",
+		{"create, no time", create, map[string]any{"title": "Dentiste"}, nil, 0, "Créer « Dentiste »", "Create “Dentiste”"},
+		{"move one", move, map[string]any{"ids": []any{"m1"}, "to": "Archive"}, facture, 1,
 			"Déplacer « Facture » · Sam vers les archives", "Move “Facture” · Sam to the archive"},
-		{"move to a folder", move, map[string]any{"ids": []any{"m1", "m2"}, "to": "Factures"}, two, 2, "mail",
+		{"move to a folder", move, map[string]any{"ids": []any{"m1", "m2"}, "to": "Factures"}, two, 2,
 			"Déplacer 2 mails vers Factures", "Move 2 emails to Factures"},
-		{"trash", trash, map[string]any{"ids": []any{"m1"}}, facture, 1, "mail",
+		{"trash", trash, map[string]any{"ids": []any{"m1"}}, facture, 1,
 			"Mettre « Facture » · Sam à la corbeille", "Move “Facture” · Sam to the trash"},
-		{"trash, junk, unknown", trash, map[string]any{"ids": []any{"a", "b", "c"}, "junk": true}, nil, 3, "mail",
+		{"trash, junk, unknown", trash, map[string]any{"ids": []any{"a", "b", "c"}, "junk": true}, nil, 3,
 			"Mettre 3 mails dans les indésirables", "Move 3 emails to junk"},
 	} {
 		for lang, want := range map[string]string{"fr": tc.fr, "en": tc.en} {
-			if got := tc.says.phrase(tc.input, tc.says.itemWords(tc.labels, tc.n, tc.noun, lang), lang, paris); got != want {
+			if got := tc.says.phrase(tc.input, tc.says.itemWords(tc.labels, tc.n, lang), tc.says.countWords(tc.n, lang), lang, paris); got != want {
 				t.Errorf("%s (%s): %q, want %q", tc.name, lang, got, want)
 			}
 		}
 	}
 	// A language it does not declare: English.
-	if got := create.phrase(map[string]any{"title": "X"}, "", "de", nil); got != "Create “X”" {
+	if got := create.phrase(map[string]any{"title": "X"}, "", "", "de", nil); got != "Create “X”" {
 		t.Errorf("another language: %q", got)
 	}
 	// No declaration, or a broken one: none.
@@ -96,7 +98,7 @@ func TestToolSays(t *testing.T) {
 // A tool with only an English title, no declaration: its title, the item
 // by its label (callPhrase); what is not a date is not one.
 func TestTitleOnlyTool(t *testing.T) {
-	got := callPhrase("mcp__box__file_away", "File away", map[string]any{"id": "f1"}, []itemLabel{{ID: "f1", Title: "Rapport"}}, "", "fr", 0)
+	got := callPhrase("mcp__box__file_away", "File away", map[string]any{"id": "f1"}, []itemLabel{{ID: "f1", Title: "Rapport"}}, "fr", 0)
 	if got != "File away · « Rapport »" {
 		t.Errorf("%q", got)
 	}

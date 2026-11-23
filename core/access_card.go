@@ -587,20 +587,6 @@ func (a accessQuestion) fields() []cardField {
 	return out
 }
 
-// callVerb says a call as an action, in lang: in the user's words for the
-// usual ones, otherwise the tool's own name.
-func callVerb(call, lang string) string {
-	name, _, _ := strings.Cut(call, " ")
-	if _, tool, ok := splitToolName(name); ok {
-		name = tool
-	}
-	key := "access.call." + name
-	if s := tr(lang, key); s != key {
-		return s
-	}
-	return fmt.Sprintf(tr(lang, "access.call.other"), strings.ReplaceAll(name, "_", " "))
-}
-
 // verbs says categories as an action, in lang.
 func verbs(list []string, lang string) string {
 	var out []string

@@ -16,8 +16,8 @@ import (
 // (the notifications tool) and, when it differs from the rule in force,
 // proposes a quiet rule, which the user approves in Settings.
 //
-// More signals feed the same suggestion by joining activitySources: a Home
-// Assistant sleep sensor, the phone's focus mode.
+// More signals feed the same suggestion by joining activitySources: a
+// sleep sensor, the phone's focus mode.
 
 const presenceSchema = `CREATE TABLE IF NOT EXISTS presence_seen (at INTEGER PRIMARY KEY);`
 
@@ -46,23 +46,36 @@ type activitySource func(c *core, since time.Time) ([]activitySignal, error)
 // activitySources feed the suggestion; a new signal is one more here.
 var activitySources = []activitySource{messageActivity, presenceActivity, feedbackActivity}
 
-// messageActivity: the user's messages, but not their home's automations.
+// messageActivity: the user's messages, but not those of a channel they
+// did not trust (an automation, someone in the room: channels_added.go).
 func messageActivity(c *core, since time.Time) ([]activitySignal, error) {
-	rows, err := c.store.db.Query(`SELECT time FROM messages WHERE role = 'user' AND via NOT IN ('Home Assistant', ?) AND time >= ?`,
+	rows, err := c.store.db.Query(`SELECT seq, time FROM messages WHERE role = 'user' AND via != ? AND time >= ?`,
 		firstRunVia, since.Unix())
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []activitySignal
+	var seqs []int
+	var ats []int64
 	for rows.Next() {
+		var seq int
 		var at int64
-		if err := rows.Scan(&at); err != nil {
+		if err := rows.Scan(&seq, &at); err != nil {
+			rows.Close()
 			return nil, err
 		}
-		out = append(out, activitySignal{At: time.Unix(at, 0)})
+		seqs, ats = append(seqs, seq), append(ats, at)
 	}
-	return out, rows.Err()
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	var out []activitySignal
+	for i, seq := range seqs {
+		if !c.fromUntrusted(seq) {
+			out = append(out, activitySignal{At: time.Unix(ats[i], 0)})
+		}
+	}
+	return out, nil
 }
 
 // presenceActivity: a tab in front of the user, the conversation's or the

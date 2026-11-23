@@ -160,7 +160,7 @@ func (s userState) line(user string) string {
 		parts = append(parts, "présent")
 	}
 	if !s.Busy.IsZero() {
-		parts = append(parts, "occupé jusqu'à "+s.at(s.Busy)+" (agenda)")
+		parts = append(parts, "occupé jusqu'à "+s.at(s.Busy))
 	}
 	if s.InQuiet {
 		parts = append(parts, fmt.Sprintf("heures calmes en cours jusqu'à %s", s.at(s.QuietOn)))

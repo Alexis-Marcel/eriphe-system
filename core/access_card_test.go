@@ -473,9 +473,9 @@ func TestBrainCardReads(t *testing.T) {
 	long := strings.Repeat("x", cardValueMax+50)
 	in := map[string]any{"repo": "portfolio", "number": 7, "body": long}
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
-	brainCalls(t, c, "p-1", "mcp__mail__merge_pull_request", in)
-	_, p := c.liveCard(accessCard(t, c, "Merge a pull request"))
-	if fr := p.Text("fr"); fr != "Fusionner une pull request" {
+	brainCalls(t, c, "p-1", "mcp__mail__publish_page", in)
+	_, p := c.liveCard(accessCard(t, c, "Use “publish page”"))
+	if fr := p.Text("fr"); fr != "Utiliser « publish page »" {
 		t.Errorf("fr: %q", fr)
 	}
 	// Its long text to read, named; its exact call, the rest, under the
@@ -489,24 +489,21 @@ func TestBrainCardReads(t *testing.T) {
 	if fs[1].Name != "number" || fs[1].Value != "7" || fs[2].Name != "repo" || fs[2].Value != "portfolio" || !fs[1].Detail {
 		t.Errorf("details: %+v", fs[1:3])
 	}
-	if d := rawCall(fs); d == nil || d.Name != "mail/merge_pull_request" || d.Value != "number : 7\nrepo : portfolio" {
+	if d := rawCall(fs); d == nil || d.Name != "mail/publish_page" || d.Value != "number : 7\nrepo : portfolio" {
 		t.Errorf("exact call: %+v", d)
 	}
 	if v := (&web{c: c}).proposalView(convoCard{Kind: cardAccess, State: cardPending}, p, "fr"); v.Yes != "" {
 		t.Errorf("Oui says %q", v.Yes)
 	}
 	msgs, _ := c.store.messagesAfter(0, 10)
-	if len(msgs) == 0 || strings.Contains(msgs[len(msgs)-1].Text, "pull request") {
+	if len(msgs) == 0 || strings.Contains(msgs[len(msgs)-1].Text, "publish page") {
 		t.Errorf("the message says it twice: %+v", msgs)
 	}
 }
 
-// A call kept before the fields were: its action still reads.
+// A call kept before the fields were: no field read from it.
 func TestBrainCardOfAnOldCall(t *testing.T) {
-	a := accessQuestion{Call: `mcp__github__create_pull_request {"base":"ma`}
-	if got := callVerb(a.Call, "fr"); got != "ouvrir une pull request" {
-		t.Errorf("verb: %q", got)
-	}
+	a := accessQuestion{Call: `mcp__box__open_thing {"base":"ma`}
 	if f := a.fields(); len(f) != 0 {
 		t.Errorf("fields: %+v", f)
 	}

@@ -251,7 +251,10 @@ and calls the tool with it, as the source gave it, under the tool's access polic
 does not reach the open web runs; any other is refused, with a line saying to ask Eriphe, who will
 propose it on a card. The click that opens is never a yes. The page shows
 what the tool said as text, never as HTML, as a letter: who (a name, its address quieter) and when
-(as people say it) on one line, its title or subject, its body (body, text or content); the item's
+(as people say it) on one line, its title or subject, its body; the fields as the read tool
+declares them in its `_meta` (`"eriphe/open": {"title": "subject", "from": "from", "date": "date",
+"body": "body"}`), else a title and a sender found as a row finds them and a text result as the
+body, the rest only in « détails »; the item's
 note when its row does not already say it (« Classé « À supprimer » : … »); then the card that
 waits on the item, if any (« Sur Oui » and what its Oui does, a long field such as the reply
 itself shown whole, and the same Oui as the row's); and one « détails » with the exact call and the

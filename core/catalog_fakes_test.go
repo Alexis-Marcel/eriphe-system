@@ -128,8 +128,14 @@ func (m *fakeMonitor) server() *mcp.Server {
 			m.sent = append(m.sent, map[string]any{"tool": "send", "id": in.ID, "body": in.Body})
 			return nil, map[string]any{"ok": true}, nil
 		})
-	// move files messages by their ids, as the mail server's move does.
-	mcp.AddTool(s, &mcp.Tool{Name: "move"},
+	// move files messages by their ids, and says its call, as the mail
+	// server's move does (call_says.go).
+	mcp.AddTool(s, &mcp.Tool{Name: "move", Meta: mcp.Meta{saysMetaKey: map[string]any{
+		"text":   map[string]any{"fr": "Déplacer {count} vers {to}", "en": "Move {count} to {to}"},
+		"items":  map[string]any{"fr": []any{"1 mail", "{n} mails"}, "en": []any{"1 email", "{n} emails"}},
+		"done":   map[string]any{"fr": []any{"1 déplacé", "{n} déplacés"}, "en": []any{"1 moved", "{n} moved"}},
+		"values": map[string]any{"to": map[string]any{"archive": map[string]any{"fr": "les archives", "en": "the archive"}}},
+	}}},
 		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 			Account string   `json:"account,omitempty"`
 			IDs     []string `json:"ids"`
@@ -143,6 +149,31 @@ func (m *fakeMonitor) server() *mcp.Server {
 			m.sent = append(m.sent, map[string]any{"tool": "move", "ids": in.IDs, "to": in.To, "account": in.Account})
 			return nil, map[string]any{"moved": len(in.IDs)}, nil
 		})
+	// discard declares only its annotations: a title, and that it throws
+	// away (no destructiveHint: MCP's default, destructive).
+	mcp.AddTool(s, &mcp.Tool{Name: "discard", Annotations: &mcp.ToolAnnotations{Title: "Discard", OpenWorldHint: closedWorld}},
+		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+			IDs []string `json:"ids"`
+		}) (*mcp.CallToolResult, map[string]any, error) {
+			return nil, map[string]any{"discarded": len(in.IDs)}, nil
+		})
+	// tag and flag declare a read for their card (card_context.go): tag the
+	// status, a free read; flag silence, a write, never run for a card.
+	reads := func(tool, with string) mcp.Meta {
+		return mcp.Meta{readsMetaKey: map[string]any{
+			"tools": []any{map[string]any{"tool": tool}}, "with": []any{with},
+			"show": []any{map[string]any{"field": "service", "name": map[string]any{"fr": "Service", "en": "Service"}}},
+		}}
+	}
+	for name, meta := range map[string]mcp.Meta{"tag": reads("status", "service"), "flag": reads("silence", "uid")} {
+		mcp.AddTool(s, &mcp.Tool{Name: name, Annotations: &mcp.ToolAnnotations{OpenWorldHint: closedWorld}, Meta: meta},
+			func(context.Context, *mcp.CallToolRequest, struct {
+				Service string `json:"service,omitempty"`
+				UID     string `json:"uid,omitempty"`
+			}) (*mcp.CallToolResult, map[string]any, error) {
+				return nil, map[string]any{"ok": true}, nil
+			})
+	}
 	// respond says its call itself, as the calendar server's respond_event
 	// does (call_says.go).
 	mcp.AddTool(s, &mcp.Tool{Name: "respond", Title: "Answer an invitation", Meta: mcp.Meta{saysMetaKey: map[string]any{
@@ -164,8 +195,9 @@ func (m *fakeMonitor) server() *mcp.Server {
 			m.sent = append(m.sent, map[string]any{"tool": "respond", "id": in.ID, "answer": in.Answer, "start": in.Start})
 			return nil, map[string]any{"ok": true}, nil
 		})
-	// message reads one received message in full, by its id; letter the
-	// same, reaching the open web (no openWorldHint): an item opened.
+	// message reads one received message in full, by its id, and declares
+	// its fields as the mail server's read_message does; letter the same,
+	// reaching the open web (no openWorldHint): an item opened.
 	readOne := func(name string) func(context.Context, *mcp.CallToolRequest, struct {
 		ID string `json:"id"`
 	}) (*mcp.CallToolResult, map[string]any, error) {
@@ -183,7 +215,11 @@ func (m *fakeMonitor) server() *mcp.Server {
 			return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "no such message"}}}, nil, nil
 		}
 	}
-	mcp.AddTool(s, &mcp.Tool{Name: "message", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: closedWorld}}, readOne("message"))
+	mcp.AddTool(s, &mcp.Tool{Name: "message", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: closedWorld},
+		Meta: mcp.Meta{openMetaKey: map[string]any{"title": "subject", "from": "from", "date": "date", "body": "body"}}}, readOne("message"))
+	// memo is message declaring only its annotations: no field of what it
+	// says is declared (item_open.go).
+	mcp.AddTool(s, &mcp.Tool{Name: "memo", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: closedWorld}}, readOne("memo"))
 	mcp.AddTool(s, &mcp.Tool{Name: "letter", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}}, readOne("letter"))
 	// thread reads a message by its id and its folder, both required: no
 	// item is opened by its id alone with it.

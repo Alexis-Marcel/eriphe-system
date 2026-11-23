@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Presets of the workspace: common tools a user chooses from a list, with
@@ -44,6 +46,10 @@ type toolPreset struct {
 	// app's installation, connections.go), offered before its token; its
 	// row says which way it is on, and links there.
 	AppPage string
+	// Meta is what the service's tools would declare in their _meta, had
+	// Eriphe written its server (presets_meta.go): by tool name or pattern
+	// (path.Match); a key a tool declares itself wins (call_says.go).
+	Meta map[string]mcp.Meta
 }
 
 var toolPresets = []toolPreset{
@@ -59,7 +65,8 @@ var toolPresets = []toolPreset{
 	// personal access token as a bearer token; it has no dynamic client
 	// registration.
 	{ID: "github", Form: "generic", Name: "github", Mark: "GH", Kind: "remote",
-		URL: "https://api.githubcopilot.com/mcp/", Auth: "bearer", Trust: true, AppPage: "/settings/github"},
+		URL: "https://api.githubcopilot.com/mcp/", Auth: "bearer", Trust: true, AppPage: "/settings/github",
+		Meta: githubMeta},
 	// https://www.home-assistant.io/integrations/mcp_server/ : the MCP Server
 	// integration serves /api/mcp; a long-lived access token (profile →
 	// security) is a bearer token like for the rest of Home Assistant's API.

@@ -1530,15 +1530,17 @@ else's words (a tainted turn). The others take their buttons only: they come at 
 yes may answer something else. A card never holds the brain: its call is answered at once as not
 run, the card keeps the exact input, and a yes runs it from eriphe-core, however late and even after
 the brain restarted, if the tool is still allowed; the result, or a no, comes back as an event. The
-same call asked again is the same card. A call on a pull request adds its title and the start of
-its description, read with the tool itself when the card is made.
+same call asked again is the same card. A call that names what it acts on by a number (a pull
+request) adds what is behind it (its title, the start of its description), read once when the card
+is made, with the read its tool declares (`card_context.go`, `_meta` `eriphe/reads`: the reads to
+try, the call's arguments they take, the fields shown and their names in fr and en).
 
 **A call in plain words** (`call_words.go`), the brain's (`access`) as a skill run's (`calls`,
 `runcalls`): a sentence of code's says what happens to what, never a question and never a model's
-words: « Mettre 2 mails à la corbeille ». Its verb comes from a fr+en table of usual actions
-(`act.verb.*`, a move to `archive`, `inbox` or `trash` by its destination), else the tool's title
-(`Title` or `annotations.title`; our servers give every tool one), else « Utiliser « tool » »; its
-noun from the server or source (`nounWords`: mails, events, files…), else « élément(s) ». The
+words: « Mettre 2 mails à la corbeille ». Core has no word of its own for a tool (#727): the
+sentence is the one the tool declares (below), else its title (`Title` or `annotations.title`; our
+servers give every tool one) with its items counted (« Ranger · 2 éléments »), else « Utiliser
+« tool » »; the items are of the kind the tool declares (`items`), else « élément(s) ». The
 items it acts on follow by their title and detail as the node's sources list them (`callRows`,
 `itemLabel`, kept with the call), at most 5 then « et N autres »; a title from a source that is not
 a trusted server's keeps its « ⚠ ». Where it acts goes apart, quietly (`context`: « compte
@@ -1553,12 +1555,14 @@ that origin names an item by its title, never its id (`card.from.item`).
 
 **A tool that says its own call** (`call_says.go`). Core knows no tool: a server declares how one
 call of its tool reads in its `_meta`, under `eriphe/says`, and code fills it in the user's
-language. Our mail and calendar servers declare theirs.
+language. Our mail, calendar and files servers declare theirs; core's own `catalog_accept` too.
 
 ```json
 "eriphe/says": {
   "text":   {"fr": "{response} {item}[ : « {comment} »]", "en": "{response} {item}[: “{comment}”]"},
   "item":   {"fr": "l'invitation", "en": "the invitation"},
+  "items":  {"fr": ["1 invitation", "{n} invitations"], "en": ["1 invitation", "{n} invitations"]},
+  "done":   {"fr": ["1 répondue", "{n} répondues"], "en": ["1 answered", "{n} answered"]},
   "values": {"response": {"accept": {"fr": "Accepter", "en": "Accept"}, "decline": {"fr": "Refuser", "en": "Decline"}}}
 }
 ```
@@ -1566,14 +1570,24 @@ language. Our mail and calendar servers declare theirs.
 `text` is the sentence by language (English, else any, when the user's is missing). `{item}` is
 what the call acts on: one item by its label as its node's source listed it (title, detail, ⚠ when
 someone else's words; the label bound to the call counts whatever id it names, an invitation's
-event), several counted (their lines below), else the declared `item` words, else counted.
+event), several counted by `items` (one, then many with `{n}`; their lines below), else the
+declared `item` words, else counted as « éléments ». `{count}` is how many it acts on, counted the
+same way even when one is known by its label. `done` says what its calls did once they ran
+(« 2 déplacés »), else « Fait pour 2 éléments ».
 `{name}` is an argument: its words in `values` (`""` for an argument left out; a value is matched
 as is, then lowercased), else a date or a time said as one (« mardi 24 novembre, 14 h 10 », a time
 with an offset in the user's zone), a list joined, a short text as written; a bool or an id with
 no words says nothing. A part in `[ … ]` is said only when every placeholder in it has words. A
-tool that declares none is said as above (verb table, title, name). « Accepter « Picnic » · Sam,
+tool that declares none is said as above (title, name). « Accepter « Picnic » · Sam,
 lundi 14 h 10 », « Créer « Dentiste », mardi 24 novembre, 14 h 10 », « Déplacer « Facture » · Sam
 vers les archives ».
+
+A server Eriphe does not write cannot declare: its preset may, in its place (`toolPreset.Meta`,
+`presets_meta.go`), what its tools' `_meta` would say, by tool name or pattern (`*`); a key the
+tool declares itself wins. GitHub's preset says its pull requests (« Fusionner la pull request
+#12 ») and reads one by its number for a card. A guard test (`tool_names_guard_test.go`) fails when
+a logic file of core names a tool, one of its tools or their arguments, outside the data files it
+lists with their reason, and when a text table keeps a word for a tool's name (`act.verb.trash`).
 
 **On its rows.** A brain's call whose ids are those of rows a node's source shows (the node the
 turn is about first, else any live node that read them: `node_reads`) is kept on that node and
@@ -3371,7 +3385,7 @@ token in `X-CSRF-Token`:
   the source's own server, checked at write) is called with the item's id as the source gave it,
   under its policy: a free read that does not reach the open web runs; any other is `403`
   (`open.notfree`: ask Eriphe, who proposes it on a card); the click is never a yes. `200` `{title, from, date, body, raw, external, note: {group, note,
-  external}}`: its common fields picked generically (`from` as written, « Sam <sam@example.org> »: the page splits name and address), the whole as JSON, `external` for a server not
+  external}}`: its fields as the read tool declares them (`_meta` `eriphe/open`), else a title and a sender as a row finds them (`from` as written, « Sam <sam@example.org> »: the page splits name and address), the whole as JSON, `external` for a server not
   trusted; `502` when the tool failed. Nothing is kept: no version, no trace, no journal of what it
   said.
 - `POST /api/nodes/{id}/archive` and `.../reopen`: the user's alone (`archiveNode`: what runs
@@ -4220,7 +4234,7 @@ outcomes `brief` were rewritten `held` at start.
   `notification` (their kind, match, floor, ceiling, nights, lines and hours in the JSON `spec`; `act`
   `deliver` or `quiet`), read by `notifyRules` only, never fired by the rule tick.
 - **Adaptive quiet hours, never applied alone.** eriphe-core records cheap signals of activity (the
-  user's messages, a tab in front (the conversation's or the workspace's), in 10-minute buckets
+  user's messages but a channel's they did not trust, a tab in front (the conversation's or the workspace's), in 10-minute buckets
   kept 30 days, reactions to notifications, gestures on the workspace's nodes but `ignored`,
   `gestureActivity`) and of unwelcome moments (« pas maintenant »), and suggests a window per kind of
   night from the last 14 days: the median last activity of the evening plus a margin, the median

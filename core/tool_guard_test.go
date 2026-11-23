@@ -21,6 +21,7 @@ var toolData = []string{
 	"github_app.go", "web_github.go", // the app: its connections, its page
 	"git_access.go", "repo_lend.go", "repo_skills.go", // git and gh through GitHub
 	"memory_trust.go", // the shapes of secrets, GitHub's tokens among them
+	"presets_meta.go", // what GitHub's tools would declare: its preset's data
 }
 
 // toolNamed is what the guard looks for: GitHub, and the cards and kinds

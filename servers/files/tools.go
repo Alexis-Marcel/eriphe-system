@@ -519,6 +519,7 @@ var titles = map[string]string{
 // Arguments are not logged: they may hold file names and contents.
 func tool[In, Out any](s *mcp.Server, t *mcp.Tool, fn func(context.Context, In) (Out, error)) {
 	t.Title = titles[t.Name]
+	withMeta(t)
 	mcp.AddTool(s, t, func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
 		start := time.Now()
 		out, err := fn(ctx, in)
