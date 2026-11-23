@@ -98,7 +98,8 @@ func (c *core) holdTask(t *TaskRow, needs []startNeed, tainted []string, byBrain
 	}
 	id, _ := res.LastInsertId()
 	if byBrain {
-		c.cardProposed(cardTaskStart, id) // in the turn, with the brain's next message
+		ref := c.cardProposed(cardTaskStart, id) // in the turn, with the brain's next message
+		c.cardRaisedFor("task:"+t.ID, ref)       // and on the task's node, which waits for it (node_status.go)
 	} else {
 		c.cardNow(cardTaskStart, id, fmt.Sprintf(tr(c.userLang(), "taskstart.held.message"), t.label()), "task:"+t.ID)
 	}
