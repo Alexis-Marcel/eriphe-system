@@ -137,6 +137,13 @@ Each block is checked alone, as an A2UI surface of its own:
   of its `sources` (`/<name>/…`, checked when code reads it). A binding to anything else is an
   error that names the block.
 
+Where a card shows follows from the components, never from a name: a component whose catalog
+schema says `x-rows` (the Agenda's `events`) bound to a source's items draws their cards on its
+rows; one that says `x-days` (the Agenda) draws the dated proposals of its days, each with its
+Yes, and a dated card of the node whose day it draws (a written or absent `date`) is not repeated
+at the page's foot. An Agenda's events are in the shape the calendar server returns: `title`,
+`start`, `end`, `place`, `allDay`, `status`.
+
 ### Sources
 
 A source is one of:

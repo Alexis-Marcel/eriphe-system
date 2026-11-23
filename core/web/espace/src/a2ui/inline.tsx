@@ -35,8 +35,10 @@ function siblings(ref: string, on: boolean) {
 
 // InlineYes draws a card on a row, or on a batch's line. where: the
 // surface, component and row it is answered from; left: the items a
-// batch's rows unticked, whose calls its Oui leaves out.
-export function InlineYes({ refText, where, say, left }: { refText: string; where: { surfaceId: string; componentId: string; at?: string }; say?: boolean; left?: ReadonlySet<string> }) {
+// batch's rows unticked, whose calls its Oui leaves out; marked: the line
+// it sits on already carries the sign of someone else's words (an
+// invitation), which it does not repeat.
+export function InlineYes({ refText, where, say, left, marked }: { refText: string; where: { surfaceId: string; componentId: string; at?: string }; say?: boolean; left?: ReadonlySet<string>; marked?: boolean }) {
   const { t } = useWords();
   const src = useProposals();
   const row = useContext(RowItem);
@@ -97,13 +99,13 @@ export function InlineYes({ refText, where, say, left }: { refText: string; wher
       onFocus={shared ? () => siblings(refText, true) : undefined}
       onBlur={shared ? () => siblings(refText, false) : undefined}
     >
-      {p.tainted && (
+      {p.tainted && !marked && (
         <span className="a2-inline-ext" title={t("espace.a2.proposal.tainted")}>
           <IconView name="warning" />
           <span className="sr-only">{t("espace.a2.proposal.tainted")}</span>
         </span>
       )}
-      {say && <span className="a2-inline-what">{p.text}</span>}
+      {say && p.text !== yesWord && <span className="a2-inline-what">{p.text}</span>}
       {shared > 0 && (
         <span className="a2-inline-shared" title={t("espace.row.shared", shared)}>
           <IconView name="link" />

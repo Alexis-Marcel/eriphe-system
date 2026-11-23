@@ -8,6 +8,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
 
 // Proposals in the blocks they concern (#428).
@@ -17,12 +20,13 @@ import (
 //     block's data. Its Oui and Non go to that proposal's card
 //     (POST /cards/{id}/yes|no), as everywhere.
 //   - Dated: a pending proposal that has a time shows as a ghost in the
-//     Day components of its day, with what it overlaps (GET
-//     /api/proposals?day=). Its time comes from what the proposal is, never
-//     from a tool's name: an intention's due date, or the arguments of a
-//     call it keeps that are a date or a date-time (callSpan). A run's card
-//     keeps several calls: each dated one is a ghost of its own, all
-//     answering the one card.
+//     Agendas that draw its day, with what it overlaps (GET
+//     /api/proposals?day=), its Oui on it; an Agenda of its own page is
+//     its place: not at the page's foot then (datedOn). Its time comes from
+//     what the proposal is, never from a tool's name: an intention's due
+//     date, or the arguments of a call it keeps that are a date or a
+//     date-time (callSpan). A run's card keeps several calls: each dated
+//     one is a ghost of its own, all answering the one card.
 //   - Moved: when a card is made, decided (anywhere: its buttons, a
 //     channel, a plain "oui", a page) or found decided, its ref
 //     is noted here; the workspace's event stream sends it ("proposals"),
@@ -208,6 +212,37 @@ func spanOf(ds []datedValue) (proposalSpan, bool) {
 		s.End = last.At
 	}
 	return s, true
+}
+
+// shownDays are the days a block's components draw the dated proposals
+// of (a2ui.DaysShown: an Agenda), each the start of its day in now's zone.
+func shownDays(b *nodefile.Block, now time.Time) []time.Time {
+	var comps []map[string]any
+	json.Unmarshal(b.Components, &comps)
+	var out []time.Time
+	for _, comp := range comps {
+		from, n, ok := a2ui.DaysShown(comp, now)
+		for i := 0; ok && i < n; i++ {
+			out = append(out, from.AddDate(0, 0, i))
+		}
+	}
+	return out
+}
+
+// datedOn tells whether the proposal a card carries takes place on one of
+// days (its spans in loc, as GET /api/proposals?day= finds them): an
+// Agenda of the page draws it there, as a ghost with its Oui.
+func (c *core) datedOn(ref string, days []time.Time, loc *time.Location) bool {
+	kind, id, ok := parseProposalRef(ref)
+	if !ok || len(days) == 0 {
+		return false
+	}
+	for _, s := range c.proposalSpans(kind, id, loc) {
+		if slices.ContainsFunc(days, s.on) {
+			return true
+		}
+	}
+	return false
 }
 
 // on tells whether the span touches the day that starts at from.

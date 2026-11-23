@@ -24,7 +24,7 @@
      },
      {
       "id": "day",
-      "component": "Day",
+      "component": "Agenda",
       "date": "2026-11-12",
       "events": {
        "@path": "/events"
@@ -157,8 +157,16 @@
       },
       "unit": "%",
       "delta": -5,
-      "better": "down",
-      "deltaLabel": "depuis hier"
+      "deltaLabel": "depuis hier",
+      "trend": [
+       41,
+       38,
+       44,
+       40,
+       37,
+       39,
+       37
+      ]
      },
      {
       "id": "disk",
@@ -184,7 +192,6 @@
       },
       "unit": "kWh",
       "delta": 3.4,
-      "better": "down",
       "deltaLabel": "cette semaine"
      },
      {
@@ -378,6 +385,11 @@
         "key": "due",
         "label": "Échéance",
         "kind": "date"
+       },
+       {
+        "key": "change",
+        "label": "%",
+        "kind": "change"
        }
       ],
       "rows": {
@@ -396,17 +408,20 @@
       {
        "title": "Formulaire de contact",
        "age": 4,
-       "due": "2026-11-14"
+       "due": "2026-11-14",
+       "change": 2.5
       },
       {
        "title": "Traduction anglaise",
        "age": 12,
-       "due": "2026-11-18"
+       "due": "2026-11-18",
+       "change": -1.25
       },
       {
        "title": "Logo en SVG",
        "age": 1,
-       "due": "2026-11-13"
+       "due": "2026-11-13",
+       "change": 0
       }
      ]
     }
@@ -963,7 +978,8 @@
       "current": 1,
       "total": {
        "@path": "/total"
-      }
+      },
+      "step": "Relecture"
      },
      {
       "id": "answer",
@@ -1306,6 +1322,68 @@
      ]
     }
    }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-people",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Qui attend",
+      "child": "col"
+     },
+     {
+      "id": "col",
+      "component": "Column",
+      "children": [
+       "sam",
+       "lea",
+       "quote"
+      ]
+     },
+     {
+      "id": "sam",
+      "component": "Person",
+      "name": "Sam Martin",
+      "detail": "Artisan, la terrasse",
+      "note": "Attend ta réponse sur le devis depuis mardi.",
+      "facts": [
+       {
+        "label": "Téléphone",
+        "value": "06 00 00 00 00"
+       },
+       {
+        "label": "Prochain rendez-vous",
+        "value": "Mercredi, réunion de chantier"
+       }
+      ]
+     },
+     {
+      "id": "lea",
+      "component": "Person",
+      "name": {
+       "@path": "/lea/name"
+      },
+      "detail": "Amie"
+     },
+     {
+      "id": "quote",
+      "component": "Quote",
+      "text": "Tu peux me dire avant vendredi si ça te va ?",
+      "from": "Sam <sam@example.org>",
+      "date": "2026-11-11T18:12:00+01:00",
+      "url": "https://example.org/devis"
+     }
+    ],
+    "dataModel": {
+     "lea": {
+      "name": "Léa"
+     }
+    }
+   }
   }
  ],
  "en": [
@@ -1333,7 +1411,7 @@
      },
      {
       "id": "day",
-      "component": "Day",
+      "component": "Agenda",
       "date": "2026-11-12",
       "events": {
        "@path": "/events"
@@ -1466,8 +1544,16 @@
       },
       "unit": "%",
       "delta": -5,
-      "better": "down",
-      "deltaLabel": "since yesterday"
+      "deltaLabel": "since yesterday",
+      "trend": [
+       41,
+       38,
+       44,
+       40,
+       37,
+       39,
+       37
+      ]
      },
      {
       "id": "disk",
@@ -1493,7 +1579,6 @@
       },
       "unit": "kWh",
       "delta": 3.4,
-      "better": "down",
       "deltaLabel": "this week"
      },
      {
@@ -1687,6 +1772,11 @@
         "key": "due",
         "label": "Due",
         "kind": "date"
+       },
+       {
+        "key": "change",
+        "label": "%",
+        "kind": "change"
        }
       ],
       "rows": {
@@ -1705,17 +1795,20 @@
       {
        "title": "Contact form",
        "age": 4,
-       "due": "2026-11-14"
+       "due": "2026-11-14",
+       "change": 2.5
       },
       {
        "title": "English translation",
        "age": 12,
-       "due": "2026-11-18"
+       "due": "2026-11-18",
+       "change": -1.25
       },
       {
        "title": "SVG logo",
        "age": 1,
-       "due": "2026-11-13"
+       "due": "2026-11-13",
+       "change": 0
       }
      ]
     }
@@ -2272,7 +2365,8 @@
       "current": 1,
       "total": {
        "@path": "/total"
-      }
+      },
+      "step": "Proofreading"
      },
      {
       "id": "answer",
@@ -2613,6 +2707,68 @@
        "_note": "Advert"
       }
      ]
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-people",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Who is waiting",
+      "child": "col"
+     },
+     {
+      "id": "col",
+      "component": "Column",
+      "children": [
+       "sam",
+       "lea",
+       "quote"
+      ]
+     },
+     {
+      "id": "sam",
+      "component": "Person",
+      "name": "Sam Martin",
+      "detail": "Builder, the terrace",
+      "note": "Waiting for your answer on the quote since Tuesday.",
+      "facts": [
+       {
+        "label": "Phone",
+        "value": "06 00 00 00 00"
+       },
+       {
+        "label": "Next meeting",
+        "value": "Wednesday, site meeting"
+       }
+      ]
+     },
+     {
+      "id": "lea",
+      "component": "Person",
+      "name": {
+       "@path": "/lea/name"
+      },
+      "detail": "Friend"
+     },
+     {
+      "id": "quote",
+      "component": "Quote",
+      "text": "Can you tell me before Friday if it suits you?",
+      "from": "Sam <sam@example.org>",
+      "date": "2026-11-11T18:12:00+01:00",
+      "url": "https://example.org/devis"
+     }
+    ],
+    "dataModel": {
+     "lea": {
+      "name": "Léa"
+     }
     }
    }
   }

@@ -3793,14 +3793,24 @@ through `a2ui.Validate`).
   actions' grammar (`a2ui/actions.go`: a Button sends `ask`, its author's words only, never the
   fields; nothing else); in a node's page eriphe-core reads the ask again in the
   stored block (`POST /api/nodes/{id}/ask`).
-- *Data*: Metric (value, unit, signed delta coloured by `better`), Chart (lines or bars in
+- *Data*: Metric (value, unit, a signed delta in ink with ▲ or ▼, a trend as a sparkline), Chart (lines or bars in
   SVG, `chart.tsx`: one axis, a palette checked for colour blindness, a legend from two
   series, a tooltip on each mark, the numbers in a table for screen readers), Table (columns
-  `text`, `number`, `date`), Timeline (`done`, `current`, `pending`, `failed`), Message
-  (short: the excerpt; full: the body, opened in place), Day (`day.tsx`: events on a grid of
-  half-hour rows, overlaps side by side and marked, all-day ones above, and the day's
-  [dated proposals as ghosts](#proposals-in-the-blocks-they-concern-card_movesgo)),
-  Alert (four levels), Placeholder (« En préparation », a slow shimmer).
+  `text`, `number`, `date`, `change`: a signed gap in ink, + or −), Timeline (`done`, `current`,
+  `pending`, `failed`), Progress (a word in ink, a bar of steps whose done part takes the tone,
+  the current step named), Message (short: the excerpt; full: the body, opened in place),
+  Agenda (`agenda.tsx`, up to 7 days from `date`: the first by the hour on half-hour rows with
+  the now line when it is today, a clash of events side by side, stacked when the block is narrow
+  (a phone); the next day as lines, the days after as a strip; a `days: 1` Agenda of another
+  date is by the hour too. Its events are in the shape servers/calendar returns — `title`,
+  `start`, `end`, `place`, `allDay`, `status` — and an invitation to answer carries the amber
+  sign of what comes from outside. With its day's
+  [dated proposals as ghosts](#proposals-in-the-blocks-they-concern-card_movesgo), each with
+  its Oui), Person (initials, what they are to the user, a note, facts as lines: a fact that is
+  wholly a phone number or an e-mail address is a `tel:` or `mailto:` link, no other scheme),
+  Quote (someone else's words as written, who and when, the page in clear), Alert (four
+  levels), Placeholder (« En préparation », a slow shimmer). Changes are told in ink and a
+  sign; colour says a state, never good or bad news.
 - *Cards* (`page/Cards.tsx`, not a catalog component: no author writes a yes) draw a proposal of
   Eriphe's by its own ref (`kind:id`, the `proposal` of a
   card): `GET /api/proposals/{ref}` (`web_proposals.go`) gives its kind, text, why, fields
@@ -3884,13 +3894,17 @@ template) or computed by a function (`{"@call": "formatDate", "args": {…}}`). 
   subject: Text, Markdown, Image, Icon, Link, Code, Row, Column, List, Grid (a gallery of cards,
   as many to a row as fit), Card, Tabs, Fold, Divider, Button (it only asks), Choice, TextField, DateField, Metric, Progress, Chart (`line`,
   `bar`, or `stack`: one bar per x, the series its parts, an allocation now against its
-  target), Table, Timeline, Item, Message, Day, Alert, Placeholder. No component says yes: a yes is
+  target), Table, Timeline, Item, Message, Agenda, Person, Quote, Alert, Placeholder. No component says yes: a yes is
   a card, which code draws. Steps, notes, options, checklists and drafts are compositions of
   these (a `Timeline`, a `Markdown`, a `List` of `Item`, `Text` sections), never components of
   their own; and the functions
   formatString, formatNumber, formatDate, formatRelative. A property that carries data takes a
-  binding (Metric's `value`, Chart's `series`, Table's `rows`, Day's `events`…). Its descriptions
-  and `instructions` are for the models, in French. Served to the app, with a session, at
+  binding (Metric's `value`, Chart's `series`, Table's `rows`, Agenda's `events`…). Its descriptions
+  and `instructions` are for the models, in French. Two keywords of its own on a component's
+  schema tell eriphe-core what it needs without naming a component (`a2ui/days.go`):
+  `x-rows` names the property that, bound to a source's items, makes them rows (their cards are
+  drawn there, not at the page's foot: the Agenda's `events`), and `x-days` says the component
+  draws the dated proposals of its days (`a2ui.DaysShown`). Served to the app, with a session, at
   `GET /espace/catalog/v1.json`; a new version gets a new path.
 - **Validation**: `a2ui.Validate(raw)` takes one agent message or an array of them (the whole
   life of their surfaces), `a2ui.ValidateSurface(a2ui.Surface{ID, Components, DataModel})` what
@@ -3977,8 +3991,12 @@ A proposal shows where it matters (#428), with no code for any tool:
   "kind:id"}`), or code draws it on the rows of the items it acts on. Its Oui and ✕ answer that
   proposal and no other (its card, `POST /cards/{id}/yes\|no`). One drawn from external content
   carries a small badge (« extérieur »), its whole sentence on hover and for a screen reader.
-- **Dated.** A proposal that has a time shows as a ghost in every `Day` of its day (unless the
-  Day says `"proposals": false`, for a day that is not the user's): drawn apart (« Proposé », « Proposé ·
+- **Dated.** A proposal that has a time shows as a ghost in every Agenda that draws its day
+  (unless the Agenda says `"proposals": false`, for days that are not the user's), with its Oui,
+  answered through the same `decideCardWith`, whichever node the card belongs to. The Agenda is
+  then the card's place: a node's page leaves it out of its foot when one of its blocks is an
+  Agenda whose days eriphe-core can tell (a written or absent `date`, `card_moves.go`
+  `datedOn`) and the card's span is on one of them. A ghost is drawn apart (« Proposé », « Proposé ·
   contenu extérieur » for one drawn from external content), placed by the hour with the events, saying which events it overlaps, which are marked too. A
   ghost only shows: the card answers. The time is generic: an intention's due
   date, or, for a call a card keeps (a held write, a run's calls), its arguments that are a date
@@ -3996,7 +4014,7 @@ A proposal shows where it matters (#428), with no code for any tool:
   workspace's stream sends them as a `proposals` event, `{"refs": [...], "nodes": [...]}` (`nodes`:
   the nodes their cards are linked to; `{"all": true}` for a stream further behind), at once
   (`watchProposals`); the page reads again each card of those refs, a node's page only when one
-  of its node's cards or a proposal it shows moved, and every Day's ghosts. The first `proposals` event of a connection, after the
+  of its node's cards or a proposal it shows moved, and every Agenda's ghosts. The first `proposals` event of a connection, after the
   snapshot, is `{"all": true}`: what the page shows may have been decided while it was away.
   The limits of a time read from values: an unrelated date argument (a recurrence's end, say)
   stretches the span, and a call with a start and a duration but no end shows a half-hour

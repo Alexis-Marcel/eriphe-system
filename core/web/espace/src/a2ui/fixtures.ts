@@ -66,7 +66,7 @@ export function galleryFixtures(lang: Lang): Message[] {
 
 
 // Made-up proposals for the gallery: its Proposal's, and a dated one its
-// Day shows as a ghost. Answering one changes nothing but its state on the
+// Agenda shows as a ghost. Answering one changes nothing but its state on the
 // page, and says it moved, as eriphe-core's stream would.
 export function sampleProposals(lang: Lang): Proposals {
   const en = lang === "en";
@@ -122,7 +122,7 @@ export function sampleProposals(lang: Lang): Proposals {
       for (const f of followers) f({ refs: [ref] });
       return true;
     },
-    day: async (date) => views.map((v) => read(v.ref)!).filter((v) => v.state === "pending" && v.when?.some((w) => w.start.startsWith(date))),
+    day: async (date) => [...views.map((v) => read(v.ref)!).filter((v) => v.state === "pending" && v.when?.some((w) => w.start.startsWith(date))), ...viewCards.day(date)],
     follow: (on) => {
       followers.add(on);
       const off = viewCards.follow(on);

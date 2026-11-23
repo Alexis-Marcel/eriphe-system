@@ -243,9 +243,28 @@ const mailBilan = (v: SampleView) => {
   return `${parts.join(" ")}\n\n**Pour info** · La facture d'électricité de novembre est arrivée (62 €, prélevés le 5 décembre). Ton colis a été livré hier. Le club avance l'entraînement de samedi à 9 h.\n\n`;
 };
 
+// The words that matter most, quoted as written; and the
+// week in figures, at the foot.
+const samQuote: Authored = {
+  name: "sam",
+  external: true,
+  components: [{ id: "root", component: "Quote", text: "Voici le devis pour la terrasse : 4 200 € posé, début possible lundi 7 décembre. Tu peux me dire avant vendredi si ça te va ?", from: "Sam <sam@example.org>", date: ago(95) }],
+};
+const weekFigures: Authored = {
+  name: "semaine",
+  components: [
+    { id: "root", component: "Column", children: ["h", "row"] },
+    { id: "h", component: "Text", variant: "subtitle", text: "Cette semaine" },
+    { id: "row", component: "Row", children: ["recus", "jetes", "repondus"] },
+    { id: "recus", component: "Metric", label: "Mails reçus", value: 212, delta: -46, deltaLabel: "sur la semaine passée", trend: [41, 38, 35, 29, 33, 22, 14] },
+    { id: "jetes", component: "Metric", label: "Jetés sur ton oui", value: 164, trend: [30, 31, 26, 22, 27, 17, 11] },
+    { id: "repondus", component: "Metric", label: "Réponses envoyées", value: 9, delta: 2, deltaLabel: "sur la semaine passée" },
+  ],
+};
+
 const mailView: SampleView = {
   id: "mails",
-  parts: ["", mailBlock],
+  parts: ["", samQuote, mailBlock, weekFigures],
   values: { mails: { messages: mails } },
   notes,
   bodies,

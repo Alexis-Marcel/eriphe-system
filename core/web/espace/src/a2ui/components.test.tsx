@@ -104,7 +104,7 @@ const MARK: Record<string, string> = {
   Column: ".a2-column", List: ".a2-list", Card: ".a2-card", Tabs: ".a2-tabs", Fold: ".a2-fold", Divider: "hr.a2-divider",
   Button: "button.a2-button", Choice: "fieldset.a2-choice", TextField: ".a2-field input[type=text]",
   DateField: ".a2-field input[type=datetime-local]", Metric: ".a2-metric", Progress: ".a2-progress", Chart: ".a2-chart", Table: "table.a2-table",
-  Timeline: "ol.a2-timeline", Item: ".a2-item", Message: "article.a2-message", Day: ".a2-day",
+  Timeline: "ol.a2-timeline", Item: ".a2-item", Message: "article.a2-message", Agenda: ".a2-agenda", Person: "section.a2-person", Quote: "figure.a2-quote",
   Alert: ".a2-alert", Placeholder: ".a2-placeholder",
 };
 
@@ -155,10 +155,11 @@ for (const lang of ["fr", "en"] as const) {
       const fr = lang === "fr";
       expect(text(".a2-more")).toBe(fr ? "Lire tout" : "Read all");
       expect(text(".a2-step-done .sr-only")).toBe(fr ? ", terminé" : ", done");
-      expect(text(".a2-day-label")).toBe(fr ? "jeudi 12 novembre" : "Thursday 12 November");
+      expect(text(".a2-agenda-hours .a2-agenda-name")).toBe(fr ? "Aujourd'hui" : "Today");
+      expect(text(".a2-agenda-hours .a2-agenda-date")).toBe(fr ? "jeudi 12 novembre" : "Thursday 12 November");
       expect($$(".a2-metric-value").map((n) => n.textContent)).toEqual(fr ? ["37 %", "1,2 To", "74,5 kWh"] : ["37 %", "1.2 TB", "74.5 kWh"]);
       expect($$(".a2-table tbody tr:first-child td").map((n) => n.textContent)).toEqual(
-        fr ? ["Formulaire de contact", "4", "14 nov."] : ["Contact form", "4", "14 Nov"],
+        fr ? ["Formulaire de contact", "4", "14 nov.", "+2,5 %"] : ["Contact form", "4", "14 Nov", "+2.5 %"],
       );
       // The functions: formatString, formatDate, formatRelative.
       const captions = $$(".a2-text-caption").map((n) => n.textContent);
@@ -166,7 +167,7 @@ for (const lang of ["fr", "en"] as const) {
       expect(captions).toContain(fr ? "jeudi 12 novembre" : "Thursday 12 November");
       expect(captions).toContain(fr ? "il y a 3 heures" : "3 hours ago");
       // A message of today says its time, an older one its date.
-      expect($$(".a2-message-date").map((n) => n.textContent)).toEqual(fr ? ["08 h 10", "11 nov., 17 h 40"] : ["08:10", "11 Nov, 17:40"]);
+      expect($$(".a2-message-date").map((n) => n.textContent)).toEqual(fr ? ["8 h 10", "11 nov., 17 h 40"] : ["8:10 am", "11 Nov, 5:40 pm"]);
       expect(text(".a2-image-off")).toBe(fr ? "Plan du quartier" : "Map of the area");
     });
 
@@ -176,7 +177,7 @@ for (const lang of ["fr", "en"] as const) {
         { id: "p", component: "Placeholder" },
         { id: "tb", component: "Table", columns: [{ key: "a", label: "A" }], rows: [] },
         { id: "ch", component: "Chart", kind: "line", series: { "@path": "/none" } },
-        { id: "d", component: "Day", date: "2026-11-12", events: [] },
+        { id: "d", component: "Agenda", date: "2026-11-12", events: [] },
       ]));
       const fr = lang === "fr";
       expect(text(".a2-placeholder-text")).toBe(fr ? "En préparation" : "In preparation");
@@ -250,29 +251,99 @@ describe("the catalog's components", () => {
     expect($$(".a2-more")).toHaveLength(1);
   });
 
-  it("place a day's events by the hour, overlaps side by side", async () => {
+  it("place a day's events by the hour, a clash side by side, and now", async () => {
     await mount("fr");
-    const evs = $$(".a2-day-grid .a2-ev");
+    const evs = $$(".a2-agenda-grid .a2-ev");
     expect(evs.map((e) => e.querySelector(".a2-ev-title")?.textContent)).toEqual(["Point d'équipe", "Atelier devis", "Appel avec Sam", "Dentiste"]);
-    // From 9:00: half-hour rows.
-    expect(evs[0].className).toMatch(/a2-r-0 a2-span-1 a2-lane-all/);
-    expect(evs[1].className).toMatch(/a2-r-2 a2-span-3 a2-lane-0 a2-ev-overlap/);
-    expect(evs[2].className).toMatch(/a2-r-4 a2-span-2 a2-lane-1 a2-ev-overlap/);
-    expect(evs[3].className).toMatch(/a2-r-10 a2-span-2 a2-lane-all/);
-    expect(evs[3].className).not.toMatch(/overlap/);
-    expect($(".a2-day-grid").className).toContain("a2-lanes-2");
+    // From 9:00: half-hour rows. A clash is a box of its own rows, its
+    // events placed in it (a phone stacks them).
+    expect(evs[0].className).toMatch(/a2-r-0 a2-span-1 /);
+    expect(evs[3].className).toMatch(/a2-r-10 a2-span-2 /);
+    const clash = $$(".a2-clash");
+    expect(clash).toHaveLength(1);
+    expect(clash[0].className).toBe("a2-clash a2-clash-2 a2-r-2 a2-span-4");
+    expect([...clash[0].children]).toEqual([evs[1], evs[2]]);
+    expect(evs[1].className).toMatch(/a2-r-0 a2-span-3 a2-lane-0/);
+    expect(evs[2].className).toMatch(/a2-r-2 a2-span-2 a2-lane-1/);
     expect(evs[1].querySelector(".sr-only")?.textContent).toBe("chevauche un autre événement");
-    expect(text(".a2-ev-time")).toBe("09 h 00–09 h 30");
-    expect(text(".a2-day-grid .a2-ev-title")).toBe("Point d'équipe");
-    expect(text(".a2-day-allday")).toBe("Anniversaire de Sam");
-    expect($$(".a2-hour").map((h) => h.textContent)).toEqual(["09", "10", "11", "12", "13", "14"]);
+    expect(evs[3].querySelector(".sr-only")).toBeNull();
+    // A short one says its time on its line, a longer one under its title.
+    expect(evs[0].querySelector(".a2-ev-time")?.textContent).toBe("9 h 00 – 9 h 30");
+    expect(evs[1].querySelector(".a2-ev-sub .a2-ev-time")?.textContent).toBe("10 h 00 – 11 h 30");
+    expect(text(".a2-agenda-allday")).toBe("Anniversaire de Sam");
+    expect($$(".a2-hour").map((h) => h.textContent)).toEqual(["9 h", "10 h", "11 h", "12 h", "13 h", "14 h"]);
+    // Today: a line where the clock is, said in words.
+    const now = new Date();
+    const min = now.getHours() * 60 + now.getMinutes() - 9 * 60;
+    expect($(".a2-now").className).toContain(`a2-r-${Math.floor(min / 30)}`);
+    expect($(".a2-now .sr-only")?.textContent).toMatch(/^Il est \d\d? h \d\d$/);
+    expect($(".a2-now-time")?.textContent).toBe($(".a2-now .sr-only")?.textContent?.replace("Il est ", ""));
+  });
+
+  it("say every status in words, and never the source's", async () => {
+    const ev = (title: string, status: string, start: string) => ({ title, status, start: `2026-11-12T${start}:00`, end: `2026-11-12T${start.slice(0, 2)}:45:00` });
+    await mount("fr", one([
+      {
+        id: "root",
+        component: "Agenda",
+        date: "2026-11-12",
+        events: [
+          ev("Sûr", "confirmed", "09:00"),
+          ev("Peut-être", "tentative", "10:00"),
+          ev("Invité", "needsAction", "11:00"),
+          ev("Invité aussi", "NEEDS-ACTION", "12:00"),
+          ev("Refusé", "declined", "13:00"),
+          ev("Annulé", "canceled", "14:00"),
+          ev("Bizarre", "x-weird", "15:00"),
+        ],
+      },
+    ]));
+    const said = (title: string) => {
+      // The title's own words, after the sign of an invitation.
+      const e = $$(".a2-ev").find((n) => n.querySelector(".a2-ev-title")?.lastChild?.textContent === title)!;
+      return [e.querySelector(".a2-ev-said")?.textContent ?? "", e.className.match(/a2-ev-(waits|tentative|declined|cancelled|needs-action)/g)?.join(" ") ?? ""];
+    };
+    expect(said("Sûr")).toEqual(["", ""]);
+    expect(said("Peut-être")).toEqual(["peut-être", "a2-ev-tentative"]);
+    expect(said("Invité")).toEqual(["à répondre", "a2-ev-waits a2-ev-needs-action"]);
+    expect(said("Invité aussi")).toEqual(["à répondre", "a2-ev-waits a2-ev-needs-action"]);
+    expect(said("Refusé")).toEqual(["refusé", "a2-ev-declined"]);
+    expect(said("Annulé")).toEqual(["annulé", "a2-ev-cancelled"]);
+    expect(said("Bizarre")).toEqual(["", ""]);
+    // An invitation comes from outside: the amber sign, said in words.
+    expect($$(".a2-ev-ext")).toHaveLength(2);
+    expect($(".a2-ev-ext .sr-only")?.textContent).toMatch(/^Une invitation/);
+    expect(el.textContent).not.toMatch(/needs|tentative|declined|cancel|weird/i);
+  });
+
+  it("show the next days as lines, then as a strip", async () => {
+    await mount("en", one([
+      {
+        id: "root",
+        component: "Agenda",
+        date: "2026-11-12",
+        days: 4,
+        events: [
+          { title: "Dentist", start: "2026-11-13T09:30:00", end: "2026-11-13T10:00:00", place: "Centre" },
+          { title: "Birthday", start: "2026-11-13", allDay: true },
+          { title: "Dinner", start: "2026-11-15T20:00:00", status: "needs-action" },
+        ],
+      },
+    ]));
+    const [tomorrow, ...strip] = $$(".a2-agenda-list");
+    expect(tomorrow.querySelector(".a2-agenda-name")?.textContent).toBe("Tomorrow");
+    expect([...tomorrow.querySelectorAll(".a2-agenda-line")].map((l) => l.querySelector(".a2-agenda-at")?.textContent + " " + l.querySelector(".a2-ev-title")?.textContent)).toEqual(["all day Birthday", "9:30 am Dentist"]);
+    expect(strip.map((d) => d.querySelector(".a2-agenda-name")?.textContent)).toEqual(["Sat 14", "Sun 15"]);
+    expect(strip[0].querySelector(".a2-agenda-free")?.textContent).toBe("Free");
+    expect(strip[1].querySelector(".a2-agenda-line")?.className).toContain("a2-ev-waits");
+    expect(strip[1].querySelector(".a2-ev-said")?.textContent).toBe("to answer");
   });
 
   it("show only the day's own events", async () => {
     await mount("en", one([
       {
         id: "root",
-        component: "Day",
+        component: "Agenda",
         date: "2026-11-12",
         events: [
           { title: "Today", start: "2026-11-12", allDay: true },
@@ -283,17 +354,18 @@ describe("the catalog's components", () => {
         ],
       },
     ]));
-    expect($$(".a2-day-allday .a2-ev-title").map((n) => n.textContent)).toEqual(["Today", "Trip"]);
-    expect($$(".a2-day-grid .a2-ev-title").map((n) => n.textContent)).toEqual(["Night"]);
-    expect($(".a2-day-grid .a2-ev").className).toMatch(/a2-r-0 a2-span-2/);
+    expect($$(".a2-agenda-allday .a2-ev-title").map((n) => n.textContent)).toEqual(["Today", "Trip"]);
+    expect($$(".a2-agenda-grid .a2-ev-title").map((n) => n.textContent)).toEqual(["Night"]);
+    expect($(".a2-agenda-grid .a2-ev").className).toMatch(/a2-r-0 a2-span-2/);
   });
 
-  it("colour a change by whether it is good news", async () => {
+  it("write a change in ink, its direction a sign", async () => {
     await mount("fr");
     const deltas = $$(".a2-delta");
-    expect(deltas.map((d) => d.className.match(/a2-delta-(\w+)/)?.[1])).toEqual(["good", "bad", "bad"]);
+    expect(deltas.map((d) => d.className)).toEqual(["a2-delta", "a2-delta", "a2-delta"]);
+    expect(deltas.map((d) => d.querySelector(".a2-delta-sign")?.textContent)).toEqual(["▼", "▼", "▲"]);
     expect(deltas[0].querySelector(".sr-only")?.textContent).toBe("en baisse de 5 %");
-    expect(deltas[2].querySelector("[aria-hidden=true]:not(svg)")?.textContent).toBe("+3,4 kWh");
+    expect(deltas[2].querySelector("[aria-hidden=true]:not(svg):not(.a2-delta-sign)")?.textContent).toBe("3,4 kWh");
   });
 
   it("draw charts in SVG, with their numbers for screen readers", async () => {
@@ -315,6 +387,59 @@ describe("the catalog's components", () => {
     expect($$(".a2-chart")[1].querySelectorAll("polyline")).toHaveLength(1);
   });
 
+  it("show a person: initials, what they are, facts as lines", async () => {
+    await mount("en");
+    const [sam, lea] = $$(".a2-person");
+    expect(sam.querySelector(".a2-person-face")?.textContent).toBe("SM");
+    expect(sam.querySelector(".a2-person-name")?.textContent).toBe("Sam Martin");
+    expect(sam.getAttribute("aria-labelledby")).toBe(sam.querySelector(".a2-person-name")?.id);
+    expect([...sam.querySelectorAll(".a2-person-facts dt")].map((n) => n.textContent)).toEqual(["Phone", "Next meeting"]);
+    // A phone number is a call, nothing else a link.
+    expect([...sam.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual(["tel:0600000000"]);
+    expect(sam.querySelector("button")).toBeNull();
+    expect(lea.querySelector(".a2-person-face")?.textContent).toBe("L");
+    expect(lea.querySelector(".a2-person-facts")).toBeNull();
+  });
+
+  it("quote someone's words, who and when, the page in clear", async () => {
+    await mount("fr");
+    const q = $("figure.a2-quote");
+    expect(q.querySelector("blockquote")?.textContent).toBe("Tu peux me dire avant vendredi si ça te va ?");
+    expect(q.querySelector(".a2-quote-who")?.textContent).toBe("Sam");
+    expect(q.querySelector(".a2-quote-when")?.textContent).toBe("11 nov., 18 h 12");
+    const a = q.querySelector("a")!;
+    expect(a.getAttribute("href")).toBe("https://example.org/devis");
+    expect(a.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(a.querySelector(".a2-link-host")?.textContent).toBe("example.org");
+  });
+
+  it("draw a figure's trend, a work's step, a table's change", async () => {
+    await mount("fr");
+    expect($$(".a2-metric svg.a2-spark")).toHaveLength(1);
+    expect($(".a2-spark .a2-spark-line").getAttribute("points")?.split(" ")).toHaveLength(7);
+    expect(text(".a2-progress-count")).toBe("2 sur 5");
+    expect(text(".a2-progress-step")).toBe("Relecture");
+    expect($(".a2-pill")).toBeNull();
+    const changes = $$("td.a2-col-change");
+    expect(changes.map((c) => c.textContent)).toEqual(["+2,5 %", "−1,3 %", "0,0 %"].slice(0, changes.length));
+    expect(changes.map((c) => c.className.match(/a2-delta-(\w+)/))).toEqual(changes.map(() => null));
+  });
+
+  it("put the dates of what happened in the margin", async () => {
+    await mount("fr", one([
+      {
+        id: "root",
+        component: "Timeline",
+        items: [
+          { label: "Sauvegarde", state: "done", date: "2026-11-12T02:10:00" },
+          { label: "Tri des mails", state: "failed", date: "2026-11-11T06:30:00" },
+        ],
+      },
+    ]));
+    expect($(".a2-timeline").className).toContain("a2-timeline-dated");
+    expect($$(".a2-step-when").map((n) => n.textContent)).toEqual(["2 h 10", "11 nov., 6 h 30"]);
+    expect($(".a2-step-date")).toBeNull();
+  });
   it("show a step's state and its date", async () => {
     await mount("fr");
     expect($$("[data-surface=gallery-project] .a2-step").map((s) => s.className.replace("a2-step a2-step-", ""))).toEqual(["done", "done", "current", "pending"]);
@@ -322,35 +447,38 @@ describe("the catalog's components", () => {
     expect(text(".a2-step-current .a2-step-detail")).toBe("Pages d'accueil et d'agenda");
   });
 
-  it("show a day's dated proposals as ghosts, and what they overlap", async () => {
+  it("show a day's dated proposals as ghosts with their Oui, and what they overlap", async () => {
     const src = sampleProposals("fr");
     await mount("fr", galleryFixtures("fr"), src);
     await act(async () => {});
-    const ghost = $(".a2-day-grid .a2-ev-ghost");
+    const ghost = $(".a2-agenda-grid [data-proposal]");
     expect(ghost.getAttribute("data-proposal")).toBe("intention:3");
-    expect(ghost.querySelector(".a2-ev-kicker")?.textContent).toBe("Proposé");
+    expect(ghost.className).toContain("a2-ev-waits");
+    expect(ghost.querySelector(".a2-ev-said")?.textContent).toBe("proposé par Eriphe");
     expect(ghost.querySelector(".a2-ev-title")?.textContent).toBe("Une heure pour relire le devis");
-    expect(ghost.querySelector(".a2-ev-time")?.textContent).toBe("14 h 30–15 h 30");
-    // It overlaps the dentist (14:00–15:00): both say so, side by side.
-    expect(ghost.className).toMatch(/a2-r-11 a2-span-2 a2-lane-1 a2-ev-ghost a2-ev-clash/);
-    expect(ghost.querySelector(".a2-ev-clash-what")?.textContent).toBe("chevauche « Dentiste »");
-    const dentist = $$(".a2-day-grid .a2-ev").find((e) => e.querySelector(".a2-ev-title")?.textContent === "Dentiste")!;
-    expect(dentist.className).toMatch(/a2-lane-0 a2-ev-overlap a2-ev-clashed/);
+    expect(ghost.querySelector(".a2-ev-time")?.textContent).toBe("14 h 30 – 15 h 30");
+    // It overlaps the dentist (14:00–14:45): side by side, said in words.
+    expect(ghost.parentElement?.className).toMatch(/^a2-clash a2-clash-2 a2-r-10 /);
+    expect(ghost.className).toMatch(/a2-r-1 a2-span-2 a2-lane-1/);
+    expect(ghost.querySelector(".sr-only")?.textContent).toBe("chevauche « Dentiste »");
+    // It carries its card's Oui.
+    expect(ghost.querySelector(".a2-inline-yes")?.textContent).toBe("Oui");
     // An event is never a ghost; the hours reach the ghost's end.
-    expect($$(".a2-ev-ghost")).toHaveLength(1);
-    expect($$(".a2-hour").map((h) => h.textContent).at(-1)).toBe("15");
+    expect($$("[data-proposal]")).toHaveLength(1);
+    expect($$(".a2-hour").map((h) => h.textContent).at(-1)).toBe("15 h");
 
-    // Answered anywhere, it leaves the day, and the dentist is alone again.
-    await act(async () => void (await src.answer({ surfaceId: "", componentId: "", ref: "intention:3", yes: false })));
+    // Answered from its ghost, it leaves the day, and the dentist is alone again.
+    await click(ghost.querySelector(".a2-inline-yes")!);
     await act(async () => {});
-    expect($$(".a2-ev-ghost")).toHaveLength(0);
-    const after = $$(".a2-day-grid .a2-ev").find((e) => e.querySelector(".a2-ev-title")?.textContent === "Dentiste")!;
-    expect(after.className).not.toMatch(/clash|overlap/);
+    expect((await src.read("intention:3"))?.state).toBe("approved");
+    expect($$("[data-proposal]")).toHaveLength(0);
+    const after = $$(".a2-agenda-grid .a2-ev").find((e) => e.querySelector(".a2-ev-title")?.textContent === "Dentiste")!;
+    expect(after.parentElement?.classList.contains("a2-clash")).toBe(false);
   });
 
   it("show no ghost on a day that is not the user's", async () => {
     let asked = 0;
-    await mount("en", one([{ id: "root", component: "Day", date: "2026-11-12", events: [], proposals: false }]), {
+    await mount("en", one([{ id: "root", component: "Agenda", date: "2026-11-12", events: [], proposals: false }]), {
       ...sampleProposals("en"),
       day: async () => (asked++, []),
     });
@@ -361,14 +489,14 @@ describe("the catalog's components", () => {
 
   it("say a ghost drawn from external content is one, all day above", async () => {
     const view = { ref: "intention:5", card: 5, state: "pending", text: "Pay the supplier", tainted: true, when: [{ start: "2026-11-12", allDay: true }] };
-    await mount("en", one([{ id: "root", component: "Day", date: "2026-11-12", events: [] }]), {
+    await mount("en", one([{ id: "root", component: "Agenda", date: "2026-11-12", events: [] }]), {
       read: async () => view,
       answer: async () => false,
       day: async (date) => (date === "2026-11-12" ? [view] : []),
     });
     await act(async () => {});
-    const ghost = $(".a2-day-allday .a2-ev-ghost");
-    expect(ghost.querySelector(".a2-ev-kicker")?.textContent).toBe("Proposed · external content");
+    const ghost = $(".a2-agenda-allday .a2-ev-waits");
+    expect(ghost.querySelector(".a2-ev-said")?.textContent).toBe("proposed · external content");
     expect(ghost.querySelector(".a2-ev-title")?.textContent).toBe("Pay the supplier");
     expect($(".a2-empty")).toBeNull();
   });

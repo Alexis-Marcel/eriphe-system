@@ -171,7 +171,7 @@
     "turn": 11,
     "tool": "node_open",
     "args": {
-      "body": "Consommation de la maison en direct. La bulle du nœud te le montre quand elle dépasse 10 kW.\n\n```eriphe:block conso\n{\"sources\": {\"conso\": {\"tool\": \"maison/conso\", \"every\": 1, \"glance\": {\"label\": \"Conso\", \"path\": \"kw\", \"threshold\": 10, \"unit\": \"amount\", \"compare\": \"fixed\", \"base\": 0}}}, \"components\": [{\"id\": \"root\", \"component\": \"Metric\", \"label\": \"Consommation\", \"value\": {\"@path\": \"/conso/kw\"}, \"unit\": \"kW\", \"better\": \"down\"}]}\n```\n",
+      "body": "Consommation de la maison en direct. La bulle du nœud te le montre quand elle dépasse 10 kW.\n\n```eriphe:block conso\n{\"sources\": {\"conso\": {\"tool\": \"maison/conso\", \"every\": 1, \"glance\": {\"label\": \"Conso\", \"path\": \"kw\", \"threshold\": 10, \"unit\": \"amount\", \"compare\": \"fixed\", \"base\": 0}}}, \"components\": [{\"id\": \"root\", \"component\": \"Metric\", \"label\": \"Consommation\", \"value\": {\"@path\": \"/conso/kw\"}, \"unit\": \"kW\"}]}\n```\n",
       "goal": "Suivre la consommation de la maison et la voir quand elle dépasse 10 kW.",
       "title": "Consommation de la maison"
     },

@@ -38,11 +38,20 @@ export function num(v: unknown): number | undefined {
 
 const fmt = (lang: Lang, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(locale(lang), { ...o, timeZone: "UTC" });
 
-// A time of day as the page writes it (i18n.ts, clock): "09 h 30" in
-// French, "09:30" in English; compact, "09:30" in both (a chart's axis).
+// clock writes a time of day the one way the workspace does, whatever
+// it dates (a page changed, an event, the time it is now): « 9 h 05 » in
+// French, « 9:05 am » in English.
+export function clock(lang: Lang, hours: number, minutes: number): string {
+  const mm = String(minutes).padStart(2, "0");
+  if (lang !== "en") return `${hours} h ${mm}`;
+  return `${hours % 12 || 12}:${mm} ${hours < 12 ? "am" : "pm"}`;
+}
+
+// A time of day as written (its wall clock), the way clock writes it;
+// compact, "09:30" in both languages (a chart's axis).
 export function time(lang: Lang, w: Wall, compact = false): string {
-  const hm = fmt(lang, { hour: "2-digit", minute: "2-digit", hour12: false }).format(w.at);
-  return lang === "fr" && !compact ? hm.replace(":", " h ") : hm;
+  if (!compact) return clock(lang, w.at.getUTCHours(), w.at.getUTCMinutes());
+  return fmt(lang, { hour: "2-digit", minute: "2-digit", hour12: false }).format(w.at);
 }
 
 // A day: "jeudi 12 novembre".
@@ -62,7 +71,7 @@ export const when = (lang: Lang, w: Wall, now = new Date()) => (w.time ? `${shor
 // today its time alone (« 13 h 13 », « 1:13 pm »), yesterday « hier,
 // 13 h 13 », this year the day (« 19 nov. », « Nov 19 »), else with the
 // year (« 19 nov. 2025 », « Nov 19, 2025 »). The one way the workspace
-// dates what happened.
+// dates what happened; its time is clock's, as every time of day.
 export function stamp(lang: Lang, iso: unknown, now = new Date()): string {
   if (typeof iso !== "string" || !iso) return "";
   const d = new Date(iso);
@@ -70,13 +79,22 @@ export function stamp(lang: Lang, iso: unknown, now = new Date()): string {
   const en = lang === "en";
   const midnight = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const days = Math.round((midnight(now) - midnight(d)) / 86_400_000);
-  const hm = en
-    ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).format(d).replace(/\s/g, " ").toLowerCase()
-    : `${d.getHours()} h ${String(d.getMinutes()).padStart(2, "0")}`;
+  const hm = clock(lang, d.getHours(), d.getMinutes());
   if (days === 0) return hm;
   if (days === 1) return `${en ? "yesterday" : "hier"}, ${hm}`;
   const year = d.getFullYear() !== now.getFullYear() ? { year: "numeric" as const } : {};
   return new Intl.DateTimeFormat(en ? "en-US" : "fr-FR", { day: "numeric", month: "short", ...year }).format(d);
+}
+
+// since says when a page last changed, in its head: within the hour, how
+// long ago ("il y a 30 min"), so that it never reads as a second clock
+// beside an Agenda's now line; then its stamp.
+export function since(lang: Lang, iso: unknown, now = new Date()): string {
+  if (typeof iso !== "string" || !iso) return "";
+  const ago = (now.getTime() - Date.parse(iso)) / 60_000;
+  if (!(ago >= 0 && ago < 60)) return stamp(lang, iso, now);
+  const rtf = new Intl.RelativeTimeFormat(locale(lang), { numeric: "auto", style: "short" });
+  return ago < 1 ? rtf.format(0, "second") : rtf.format(-Math.floor(ago), "minute");
 }
 
 // relative says an instant from now: "il y a 2 heures", "demain". Past a

@@ -230,7 +230,9 @@ forget one. There is no settings page for the workspace and no rule to maintain.
 - **A proposal runs only after your yes.** When Eriphe proposes something (an event to add, a reply
   to send, a new skill), it shows as a card with **Yes** and ✕, in its page. A card that
   belongs to no page shows above the bar, wherever you are, until you answer it: no card waits
-  out of sight (the only buttons the bar ever has). A proposed appointment shows on a day's block as a ghost marked **Proposed**.
+  out of sight (the only buttons the bar ever has). A proposed appointment shows in the agenda of its day as a ghost marked **Proposed**, with its
+  **Yes**, wherever that agenda is; on its page the agenda is then its place, not the page's foot.
+  An invitation someone sent you carries the small amber sign of what comes from outside.
   Answering in one place answers everywhere. After your yes, a proposal that runs a call shows
   **Approved · running…** while it runs.
 - **A decided card leaves the page.** Done, failed, declined or withdrawn, a card leaves the page's
@@ -314,8 +316,8 @@ On the machine that runs eriphe-core, in its data folder (`/data` in the contain
   fetched by Eriphe's core, only from a public address, without your cookies or credentials. An
   address an assistant wrote after reading outside content is dropped.
 - **Strict page rules.** The workspace runs under a strict content security policy: no script or
-  style from a block, no inline code. Links open in a new tab, only on your click, and only to web
-  or mail addresses.
+  style from a block, no inline code. Links open only on your click: a web address in a new tab, and a
+  person's phone number or e-mail address (a call, a mail); nothing else is a link.
 - **Outside content is data.** Whatever a mail or a page says, Eriphe reads it as information,
   never as instructions; its title is never shown as a bubble's name.
 

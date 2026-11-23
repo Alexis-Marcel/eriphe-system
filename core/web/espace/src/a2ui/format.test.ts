@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { stamp } from "./format";
+import { since, stamp } from "./format";
 
 // stamp dates what happened in the browser's time: built from local
 // fields here, so that the test holds in any zone.
@@ -28,5 +28,19 @@ describe("stamp", () => {
   it("says nothing of what is no date", () => {
     expect(stamp("fr", undefined, now)).toBe("");
     expect(stamp("fr", "soon", now)).toBe("");
+  });
+});
+
+describe("since", () => {
+  it("says how long ago within the hour, never a second clock", () => {
+    expect(since("fr", local(2026, 11, 19, 14, 30), now)).toMatch(/^il y a\s30\smin$/);
+    expect(since("en", local(2026, 11, 19, 14, 30), now)).toMatch(/^30\smin\.? ago$/);
+    expect(since("fr", local(2026, 11, 19, 15, 0), now)).toBe("maintenant");
+  });
+
+  it("is the stamp past the hour, or ahead of now", () => {
+    expect(since("fr", local(2026, 11, 19, 13, 13), now)).toBe("13 h 13");
+    expect(since("fr", local(2026, 11, 19, 15, 10), now)).toBe("15 h 10");
+    expect(since("fr", undefined, now)).toBe("");
   });
 });

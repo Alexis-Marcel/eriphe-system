@@ -36,6 +36,11 @@
   --r-sm: 8px;
   --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* The scale of a node's page and its blocks: six sizes, three line
+     heights, spaces in steps of 4px. A value off it is a decision. */
+  --fs-tiny: 11px; --fs-small: 12.5px; --fs-body: 14px; --fs-lead: 16px; --fs-title: 19px; --fs-figure: 24px;
+  --lh-tight: 1.25; --lh-snug: 1.4; --lh-body: 1.55;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
   color-scheme: light dark;
 }
 
@@ -140,38 +145,40 @@ button, input, select, textarea { font: inherit; }
 
 /* A2UI blocks (a2ui/): what an author wrote, with the catalog's
    components, a block of a page each (doc/); the gallery (?gallery) lists
-   them one under the other. Classes only, as everywhere here. The type
-   scale: 12 caption, 13 meta, 14 body, 15 subtitle, 17 title; 4px steps. */
+   them one under the other. Classes only, as everywhere here. Sizes,
+   line heights and spaces are the page's scale (:root, --fs-, --lh-,
+   --sp-): small and quiet for what dates or explains, the body for what
+   is said, the lead for a block's own title. */
 .a2-surface {
   flex: 0 1 360px; min-width: 240px; min-height: 0; overflow: auto; scrollbar-width: thin;
   display: flex; flex-direction: column; gap: 10px;
   padding: 16px; border-radius: var(--r); background: var(--card); color: var(--fg); border: 1px solid var(--line);
 }
-.a2-column, .a2-row { display: flex; gap: 8px; min-width: 0; }
+.a2-column, .a2-row { display: flex; gap: var(--sp-2); min-width: 0; }
 .a2-column { flex-direction: column; }
 .a2-row { flex-direction: row; flex-wrap: wrap; }
 .a2-justify-start { justify-content: flex-start; } .a2-justify-center { justify-content: center; }
 .a2-justify-end { justify-content: flex-end; } .a2-justify-spaceBetween { justify-content: space-between; }
 .a2-align-start { align-items: flex-start; } .a2-align-center { align-items: center; }
 .a2-align-end { align-items: flex-end; } .a2-align-stretch { align-items: stretch; }
-.a2-text { margin: 0; font-size: 14px; }
-.a2-text-title { margin: 0; font-weight: 600; font-size: 17px; line-height: 1.3; letter-spacing: -0.015em; }
-.a2-text-subtitle { margin: 2px 0 0; font-size: 13px; font-weight: 500; color: var(--fg3); }
-.a2-text-caption, .a2-empty { font-size: 12.5px; color: var(--fg3); }
+.a2-text { margin: 0; font-size: var(--fs-body); }
+.a2-text-title { margin: 0; font-weight: 600; font-size: var(--fs-lead); line-height: var(--lh-tight); letter-spacing: -0.015em; }
+.a2-text-subtitle { margin: 0; font-size: var(--fs-small); font-weight: 500; line-height: var(--lh-snug); color: var(--fg3); }
+.a2-text-caption, .a2-empty { font-size: var(--fs-small); color: var(--fg3); }
 .a2-empty { margin: 0; }
 /* A mark: a short word attached to what follows it, someone else's words
    in it (« extérieur »): a small tag, the block under it edged. */
 .a2-text-mark {
   align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; margin-bottom: -4px;
-  padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 500; line-height: 18px;
+  padding: 0 8px; border-radius: 999px; font-size: var(--fs-tiny); font-weight: 500; line-height: 18px;
   color: var(--warn-text); background: var(--warn-soft);
 }
 .a2-text-mark::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--warn); }
 /* A Mark at the head of a column marks what follows it. */
 .a2-column > .a2-text-mark + * { padding-left: 12px; border-left: 2px solid color-mix(in oklab, var(--warn) 55%, transparent); }
-.a2-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.a2-list-horizontal { flex-direction: row; flex-wrap: wrap; gap: 8px; }
-.a2-list-vertical > li + li { padding-top: 4px; border-top: 1px solid var(--line); }
+.a2-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.a2-list-horizontal { flex-direction: row; flex-wrap: wrap; gap: var(--sp-2); }
+.a2-list-vertical > li + li { padding-top: var(--sp-1); border-top: 1px solid var(--line); }
 .a2-button-primary { background: var(--fg); color: var(--card); border-color: var(--fg); }
 .a2-button-primary:hover { background: var(--fg); border-color: var(--fg); opacity: 0.88; }
 /* A quiet button: words only, in line with the text around it. */
@@ -187,28 +194,28 @@ button, input, select, textarea { font: inherit; }
 .a2-button:disabled { opacity: 0.5; cursor: default; }
 
 /* Card: the block's own frame when it is the root, a quiet box inside. */
-.a2-card { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.a2-card-title { margin: 0; font-weight: 600; font-size: 17px; line-height: 1.3; letter-spacing: -0.015em; }
+.a2-card { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-3); }
+.a2-card-title { margin: 0; font-weight: 600; font-size: var(--fs-lead); line-height: var(--lh-tight); letter-spacing: -0.015em; }
 /* A card inside another, or a cell of a gallery: framed, as one of several. */
-.a2-card .a2-card, .a2-cells > li > .a2-card { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
-.a2-card .a2-card .a2-card-title, .a2-cells > li > .a2-card > .a2-card-title { font-size: 14.5px; font-weight: 500; }
-.a2-card-body { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.a2-card .a2-card, .a2-cells > li > .a2-card { padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.a2-card .a2-card .a2-card-title, .a2-cells > li > .a2-card > .a2-card-title { font-size: var(--fs-body); font-weight: 500; }
+.a2-card-body { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
 .a2-divider { width: 100%; margin: 2px 0; border: 0; border-top: 1px solid var(--line); }
 
 /* Tabs */
 .a2-tablist { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
-.a2-tab { padding: 6px 10px; border: 0; background: none; color: var(--fg3); font-size: 13px; font-weight: 500; cursor: pointer; border-radius: 6px 6px 0 0; white-space: nowrap; }
+.a2-tab { padding: 6px 10px; border: 0; background: none; color: var(--fg3); font-size: var(--fs-small); font-weight: 500; cursor: pointer; border-radius: 6px 6px 0 0; white-space: nowrap; }
 .a2-tab:hover { color: var(--fg); }
 .a2-tab[aria-selected="true"] { color: var(--fg); box-shadow: inset 0 -2px 0 var(--fg); }
 .a2-tabpanel { padding-top: 10px; min-width: 0; }
 
 /* Markdown */
-.a2-markdown { font-size: 14px; line-height: 1.55; }
+.a2-markdown { font-size: var(--fs-body); line-height: var(--lh-body); }
 .a2-markdown > :first-child { margin-top: 0; }
 .a2-markdown > :last-child { margin-bottom: 0; }
-.a2-markdown p, .a2-markdown ul, .a2-markdown ol, .a2-markdown blockquote { margin: 0 0 8px; }
-.a2-markdown h3, .a2-markdown h4, .a2-markdown h5, .a2-markdown h6 { margin: 12px 0 4px; font-size: 15px; font-weight: 600; }
-.a2-markdown h4, .a2-markdown h5, .a2-markdown h6 { font-size: 14px; }
+.a2-markdown p, .a2-markdown ul, .a2-markdown ol, .a2-markdown blockquote { margin: 0 0 var(--sp-3); }
+.a2-markdown h3, .a2-markdown h4, .a2-markdown h5, .a2-markdown h6 { margin: var(--sp-5) 0 var(--sp-2); font-size: var(--fs-lead); font-weight: 600; }
+.a2-markdown h4, .a2-markdown h5, .a2-markdown h6 { font-size: var(--fs-body); }
 .a2-markdown ul, .a2-markdown ol { padding-left: 1.3em; }
 .a2-markdown li + li { margin-top: 2px; }
 .a2-markdown a { color: var(--accent-text); text-underline-offset: 2px; }
@@ -221,19 +228,19 @@ button, input, select, textarea { font: inherit; }
 .a2-wiki.none { color: var(--fg3); cursor: default; text-decoration-color: var(--line-strong); }
 .a2-wiki.archived { color: var(--fg3); cursor: default; text-decoration: line-through; }
 .a2-markdown code { padding: 0 4px; border-radius: 4px; background: var(--fill); font: 12.5px var(--mono); }
-.a2-markdown pre { margin: 0.5em 0; padding: 8px 10px; border-radius: 8px; background: var(--fill); overflow-x: auto; }
+.a2-markdown pre { margin: 0.5em 0; padding: var(--sp-2) var(--sp-3); border-radius: 8px; background: var(--fill); overflow-x: auto; }
 .a2-markdown pre code { padding: 0; background: none; white-space: pre; }
-.a2-markdown blockquote { padding-left: 10px; border-left: 2px solid var(--line-strong); color: var(--fg2); }
+.a2-markdown blockquote { padding-left: var(--sp-3); border-left: 2px solid var(--line-strong); color: var(--fg2); }
 /* A table fits the page, its words wrapping; past its narrowest (a long
    word, a piece of code), it scrolls in its own box, never the page. */
 .a2-markdown { min-width: 0; }
 .a2-md-table { margin: 0 0 10px; max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; scrollbar-width: thin; }
-.a2-md-table table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.45; }
+.a2-md-table table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); line-height: var(--lh-snug); }
 .a2-md-table th, .a2-md-table td { padding: 6px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); overflow-wrap: break-word; }
 .a2-md-table th + th, .a2-md-table td + td { border-left: 1px solid var(--line); }
 .a2-md-table thead th { background: var(--fill); font-weight: 600; color: var(--fg); white-space: nowrap; }
 .a2-md-table tbody tr:last-child td { border-bottom: 0; }
-.a2-md-table td code { font-size: 12px; white-space: pre-wrap; overflow-wrap: break-word; }
+.a2-md-table td code { font-size: var(--fs-small); white-space: pre-wrap; overflow-wrap: break-word; }
 .a2-md-table .a2-md-left { text-align: left; }
 .a2-md-table .a2-md-center { text-align: center; }
 .a2-md-table .a2-md-right { text-align: right; }
@@ -242,24 +249,24 @@ button, input, select, textarea { font: inherit; }
 .a2-image { display: block; max-width: 100%; border-radius: var(--r-sm); }
 .a2-fit-contain { max-height: 240px; object-fit: contain; }
 .a2-fit-cover { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
-.a2-image-off { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: var(--r-sm); font-size: 13px; color: var(--fg3); }
+.a2-image-off { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3) var(--sp-3); border: 1px dashed var(--line-strong); border-radius: var(--r-sm); font-size: var(--fs-small); color: var(--fg3); }
 
 /* Link: a page outside, its address in clear beside the label. */
-.a2-link { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 2px 6px; min-width: 0; max-width: 100%; font-size: 14px; color: var(--accent-text); text-decoration: none; }
+.a2-link { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 2px var(--sp-2); min-width: 0; max-width: 100%; font-size: var(--fs-body); color: var(--accent-text); text-decoration: none; }
 .a2-link > .a2-icon { align-self: center; }
 .a2-link-label { text-decoration: underline; text-underline-offset: 3px; }
-.a2-link-host { min-width: 0; font-size: 12.5px; color: var(--fg3); overflow-wrap: anywhere; }
-.a2-link:not(:has(.a2-link-label)) .a2-link-host { font-size: 13px; color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.a2-link-host { min-width: 0; font-size: var(--fs-small); color: var(--fg3); overflow-wrap: anywhere; }
+.a2-link:not(:has(.a2-link-label)) .a2-link-host { font-size: var(--fs-small); color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .a2-link:hover .a2-link-label { text-decoration-thickness: 2px; }
 .a2-link-off { color: var(--fg3); }
 
 /* Code: as it is, one block per line; long lines wrap. A diff colours its
    lines by class. */
-.a2-code { margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.a2-code { margin: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
 .a2-code-lang { align-self: flex-start; padding: 0 8px; border-radius: 999px; font: 11.5px/18px var(--mono); color: var(--fg3); background: var(--fill); }
-.a2-code-body { margin: 0; padding: 8px 0; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--fill); font: 12.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
+.a2-code-body { margin: 0; padding: var(--sp-2) 0; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--fill); font: 12.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
 .a2-code-body > code { display: block; font: inherit; }
-.a2-code-line { display: block; min-height: 1.5em; padding: 0 12px; }
+.a2-code-line { display: block; min-height: 1.5em; padding: 0 var(--sp-3); }
 .a2-diff-file { color: var(--fg); background: var(--fill-strong); }
 .a2-diff-hunk { color: var(--accent-text); background: var(--accent-soft); }
 .a2-diff-add { background: var(--ok-soft); }
@@ -268,38 +275,49 @@ button, input, select, textarea { font: inherit; }
 
 /* Fields: what the user enters goes to the surface's data. */
 .a2-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.a2-field-label { padding: 0; font-size: 12.5px; font-weight: 500; color: var(--fg2); }
-.a2-input { width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--card); color: var(--fg); font-size: 14px; }
+.a2-field-label { padding: 0; font-size: var(--fs-small); font-weight: 500; color: var(--fg2); }
+.a2-input { width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--card); color: var(--fg); font-size: var(--fs-body); }
 .a2-input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 20%, transparent); }
 textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-choice { min-width: 0; margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px; }
 .a2-options { display: flex; flex-wrap: wrap; gap: 6px; }
 .a2-option { position: relative; display: inline-flex; }
 .a2-option input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
-.a2-option span { padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; background: var(--card); transition: background 0.15s, color 0.15s; }
+.a2-option span { padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: var(--fs-small); background: var(--card); transition: background 0.15s, color 0.15s; }
 .a2-option:hover span { border-color: var(--line-strong); }
 .a2-option input:checked + span { background: var(--fg); border-color: var(--fg); color: var(--card); }
 .a2-option input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* Metric */
+/* Metric: its name, the figure large, its change, its trend under them. */
 .a2-metric { flex: 1 1 96px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.a2-metric-label { margin: 0; font-size: 12.5px; color: var(--fg3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.a2-metric-value { margin: 0; font-size: 22px; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.a2-metric-unit { font-size: 13px; font-weight: 500; color: var(--fg3); letter-spacing: 0; }
-.a2-delta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.a2-delta-good { color: var(--ok-text); }
-.a2-delta-bad { color: var(--hot-text); }
-.a2-delta-flat { color: var(--fg3); }
+.a2-metric-label { margin: 0; font-size: var(--fs-small); color: var(--fg3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a2-metric-value { margin: 0; font-size: var(--fs-figure); font-weight: 600; line-height: var(--lh-tight); letter-spacing: -0.025em; font-variant-numeric: tabular-nums; }
+.a2-metric-unit { font-size: var(--fs-small); font-weight: 500; color: var(--fg3); letter-spacing: 0; }
+.a2-delta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--sp-1); font-size: var(--fs-small); font-weight: 500; font-variant-numeric: tabular-nums; }
+.a2-delta .a2-icon { width: 13px; height: 13px; }
+.a2-delta-sign { font-size: 0.8em; }
 .a2-delta-label { font-weight: 400; color: var(--fg3); }
-/* Counts side by side (a horizontal List of Metrics): each in its own box. */
-.a2-list-horizontal > li:has(> .a2-metric) { flex: 1 1 120px; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; }
+.a2-spark { display: block; width: 100%; max-width: 160px; height: 28px; margin-top: 6px; overflow: visible; }
+.a2-spark-line { fill: none; stroke: var(--fg2); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.a2-spark-area { fill: color-mix(in oklab, var(--fg) 6%, transparent); stroke: none; }
+.a2-spark-dot { fill: none; stroke: var(--fg); stroke-width: 5; stroke-linecap: round; }
+/* Figures side by side (a Row of Metrics): one band, hairlines between
+   them, as many to a line as fit. */
+.a2-row:has(> .a2-metric) {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--sp-4) 0;
+  padding: 2px 0;
+}
+.a2-row > .a2-metric { padding: 0 var(--sp-4); border-left: 1px solid var(--line); }
+.a2-row > .a2-metric:first-child { padding-left: 0; border-left: 0; }
+/* Counts side by side (a horizontal List of Metrics): the same band. */
+.a2-list-horizontal > li:has(> .a2-metric) { flex: 1 1 140px; min-width: 0; padding: 0 var(--sp-4); border-left: 1px solid var(--line); }
+.a2-list-horizontal > li:has(> .a2-metric):first-child { padding-left: 0; border-left: 0; }
 
 /* Chart: one axis, a recessive grid, series told by colour and legend. */
 .a2-chart { margin: 0; min-width: 0; }
 .a2-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .a2-grid line { stroke: var(--line); stroke-width: 1; }
 .a2-grid line.a2-zero { stroke: var(--line-strong); }
-.a2-grid text { font: 11px var(--mono); fill: var(--fg3); }
+.a2-grid text { font-size: var(--fs-tiny); font-variant-numeric: tabular-nums; fill: var(--fg3); }
 .a2-s0 { color: var(--s0); } .a2-s1 { color: var(--s1); } .a2-s2 { color: var(--s2); } .a2-s3 { color: var(--s3); } .a2-sx { color: var(--sx); }
 .a2-line { fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
 .a2-dot { fill: currentColor; stroke: var(--card); stroke-width: 1.5; }
@@ -307,18 +325,18 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-hit:hover { fill: currentColor; fill-opacity: 0.15; }
 .a2-chart .a2-bar { fill: currentColor; }
 .a2-chart .a2-bar:hover { fill-opacity: 0.8; }
-.a2-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 6px; font-size: 12.5px; color: var(--fg2); }
-.a2-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.a2-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-4); margin-top: var(--sp-2); font-size: var(--fs-small); color: var(--fg2); }
+.a2-legend-item { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .a2-swatch { width: 8px; height: 8px; border-radius: 2px; background: currentColor; }
 .a2-legend-unit { margin-left: auto; color: var(--fg3); }
 .a2-legend-values { font-weight: 500; color: var(--fg); font-variant-numeric: tabular-nums; }
-.a2-stack-rows { display: flex; flex-direction: column; gap: 8px; }
+.a2-stack-rows { display: flex; flex-direction: column; gap: var(--sp-2); }
 .a2-stack-row { display: flex; flex-direction: column; gap: 3px; }
-.a2-stack-label { font-size: 12px; color: var(--fg3); }
+.a2-stack-label { font-size: var(--fs-small); color: var(--fg3); }
 .a2-chart-stack .a2-stack-row svg { height: 12px; border-radius: 6px; }
 
 /* Grid: a gallery, as many cells to a row as fit. */
-.a2-cells { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.a2-cells { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-3); }
 .a2-cells-small { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 .a2-cells-medium { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
 .a2-cells-large { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
@@ -330,17 +348,17 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 
 /* Table */
 .a2-table-wrap { min-width: 0; overflow-x: auto; scrollbar-width: thin; }
-.a2-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-.a2-table th { padding: 6px 10px; text-align: left; font-size: 12px; font-weight: 500; color: var(--fg3); border-bottom: 1px solid var(--line); white-space: nowrap; }
-.a2-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.a2-table { width: 100%; border-collapse: collapse; font-size: var(--fs-body); }
+.a2-table th { padding: var(--sp-2) var(--sp-3); text-align: left; font-size: var(--fs-small); font-weight: 500; color: var(--fg3); border-bottom: 1px solid var(--line); white-space: nowrap; }
+.a2-table td { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); vertical-align: top; }
 .a2-table tr:last-child td { border-bottom: 0; }
 .a2-table th:first-child, .a2-table td:first-child { padding-left: 0; }
-.a2-table .a2-col-number { text-align: right; font-variant-numeric: tabular-nums; }
+.a2-table .a2-col-number, .a2-table .a2-col-change { text-align: right; font-variant-numeric: tabular-nums; }
 .a2-table .a2-col-date { white-space: nowrap; color: var(--fg3); font-variant-numeric: tabular-nums; }
 
 /* Timeline: a line through the steps, each dot says its state. */
 .a2-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.a2-step { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 12px; padding-bottom: 12px; font-size: 14px; }
+.a2-step { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: var(--sp-3); padding-bottom: var(--sp-3); font-size: var(--fs-body); }
 .a2-step:last-child { padding-bottom: 0; }
 .a2-step::before { content: ""; position: absolute; left: 6px; top: 18px; bottom: 2px; width: 1.5px; background: var(--line); }
 .a2-step:last-child::before { display: none; }
@@ -348,46 +366,88 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-step-dot { position: relative; top: 3px; width: 14px; height: 14px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--line-strong); background: var(--card); color: var(--card); }
 .a2-step-dot .a2-icon { width: 9px; height: 9px; stroke-width: 3.2; }
 .a2-step-done .a2-step-dot { background: var(--ok); border-color: var(--ok); }
-.a2-step-current .a2-step-dot { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent); }
+.a2-step-current .a2-step-dot { border-color: var(--fg); background: var(--card); box-shadow: inset 0 0 0 2.5px var(--card), inset 0 0 0 7px var(--fg); }
+/* Dated (what happened): the date in a margin before the line. */
+.a2-timeline-dated .a2-step { grid-template-columns: 4.2em 14px minmax(0, 1fr); }
+.a2-timeline-dated .a2-step::before { left: calc(4.2em + 12px + 6px); }
+.a2-step-when { padding-top: 1px; font-size: var(--fs-small); line-height: 20px; font-variant-numeric: tabular-nums; color: var(--fg3); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .a2-step-failed .a2-step-dot { background: var(--hot); border-color: var(--hot); }
 .a2-step-body { min-width: 0; }
 .a2-step-label { line-height: 20px; }
 .a2-step-done .a2-step-label { color: var(--fg2); }
 .a2-step-pending .a2-step-label { color: var(--fg3); }
 .a2-step-current .a2-step-label { font-weight: 500; }
-.a2-step-failed .a2-step-label { color: var(--hot-text); font-weight: 500; }
-.a2-step-date { font-size: 12px; color: var(--fg3); font-variant-numeric: tabular-nums; }
-.a2-step-detail { display: block; font-size: 13px; color: var(--fg2); }
+.a2-step-date { font-size: var(--fs-small); color: var(--fg3); font-variant-numeric: tabular-nums; }
+.a2-step-detail { display: block; font-size: var(--fs-small); color: var(--fg2); }
 
 /* Message: short (the excerpt), full (the body, opened in place). */
-.a2-message { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; min-width: 0; }
-.a2-avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 12.5px; font-weight: 500; color: var(--fg2); background: var(--fill); border: 1px solid var(--line); }
+/* Person: a circle of initials, the name and what they are, a sentence,
+   facts as two columns of lines. */
+.a2-person { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: var(--sp-3); min-width: 0; }
+.a2-person-face {
+  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  font-size: var(--fs-body); font-weight: 600; letter-spacing: 0.02em; color: var(--fg2); background: var(--fill-strong);
+}
+.a2-person-main { min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-top: 1px; }
+.a2-person-head { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--sp-2); }
+.a2-person-name { font-size: var(--fs-lead); font-weight: 600; letter-spacing: -0.01em; }
+.a2-person-detail { font-size: var(--fs-small); color: var(--fg3); }
+.a2-person-note { margin: 0; font-size: var(--fs-body); color: var(--fg2); }
+.a2-person-facts { margin: var(--sp-2) 0 0; display: grid; gap: 3px; font-size: var(--fs-small); }
+.a2-person-facts > div { display: grid; grid-template-columns: minmax(6em, max-content) minmax(0, 1fr); gap: var(--sp-3); }
+.a2-person-facts dt { color: var(--fg3); }
+.a2-person-facts dd { margin: 0; overflow-wrap: anywhere; user-select: text; }
+/* Quote: someone else's words, set apart by a rule and a larger size; who
+   and when under them. */
+.a2-quote { margin: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); padding-left: var(--sp-4); border-left: 2px solid var(--line-strong); }
+.a2-quote-text { margin: 0; font-size: var(--fs-lead); line-height: var(--lh-body); letter-spacing: -0.005em; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+.a2-quote-from { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--sp-3); font-size: var(--fs-small); color: var(--fg3); }
+.a2-quote-who { font-weight: 500; color: var(--fg2); }
+.a2-quote-when { font-variant-numeric: tabular-nums; }
+.a2-quote-link { font-size: var(--fs-small); }
+.a2-message { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--sp-3); min-width: 0; }
+.a2-avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: var(--fs-small); font-weight: 500; color: var(--fg2); background: var(--fill); border: 1px solid var(--line); }
 .a2-message-main { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.a2-message-head { margin: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 13.5px; }
+.a2-message-head { margin: 0; display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); font-size: var(--fs-body); }
 .a2-message-from { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.a2-message-date { flex: none; font: 12px var(--mono); color: var(--fg3); }
-.a2-message-subject { margin: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a2-message-date { flex: none; font-size: var(--fs-small); font-variant-numeric: tabular-nums; color: var(--fg3); }
+.a2-message-subject { margin: 0; font-size: var(--fs-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .a2-message-open .a2-message-subject { white-space: normal; font-weight: 500; }
-.a2-message-excerpt { margin: 0; font-size: 13px; color: var(--fg3); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
-.a2-message-body { margin: 4px 0 0; font-size: 14px; line-height: 1.6; color: var(--fg2); white-space: pre-wrap; overflow-wrap: anywhere; }
-.a2-more { align-self: flex-start; margin-top: 2px; padding: 0; border: 0; background: none; color: var(--fg2); font-size: 12.5px; font-weight: 500; cursor: pointer; }
+.a2-message-excerpt { margin: 0; font-size: var(--fs-small); color: var(--fg3); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.a2-message-body { margin: var(--sp-1) 0 0; font-size: var(--fs-body); line-height: var(--lh-body); color: var(--fg2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.a2-more { align-self: flex-start; margin-top: 2px; padding: 0; border: 0; background: none; color: var(--fg2); font-size: var(--fs-small); font-weight: 500; cursor: pointer; }
 .a2-more:hover { color: var(--fg); text-decoration: underline; }
 
-/* Day: half-hour rows; an event starts at a row (.a2-r-N), spans rows
-   (.a2-span-N) and takes a lane (.a2-lane-N) when events overlap. */
-.a2-day { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.a2-day-label { margin: 0; font-size: 13px; font-weight: 500; color: var(--fg3); }
-.a2-day-label::first-letter { text-transform: uppercase; }
-.a2-day-allday { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
-.a2-day-grid {
-  display: grid; grid-auto-rows: 20px; column-gap: 4px; min-width: 0;
-  background: repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px 40px);
+/* Agenda: its first day by the hour, the next one as lines, the days after
+   as a strip of small columns, or a list of days when the block is narrow
+   (a container query: a page is resized, a phone is narrow). Events are
+   quiet greys; what waits for the user is one sign, a dashed violet ghost;
+   a status is a word. Half-hour rows of 24px at least: an event starts at
+   a row (.a2-r-N) and spans rows (.a2-span-N); events that overlap are a
+   clash (.a2-clash), its own lanes over its rows (a subgrid), stacked when
+   the block is narrow, its rows growing to hold them. */
+.a2-agenda { container-type: inline-size; min-width: 0; display: flex; flex-direction: column; gap: 18px; }
+.a2-agenda-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); min-width: 0; }
+@container (min-width: 620px) {
+  .a2-agenda-n2 .a2-agenda-main, .a2-agenda-n3 .a2-agenda-main { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 0; }
+  .a2-agenda-main > .a2-agenda-list { padding-left: var(--sp-5); margin-left: var(--sp-5); border-left: 1px solid var(--line); }
 }
-.a2-lanes-1 { grid-template-columns: 3em minmax(0, 1fr); }
-.a2-lanes-2 { grid-template-columns: 3em repeat(2, minmax(0, 1fr)); }
-.a2-lanes-3 { grid-template-columns: 3em repeat(3, minmax(0, 1fr)); }
-.a2-hour { grid-column: 1; grid-row-end: span 2; padding-top: 2px; font: 11px var(--mono); color: var(--fg3); }
-.a2-lane-0 { grid-column: 2; } .a2-lane-1 { grid-column: 3; } .a2-lane-2 { grid-column: 4; } .a2-lane-all { grid-column: 2 / -1; }
+.a2-agenda-day { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.a2-agenda-head { margin: 0; display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; }
+.a2-agenda-name { font-size: var(--fs-lead); font-weight: 600; letter-spacing: -0.01em; }
+.a2-agenda-date { font-size: var(--fs-small); color: var(--fg3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.a2-agenda-allday { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.a2-agenda-grid { position: relative; display: grid; grid-template-columns: 3em minmax(0, 1fr); grid-auto-rows: minmax(24px, auto); column-gap: var(--sp-2); min-width: 0; }
+.a2-agenda-none { grid-column: 2; align-self: center; padding-left: var(--sp-1); }
+/* An hour: a hairline across the day, its words in the gutter; the hour
+   the now line's time stands over keeps its line, not its words. */
+.a2-hour { grid-column: 1 / -1; grid-row-end: span 2; padding-top: 3px; border-top: 1px solid var(--line); font-size: var(--fs-tiny); font-variant-numeric: tabular-nums; color: var(--fg3); pointer-events: none; }
+.a2-hour-quiet { color: transparent; }
+.a2-agenda-grid > .a2-ev, .a2-clash { grid-column: 2; }
+.a2-clash { min-width: 0; display: grid; grid-template-rows: subgrid; column-gap: var(--sp-1); }
+.a2-clash-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.a2-clash-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.a2-clash > .a2-lane-0 { grid-column: 1; } .a2-clash > .a2-lane-1 { grid-column: 2; } .a2-clash > .a2-lane-2 { grid-column: 3; }
 .a2-r-0 { grid-row-start: 1; } .a2-r-1 { grid-row-start: 2; } .a2-r-2 { grid-row-start: 3; } .a2-r-3 { grid-row-start: 4; } .a2-r-4 { grid-row-start: 5; } .a2-r-5 { grid-row-start: 6; }
 .a2-r-6 { grid-row-start: 7; } .a2-r-7 { grid-row-start: 8; } .a2-r-8 { grid-row-start: 9; } .a2-r-9 { grid-row-start: 10; } .a2-r-10 { grid-row-start: 11; } .a2-r-11 { grid-row-start: 12; }
 .a2-r-12 { grid-row-start: 13; } .a2-r-13 { grid-row-start: 14; } .a2-r-14 { grid-row-start: 15; } .a2-r-15 { grid-row-start: 16; } .a2-r-16 { grid-row-start: 17; } .a2-r-17 { grid-row-start: 18; }
@@ -405,44 +465,104 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-span-37 { grid-row-end: span 37; } .a2-span-38 { grid-row-end: span 38; } .a2-span-39 { grid-row-end: span 39; } .a2-span-40 { grid-row-end: span 40; } .a2-span-41 { grid-row-end: span 41; } .a2-span-42 { grid-row-end: span 42; }
 .a2-span-43 { grid-row-end: span 43; } .a2-span-44 { grid-row-end: span 44; } .a2-span-45 { grid-row-end: span 45; } .a2-span-46 { grid-row-end: span 46; } .a2-span-47 { grid-row-end: span 47; } .a2-span-48 { grid-row-end: span 48; }
 .a2-ev {
-  min-width: 0; margin: 1px 0; padding: 2px 8px; overflow: hidden;
-  display: flex; flex-direction: column; border-radius: 6px; font-size: 12px; line-height: 1.3;
-  background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent);
+  min-width: 0; margin: 1px 0; padding: 3px 8px; overflow: hidden;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: start; column-gap: 8px;
+  border-radius: 6px; font-size: var(--fs-small); line-height: var(--lh-snug);
+  background: var(--fill); box-shadow: inset 2px 0 0 var(--line-strong);
 }
-.a2-ev-short { flex-direction: row; align-items: baseline; gap: 6px; container-type: inline-size; }
-@container (max-width: 150px) { .a2-ev-short .a2-ev-time { display: none; } }
-.a2-ev-short .a2-ev-title { flex: 0 1 auto; min-width: 0; }
-.a2-ev-allday { padding: 2px 10px; border-radius: 999px; flex-direction: row; gap: 6px; box-shadow: none; }
-.a2-ev-time { flex: none; font: 11px var(--mono); color: var(--fg2); white-space: nowrap; }
-.a2-ev-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.a2-ev-place { color: var(--fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.a2-ev-overlap { background: var(--warn-soft); box-shadow: inset 2px 0 0 var(--hot); }
-/* A ghost: a dated proposal that waits for the user's yes, drawn apart. */
-.a2-ev-ghost {
-  background: transparent; box-shadow: none;
-  outline: 1.5px dashed var(--accent); outline-offset: -1.5px;
+.a2-ev-line { grid-column: 1; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.a2-ev-short { align-content: center; padding-block: 0; }
+.a2-ev-short .a2-ev-sub { display: none; }
+.a2-ev-title { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a2-ev-time { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-tiny); font-variant-numeric: tabular-nums; color: var(--fg3); white-space: nowrap; }
+.a2-ev-place, .a2-ev-clash { min-width: 0; font-size: var(--fs-tiny); color: var(--fg3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a2-ev-said { flex: none; font-size: var(--fs-tiny); color: var(--fg3); white-space: nowrap; }
+.a2-ev > .a2-inline { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+/* Tall enough: its Oui under its lines, so they keep the width. */
+.a2-ev-tall { display: flex; flex-direction: column; }
+.a2-ev-tall > .a2-inline { align-self: flex-end; margin-top: auto; }
+.a2-ev-allday { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; box-shadow: none; }
+/* Gone by: quieter. Off (declined, cancelled): struck, no fill. Maybe: an
+   outline, no fill. */
+.a2-ev-past { opacity: 0.55; }
+.a2-ev-declined, .a2-ev-cancelled { background: none; box-shadow: inset 0 0 0 1px var(--line); }
+.a2-ev-declined .a2-ev-title, .a2-ev-cancelled .a2-ev-title { color: var(--fg3); text-decoration: line-through; font-weight: 400; }
+.a2-ev-tentative { background: var(--card); box-shadow: inset 0 0 0 1px var(--line-strong); }
+/* What waits for the user's answer: a ghost, the one violet sign. */
+.a2-ev-waits {
+  background: color-mix(in oklab, var(--accent) 6%, var(--card)); box-shadow: none;
+  outline: 1.5px dashed color-mix(in oklab, var(--accent) 70%, transparent); outline-offset: -1.5px;
 }
-.a2-ev-ghost.a2-ev-clash { outline-color: var(--hot); }
-/* An event a ghost would overlap: marked as any overlap, outlined too. */
-.a2-ev-clashed { outline: 1px solid var(--hot); outline-offset: -1px; }
-.a2-ev-kicker { flex: none; font-size: 10.5px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--accent-text); }
-.a2-ev-clash-what { font-size: 11px; color: var(--hot-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a2-ev-waits .a2-ev-said { color: var(--accent-text); font-weight: 500; }
+.a2-agenda .a2-inline { gap: 2px; }
+.a2-agenda .a2-inline-yes { min-width: 0; padding: 1px 11px; font-size: var(--fs-small); line-height: 18px; }
+.a2-agenda .a2-inline-no { width: 22px; height: 22px; }
+.a2-ev:hover .a2-inline-no { opacity: 1; }
+/* Now: a line across the day, its time in the hours' gutter; placed in its
+   half-hour row, then a third (10 min) at a time. */
+.a2-now { grid-column: 2 / -1; align-self: start; height: 0; border-top: 1.5px solid var(--fg); position: relative; z-index: 1; pointer-events: none; }
+.a2-now::before { content: ""; position: absolute; left: -4px; top: -4.75px; width: 8px; height: 8px; border-radius: 50%; background: var(--fg); }
+.a2-now-time {
+  grid-column: 1; align-self: start; z-index: 1; transform: translateY(-50%); padding-right: 2px;
+  font-size: var(--fs-tiny); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg); background: var(--card);
+}
+.a2-now-1 { margin-top: 8px; } .a2-now-2 { margin-top: 16px; }
+/* A day as lines: its time, what, and its word. */
+.a2-agenda-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.a2-agenda-line {
+  display: grid; grid-template-columns: 3.8em minmax(0, 1fr) auto; align-items: baseline; column-gap: var(--sp-2);
+  padding: 4px 6px; margin: 0 -6px; border-radius: 6px; font-size: var(--fs-small);
+}
+.a2-agenda-line > .a2-inline { align-self: center; }
+.a2-agenda-at { font-size: var(--fs-small); font-variant-numeric: tabular-nums; color: var(--fg3); white-space: nowrap; }
+.a2-agenda-what { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--sp-2); }
+.a2-agenda-what .a2-ev-title { flex-shrink: 0; max-width: 100%; font-weight: 400; white-space: normal; } /* whole on its line, the rest after it */
+.a2-agenda-line.a2-ev-waits { outline-offset: -1.5px; }
+.a2-agenda-line.a2-ev-declined, .a2-agenda-line.a2-ev-cancelled, .a2-agenda-line.a2-ev-tentative { background: none; box-shadow: none; }
+.a2-agenda-free { font-size: var(--fs-small); }
+/* The next day beside the hours, a narrow column: an Oui under its words,
+   which keep their line. */
+.a2-agenda-main > .a2-agenda-list { container: a2-next / inline-size; }
+@container a2-next (max-width: 300px) {
+  .a2-agenda-line { grid-template-columns: 3.8em minmax(0, 1fr); }
+  .a2-agenda-line > .a2-inline { grid-column: 2; justify-self: start; margin-top: var(--sp-1); }
+}
+/* The days after: small columns side by side, a list when narrow. */
+.a2-agenda-week {
+  list-style: none; margin: 0; padding: var(--sp-4) 0 0; border-top: 1px solid var(--line);
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--sp-4);
+}
+.a2-agenda-small { gap: var(--sp-2); }
+.a2-agenda-small .a2-agenda-name { font-size: var(--fs-small); font-weight: 500; }
+.a2-agenda-weekend .a2-agenda-name { color: var(--fg3); }
+.a2-agenda-small .a2-agenda-line { grid-template-columns: minmax(0, 1fr); row-gap: 0; padding: 3px 6px; font-size: var(--fs-small); }
+.a2-agenda-small .a2-agenda-at { font-size: var(--fs-tiny); }
+.a2-agenda-small .a2-agenda-what .a2-ev-title { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.a2-agenda-small .a2-agenda-line > .a2-inline { justify-self: start; margin-top: 4px; }
+@container (max-width: 560px) {
+  .a2-clash { display: flex; flex-direction: column; gap: 2px; }
+  .a2-agenda-week { grid-auto-flow: row; grid-auto-columns: auto; gap: 0; padding-top: var(--sp-1); }
+  .a2-agenda-small { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); align-items: baseline; padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
+  .a2-agenda-small:last-child { border-bottom: 0; }
+  .a2-agenda-small .a2-agenda-line { grid-template-columns: 3.8em minmax(0, 1fr) auto; }
+  .a2-agenda-small .a2-agenda-line > .a2-inline { justify-self: end; margin-top: 0; }
+}
 
 /* Proposal: what Eriphe proposes, and the user's yes or no. */
-.a2-proposal { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 10px; background: var(--card); border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--line)); }
+.a2-proposal { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-3) var(--sp-4); border-radius: 10px; background: var(--card); border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--line)); }
 .a2-proposal-decided { border-color: var(--line); }
 .a2-proposal-loading { min-height: 64px; justify-content: center; }
-.a2-proposal-kicker { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; color: var(--accent-text); }
+.a2-proposal-kicker { margin: 0; display: flex; align-items: center; gap: 6px; font-size: var(--fs-small); font-weight: 500; color: var(--accent-text); }
 .a2-proposal-decided .a2-proposal-kicker { color: var(--fg3); }
-.a2-proposal-text { margin: 0; font-size: 15px; font-weight: 500; line-height: 1.4; }
-.a2-proposal-context { font-size: 13px; font-weight: 400; color: var(--fg3); }
-.a2-proposal-why { margin: 0; font-size: 13.5px; color: var(--fg2); }
-.a2-proposal-from, .a2-proposal-yes { margin: 0; font-size: 13px; color: var(--fg3); }
+.a2-proposal-text { margin: 0; font-size: var(--fs-lead); font-weight: 500; line-height: var(--lh-snug); }
+.a2-proposal-context { font-size: var(--fs-small); font-weight: 400; color: var(--fg3); }
+.a2-proposal-why { margin: 0; font-size: var(--fs-body); color: var(--fg2); }
+.a2-proposal-from, .a2-proposal-yes { margin: 0; font-size: var(--fs-small); color: var(--fg3); }
 .a2-proposal-from a { color: inherit; }
 /* Drawn from external content: a small badge, its sentence on hover. */
 .a2-badge {
   display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 0 8px 0 6px; border-radius: 999px;
-  font-size: 11.5px; font-weight: 500; line-height: 18px; white-space: nowrap; cursor: help;
+  font-size: var(--fs-tiny); font-weight: 500; line-height: 18px; white-space: nowrap; cursor: help;
 }
 .a2-badge .a2-icon { width: 12px; height: 12px; }
 .a2-badge-external { color: var(--warn-text); background: var(--warn-soft); }
@@ -450,28 +570,28 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
    kicker, its sentence on hover. */
 .a2-taint { display: inline-grid; place-items: center; margin-left: auto; color: color-mix(in oklab, var(--warn) 80%, var(--fg3)); cursor: help; }
 .a2-taint .a2-icon { width: 13px; height: 13px; }
-.a2-proposal-fields { margin: 4px 0 0; display: grid; gap: 2px; font-size: 13px; }
+.a2-proposal-fields { margin: 4px 0 0; display: grid; gap: 2px; font-size: var(--fs-small); }
 .a2-proposal-fields > div { display: grid; grid-template-columns: minmax(80px, auto) 1fr; gap: 8px; }
 .a2-proposal-fields dt { color: var(--fg3); }
 .a2-proposal-fields dd { margin: 0; overflow-wrap: anywhere; }
-.a2-proposal-summary { margin: 2px 0 0; padding-left: 18px; display: grid; gap: 2px; font-size: 13.5px; color: var(--fg); }
+.a2-proposal-summary { margin: 2px 0 0; padding-left: var(--sp-4); display: grid; gap: 2px; font-size: var(--fs-body); color: var(--fg); }
 /* A card of several calls: each a line the user may untick. */
-.a2-proposal-choices { list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 2px; font-size: 13.5px; color: var(--fg); }
+.a2-proposal-choices { list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 2px; font-size: var(--fs-body); color: var(--fg); }
 .a2-proposal-choices label { display: flex; align-items: baseline; gap: 8px; cursor: pointer; }
 .a2-proposal-choices input { margin: 0; flex: none; }
 .a2-proposal-choices li.is-left > span { color: var(--fg3); text-decoration: line-through; }
 .a2-proposal-choices li > small { margin-left: 8px; color: var(--fg3); }
-.a2-proposal-details { margin-top: 4px; font-size: 13px; }
+.a2-proposal-details { margin-top: var(--sp-1); font-size: var(--fs-small); }
 .a2-proposal-details > summary { cursor: pointer; color: var(--fg3); width: fit-content; }
 .a2-proposal-details > summary:hover { color: var(--fg); }
-.a2-proposal-details[open] > summary { margin-bottom: 4px; }
+.a2-proposal-details[open] > summary { margin-bottom: var(--sp-1); }
 /* A Markdown value (a skill's instructions): drawn, under its name, in a box
    that scrolls when long. */
 .a2-proposal-fields > .a2-proposal-md { grid-template-columns: 1fr; gap: 2px; }
-.a2-proposal-md dd { max-height: 220px; overflow-y: auto; padding: 6px 10px; border-radius: 8px; background: var(--fill); border: 1px solid var(--line); scrollbar-width: thin; }
+.a2-proposal-md dd { max-height: 220px; overflow-y: auto; padding: var(--sp-2) var(--sp-3); border-radius: 8px; background: var(--fill); border: 1px solid var(--line); scrollbar-width: thin; }
 .a2-proposal-md .a2-markdown > :first-child { margin-top: 0; }
 .a2-proposal-md .a2-markdown > :last-child { margin-bottom: 0; }
-.a2-proposal-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.a2-proposal-actions { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); }
 .a2-proposal:hover .a2-proposal-no, .a2-proposal-no:focus-visible { opacity: 1; }
 /* The answer on its way: the button pressed says so at once. */
 .a2-button.is-busy { opacity: 1; cursor: progress; }
@@ -480,9 +600,9 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
   border: 2px solid currentColor; border-right-color: transparent; animation: a2-spin 0.7s linear infinite;
 }
 @keyframes a2-spin { to { rotate: 360deg; } }
-.a2-proposal-failed { margin: 4px 0 0; font-size: 12.5px; color: var(--hot-text); }
+.a2-proposal-failed { margin: var(--sp-1) 0 0; font-size: var(--fs-small); color: var(--hot-text); }
 /* A decided proposal, compact: one line, opened by a click. */
-.a2-proposal-line { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; padding: 6px 10px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--fg3); font-size: 13px; text-align: left; cursor: pointer; }
+.a2-proposal-line { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-width: 0; padding: var(--sp-2) var(--sp-3); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--fg3); font-size: var(--fs-small); text-align: left; cursor: pointer; }
 .a2-proposal-line:hover { background: var(--fill); }
 .a2-proposal-line .a2-icon { flex: none; width: 14px; height: 14px; }
 .a2-proposal-line-kicker { flex: none; font-weight: 500; }
@@ -491,7 +611,7 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 
 /* Alert */
 .a2-alert-success, .a2-alert-warning, .a2-alert-error { --fg3: var(--fg2); }
-.a2-alert { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 10px; font-size: 13.5px; border: 1px solid transparent; }
+.a2-alert { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 10px; font-size: var(--fs-body); border: 1px solid transparent; }
 .a2-alert > .a2-icon { width: 18px; height: 18px; margin-top: 1px; }
 .a2-alert-title { margin: 0; font-weight: 600; }
 .a2-alert-text { margin: 0; }
@@ -506,7 +626,7 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 
 /* Placeholder: in preparation, a slow shimmer. */
 .a2-placeholder { display: flex; flex-direction: column; gap: 8px; padding: 2px 0; }
-.a2-placeholder-text { margin: 0; font-size: 13px; color: var(--fg3); }
+.a2-placeholder-text { margin: 0; font-size: var(--fs-small); color: var(--fg3); }
 .a2-shimmer {
   display: block; height: 10px; border-radius: 6px;
   background: linear-gradient(90deg, var(--fill) 0%, var(--fill-strong) 40%, var(--fill) 80%) 0 0 / 250% 100%;
@@ -515,47 +635,53 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-shimmer-short { width: 60%; }
 @keyframes a2-shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
 
-/* Fold: a line that opens in place. */
-.a2-fold { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.a2-fold-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--fg); font-size: 14px; text-align: left; cursor: pointer; }
-.a2-fold-head:hover { background: var(--fill); }
+/* Fold: a quiet line that opens in place, its chevron first, its count in
+   its words; no box: a hairline above it says where it starts. */
+.a2-fold { min-width: 0; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); }
+.a2-fold-head {
+  display: flex; align-items: center; gap: var(--sp-2); width: 100%; padding: var(--sp-2) var(--sp-1) var(--sp-2) 0; border: 0; border-radius: 0;
+  background: transparent; color: var(--fg2); font-size: var(--fs-body); font-weight: 500; text-align: left; cursor: pointer;
+}
+.a2-fold-head:hover { color: var(--fg); }
 .a2-fold-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.a2-fold-chev { margin-left: auto; color: var(--fg3); }
-.a2-fold-body { min-width: 0; padding: 0 2px; }
-.a2-fold-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.a2-fold-chev { order: -1; flex: none; width: 12px; color: var(--fg3); font-size: var(--fs-tiny); }
+.a2-fold-open > .a2-fold-head, .a2-fold-open > .a2-fold-line > .a2-fold-head { color: var(--fg); }
+.a2-fold-body { min-width: 0; padding: 0 0 var(--sp-2) var(--sp-5); }
+.a2-fold-line { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .a2-fold-line > .a2-fold-head { flex: 1; min-width: 0; }
 .a2-fold-aside { flex: none; }
 .a2-fold-aside:empty { display: none; }
 
-/* Progress: a pill for the state, a bar for the steps. */
-.a2-progress { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.a2-pill {
-  flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 1px 8px;
-  border: 1px solid var(--line); border-radius: 999px; font-size: 12px; font-weight: 500; color: var(--fg2);
-}
-.a2-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.a2-tone-urgent .a2-pill { color: var(--hot-text); border-color: color-mix(in oklab, var(--hot) 35%, var(--line)); }
-.a2-tone-success .a2-pill { color: var(--ok-text); border-color: color-mix(in oklab, var(--ok) 35%, var(--line)); }
-.a2-tone-muted .a2-pill { color: var(--fg3); }
-.a2-progress .a2-bar { flex: 1; min-width: 40px; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; }
-.a2-progress .a2-bar > span { height: 4px; border-radius: 2px; background: var(--fill-strong); }
+/* Progress: a work's word and how far, a bar of its steps under them. The
+   words are ink; the tone colours what is done of the bar, its one sign. */
+.a2-progress { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.a2-progress-head { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--sp-3); min-width: 0; }
+.a2-progress-label { font-size: var(--fs-body); font-weight: 500; }
+.a2-progress-count { font-size: var(--fs-small); font-variant-numeric: tabular-nums; color: var(--fg3); }
+.a2-progress-step { min-width: 0; font-size: var(--fs-small); color: var(--fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a2-tone-muted .a2-progress-label { color: var(--fg3); font-weight: 400; }
+.a2-progress .a2-bar { min-width: 40px; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; }
+.a2-progress .a2-bar > span { height: 5px; border-radius: 3px; background: var(--fill-strong); }
 .a2-progress .a2-bar > .a2-seg-done { background: var(--fg); }
-.a2-progress .a2-bar > .a2-seg-now { background: linear-gradient(90deg, var(--accent) 50%, var(--fill-strong) 50%); }
-.a2-progress-count { flex: none; font: 12px var(--mono); color: var(--fg3); }
+.a2-progress .a2-bar > .a2-seg-now { background: linear-gradient(90deg, var(--fg2) 50%, var(--fill-strong) 50%); }
+.a2-tone-urgent .a2-bar > .a2-seg-done { background: var(--hot); }
+.a2-tone-success .a2-bar > .a2-seg-done { background: var(--ok); }
+.a2-tone-muted .a2-bar > .a2-seg-done { background: var(--fg3); }
 
-/* Item: a line of a list, its note under it, its due date aside. */
-.a2-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; min-width: 0; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); }
-.a2-item-low { padding: 5px 12px; border-color: transparent; }
-.a2-item-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.a2-item-head { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 14px; }
+/* Item: a line of a list, its note under it, its due date aside. No box:
+   the list's hairlines part the lines. */
+.a2-item { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-3); min-width: 0; padding: var(--sp-2) 0; }
+.a2-item-low { padding: var(--sp-1) 0; }
+.a2-item-main { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.a2-item-head { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--sp-2); font-size: var(--fs-body); }
 .a2-item-title { font-weight: 500; overflow-wrap: anywhere; }
 .a2-item-low .a2-item-title { font-weight: 400; }
-.a2-item-detail { font-size: 13px; color: var(--fg3); }
-.a2-item-note { margin: 0; font-size: 13px; color: var(--fg2); }
-.a2-item-low .a2-item-note { display: inline; }
-.a2-item-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.a2-item-detail { font-size: var(--fs-small); color: var(--fg3); }
+.a2-item-note { margin: 0; font-size: var(--fs-small); color: var(--fg2); }
+.a2-item-low .a2-item-note { display: inline; color: var(--fg3); }
+.a2-item-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-1); }
 .a2-item-side .a2-badge { margin-left: 0; cursor: default; }
-.a2-due { padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; font-weight: 500; line-height: 18px; white-space: nowrap; color: var(--fg2); }
+.a2-due { font-size: var(--fs-small); font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--fg2); }
 
 
 /* ---------- the graph (graph/) ---------- */
@@ -682,96 +808,99 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
   border-radius: var(--r); background: var(--card); border: 1px solid var(--line); box-shadow: var(--lift); transition: border-color 0.3s, box-shadow 0.3s; }
 .pg::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--accent) 70%, transparent), transparent); }
 .pg.talking { border-color: color-mix(in oklab, var(--accent) 55%, var(--line)); box-shadow: var(--lift), 0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent); }
-.pg-head { padding: 14px 20px 10px; border-bottom: 1px solid var(--line); display: grid; gap: 4px; cursor: grab; user-select: none; touch-action: none; }
+.pg-head { padding: var(--sp-4) var(--pg-pad) var(--sp-3); border-bottom: 1px solid var(--line); display: grid; gap: var(--sp-1); cursor: grab; user-select: none; touch-action: none; }
 .gr-viewport.holding .pg-head { cursor: grabbing; }
-.pg-kicker { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; color: var(--fg3); text-transform: uppercase; }
+.pg-kicker { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-family: var(--mono); font-size: var(--fs-tiny); letter-spacing: 0.08em; color: var(--fg3); text-transform: uppercase; }
 .pg-crumb { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; letter-spacing: inherit; text-transform: inherit; }
 .pg-crumb:hover { color: var(--fg); }
-.pg-badge { font-style: normal; padding: 0 6px; border-radius: 5px; border: 1px solid var(--line-strong); font-size: 9.5px; }
+.pg-badge { font-style: normal; padding: 0 6px; border-radius: 5px; border: 1px solid var(--line-strong); font-size: var(--fs-tiny); }
 /* The title row: the title takes what the rest leaves, on one line, cut
    short with « … » (whole in its tooltip); its badges stay beside it. */
 .pg-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .pg-title > * { flex: none; }
-.pg-title h2 { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.25; }
+.pg-title h2 { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; margin: 0; font-size: var(--fs-title); font-weight: 600; letter-spacing: -0.018em; line-height: var(--lh-tight); }
 .pg-title h2 > * { flex: none; }
 .pg-title h2 > .pg-title-tx { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pg-title-tx > .title-ext { display: flex; }
-.pg-when { margin-left: auto; font-size: 12.5px; color: var(--fg3); white-space: nowrap; }
+.pg-when { margin-left: auto; font-size: var(--fs-small); color: var(--fg3); white-space: nowrap; }
 /* A permanent subject: a small sign beside its title. */
 /* A node the user did not ask for (a skill or an event opened it): a
    small ↯ after its title on a bubble, a compact pill in its header. */
 .unasked-mark { display: inline-block; margin-left: 0.3em; font-size: 0.8em; font-weight: 600; color: var(--fg3); cursor: help; text-shadow: none; }
 .gr-label .unasked-mark { pointer-events: auto; }
-.pg-title h2 .unasked-mark { margin-left: 8px; padding: 0 5px; vertical-align: 0.25em; border: 1px dashed var(--line-strong); border-radius: 5px; font-size: 10.5px; font-weight: 600; line-height: 15px; color: var(--fg2); white-space: nowrap; }
-.pg-standing { font-size: 15px; line-height: 1; color: var(--accent-text); cursor: help; margin-left: -4px; }
+.pg-title h2 .unasked-mark { margin-left: 8px; padding: 0 5px; vertical-align: 0.25em; border: 1px dashed var(--line-strong); border-radius: 5px; font-size: var(--fs-tiny); font-weight: 600; line-height: 15px; color: var(--fg2); white-space: nowrap; }
+.pg-standing { font-size: var(--fs-lead); line-height: 1; color: var(--accent-text); cursor: help; margin-left: calc(-1 * var(--sp-1)); }
 .ls-row .pg-standing { margin-left: 0; font-size: 13px; }
-.pg-live { display: inline-flex; align-items: center; gap: 6px; color: var(--run); }
+.pg-live { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--run); }
 /* Its versions: one chip, the version shown (amber when not the last),
    opening a short list under it, the newest first (page/Versions.tsx). */
 .pg-vchip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 7px 0 8px; border-radius: 7px; border: 1px solid var(--line); background: none;
-  font-family: var(--mono); font-size: 12px; color: var(--fg2); cursor: pointer; white-space: nowrap; }
+  font-family: var(--mono); font-size: var(--fs-small); color: var(--fg2); cursor: pointer; white-space: nowrap; }
 .pg-vchip svg { color: var(--fg3); }
 .pg-vchip:hover, .pg-vchip[aria-expanded="true"] { background: var(--fill); color: var(--fg); }
 .pg-vchip.old { color: var(--warn-text); border-color: color-mix(in oklab, var(--warn) 50%, transparent); background: var(--warn-soft); }
 .pg-vlist { position: fixed; z-index: 40; width: min(230px, calc(100vw - 16px)); max-height: min(320px, 60vh); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; display: grid; align-content: start; padding: 4px;
   border-radius: 10px; border: 1px solid var(--line); background: var(--card); box-shadow: var(--lift); }
 .pg-vlist button { display: grid; grid-template-columns: 3.4em minmax(0, 1fr) auto; align-items: baseline; column-gap: 8px; border: 0; background: none; text-align: left; padding: 6px 10px; border-radius: 7px;
-  font-size: 12.5px; color: var(--fg2); cursor: pointer; }
+  font-size: var(--fs-small); color: var(--fg2); cursor: pointer; }
 .pg-vlist button:hover, .pg-vlist button:focus-visible { background: var(--fill); color: var(--fg); outline: none; }
 .pg-vlist button[aria-selected="true"] { background: var(--fill-strong); color: var(--fg); }
-.pg-vlist b { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+.pg-vlist b { font-family: var(--mono); font-size: var(--fs-small); font-weight: 600; }
 .pg-vwho { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pg-vlist time { font-size: 11.5px; color: var(--fg3); white-space: nowrap; }
-.pg-vlist em { grid-column: 2 / -1; font-style: normal; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
-.pg-x { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; border: 1px solid var(--line); background: none; color: var(--fg2); font-size: 11px; cursor: pointer; }
+.pg-vlist time { font-size: var(--fs-tiny); color: var(--fg3); white-space: nowrap; }
+.pg-vlist em { grid-column: 2 / -1; font-style: normal; font-family: var(--mono); font-size: var(--fs-tiny); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
+.pg-x { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; border: 1px solid var(--line); background: none; color: var(--fg2); font-size: var(--fs-tiny); cursor: pointer; }
 .pg-x:hover { background: var(--fill); }
-.pg-archive { border: 1px solid var(--line); background: none; padding: 3px 9px; border-radius: 7px; font-size: 12px; color: var(--fg3); cursor: pointer; }
+.pg-archive { border: 1px solid var(--line); background: none; padding: 3px 9px; border-radius: 7px; font-size: var(--fs-small); color: var(--fg3); cursor: pointer; }
 .pg-archive:hover { color: var(--fg); background: var(--fill); }
 .pg-ask { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .pg-ask p { display: grid; gap: 1px; margin: 0; min-width: 0; }
-.pg-ask b { font-weight: 600; font-size: 14px; }
-.pg-ask small { color: var(--fg3); font-size: 12.5px; }
+.pg-ask b { font-weight: 600; font-size: var(--fs-body); }
+.pg-ask small { color: var(--fg3); font-size: var(--fs-small); }
 .pg-ask-btns { display: flex; gap: 8px; flex: none; }
-.pg-old { margin: 0; font-size: 12.5px; color: var(--warn-text); }
+.pg-old { margin: 0; font-size: var(--fs-small); color: var(--warn-text); }
 .pg-old .linkish { color: inherit; }
 /* The « ⋯ » menu: the trace and the .md file, rarely wanted. */
 .pg-more { position: relative; display: inline-flex; }
 .pg-more-btn { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--fg3); cursor: pointer; }
 .pg-more-btn:hover, .pg-more-btn[aria-expanded="true"] { background: var(--fill); color: var(--fg); border-color: var(--line); }
 .pg-menu { position: fixed; z-index: 40; min-width: 150px; display: grid; padding: 4px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); box-shadow: var(--lift); }
-.pg-menu button { border: 0; background: none; text-align: left; padding: 6px 10px; border-radius: 7px; font-size: 13px; color: var(--fg2); cursor: pointer; }
+.pg-menu button { border: 0; background: none; text-align: left; padding: 6px 10px; border-radius: 7px; font-size: var(--fs-small); color: var(--fg2); cursor: pointer; }
 .pg-menu button:hover { background: var(--fill); color: var(--fg); }
 .pg-menu button[aria-checked="true"] { color: var(--fg); font-weight: 500; }
 /* What keeps a permanent subject alive, under the menu's entries. */
 /* Where the node comes from, under the menu's entries. */
-.pg-origin { margin: 4px 0 0; padding: 8px 10px 6px; border-top: 1px solid var(--line); max-width: min(340px, 86vw); display: grid; gap: 4px; font-size: 12.5px; color: var(--fg2); }
-.pg-origin h3 { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--fg); }
+.pg-origin { margin: 4px 0 0; padding: 8px 10px 6px; border-top: 1px solid var(--line); max-width: min(340px, 86vw); display: grid; gap: 4px; font-size: var(--fs-small); color: var(--fg2); }
+.pg-origin h3 { margin: 0; font-size: var(--fs-small); font-weight: 600; color: var(--fg); }
 .pg-origin p { margin: 0; overflow-wrap: anywhere; }
 .pg-origin + .pg-alive { margin-top: 0; }
-.pg-alive { margin: 4px 0 0; padding: 8px 10px 4px; border-top: 1px solid var(--line); max-width: min(340px, 86vw); display: grid; gap: 6px; font-size: 12.5px; color: var(--fg2); }
-.pg-alive h3 { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--fg); }
-.pg-alive h4 { margin: 0 0 2px; font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg3); }
+.pg-alive { margin: var(--sp-1) 0 0; padding: var(--sp-2) var(--sp-3) var(--sp-1); border-top: 1px solid var(--line); max-width: min(340px, 86vw); display: grid; gap: var(--sp-2); font-size: var(--fs-small); color: var(--fg2); }
+.pg-alive h3 { margin: 0; font-size: var(--fs-small); font-weight: 600; color: var(--fg); }
+.pg-alive h4 { margin: 0 0 2px; font-family: var(--mono); font-size: var(--fs-tiny); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg3); }
 .pg-alive ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
-.pg-alive li b { font-weight: 500; color: var(--fg); font-family: var(--mono); font-size: 11.5px; }
+.pg-alive li b { font-weight: 500; color: var(--fg); font-family: var(--mono); font-size: var(--fs-tiny); }
 .pg-alive p { margin: 0; color: var(--fg3); }
-.pg-view { display: flex; align-items: center; gap: 10px; margin: 2px 0 0; font-size: 12.5px; color: var(--fg3); }
+.pg-view { display: flex; align-items: center; gap: var(--sp-3); margin: 2px 0 0; font-size: var(--fs-small); color: var(--fg3); }
 .pg-view b { font-weight: 500; color: var(--fg2); }
 .pg-view .linkish { font-size: inherit; color: var(--accent-text); }
 /* The body is the page's one scroll: the wheel over a page scrolls it, not
    the graph (Graph.tsx). In the graph it keeps its scroll to itself; on a
    small screen the list scrolls the whole page (.ls-page). */
-.pg-body { overflow-y: auto; padding: 16px 20px 20px; scrollbar-width: thin; touch-action: pan-y; }
+.pg { --pg-pad: var(--sp-5); }
+.pg-body { overflow-y: auto; padding: var(--sp-5) var(--pg-pad); scrollbar-width: thin; touch-action: pan-y; }
 .pg-body:focus { outline: none; }
 .pg-body:focus-visible { outline: 2px solid var(--link-on); outline-offset: -2px; }
 .gr-page .pg-body { overscroll-behavior: contain; }
 .ls-page .pg-body { overflow: visible; }
 /* The cards at the foot: a band across the page, the last thing its body
    scrolls to. */
-.pg-foot { border-top: 1px solid var(--line); padding: 10px 12px; background: var(--fill); }
-.pg-body > .pg-foot { margin: 20px -20px -20px; }
-.pg-doc { display: grid; gap: 14px; }
+.pg-foot { border-top: 1px solid var(--line); padding: var(--sp-3); background: var(--fill); }
+.pg-body > .pg-foot { margin: var(--sp-5) calc(-1 * var(--pg-pad)) calc(-1 * var(--sp-5)); }
+/* Its rhythm: a step of --sp-5 between its parts (a paragraph, a block),
+   --sp-3 inside a block, --sp-2 inside a column. */
+.pg-doc { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); }
 .pg-doc .a2-markdown > :first-child { margin-top: 0; }
-.a2-block { display: flex; flex-direction: column; gap: 10px; }
+.a2-block { display: flex; flex-direction: column; gap: var(--sp-3); }
 /* A block someone else's words reached: a thin amber edge, a small dot at
    its top whose words say why (on hover, and to a screen reader). The
    page's head says it once in words; nothing inside repeats it. */
@@ -784,19 +913,19 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
    page/Editor.tsx's, on these variables), its bar, and a conflict with the
    newer text. */
 .pg-md { display: grid; gap: 10px; }
-.pg-md-text, .pg-editor { margin: 0; border-radius: 10px; background: var(--fill); border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; line-height: 1.55; color: var(--fg2); }
+.pg-md-text, .pg-editor { margin: 0; border-radius: 10px; background: var(--fill); border: 1px solid var(--line); font-family: var(--mono); font-size: var(--fs-small); line-height: var(--lh-body); color: var(--fg2); }
 .pg-md-text { padding: 12px 14px; white-space: pre-wrap; word-break: break-word; }
 .pg-md-bar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
-.pg-md-state { font-size: 12.5px; color: var(--fg3); }
+.pg-md-state { font-size: var(--fs-small); color: var(--fg3); }
 .pg-md-conflict { display: grid; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); border: 1px solid color-mix(in oklab, var(--warn) 40%, transparent); }
-.pg-md-conflict p { margin: 0; font-size: 13px; color: var(--warn-text); }
+.pg-md-conflict p { margin: 0; font-size: var(--fs-small); color: var(--warn-text); }
 .pg-md-choice { display: flex; gap: 8px; }
 .pg-trace { list-style: none; display: grid; padding: 0; margin: 0; }
-.pg-trace li { display: grid; grid-template-columns: 110px 64px minmax(0, 1fr); gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--fg2); }
+.pg-trace li { display: grid; grid-template-columns: 110px 64px minmax(0, 1fr); gap: var(--sp-2); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); font-size: var(--fs-small); color: var(--fg2); }
 .pg-trace li:last-child { border-bottom: 0; }
-.pg-trace time { font-size: 12px; color: var(--fg3); }
+.pg-trace time { font-size: var(--fs-small); color: var(--fg3); }
 .pg-trace p { margin: 0; white-space: pre-wrap; }
-.pg-who { font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg3); padding-top: 2px; }
+.pg-who { font-family: var(--mono); font-size: var(--fs-tiny); letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg3); padding-top: 2px; }
 .who-task .pg-who { color: var(--run); }
 .who-brain .pg-who { color: var(--accent-text); }
 .who-outside .pg-who { color: var(--warn-text); }
@@ -915,8 +1044,8 @@ a.notice-text:hover { text-decoration: underline; }
 
 /* A card block: one of the node's cards, where its document places it;
    one not found says so, with no Oui or Non. */
-.pg-card { margin: 12px 0; }
-.pg-card-missing { margin: 12px 0; padding: 8px 12px; border-radius: 10px; border: 1px dashed var(--line); color: var(--fg3); font-size: 13px; }
+.pg-card { margin: var(--sp-3) 0; }
+.pg-card-missing { margin: var(--sp-3) 0; padding: var(--sp-2) var(--sp-3); border-radius: 10px; border: 1px dashed var(--line); color: var(--fg3); font-size: var(--fs-small); }
 
 .gallery { position: fixed; inset: 0; overflow: auto; padding: 24px; display: flex; flex-wrap: wrap; gap: 12px; align-content: flex-start; }
 
@@ -938,7 +1067,8 @@ a.notice-text:hover { text-decoration: underline; }
 .ls-page { position: absolute; inset: 0; overflow-y: auto; padding: 60px 8px 240px; }
 .ls-page .pg { max-height: none; }
 @media (max-width: 760px) {
-  .pg-title { flex-wrap: wrap; row-gap: 6px; }
+  .pg { --pg-pad: var(--sp-4); }
+  .pg-title { flex-wrap: wrap; row-gap: var(--sp-2); }
   .pg-title h2 { flex-basis: 100%; }
   .a2-proposal-fields > div { grid-template-columns: 1fr; gap: 0; }
 }
@@ -950,54 +1080,54 @@ a.notice-text:hover { text-decoration: underline; }
 
 /* A batch's rows (a2ui/lists.tsx): each with its box, all ticked, the
    user unticking what they keep. */
-.a2-batchrows > li { display: flex; align-items: flex-start; gap: 8px; }
+.a2-batchrows > li { display: flex; align-items: flex-start; gap: var(--sp-2); }
 .a2-tickrow { flex: 1; min-width: 0; }
 .a2-tick { width: 16px; height: 16px; margin: 3px 0 0; flex: none; accent-color: var(--accent); cursor: pointer; }
 /* A row that opens in place (opener.tsx): the row, its disclosure, what it read below it. */
 .a2-openhead { display: flex; align-items: flex-start; gap: 6px; cursor: pointer; }
 .a2-openmain { flex: 1; min-width: 0; }
-.a2-openbtn { flex: none; width: 22px; height: 22px; padding: 0; border: none; border-radius: var(--r-sm); background: none; color: var(--fg3); font: inherit; font-size: 12px; cursor: pointer; }
+.a2-openbtn { flex: none; width: 22px; height: 22px; padding: 0; border: none; border-radius: var(--r-sm); background: none; color: var(--fg3); font: inherit; font-size: var(--fs-small); cursor: pointer; }
 .a2-openbtn:hover, .a2-openrow.open .a2-openbtn { background: var(--fill); color: var(--fg); }
 /* An item opened in place reads as a letter: a quiet sheet under its row. */
 .a2-opened { position: relative; margin: 4px 0 10px; padding: 16px 20px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card);
-  box-shadow: 0 1px 2px color-mix(in oklab, var(--fg) 5%, transparent); font-size: 13.5px; cursor: auto; }
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--fg) 5%, transparent); font-size: var(--fs-body); cursor: auto; }
 .a2-openclose { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; padding: 0; border: none; border-radius: 999px; background: none; color: var(--fg3); cursor: pointer; }
 .a2-openclose:hover { background: var(--fill); color: var(--fg); }
-.a2-openwait, .a2-openfail { margin: 0; font-size: 12px; color: var(--fg3); }
-.a2-read { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.a2-read-head { display: flex; align-items: baseline; gap: 10px; padding-right: 28px; font-size: 12.5px; color: var(--fg2); }
+.a2-openwait, .a2-openfail { margin: 0; font-size: var(--fs-small); color: var(--fg3); }
+.a2-read { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.a2-read-head { display: flex; align-items: baseline; gap: var(--sp-3); padding-right: var(--sp-6); font-size: var(--fs-small); color: var(--fg2); }
 .a2-read-from { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--fg); }
-.a2-read-addr { margin-left: 6px; font-weight: 400; color: var(--fg3); opacity: 0; transition: opacity 160ms; }
+.a2-read-addr { margin-left: var(--sp-2); font-weight: 400; color: var(--fg3); opacity: 0; transition: opacity 160ms; }
 .a2-read-head:hover .a2-read-addr { opacity: 1; }
 @media (hover: none) { .a2-read-addr { opacity: 1; } }
 .a2-read-date { flex: none; margin-left: auto; color: var(--fg3); font-variant-numeric: tabular-nums; }
-.a2-read-title { margin: -2px 0 0; font-size: 16px; font-weight: 600; line-height: 1.35; letter-spacing: -0.01em; color: var(--fg); }
-.a2-read-note { margin: 0; font-size: 12.5px; color: var(--fg3); }
-.a2-read-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; line-height: 1.6; color: var(--fg); }
+.a2-read-title { margin: -2px 0 0; font-size: var(--fs-lead); font-weight: 600; line-height: var(--lh-snug); letter-spacing: -0.01em; color: var(--fg); }
+.a2-read-note { margin: 0; font-size: var(--fs-small); color: var(--fg3); }
+.a2-read-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; line-height: var(--lh-body); color: var(--fg); }
 /* One discreet « détails » at the foot: the exact call, the item as read. */
 .a2-read-more { margin-top: 2px; }
-.a2-read-more summary { display: inline-block; list-style: none; cursor: pointer; font-size: 11.5px; color: var(--fg3); }
+.a2-read-more summary { display: inline-block; list-style: none; cursor: pointer; font-size: var(--fs-tiny); color: var(--fg3); }
 .a2-read-more summary::-webkit-details-marker { display: none; }
 .a2-read-more summary:hover { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
 .a2-read-more[open] summary { margin-bottom: 6px; }
 .a2-read-more section { display: grid; gap: 4px; margin-top: 6px; }
-.a2-read-more h5 { margin: 0; font-size: 11px; font-weight: 500; color: var(--fg3); }
-.a2-read-more pre { margin: 0; padding: 8px 10px; max-height: 220px; overflow: auto; border-radius: 8px; background: var(--fill); font-family: var(--mono); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg2); }
+.a2-read-more h5 { margin: 0; font-size: var(--fs-tiny); font-weight: 500; color: var(--fg3); }
+.a2-read-more pre { margin: 0; padding: 8px 10px; max-height: 220px; overflow: auto; border-radius: 8px; background: var(--fill); font-family: var(--mono); font-size: var(--fs-tiny); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg2); }
 .a2-openfail { color: var(--hot-text); }
 .a2-wiki.ext, .a2-from-ext { color: var(--warn-text); }
 
 /* --- A page's opening, items that propose, batches -------------------------
    A page's text opens with what matters (the prompt: « commence par ce qui
    compte »): its first paragraph is its lead, a size above the rest. */
-.pg-doc > .a2-markdown:first-child > p:first-child { font-size: 16.5px; line-height: 1.5; letter-spacing: -0.01em; color: var(--fg); }
-.pg-doc > .a2-markdown:first-child > p:first-child + p { color: var(--fg2); font-size: 13.5px; }
+.pg-doc > .a2-markdown:first-child > p:first-child { font-size: var(--fs-lead); line-height: var(--lh-body); letter-spacing: -0.01em; color: var(--fg); }
+.pg-doc > .a2-markdown:first-child > p:first-child + p { color: var(--fg2); font-size: var(--fs-body); }
 
 /* An item that proposes: one line, the item and its one Oui, no frame of
    its own; the rows of the list are what separates them. */
 .a2-row:has(> .a2-inline) { flex-wrap: nowrap; gap: 10px; }
-.a2-row:has(> .a2-inline) > .a2-item, .a2-row:has(> .a2-inline-state) > .a2-item, .a2-openmain > .a2-row > .a2-item { padding: 6px 2px; border-color: transparent; background: none; }
+.a2-row:has(> .a2-inline) > .a2-item, .a2-row:has(> .a2-inline-state) > .a2-item, .a2-openmain > .a2-row > .a2-item { padding: 7px 0; border-color: transparent; background: none; }
 .a2-inline { flex: none; display: inline-flex; align-items: center; gap: 4px; }
-.a2-inline-yes { min-width: 52px; padding: 5px 14px; border-radius: 999px; font-size: 13px; font-weight: 500; }
+.a2-inline-yes { min-width: 52px; padding: 5px 14px; border-radius: 999px; font-size: var(--fs-small); font-weight: 500; }
 .a2-inline-no { display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--fg3); cursor: pointer; opacity: 0; transition: opacity 120ms; }
 .a2-inline-no .a2-icon { width: 13px; height: 13px; }
 .a2-inline-no:hover { background: var(--fill); color: var(--fg); }
@@ -1005,18 +1135,31 @@ li:hover .a2-inline-no, .a2-inline-no:focus-visible { opacity: 1; }
 @media (hover: none) { .a2-inline-no { opacity: 1; } }
 .a2-inline-ext { display: inline-grid; place-items: center; color: var(--warn-text); }
 .a2-inline-ext .a2-icon { width: 13px; height: 13px; }
+.a2-ev-ext { display: inline; margin-right: var(--sp-1); vertical-align: -0.1em; }
 .a2-block.ext .a2-inline-ext { display: none; } /* the block's own mark says it */
 /* A card the page draws on its row; one card on several rows: a quiet
    mark of how many, its siblings lit on hover. */
-.a2-rowcard { flex-wrap: nowrap; gap: 10px; padding-left: 10px; }
+.a2-rowcard { flex-wrap: nowrap; gap: 10px; }
+/* A narrow page (a phone, a page made small): the Oui alone, its words in its tooltip. */
+.pg-doc { container-type: inline-size; }
+@container (max-width: 560px) {
+  .a2-inline-what { display: none; }
+  /* A batch's line: its words whole, its Oui under them. */
+  .a2-fold-line { flex-wrap: wrap; }
+  .a2-fold-line > .a2-fold-head { flex-basis: 100%; }
+  .a2-fold-line > .a2-fold-card { margin: 0 0 var(--sp-2) auto; }
+  /* Figures two by two, no hairlines between them. */
+  .a2-row:has(> .a2-metric) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4) var(--sp-4); }
+  .a2-row > .a2-metric { padding: 0; border-left: 0; }
+}
 .a2-rowcard > .a2-inline { flex: 0 1 auto; min-width: 0; }
-.a2-inline-what { min-width: 0; max-width: 22em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--fg3); margin-right: 2px; }
+.a2-inline-what { min-width: 0; max-width: 22em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-small); color: var(--fg3); margin-right: 2px; }
 .a2-rowcard > :first-child { flex: 1 1 auto; min-width: 0; }
-.a2-inline-shared { display: inline-flex; align-items: center; gap: 2px; padding: 0 4px; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--accent-text); }
+.a2-inline-shared { display: inline-flex; align-items: center; gap: 2px; padding: 0 4px; font-size: var(--fs-tiny); font-variant-numeric: tabular-nums; color: var(--accent-text); }
 .a2-inline-shared .a2-icon { width: 12px; height: 12px; }
 .a2-list > li.a2-card-sibling { border-radius: 10px; background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .a2-fold-card { display: inline-flex; margin-left: auto; }
-.a2-inline-state { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--fg3); }
+.a2-inline-state { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-small); color: var(--fg3); }
 .a2-inline-state .a2-icon { width: 13px; height: 13px; }
 .a2-inline-approved:not(.a2-inline-failed) { color: var(--ok-text); }
 .a2-inline-failed { color: var(--hot-text); }
@@ -1026,44 +1169,48 @@ li:hover .a2-inline-no, .a2-inline-no:focus-visible { opacity: 1; }
 /* What its Oui does, under an item opened in place: a calm box, what it
    makes as it will be, its Oui there. The row's own Oui keeps quiet while
    the item is open: one yes per item. */
-.a2-onyes { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; padding: 12px 14px; border-radius: 10px;
+.a2-onyes { display: flex; flex-direction: column; gap: var(--sp-3); margin-top: var(--sp-1); padding: var(--sp-3) var(--sp-4); border-radius: 10px;
   background: color-mix(in oklab, var(--accent) 5%, var(--card)); border: 1px solid color-mix(in oklab, var(--accent) 18%, var(--line)); }
-.a2-onyes-what { margin: 0; font-size: 13.5px; font-weight: 500; line-height: 1.45; color: var(--fg); }
-.a2-onyes-kicker { display: block; margin-bottom: 2px; font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
-.a2-onyes-facts { display: grid; gap: 2px; margin: 0; font-size: 12.5px; }
-.a2-onyes-facts > div { display: flex; gap: 8px; }
+.a2-onyes-what { margin: 0; font-size: var(--fs-body); font-weight: 500; line-height: var(--lh-snug); color: var(--fg); }
+.a2-onyes-kicker { display: block; margin-bottom: 2px; font-family: var(--mono); font-size: var(--fs-tiny); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
+.a2-onyes-facts { display: grid; gap: 2px; margin: 0; font-size: var(--fs-small); }
+.a2-onyes-facts > div { display: flex; gap: var(--sp-2); }
 .a2-onyes-facts dt { color: var(--fg3); }
 .a2-onyes-facts dd { margin: 0; color: var(--fg); }
-.a2-onyes-content { margin: 0; display: grid; gap: 4px; }
-.a2-onyes-content figcaption { font-size: 11.5px; color: var(--fg3); }
-.a2-onyes-text { padding: 10px 12px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; line-height: 1.6; color: var(--fg); }
-.a2-onyes-acts { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.a2-onyes-content { margin: 0; display: grid; gap: var(--sp-1); }
+.a2-onyes-content figcaption { font-size: var(--fs-tiny); color: var(--fg3); }
+.a2-onyes-text { padding: 10px 12px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; line-height: var(--lh-body); color: var(--fg); }
+.a2-onyes-acts { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); }
 .a2-onyes .a2-onyes-no { opacity: 1; }
 /* Nothing more to show than what it does: its Oui on the same line. */
 .a2-onyes.bare { flex-direction: row; align-items: center; }
 .a2-onyes.bare .a2-onyes-what { flex: 1; min-width: 0; }
-.a2-onyes-state { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; font-size: 12.5px; color: var(--fg3); }
+.a2-onyes-state { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; font-size: var(--fs-small); color: var(--fg3); }
 .a2-onyes-state .a2-icon { width: 13px; height: 13px; flex: none; }
 .a2-openrow.open > .a2-openhead .a2-inline { visibility: hidden; }
 
 /* A batch: one line, how many and the Oui of their card; opened, its rows. */
-.a2-batch .a2-fold-head { gap: 10px; padding: 9px 12px; border-style: dashed; color: var(--fg2); }
-.a2-batch.a2-fold-open .a2-fold-head { border-style: solid; }
-.a2-batch .a2-fold-chev { margin-left: 0; order: -1; font-size: 11px; }
+.a2-batch .a2-fold-head { gap: var(--sp-3); }
 .a2-batch .a2-fold-label { color: var(--fg); }
-.a2-batch-kept { font-size: 12px; color: var(--fg3); }
-.a2-batch .a2-fold-body { max-height: 320px; overflow-y: auto; scrollbar-width: thin; padding: 2px 4px; }
+.a2-batch-kept { font-size: var(--fs-small); color: var(--fg3); }
+.a2-batch .a2-fold-body { max-height: 320px; overflow-y: auto; scrollbar-width: thin; padding: 2px var(--sp-1); }
 .a2-batchrows > li.left { opacity: 0.55; }
 .a2-batchrows > li.ticked { background: none; }
 
 /* What is already decided, in the page's « ⋯ » menu. */
 .pg-settled { margin: 4px 0 0; padding: 8px 10px 6px; border-top: 1px solid var(--line); max-width: min(340px, 86vw); display: grid; gap: 6px; }
-.pg-settled h3 { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--fg); }
-.pg-settled ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.pg-settled li { display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 12.5px; }
+.pg-settled h3 { margin: 0; font-size: var(--fs-small); font-weight: 600; color: var(--fg); }
+.pg-settled ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.pg-settled li { display: flex; flex-wrap: wrap; gap: 2px var(--sp-2); font-size: var(--fs-small); }
 .pg-settled-word { flex: none; color: var(--ok-text); }
 .pg-settled li.no .pg-settled-word { color: var(--fg3); }
 .pg-settled li.failed .pg-settled-word { color: var(--warn-text); }
 .pg-settled-text { color: var(--fg2); flex: 1 1 0; min-width: 0; }
-.pg-settled-why { flex-basis: 100%; color: var(--fg3); font-size: 12px; overflow-wrap: anywhere; }
+.pg-settled-why { flex-basis: 100%; color: var(--fg3); font-size: var(--fs-small); overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .a2-inline-no { transition: none; } .a2-list-vertical > li:has(.a2-inline-state) { animation: none; } }
+
+.a2-block.ext .a2-quote { padding-left: 0; border-left: 0; } /* the block's edge already sets the words apart */
+.a2-metric > .a2-spark { margin-top: auto; padding-top: 6px; box-sizing: content-box; }
+/* An event beside another: room for its time, its place left out. */
+.a2-clash > .a2-ev .a2-ev-sub .a2-ev-place { display: none; }
+@container (max-width: 560px) { .a2-clash > .a2-ev .a2-ev-sub .a2-ev-place { display: inline; } }

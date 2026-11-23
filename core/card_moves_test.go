@@ -12,6 +12,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
+	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
 // A call's time comes from its arguments that are a date or a date-time:
@@ -83,10 +86,53 @@ func heldCall(t *testing.T, c *core, input string) int64 {
 	return id
 }
 
-// A Day's ghosts: the proposals that wait and take place that day, in the
+// An Agenda of a node's page is the place of its dated cards: one that
+// waits on a day the Agenda draws shows there, its Oui on its ghost, and
+// not at the page's foot. A day it does not draw, an Agenda that shows no
+// proposals, one whose date core cannot read, or a page without one keeps
+// the card at the foot: a card that waits is never nowhere.
+func TestAgendaPlacesDatedCards(t *testing.T) {
+	c, _, _ := viewCore(t)
+	tw := newTestWebFor(t, c)
+	tw.setup()
+	tomorrow := time.Now().In(c.userZone()).AddDate(0, 0, 1).Format(time.DateOnly)
+	ask := heldCall(t, c, `{"title":"Relire le devis","start":"`+tomorrow+`T16:00","end":"`+tomorrow+`T17:00"}`)
+	ref := proposalRef(cardAccess, ask)
+	for _, tc := range []struct {
+		agenda string // the Agenda's fields, none: no block
+		foot   bool
+	}{
+		{"", true},
+		{`"days": 2`, false},
+		{`"days": 7`, false},
+		{`"date": "` + tomorrow + `"`, false},
+		{`"days": 1`, true},
+		{`"days": 2, "proposals": false`, true},
+		{`"date": {"@path": "/jour"}, "days": 7`, true},
+	} {
+		body := "Le jour.\n"
+		if tc.agenda != "" {
+			body += "\n```eriphe:block jour\n" + `{"components": [{"id": "root", "component": "Agenda", ` + tc.agenda + `, "events": []}], "data": {"jour": "` + tomorrow + `"}}` + "\n```\n"
+		}
+		id := mustNode(t, c, nodestore.New{Title: "Ma journée", Lifetime: nodefile.Standing, Body: body})
+		c.store.db.Exec(`INSERT INTO node_cards (node, ref, created) VALUES (?, ?, 1)`, id, ref)
+		page, err := tw.w.nodePageOf(id, 0, "fr")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tc.agenda != "" && (len(page.Parts) < 2 || page.Parts[1].Block == nil || page.Parts[1].Block.Error != "") {
+			t.Fatalf("%s: the block does not read: %+v", tc.agenda, page.Parts)
+		}
+		if got := slices.ContainsFunc(page.Cards, func(v proposalView) bool { return v.Ref == ref }); got != tc.foot {
+			t.Errorf("Agenda {%s}: at the foot %v, want %v", tc.agenda, got, tc.foot)
+		}
+	}
+}
+
+// An Agenda's ghosts: the proposals that wait and take place that day, in the
 // user's zone, an intention by its due date, a held call by its
 // arguments; none once answered.
-func TestDayProposals(t *testing.T) {
+func TestAgendaProposals(t *testing.T) {
 	tw, csrf := newMemoryWeb(t)
 	c := tw.c
 	loc := c.userZone()

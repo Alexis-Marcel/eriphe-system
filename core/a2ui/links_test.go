@@ -98,8 +98,13 @@ func TestLinkValidation(t *testing.T) {
 	if errs := ValidateSurface(empty); len(errs) == 0 {
 		t.Error("an empty url passed the schema")
 	}
-	if !IsLink("Link", "url") || IsLink("Link", "label") || IsLink("Image", "url") {
+	if !IsLink("Link", "url") || IsLink("Link", "label") || IsLink("Image", "url") || !IsLink("Quote", "url") {
 		t.Error("IsLink")
+	}
+	// A Quote's page is an address the page opens: the same rule.
+	quote := surfaceOf(`{"id":"root","component":"Quote","text":"Bonjour","url":"javascript:alert(1)"}`)
+	if errs := CheckLinks(quote.ID, quote.Components); len(errs) != 1 || errs[0].Path != "/components/0/url" {
+		t.Errorf("a Quote's url: %v", errs)
 	}
 }
 

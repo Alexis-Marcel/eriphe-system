@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { answerProposal, dayProposals, proposal, type Answer, type Moved, type ProposalView } from "../data/api";
 import { store } from "../data/store";
 
-// Where the Proposal and Day components read proposals, send an answer and
+// Where the Proposal and Agenda components read proposals, send an answer and
 // learn that one moved (made or decided anywhere: its card, a channel, a
 // plain "oui", another page): eriphe-core by default (data/api.ts: the
 // proposal's card answered, the stream's "proposals" events in the store);

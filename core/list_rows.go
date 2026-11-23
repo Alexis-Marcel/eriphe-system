@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
 
@@ -157,6 +158,10 @@ func (c *core) blockLists(b *nodefile.Block, data map[string]any, only ...string
 	folded := foldedLists(comps)
 	var out []pageList
 	for _, comp := range comps {
+		if l, ok := c.rowsOf(b, comp, data, only); ok {
+			out = append(out, l)
+			continue
+		}
 		if comp["component"] != "List" {
 			continue
 		}
@@ -185,6 +190,33 @@ func (c *core) blockLists(b *nodefile.Block, data map[string]any, only ...string
 		}
 	}
 	return out
+}
+
+// rowsOf is a component that shows a source's items as its own rows (an
+// event of a calendar is a row, a2ui.RowsProp), bound as a whole to them
+// ({"@path": "/<source>/<path>"}): its rows, each with the card that waits
+// on it, when one does (the page draws that card on its row). ok is false
+// for any other component, or one bound to no source's items as a whole.
+func (c *core) rowsOf(b *nodefile.Block, comp map[string]any, data map[string]any, only []string) (pageList, bool) {
+	kind, _ := comp["component"].(string)
+	prop := a2ui.RowsProp(kind)
+	id, _ := comp["id"].(string)
+	bound, _ := comp[prop].(map[string]any)
+	path, _ := bound["@path"].(string)
+	if prop == "" || id == "" || path == "" {
+		return pageList{}, false
+	}
+	for name, src := range b.Sources {
+		if listPath(name, src) != path || len(only) > 0 && !slices.Contains(only, name) {
+			continue
+		}
+		rows := sourceRows(name, src, data[name], nil)
+		if !slices.ContainsFunc(rows, func(r listItem) bool { return r.Card != "" }) {
+			return pageList{}, false
+		}
+		return pageList{Component: id, Source: name, Items: rows}, true
+	}
+	return pageList{}, false
 }
 
 // sourceNow is a block's source's value now: its last read, nil if none.
