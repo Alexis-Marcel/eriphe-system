@@ -93,8 +93,9 @@ func (f *fakeShares) writes() []string {
 }
 
 // folderFilesCore is the folders' core with their files on the fake machine,
-// the pool running, and a brain.
-func folderFilesCore(t *testing.T) (*core, *fakeShares) {
+// the pool running, and a brain. Each of before is done to the core before
+// its pool runs (withGraph).
+func folderFilesCore(t *testing.T, before ...func(*core)) (*core, *fakeShares) {
 	t.Helper()
 	c, _, shares := foldersCoreShares(t)
 	shares.mu.Lock()
@@ -103,6 +104,9 @@ func folderFilesCore(t *testing.T) (*core, *fakeShares) {
 		"f2": {"vacances.jpg": "x"},
 	}
 	shares.mu.Unlock()
+	for _, f := range before {
+		f(c)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	c.pool.run(ctx)
@@ -300,8 +304,7 @@ func TestFoldersToolNever(t *testing.T) {
 // A node's block bound to a file: its text in the block's data, read
 // again at once after a change through the tools.
 func TestFoldersNodeSource(t *testing.T) {
-	c, _ := folderFilesCore(t)
-	openGraph(t, c)
+	c, _ := folderFilesCore(t, withGraph(t))
 	block := "```eriphe:block note\n" + `{"components": [{"id": "root", "component": "Text", "text": {"@path": "/note/text"}}],
  "sources": {"note": {"tool": "` + foldersServer + `/read_file", "args": {"folder": "Clients", "path": "Projets/site.md"}}}}` + "\n```\n"
 	d, err := c.nodes.Create(nodestore.New{Title: "Site", Body: block, Author: byBrain})

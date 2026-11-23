@@ -38,8 +38,9 @@ func fakeGitHub() *mcp.Server {
 }
 
 // newCatalogCore is a core whose catalog has github (trusted annotations,
-// a bearer token in a file) and notes, both served in memory.
-func newCatalogCore(t *testing.T) *core {
+// a bearer token in a file) and notes, both served in memory. Each of
+// before is done to the core before its pool runs (withGraph).
+func newCatalogCore(t *testing.T, before ...func(*core)) *core {
 	t.Helper()
 	dir := t.TempDir()
 	write := func(name, v string) string {
@@ -84,6 +85,9 @@ func newCatalogCore(t *testing.T) *core {
 			return nil, err
 		}
 		return ct, nil
+	}
+	for _, f := range before {
+		f(c)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -553,7 +557,7 @@ func TestSelfServerRelay(t *testing.T) {
 // tools that act; reads only, or nothing, still start. The next turn is
 // clean.
 func TestTaintedTurnLimitsActions(t *testing.T) {
-	c := newCatalogCore(t)
+	c := newCatalogCore(t, withGraph(t))
 	c.conf().User = "Sam"
 	setBrain(c, &BrainConfig{})
 	c.store.registerDevice("pc", hashSecret("device-secret"))
@@ -568,7 +572,6 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 	}
 	cs := connectTo(t, newMCPServer(c))
 	// A task works for the turn's node.
-	openGraph(t, c)
 	th := workNode(t, c, "Elle est traitée.")
 	run := func(tools ...string) *mcp.CallToolResult {
 		c.turnNode(th)
@@ -682,12 +685,11 @@ func TestBrainWaitsForTheCatalogAtStart(t *testing.T) {
 // A call the brain makes with the user's permission is on record in the
 // trace of the node its turn is about; a free read is not.
 func TestBrainCallTraced(t *testing.T) {
-	c := newCatalogCore(t)
+	c := newCatalogCore(t, withGraph(t))
 	setBrain(c, &BrainConfig{})
 	editBrain(c, func(a *Assistant) { a.Tools = []string{"github"} })
 	c.store.insertTask(&TaskRow{ID: "b-1", Device: "pc", Kind: "brain", Runtime: "claude-code", State: stateRunning})
 	setBrainTask(c, "b-1")
-	openGraph(t, c)
 	id := workNode(t, c, "La journée.")
 	c.turn.start(1, 1, 0)
 	ctx := context.Background()

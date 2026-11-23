@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -16,15 +15,7 @@ import (
 // nodeCore is a core with a device, a brain to tell, and the graph open.
 func nodeCore(t *testing.T) *catalogCore {
 	t.Helper()
-	c := brainCore(t, &BrainConfig{})
-	dir := t.TempDir()
-	s, _, err := nodestore.Open(filepath.Join(dir, "nodes"), filepath.Join(dir, "nodes.db"), nodestore.Options{Refuse: refuseSecret})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
-	c.nodes = s
-	return c
+	return brainCore(t, &BrainConfig{}, withGraph(t))
 }
 
 // callNodes calls one of eriphe-nodes' tools as a task: its result, or

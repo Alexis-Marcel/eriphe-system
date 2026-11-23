@@ -40,7 +40,7 @@ Each Go module builds on its own; run the checks from its folder (CI runs the sa
 
 | Module | Checks |
 |---|---|
-| `core/`, `cli/`, `servers/mail/`, `servers/calendar/`, `servers/files/`, `servers/signal/`, `device/cred/` | `go build ./... && go vet ./... && go test ./...` |
+| `core/`, `cli/`, `servers/mail/`, `servers/calendar/`, `servers/files/`, `servers/signal/`, `device/cred/` | `go build ./... && go vet ./... && go test -race ./...` |
 | `device/` | the same, plus `GOOS=windows go build ./...` |
 | `install/` | `sh install/lint.sh` (needs `shellcheck`), `sh install/launcher_test.sh` and `sh install/wsl_test.sh` |
 | `.github/scripts/` | `sh .github/scripts/release_test.sh` |

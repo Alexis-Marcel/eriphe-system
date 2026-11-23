@@ -80,8 +80,8 @@ func addTriggered(t *testing.T, c *core, md string) {
 	}
 }
 
-func skillCore(t *testing.T) (*core, *time.Time) {
-	c, _, now := pollCore(t)
+func skillCore(t *testing.T, before ...func(*core)) (*core, *time.Time) {
+	c, _, now := pollCore(t, before...)
 	c.store.registerDevice("pc", hashSecret("pc-secret"))
 	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	c.subscribeEvents(c.queueSkillEvent)

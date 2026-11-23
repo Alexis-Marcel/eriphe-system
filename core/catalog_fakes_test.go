@@ -189,7 +189,8 @@ func (m *fakeMonitor) server() *mcp.Server {
 
 // pollCore is a core with a brain lent the monitor server, a vault, and a
 // clock the test moves.
-func pollCore(t *testing.T) (*core, *fakeMonitor, *time.Time) {
+// Each of before is done to the core before its pool runs (withGraph).
+func pollCore(t *testing.T, before ...func(*core)) (*core, *fakeMonitor, *time.Time) {
 	t.Helper()
 	dir := t.TempDir()
 	store, err := openStore(filepath.Join(dir, "core.db"))
@@ -221,6 +222,9 @@ func pollCore(t *testing.T) (*core, *fakeMonitor, *time.Time) {
 			return nil, err
 		}
 		return ct, nil
+	}
+	for _, f := range before {
+		f(c)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

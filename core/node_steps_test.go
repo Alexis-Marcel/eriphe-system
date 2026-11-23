@@ -21,7 +21,15 @@ func graphCore(t *testing.T) *core {
 	return c
 }
 
-// openGraph opens an empty graph for c.
+// withGraph opens an empty graph for a core, before its pool runs: the
+// pool's servers read c.nodes as soon as they list their tools, so a core
+// whose pool is running is given its graph by its helper, never after.
+func withGraph(t *testing.T) func(*core) {
+	return func(c *core) { openGraph(t, c) }
+}
+
+// openGraph opens an empty graph for c, whose pool does not run yet (see
+// withGraph).
 func openGraph(t *testing.T, c *core) {
 	t.Helper()
 	dir := t.TempDir()
