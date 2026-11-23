@@ -320,6 +320,8 @@ test("the steps of the scenario", async ({ page, request }) => {
   const draft = pageOf("Mes mails");
   await expect(draft).toBeVisible();
   await expect(page.locator(`.gr-node.yours[data-node="${await page.locator(".gr-page", { has: draft }).getAttribute("data-page")}"]`)).toHaveCount(1);
+  // The draft opened beside it takes nothing from the orb: its answer stays.
+  await expect(said).toContainText("Voici la vue : dis oui sur sa carte et elle s'ouvre.");
   // The subject says where things stand: the questions and their
   // buttons gone, the choices written, the draft linked; no card in it.
   await expect(defaults).toHaveCount(0);

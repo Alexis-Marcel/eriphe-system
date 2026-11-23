@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { motionValue } from "motion/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Boot, GraphNode, OrbFeed } from "../data/api";
-import { empty, store } from "../data/store";
+import { applyShow, empty, store } from "../data/store";
 import type { LNode } from "../graph/layout";
 import { makeT, WordsContext } from "../i18n";
 import strings from "../strings.json";
@@ -202,6 +202,11 @@ describe("the orb", () => {
     expect(say()?.textContent).toContain("J'ai lancé le tri : dis oui sur sa carte.");
     expect(say()?.textContent).not.toContain("Il me faut ton oui ici.");
     expect(say()?.querySelectorAll("button.orb-link")).toHaveLength(0);
+    // Eriphe opens the card's page beside it (a show: the bar still talks to Substack): the answer stays
+    await act(async () => store.setState({ talk: "sub" }));
+    await act(async () => store.setState(applyShow(store.getState(), { node: "mail", seq: 1, at: new Date().toISOString() })));
+    expect(store.getState().open).toContain("mail");
+    expect(say()?.textContent).toContain("J'ai lancé le tri : dis oui sur sa carte.");
   });
 
   it("says when it could not answer, without its error", async () => {
