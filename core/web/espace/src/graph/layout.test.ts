@@ -299,19 +299,15 @@ describe("the force graph", () => {
 
   describe("the node in focus as the centre", () => {
     const size = { w: 1440, h: 900 };
-    // view is the camera on the page in focus, slid toward its neighbours
-    // (as Graph.tsx frames it), and that page's box.
+    // view is the camera on the page in focus (as Graph.tsx frames it),
+    // and that page's box.
     const view = (sim: Sim, nodes: LNode[], id: string) => {
-      const p = sim.positions();
       const f = nodes.find((n) => n.id === id)!;
-      const kin = new Set(pairs(nodes).flatMap(([a, b]) => (a === id ? [b] : b === id ? [a] : [])));
-      const near = nodes.filter((n) => kin.has(n.id)).map((n) => {
-        const [h, t, b] = extent(n, p[n.id]);
-        return [p[n.id][0] - h, t, p[n.id][0] + h, b] as [number, number, number, number];
-      });
-      const page = boxAt(p[id], f.box!);
-      return { cam: frameAround(page, near, size), page };
+      const page = boxAt(sim.at(id)!, f.box!);
+      return { cam: frameAround(page, size), page };
     };
+    // centred tells whether a box's middle is the screen's, left to right.
+    const centred = (cam: { k: number; x: number }, [l, , r]: number[]) => Math.abs(cam.x + ((l + r) / 2) * cam.k - size.w / 2) < 1;
     // whole tells whether a box is whole on screen under the camera.
     const whole = (cam: { k: number; x: number; y: number }, [l, t, r, b]: number[]) =>
       cam.x + l * cam.k >= 0 && cam.x + r * cam.k <= size.w && cam.y + t * cam.k >= 0 && cam.y + b * cam.k <= size.h;
@@ -380,6 +376,7 @@ describe("the force graph", () => {
         const { cam, page } = view(sim, opened, id);
         expect(cam.k).toBeGreaterThanOrEqual(FLOOR);
         expect(whole(cam, page)).toBe(true);
+        expect(centred(cam, page)).toBe(true);
         expect(overlaps(sim, opened)).toEqual([]);
       }
     });

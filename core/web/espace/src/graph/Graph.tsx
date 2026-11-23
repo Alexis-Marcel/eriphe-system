@@ -324,13 +324,8 @@ export function Graph({ live }: { live: boolean }) {
     const all = bubbles.map((x) => bubbleBox(x, rp[x.id]));
     // An enlarged page in focus is framed alone and whole, at scale 1.
     if (focus && shown.includes(focus) && sizes.get(focus) === "big") return frameAlone(boxAt(rp[focus], boxOf(focus)), band);
-    // The page in focus as the centre: framed readable, slid toward its
-    // direct neighbours as far as it stays whole.
-    if (centre && shown.includes(centre)) {
-      const kin = new Set(links.flatMap((l) => (l.a === centre ? [l.b] : l.b === centre ? [l.a] : [])));
-      const near = list.filter((x) => kin.has(x.id) && rp[x.id]).map((x) => (shown.includes(x.id) ? boxAt(rp[x.id], boxOf(x.id)) : bubbleBox(x, rp[x.id])));
-      return frameAround(boxAt(rp[centre], boxOf(centre)), near, band);
-    }
+    // The page in focus as the centre: framed readable, in the middle.
+    if (centre && shown.includes(centre)) return frameAround(boxAt(rp[centre], boxOf(centre)), band);
     if (shown.length) {
       const pages = shown.map((id) => ({ id, box: boxAt(rp[id], boxOf(id)) }));
       const near = bubbles.filter((x) => lit.has(x.id)).map((x) => bubbleBox(x, rp[x.id]));
@@ -639,8 +634,6 @@ export function Graph({ live }: { live: boolean }) {
               lang={lang}
               glanceWord={x.glance ? glanceSaid(x.glance, lang, t) : ""}
               open={openIds.includes(x.id)}
-              // a node that waits for the user is never dimmed: seen round the page in focus
-              dim={openIds.length > 0 && !lit.has(x.id) && !waits(x)}
               held={held === x.id}
               light={0.3 + 0.7 * Math.min(1, weight(x, nodes, now) / 0.85)}
               waitsWord={t("espace.waits")}
@@ -778,7 +771,7 @@ function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, Motion
 const Bubble = memo(function Bubble(p: {
   place: (el: HTMLElement | null) => void;
   x: GraphNode; title: string; said: string; d: number; r: number; tile?: [number, number]; lang: Lang; glanceWord: string;
-  open: boolean; dim: boolean; held: boolean; light: number; waitsWord: string; standingWord: string;
+  open: boolean; held: boolean; light: number; waitsWord: string; standingWord: string;
   onGrab: (id: string, e: PtrEvent) => void; onOpen: (id: string, beside: boolean) => void; onHover: (id: string | null) => void;
 }) {
   const { x, d, r, tile } = p;
@@ -789,7 +782,8 @@ const Bubble = memo(function Bubble(p: {
   const shape = coreShape(tile, r, !!still);
   const morph = shape.move;
   // A tile is shown whole: a figure that deserves a look.
-  const opacity = p.open ? 0 : tile ? (p.dim ? 0.6 : 1) : p.dim ? (d === 0 ? 0.42 : 0.28) : x.status === "done" ? Math.max(0.35, p.light * 0.8) : Math.max(0.5, p.light);
+  // the same with pages open or not: only a hover fades (Graph, hoverOn)
+  const opacity = p.open ? 0 : tile ? 1 : x.status === "done" ? Math.max(0.35, p.light * 0.8) : Math.max(0.5, p.light);
   const ring = R + (d === 0 ? 9 : 7);
   const cls = ["gr-node", `d${Math.min(d, 2)}`, x.status, yours && "yours", p.held && "held", x.lifetime === "standing" && "standing", x.external && "external", x.unasked && "unasked", tile && "tiled"]
     .filter(Boolean)
@@ -858,7 +852,7 @@ const Bubble = memo(function Bubble(p: {
           {p.title}
           {x.unasked && <UnaskedMark />}
         </b>
-        {x.line && run && !p.dim && <em className="runs">{x.line}</em>}
+        {x.line && run && <em className="runs">{x.line}</em>}
       </motion.span>
     </motion.div>
   );

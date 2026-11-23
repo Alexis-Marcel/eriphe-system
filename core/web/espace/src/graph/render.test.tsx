@@ -66,7 +66,7 @@ describe("the graph's frames", () => {
     expect(bubble("c").style.left).not.toBe("");
 
     // A page opens: the graph moves for a while; the bubbles are drawn
-    // again once (dimmed, the one open hidden), then not at each frame.
+    // again once (the one open hidden), then not at each frame.
     await act(async () => step(store, openPage, "a", false));
     frame();
     const drawn = vi.mocked(coreShape).mock.calls.length;
