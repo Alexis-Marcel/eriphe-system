@@ -519,9 +519,10 @@ func (c *core) callState(id int64) (string, string) {
 	return state, why
 }
 
-// newAccessAsk keeps a question and shows its card now: the brain or the
-// task is stopped on it, so no later message will carry it. It goes to
-// the channels the user writes from as well (channelCards).
+// newAccessAsk keeps a question and makes its card: with the brain's
+// message of its turn when the brain asked it, else at once, a task being
+// stopped on it. It goes to the channels the user writes from as well
+// (channelCards).
 func (c *core) newAccessAsk(a accessQuestion) int64 {
 	refs := ""
 	if len(a.Refs) > 0 {

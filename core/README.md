@@ -1006,7 +1006,7 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   still waits and the work made obsolete is withdrawn: gone, by `eriphe`, nothing of it runs,
   nobody is told, nothing decided for the user. His own are what the brain proposed, his calls,
   and what his skills' runs keep; never what a task asks for itself (a grant, a release), a task's
-  start (`stop_task`), or a tools review. A replacement is proposed as usual.
+  start (`stop_task`), or a tools review. A replacement is proposed as usual; a view's card is changed, not withdrawn (`propose_view` with `node`).
 - **No message asks a card again.** A card the brain raises in its turn, its calls and releases
   included, goes with its message of the turn (`cardProposedBy`); a task's access card, with the
   queue's message, which says the card's line, not a question of its own.

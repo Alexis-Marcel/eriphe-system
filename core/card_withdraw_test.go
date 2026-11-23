@@ -56,6 +56,23 @@ func TestBrainWithdrawsOnlyHisOwn(t *testing.T) {
 			t.Errorf("%s: no longer waits", kind)
 		}
 	}
+	// A view's card is changed on its draft, never left without one.
+	c, ref := outcomeMakers[cardViewKind](t)
+	if _, err := c.brainWithdrawCard(context.Background(), ref); err == nil || !strings.Contains(err.Error(), "propose_view") || c.cardState(ref) != cardPending {
+		t.Errorf("a view's card: %v, %s", err, c.cardState(ref))
+	}
+}
+
+// A call the brain asks in a turn that then writes nothing still reaches
+// the user: the queue shows its card under a message.
+func TestBrainCallCardOfASilentTurn(t *testing.T) {
+	c := newMailCore(t, "")
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	brainCalls(t, c, "p-1", "mcp__mail__publish_page", map[string]any{"repo": "portfolio"})
+	c.cardsTurnEnded()
+	if xs, _ := c.cardsWhere(`kind = ? AND seq > 0`, cardAccess); len(xs) != 1 {
+		t.Fatalf("the card is under no message: %+v", xs)
+	}
 }
 
 // A skill's batch the work made obsolete: withdrawn, none of its calls

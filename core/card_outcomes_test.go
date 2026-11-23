@@ -187,6 +187,9 @@ func TestViewOutcomeToldInItsSubject(t *testing.T) {
 			t.Errorf("the event lacks %q: %s", want, told[0].Text)
 		}
 	}
+	if strings.Contains(told[0].Text, "tourne") { // neither a monitor nor a skill was made
+		t.Errorf("the event says something runs: %s", told[0].Text)
+	}
 	// No: the draft is archived, told in the subject too.
 	c, subject, draft, ref = daySubject(t)
 	before = c.store.lastMessageSeq()

@@ -288,7 +288,16 @@ func (c *core) viewTold(id int64, approve bool) cardTold {
 		} else {
 			node = v.Node
 		}
-		return cardTold{node, fmt.Sprintf("la vue est en place sur le nœud %s, ce n'est plus un brouillon ; sa surveillance et son skill tournent.%s", v.Node, of)}
+		made := ""
+		switch {
+		case v.Spec != nil && v.MD != "":
+			made = fmt.Sprintf(" ; sa surveillance « %s » et son skill « %s » tournent", v.Monitor, v.Skill)
+		case v.Spec != nil:
+			made = fmt.Sprintf(" ; sa surveillance « %s » tourne", v.Monitor)
+		case v.MD != "":
+			made = fmt.Sprintf(" ; son skill « %s » tourne", v.Skill)
+		}
+		return cardTold{node, fmt.Sprintf("la vue est en place sur le nœud %s, ce n'est plus un brouillon%s.%s", v.Node, made, of)}
 	}
 	if of != "" {
 		of += "la vue n'a pas été retenue."

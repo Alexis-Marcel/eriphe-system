@@ -27,7 +27,7 @@ type cardWithdrawIn struct {
 }
 
 func registerCardWithdrawTool(s *mcp.Server, c *core) {
-	tool(s, "withdraw_proposal", "Withdraw a card you made that still waits and the work made obsolete: it no longer asks the user and nothing of it runs. It decides nothing for the user. To replace it, propose the new one as usual.",
+	tool(s, "withdraw_proposal", "Withdraw a card of yours, still waiting, that the work made obsolete: nothing of it runs, nothing is decided for the user. Propose its replacement as usual.",
 		func(ctx context.Context, in cardWithdrawIn) (map[string]any, error) {
 			return c.brainWithdrawCard(ctx, in.Ref)
 		})
@@ -42,6 +42,9 @@ func (c *core) brainWithdrawCard(ctx context.Context, ref string) (map[string]an
 	if c.cardState(ref) != cardPending {
 		return nil, errCardDecided
 	}
+	if kind == cardViewKind {
+		return nil, errors.New("a view's card is changed, not withdrawn: call propose_view again with node, its draft; the card says the new proposal")
+	}
 	if !c.eriphesCard(kind, id) {
 		return nil, errNotEriphes
 	}
@@ -49,11 +52,7 @@ func (c *core) brainWithdrawCard(ctx context.Context, ref string) (map[string]an
 	if c.cardState(ref) == cardPending {
 		return nil, fmt.Errorf("%s still waits: it could not be withdrawn", ref)
 	}
-	out := map[string]any{"withdrawn": ref, "note": "The user no longer sees it; nothing of it runs."}
-	if kind == cardViewKind {
-		out["note"] = "The user no longer sees it; its draft node stays: propose_view again on it (node), or say it can be archived."
-	}
-	return out, nil
+	return map[string]any{"withdrawn": ref, "note": "The user no longer sees it; nothing of it runs."}, nil
 }
 
 // eriphesCard tells a proposal Eriphe made: what the brain proposed, a
