@@ -62,6 +62,7 @@ The titles proposed for the first article:
 
 | Field | Type | Meaning |
 |---|---|---|
+| `format` | whole number | Written by code only: the format the file is written in ([Format version](#format-version)). Absent: 1, and never written while it is 1. |
 | `id` | text | The node's id: lowercase letters and digits, 32 at most, no dash. Required. |
 | `title` | text | Its title for the user: one line, 120 characters at most. Required. |
 | `parent` | id | The node it belongs to; none for a node at the top. Code writes it: at creation, and when Eriphe moves the node (`node_set parent`), never under itself or a node below it. |
@@ -82,6 +83,32 @@ not kept. A field given twice, or YAML that does not parse, is an error.
 
 The node's status (`running`, `waits`, `done`, `idle`) is in no file nor index: eriphe-core
 computes it from its cards, its tasks and steps, and this file's `done`.
+
+## Format version
+
+A node is the user's note: it outlives every change of Eriphe. No code wipes a node (one is only
+archived, by the user), and a change of this format converts the files instead of leaving them
+unread.
+
+- **Where:** each file says its own format, in its front matter's `format`. The format is 1 today,
+  the only one, and a file that does not say it is in format 1: no file is rewritten to say it.
+  It is in the file rather than once for the repository because the file is the unit: a file
+  copied in from elsewhere, and each old version in the history, says the format it was written
+  in, so it is read as it was meant (a version read from the history is converted in memory).
+  Whatever else changes, the front matter stays YAML between two `---` lines, with `format` in it.
+- **A change of the format** comes with its conversion, from the format before it (a function of
+  the file's bytes, in [`core/nodefile`](../core/nodefile)), and a test that reads a file of the old
+  format. The new format is the one after the last conversion; files are written in it, `format`
+  then in their front matter.
+- **At start**, a file of an older format is converted to today's, through each conversion in
+  turn: all of them in one commit by `convert`, each node a version of its own, the old one kept in
+  the history. A file changed by hand meanwhile is first committed as it is (`outside`). A
+  conversion that fails, or gives a file that does not read as a node, stops the start: nothing is
+  written.
+- **A file of a newer format** than this Eriphe knows stops the graph at start, with an error that
+  names it; nothing is written, the file is left as it is. Update Eriphe.
+- **The index** (`nodes.db`) holds nothing the files do not: it may be rebuilt from them at any
+  time, and is never converted.
 
 ## Links between nodes
 

@@ -46,6 +46,9 @@ func openNodes(cfg *Config) (*nodestore.Store, error) {
 	if len(rep.Changed) > 0 {
 		log.Printf("nodes: changed outside Eriphe, committed as a version of their own: %s", strings.Join(rep.Changed, ", "))
 	}
+	if len(rep.Converted) > 0 {
+		log.Printf("nodes: converted to today's file format, the old one kept in the history: %s", strings.Join(rep.Converted, ", "))
+	}
 	if len(rep.Gone) > 0 {
 		log.Printf("nodes: removed outside Eriphe: %s", strings.Join(rep.Gone, ", "))
 	}

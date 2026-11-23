@@ -29,6 +29,14 @@
 //   - At start, the files are compared to the index: a file changed
 //     outside Eriphe is committed as a version of its own (author
 //     "outside"), reindexed and reported.
+//   - Nodes are the user's notes and are never lost. No code removes the
+//     repository, a node's file or its history (no gc, prune, reset nor
+//     force); a node is only archived, by the user. A file of an older
+//     format is converted at start in a version of its own (author
+//     "convert"), the old one kept in the history and read converted; a
+//     file of a newer format stops the store, untouched
+//     (nodefile.Upgrade). The index may be rebuilt from the files at any
+//     time. The guard test core/nodes_guard_test.go holds the rule.
 package nodestore
 
 import (
@@ -69,6 +77,10 @@ const (
 // Eriphe, found at start.
 const Outside = "outside"
 
+// Convert is the author of a version made at start by converting a file
+// of an older format into today's.
+const Convert = "convert"
+
 var (
 	// ErrConflict: the write was made on a version that is no longer the
 	// last one.
@@ -90,6 +102,10 @@ type Options struct {
 	Now func() time.Time
 	// NewID makes a node's id; random by default.
 	NewID func() string
+
+	// conversions are the file format's (nodefile.Conversions by
+	// default); a test gives its own.
+	conversions []nodefile.Conversion
 }
 
 // What changed of a node, as Watch tells it.
@@ -147,6 +163,9 @@ type Report struct {
 	Changed []string // nodes whose file was changed outside Eriphe
 	Gone    []string // nodes whose file was removed outside Eriphe
 	Broken  []string // files that do not read as a node: "<file>: <why>"
+	// Converted are the nodes whose file was of an older format,
+	// converted to today's in a version of their own (author Convert).
+	Converted []string
 }
 
 // Version is one of a node's versions.
@@ -207,6 +226,9 @@ func Open(dir, index string, opts Options) (*Store, Report, error) {
 	if opts.NewID == nil {
 		opts.NewID = randomID
 	}
+	if opts.conversions == nil {
+		opts.conversions = nodefile.Conversions()
+	}
 	if rel, err := filepath.Rel(dir, index); err == nil && !strings.HasPrefix(rel, "..") {
 		return nil, Report{}, errors.New("the index is kept outside the repository")
 	}
@@ -238,6 +260,15 @@ func Open(dir, index string, opts Options) (*Store, Report, error) {
 
 // Close closes the index.
 func (s *Store) Close() error { return s.db.Close() }
+
+// format is the file format the store writes: the one after its last
+// conversion.
+func (s *Store) format() int { return len(s.opts.conversions) + 1 }
+
+// upgrade brings a file to the store's format, in memory.
+func (s *Store) upgrade(raw []byte) ([]byte, error) {
+	return nodefile.Upgrade(raw, s.opts.conversions)
+}
 
 // randomID is a new node's id: 10 letters and digits.
 func randomID() string {
@@ -459,6 +490,9 @@ func (s *Store) onlyCodeSince(cur *Doc, expect string) bool {
 	if err != nil {
 		return false
 	}
+	if raw, err = s.upgrade(raw); err != nil {
+		return false
+	}
 	was, err := nodefile.Parse(raw)
 	if err != nil {
 		return false
@@ -489,6 +523,7 @@ func (s *Store) save(n *nodefile.Node, file string, prev *Doc, author, op string
 		was = prev.Node
 	}
 	settleTitle(n, was)
+	n.Meta.Format = s.format()
 	raw, err := n.Bytes()
 	if err != nil {
 		return nil, err
@@ -633,6 +668,10 @@ func (s *Store) read(id string, version int) (*Doc, error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+	// A version from before a conversion reads in today's format.
+	if raw, err = s.upgrade(raw); err != nil {
+		return nil, fmt.Errorf("%s: %w", sum.File, err)
 	}
 	node, err := nodefile.Parse(raw)
 	if err != nil {
