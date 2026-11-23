@@ -477,6 +477,9 @@ func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlo
 			}
 		}
 	}
+	if done := c.setUpButtons(list); len(done) > 0 {
+		list = withoutComponents(list, done) // what they set up is (setup_buttons.go)
+	}
 	unfilterLists(list) // code filters, the page shows the rows it gets (list_sections.go)
 	raw, _ := json.Marshal(list)
 	json.Unmarshal(raw, &v.Components)

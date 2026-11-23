@@ -166,6 +166,9 @@ func (c *core) brainNodeOpen(ctx context.Context, in brainNodeOpenIn) (map[strin
 		c.showNode(id, byBrain, false) // from a node: beside it, the bar where it is
 	}
 	out := map[string]any{"id": id, "title": d.Node.Meta.Title, "version": d.Version.N, "hash": d.Version.Hash}
+	if page := c.pageReport(id, false); page != nil {
+		out["page"] = page // what its blocks show (page_report.go)
+	}
 	c.noteWaitingLinks(out, d)
 	if parent != "" {
 		out["parent"] = parent
@@ -367,10 +370,12 @@ func (c *core) brainNodeWrite(id, expect string, fn func(*nodefile.Node) error) 
 	}
 	c.turn.wrote()
 	c.turnNode(sum.ID)
-	if len(d.Node.Blocks()) > 0 {
-		c.readNodeLater(context.Background(), sum.ID, nil) // a source new or changed, read at once (node_live.go)
-	}
 	out := written(d)
+	// Its sources read at once, and what its page shows said back
+	// (page_report.go): its author fixes it in this turn.
+	if page := c.pageReport(sum.ID, d.Node.Meta.Lifetime == nodefile.Standing); page != nil {
+		out["page"] = page
+	}
 	c.noteWaitingLinks(out, d)
 	return out, nil
 }

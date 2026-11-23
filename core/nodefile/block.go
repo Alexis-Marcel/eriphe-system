@@ -500,6 +500,11 @@ func tokens(ptr string) []string {
 	return parts
 }
 
+// Leads tells whether a path's tokens lead somewhere in v, as a block's
+// bindings are checked ("*": in an item of a list; list: to a list); if
+// not, a hint of what is there.
+func Leads(v any, toks []string, list bool) (bool, string) { return lookup(v, toks, list) }
+
 // lookup tells whether a path leads somewhere in v ("*": in an item of a
 // list, an empty list telling nothing); if not, a hint of what is there.
 func lookup(v any, toks []string, list bool) (bool, string) {

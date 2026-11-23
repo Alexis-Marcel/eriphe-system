@@ -320,11 +320,17 @@ func (st *stream) tree(sid string, s *surfaceState) {
 	kindOf := func(id string) string { k, _ := s.components[id].value["component"].(string); return k }
 
 	// A batch Fold names a List of the surface by its id (not a child: the
-	// List is its child, or its child's, already).
+	// List is its child, or its child's, already); so does a Metric that
+	// counts its rows, in place of a value.
 	for _, id := range ids {
 		p := s.components[id]
 		l, ok := p.value["list"].(string)
-		if kindOf(id) != "Fold" || !ok {
+		_, valued := p.value["value"]
+		if kindOf(id) == "Metric" && ok == valued {
+			st.fail(CodeValidationFailed, sid, p.loc, "a Metric has a value, or a list whose rows it counts: one of them")
+			continue
+		}
+		if kindOf(id) != "Fold" && kindOf(id) != "Metric" || !ok {
 			continue
 		}
 		if _, there := s.components[l]; !there || kindOf(l) != "List" {

@@ -87,6 +87,18 @@ func TestValidSurface(t *testing.T) {
 	if errs := ValidateSurface(s); len(errs) > 0 {
 		t.Fatal(errs)
 	}
+	// A figure that counts the rows of a List; a button that leaves once
+	// what it sets up is.
+	s = surfaceOf(
+		`{"id":"root","component":"Column","children":["compte","liste","brancher"]}`,
+		`{"id":"compte","component":"Metric","label":"À lire","list":"liste"}`,
+		`{"id":"liste","component":"List","children":{"path":"/mails/messages","componentId":"item"}}`,
+		`{"id":"item","component":"Item","title":{"@path":"subject"}}`,
+		`{"id":"brancher","component":"Button","label":"Brancher GitHub","until":{"tool":"github"},"action":{"event":{"name":"ask","context":{"text":"Branche GitHub"}}}}`,
+	)
+	if errs := ValidateSurface(s); len(errs) > 0 {
+		t.Fatal(errs)
+	}
 }
 
 // What a model gets wrong comes back where it is, in a sentence it can act on.
@@ -104,6 +116,14 @@ func TestInvalidSurfaces(t *testing.T) {
 			CodeValidationFailed, "/components/0/list", `"t" is not the id of a List of this block`},
 		{"a batch of nothing", surfaceOf(`{"id":"root","component":"Fold","label":"{n} à jeter","child":"t","list":"nope"}`, `{"id":"t","component":"Text","text":"a"}`),
 			CodeValidationFailed, "/components/0/list", `"nope" is not the id of a List of this block`},
+		{"a Metric with neither value nor list", surfaceOf(`{"id":"root","component":"Metric","label":"À lire"}`),
+			CodeValidationFailed, "/components/0", "a Metric has a value, or a list whose rows it counts"},
+		{"a Metric with both", surfaceOf(`{"id":"root","component":"Metric","label":"À lire","value":3,"list":"l"}`),
+			CodeValidationFailed, "/components/0", "one of them"},
+		{"a Metric counting no List", surfaceOf(`{"id":"root","component":"Metric","label":"À lire","list":"nope"}`),
+			CodeValidationFailed, "/components/0/list", `"nope" is not the id of a List of this block`},
+		{"a setup button saying two things", surfaceOf(`{"id":"root","component":"Button","label":"x","until":{"tool":"a","skill":"b"},"action":{"event":{"name":"ask","context":{"text":"x"}}}}`),
+			CodeValidationFailed, "/components/0/until", ""},
 		{"unknown property", surfaceOf(`{"id":"root","component":"Text","text":"a","color":"red"}`),
 			CodeValidationFailed, "/components/0/color", `property "color" is not allowed`},
 		{"unknown component", surfaceOf(`{"id":"root","component":"Gauge","value":3}`),
