@@ -180,6 +180,7 @@ func (w *web) handleUploadSkill(rw http.ResponseWriter, r *http.Request, s *sess
 		w.skillError(rw, lang, err)
 		return
 	}
+	w.c.settleCards(cardSkill) // the brain's version it replaced
 	log.Printf("web: skill %s uploaded (%s)", k.Name, orStr(k.Pending, k.Approved))
 	rw.Header().Set("HX-Redirect", "/settings/skills/"+url.PathEscape(k.Name))
 	rw.WriteHeader(http.StatusOK)
@@ -220,6 +221,7 @@ func (w *web) handleRejectSkill(rw http.ResponseWriter, r *http.Request, s *sess
 		w.toast(rw, tr(w.lang(r), "err.internal"), false)
 		return
 	}
+	w.c.settleCards(cardSkill)
 	log.Printf("web: skill %s: the version waiting is dropped", name)
 	if _, err := w.c.store.skill(name); err != nil {
 		rw.Header().Set("HX-Redirect", "/settings/skills")

@@ -553,13 +553,16 @@ func (m *memStore) recordSkillUndo(e *learnEntry, who, reason string, evidence [
 	if _, err := tx.Exec(`UPDATE learning_log SET status = 'reverted', undo = '' WHERE id = ?`, e.ID); err != nil {
 		return nil, err
 	}
-	return r, tx.Commit()
+	return r, m.commitIntention(tx)
 }
 
 // setUndo marks an entry's undo proposed (with why) or rejected.
 func (m *memStore) setUndo(id int64, state, why string) error {
-	_, err := m.db.Exec(`UPDATE learning_log SET undo = ?, undo_why = ? WHERE id = ?`, state, truncate(why, 300), id)
-	return err
+	if _, err := m.db.Exec(`UPDATE learning_log SET undo = ?, undo_why = ? WHERE id = ?`, state, truncate(why, 300), id); err != nil {
+		return err
+	}
+	m.changed()
+	return nil
 }
 
 // The core's side: undoing an entry, the skills' changes, and the brief.
@@ -593,6 +596,7 @@ func (c *core) approveSkill(name, sha, who string) error {
 	if err != nil {
 		return err
 	}
+	c.settleCards(cardSkill) // the card of the version it was, if the brain wrote it
 	c.learnSkill(name, sha, prev, who, "approved")
 	return nil
 }
@@ -603,6 +607,7 @@ func (c *core) deleteSkill(name, who string) error {
 	if err != nil {
 		return err
 	}
+	c.settleCards(cardSkill)
 	if prev != "" {
 		c.learnSkill(name, "", prev, who, "deleted")
 	}

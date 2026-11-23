@@ -57,7 +57,8 @@ func (c *core) saveMonitor(name string, s monitorSpec) error {
 	}
 	_, err = c.store.db.Exec(`UPDATE monitors SET state = ?, spec = ?, pending = '', look = '{}', next_at = 0, tainted = '', updated = ? WHERE id = ?`,
 		state, string(raw), now, m.ID)
-	c.monitorLooked(name) // a new baseline: the blocks that read it (node_live.go)
+	c.settleCards(cardMonitor) // the brain's proposal on it, dropped
+	c.monitorLooked(name)      // a new baseline: the blocks that read it (node_live.go)
 	return err
 }
 
@@ -88,7 +89,8 @@ func (c *core) deleteMonitor(name string) error {
 		}
 	}
 	_, err := c.store.db.Exec(`DELETE FROM monitors WHERE name = ?`, name)
-	c.monitorLooked(name) // the blocks that read it wait (node_live.go)
+	c.settleCards(cardMonitor) // a proposal on it goes with it
+	c.monitorLooked(name)      // the blocks that read it wait (node_live.go)
 	return err
 }
 

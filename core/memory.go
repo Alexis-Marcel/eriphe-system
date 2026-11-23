@@ -177,6 +177,9 @@ type memStore struct {
 	// The readable mirror (memory_mirror.go), written after every change;
 	// nil: none.
 	mirror *memMirror
+	// moved is told after every change is committed: the cards of its
+	// proposals follow them (useMemory); nil: no one.
+	moved func()
 }
 
 // memorySchemaVersion is the schema memory.db is at; meta.schema_version
@@ -658,6 +661,23 @@ func (m *memStore) commit(tx *sql.Tx) error {
 		return err
 	}
 	m.mirrorSync()
+	m.changed()
+	return nil
+}
+
+// changed tells who follows the store that it changed.
+func (m *memStore) changed() {
+	if m.moved != nil {
+		m.moved()
+	}
+}
+
+// commitIntention commits a change of the intentions, and tells it.
+func (m *memStore) commitIntention(tx *sql.Tx) error {
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	m.changed()
 	return nil
 }
 

@@ -175,8 +175,9 @@ func TestCardsFollowTheTurn(t *testing.T) {
 }
 
 // A held task's card does not wait for a good moment: its turn failed before
-// the brain wrote, it is night, and it still comes with the brain's next
-// message. If the task stopped meanwhile, it does not.
+// the brain wrote, it is night, and it comes at once, under a message of
+// its own (the attention queue, no timer). A task stopped after its card
+// came takes it with it at once.
 func TestBlockingCardSurvivesASilentTurn(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "23:30"))
 	hold := func(id string) int64 {
@@ -192,16 +193,19 @@ func TestBlockingCardSurvivesASilentTurn(t *testing.T) {
 	}
 	kept, gone := hold("t-kept"), hold("t-gone")
 	c.cardsTurnEnded()
-	if x := cardOf(t, c, cardTaskStart, kept); x.Seq != 0 || x.Turn {
-		t.Fatalf("after a silent turn: %+v", x)
+	for _, id := range []int64{kept, gone} {
+		if x := cardOf(t, c, cardTaskStart, id); x.Seq == 0 || x.Turn || x.State != cardPending {
+			t.Fatalf("after a silent turn, the card did not come: %+v", x)
+		}
 	}
-	c.store.updateTask("t-gone", map[string]any{"state": stateStopped, "desired": desiredStopped})
-	seq := brainSays(c, "Je reprends.")
-	if x := cardOf(t, c, cardTaskStart, kept); x.Seq != seq || x.State != cardPending {
-		t.Fatalf("the held task's card did not come: %+v", x)
+	if err := c.stop(context.Background(), "t-gone"); err != nil {
+		t.Fatal(err)
 	}
-	if x := cardOf(t, c, cardTaskStart, gone); x.Seq != 0 {
-		t.Fatalf("the card of a stopped task came: %+v", x)
+	if x := cardOf(t, c, cardTaskStart, gone); x.State != cardGone {
+		t.Fatalf("the card of a stopped task waits: %+v", x)
+	}
+	if x := cardOf(t, c, cardTaskStart, kept); x.State != cardPending {
+		t.Fatalf("the held task's card: %+v", x)
 	}
 }
 

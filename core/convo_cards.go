@@ -280,7 +280,11 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 	if !c.proposalOf(kind, id).Pending {
 		return errCardDecided
 	}
-	return k.decides(c, ctx, id, approve)
+	if err := k.decides(c, ctx, id, approve); err != nil {
+		return err
+	}
+	c.settleRef(proposalRef(kind, id)) // its card, at once (decideCardWith then says who)
+	return nil
 }
 
 var (
@@ -368,11 +372,88 @@ func (c *core) cardAgain(p proposal) {
 
 // syncCards gives every waiting proposal without a waiting card one,
 // queued, linked to the node it belongs to (one raised before it was
-// linked waits there too).
+// linked waits there too). Only at start (reconcileCards): a proposal
+// gets its card where it is made.
 func (c *core) syncCards() {
 	c.foldCalls() // same-kind calls cards made before (call_fold.go)
 	for _, p := range c.pendingProposals() {
 		c.syncCard(p)
+	}
+}
+
+// cardQueued gives a proposal made outside a turn, by no one who shows it
+// (the memory's extraction), its card, queued: the attention queue
+// delivers it at its card's weight (attendQueuedCards).
+func (c *core) cardQueued(kind string, id int64) {
+	p := c.proposalOf(kind, id)
+	if !p.Pending {
+		return
+	}
+	c.syncCard(p)
+	c.attendQueuedCards()
+}
+
+// reconcileCards puts the cards in step with their proposals once, when
+// eriphe-core starts: a proposal and its card are written one after the
+// other, not in one transaction, so a stop between the two leaves them
+// apart; and what was queued waits in the attention queue again. Past
+// that, each proposal moves its card the moment it moves (settleCards).
+func (c *core) reconcileCards() {
+	c.syncCards()
+	c.settleCards()
+	c.attendQueuedCards()
+}
+
+// settleCards reads the waiting cards of kinds (of all kinds when none)
+// again against their proposals: a proposal decided elsewhere, or gone,
+// is said so on its card at once, it leaves the attention queue, and its
+// nodes stop waiting on it (proposalMoved). Whatever moves a proposal
+// other than its card calls it: a task's state, the memory's store, a
+// page. It takes no lock: decideCardWith calls it too, through a
+// decider.
+func (c *core) settleCards(kinds ...string) {
+	where, args := `state = ?`, []any{cardPending}
+	if len(kinds) > 0 {
+		where += ` AND kind IN (?` + strings.Repeat(`, ?`, len(kinds)-1) + `)`
+		for _, k := range kinds {
+			args = append(args, k)
+		}
+	}
+	xs, err := c.cardsWhere(where, args...)
+	if err != nil {
+		return
+	}
+	for _, x := range xs {
+		c.settleCard(x)
+	}
+}
+
+// settleRef settles the waiting card of one proposal.
+func (c *core) settleRef(ref string) {
+	xs, err := c.cardsWhere(`ref = ? AND state = ?`, ref, cardPending)
+	if err != nil {
+		return
+	}
+	for _, x := range xs {
+		c.settleCard(x)
+	}
+}
+
+// settleCard says on a waiting card what came of its proposal, if it no
+// longer waits.
+func (c *core) settleCard(x convoCard) {
+	kind, id, ok := parseProposalRef(x.Ref)
+	if !ok || x.State != cardPending {
+		return
+	}
+	p := c.proposalOf(kind, id)
+	if p.Pending {
+		return
+	}
+	res, err := c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ? WHERE id = ? AND state = ?`, p.Outcome, time.Now().Unix(), x.ID, cardPending)
+	if n, _ := rowsOf(res, err); n > 0 {
+		c.attentionDone(cardItemRef(x.ID))
+		c.proposalMoved(x.Ref)
 	}
 }
 
@@ -424,32 +505,28 @@ func (c *core) claimBlockingCards() {
 
 // cardsTurnEnded attaches what the brain proposed after its last message
 // to that message; without one in the turn, its cards go back to the
-// queue. Called with relayMu held.
+// queue, which delivers them (attendQueuedCards). Called with relayMu
+// held.
 func (c *core) cardsTurnEnded() {
 	if c.brainSeqOfTurn > 0 {
 		c.attachTurnCards(c.brainSeqOfTurn)
-	} else {
-		c.store.db.Exec(`UPDATE convo_cards SET turn = 0 WHERE seq = 0 AND turn = 1`)
+	} else if res, err := c.store.db.Exec(`UPDATE convo_cards SET turn = 0 WHERE seq = 0 AND turn = 1`); err == nil {
+		if n, _ := res.RowsAffected(); n > 0 {
+			c.attendQueuedCards()
+		}
 	}
 	c.brainSeqOfTurn = 0
 }
 
-// liveCard reads a card's proposal and keeps its state: a proposal decided
-// elsewhere, or gone, is said so on its card.
+// liveCard is a card with its proposal, read now. The card's state is the
+// one truth of whether it waits: its proposal moves it when it moves
+// (settleCards).
 func (c *core) liveCard(x convoCard) (convoCard, proposal) {
 	kind, id, ok := parseProposalRef(x.Ref)
 	if !ok {
 		return x, proposal{}
 	}
-	p := c.proposalOf(kind, id)
-	if x.State == cardPending && !p.Pending {
-		x.State = p.Outcome
-		res, err := c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ? WHERE id = ? AND state = ?`, x.State, time.Now().Unix(), x.ID, cardPending)
-		if n, _ := rowsOf(res, err); n > 0 {
-			c.proposalMoved(x.Ref)
-		}
-	}
-	return x, p
+	return x, c.proposalOf(kind, id)
 }
 
 // decideCard is a card's Oui or ✕: its proposal's own approval.
@@ -475,6 +552,9 @@ func (c *core) decideCardWith(ctx context.Context, id int64, approve bool, by st
 	}
 	kind, pid, _ := parseProposalRef(x.Ref)
 	if err := decide(kind, pid); err != nil {
+		if errors.Is(err, errCardDecided) {
+			c.settleCard(x) // moved where its card did not hear of it
+		}
 		return x, err
 	}
 	x.State, x.Decided, x.By = cardRejected, time.Now(), by

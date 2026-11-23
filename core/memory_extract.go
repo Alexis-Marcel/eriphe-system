@@ -1009,6 +1009,7 @@ func (c *core) applyIntend(op extractionOp, trust, ref, who string) (why, result
 	case got.ID != x.ID:
 		return "", "noop"
 	case got.State == intentProposed:
+		c.cardQueued(cardIntention, got.ID) // the user's to approve: queued, no turn shows it
 		return "", "proposed"
 	}
 	return "", "added"

@@ -13,12 +13,16 @@ import (
 // the graph, the page, node_find, node_read and the brain's context all
 // read it from here:
 //
-//   - waits: a card linked to it waits for the user's answer (node_turn.go),
-//     a task in it is held for its start card or waits for a permission,
-//     or it is the result of a finished work the user has not said done yet:
-//     an accepted step no other accepted step comes after, or the work's
-//     node itself when no step is such a result (node_steps.go);
-//   - running: a task works in it, or it is a step whose task runs;
+//   - waits: a card linked to it waits for the user's answer (node_turn.go):
+//     whatever asks the user's yes is a card, a task's held start and the
+//     access a task waits on included, so the card is the one truth of what
+//     waits; or it is the result of a finished work the user has not said
+//     done yet: an accepted step no other accepted step comes after, or the
+//     work's node itself when no step is such a result (node_steps.go). That
+//     one stays computed, not a card: the user reads the result and says it
+//     done in words, no button asks it;
+//   - running: a task works in it (held for its start card, it does not
+//     yet), or it is a step whose task runs;
 //   - done: its file says done, or the steps' engine finished it (a step
 //     accepted or dropped, a work done whose results wait in its steps);
 //   - idle: anything else. A task that ended (stopped, failed, lost)
@@ -28,7 +32,9 @@ import (
 // Waits comes first: what the user must answer is never hidden under a
 // node at work. An archived node waits for no one.
 //
-// Whatever these come from tells the graph when it moves (nodeMoved).
+// Whatever these come from tells the graph when it moves (nodeMoved): a
+// card the moment its proposal moves, wherever it was answered
+// (settleCards), never on a timer.
 
 // A node's statuses.
 const (
@@ -42,7 +48,7 @@ const (
 // constant number of queries, whatever the size of the graph.
 type statusFacts struct {
 	cards   map[string]bool   // nodes a waiting card is linked to
-	tasks   map[string]string // node → nodeRunning or nodeWaits, of the live tasks working in it
+	tasks   map[string]bool   // nodes a live task works in, not held for its start
 	steps   map[string]string // step's node → its status
 	results map[string]bool   // results of a finished work, waiting until the user says them done
 	settled map[string]bool   // nodes the steps' engine finished
@@ -51,7 +57,7 @@ type statusFacts struct {
 // of is a node's status.
 func (f statusFacts) of(sum nodestore.Summary) string {
 	id, done := sum.ID, !sum.Done.IsZero()
-	running := f.tasks[id] == nodeRunning || f.steps[id] == stepRunning
+	running := f.tasks[id] || f.steps[id] == stepRunning
 	if !sum.Archived.IsZero() {
 		switch {
 		case running:
@@ -62,7 +68,7 @@ func (f statusFacts) of(sum nodestore.Summary) string {
 		return nodeIdle
 	}
 	switch {
-	case f.cards[id], f.tasks[id] == nodeWaits, !done && f.results[id]:
+	case f.cards[id], !done && f.results[id]:
 		return nodeWaits
 	case running:
 		return nodeRunning
@@ -75,7 +81,7 @@ func (f statusFacts) of(sum nodestore.Summary) string {
 // statusFacts reads what the statuses of the graph's nodes come from;
 // only one node's (and its work's, for a step) when only is given.
 func (c *core) statusFacts(only string) statusFacts {
-	f := statusFacts{cards: map[string]bool{}, tasks: map[string]string{}, steps: map[string]string{},
+	f := statusFacts{cards: map[string]bool{}, tasks: map[string]bool{}, steps: map[string]string{},
 		results: map[string]bool{}, settled: map[string]bool{}}
 	db := c.store.db
 	filter := func(q, col string) (string, []any) {
@@ -96,18 +102,13 @@ func (c *core) statusFacts(only string) statusFacts {
 		rows.Close()
 	}
 
-	q, args = filter(`SELECT tn.node, t.state, t.desired FROM task_nodes tn JOIN tasks t ON t.id = tn.task
-		WHERE t.state IN ('`+statePending+`', '`+stateRunning+`', '`+stateWaitingPermission+`')`, `tn.node`)
+	q, args = filter(`SELECT DISTINCT tn.node FROM task_nodes tn JOIN tasks t ON t.id = tn.task
+		WHERE t.state IN ('`+statePending+`', '`+stateRunning+`', '`+stateWaitingPermission+`') AND t.desired != '`+desiredHeld+`'`, `tn.node`)
 	if rows, err := db.Query(q, args...); err == nil {
 		for rows.Next() {
-			var id, state, desired string
-			if rows.Scan(&id, &state, &desired) != nil {
-				continue
-			}
-			if state == stateWaitingPermission || desired == desiredHeld {
-				f.tasks[id] = nodeWaits
-			} else if f.tasks[id] == "" {
-				f.tasks[id] = nodeRunning
+			var id string
+			if rows.Scan(&id) == nil {
+				f.tasks[id] = true
 			}
 		}
 		rows.Close()
@@ -234,35 +235,20 @@ func (c *core) nodeMoved(id string, ended bool) {
 	c.graphSaid(graphEvent{Kind: graphEvNode, Node: id})
 }
 
-// taskNodeMoved follows a task's state on its node: the cards that waited
-// on the task are read again (an access card, a held start, gone with
-// it), and the graph is told.
+// taskNodeMoved follows a task's state: the cards that waited on a task
+// are read again (an access card, a held start, gone with it), and its
+// node's graph is told.
 func (c *core) taskNodeMoved(task, state string) {
-	id := c.taskNode(task)
-	if id == "" || c.nodes == nil {
-		return
+	c.settleCards(taskCardKinds...)
+	if id := c.taskNode(task); id != "" && c.nodes != nil {
+		c.nodeMoved(id, state != stateRunning && state != statePending)
 	}
-	c.settleCards(id)
-	c.nodeMoved(id, state != stateRunning && state != statePending)
 }
 
-// settleCards reads the waiting cards again against their proposals,
-// those linked to node only when one is given: a proposal decided
-// elsewhere, or gone, is said so on its card (liveCard), and its nodes
-// stop waiting on it.
-func (c *core) settleCards(node string) {
-	where, args := `state = ?`, []any{cardPending}
-	if node != "" {
-		where, args = where+` AND ref IN (SELECT ref FROM node_cards WHERE node = ?)`, append(args, node)
-	}
-	xs, err := c.cardsWhere(where, args...)
-	if err != nil {
-		return
-	}
-	for _, x := range xs {
-		c.liveCard(x)
-	}
-}
+// taskCardKinds are the kinds of proposals a task's state decides: its
+// held start and its access stop waiting with it, a run's calls with its
+// run.
+var taskCardKinds = []string{cardTaskStart, cardAccess, cardRunCalls, cardCalls}
 
 // warmNodeCaches fills what the graph's rows read of each node and keeps
 // in memory (its glance) for those not read yet, in a constant number of
