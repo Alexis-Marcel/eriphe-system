@@ -119,7 +119,7 @@ as a Link's: `a2ui.IsLink` now covers `Quote.url`, with a Go test. Inside a bloc
 the quote drops its own rule, because the block's amber edge is already that sign.
 
 ```json
-{"id":"q","component":"Quote","text":"Tu peux me dire avant vendredi si ça te va ?","from":"Sam <sam@example.org>","date":"2026-11-22T18:12:00+01:00"}
+{"id":"q","component":"Quote","text":"Tu peux me dire avant vendredi si ça te va ?","from":"Sam <sam@example.org>","date":"2026-11-22T18:12:00+01:00","url":"https://example.org/devis"}
 ```
 
 ### Timeline (revised): what happened
@@ -153,6 +153,7 @@ green when up and red when down.
 - **Chart**: the plot is measured with `ResizeObserver` and its viewBox follows the real width, so
   its words and height keep their size. Axis labels now use Geist with tabular figures.
 - **Message**: the date is in Geist with tabular figures, not monospace.
+- **Page grid**: `.pg-doc` gets `grid-template-columns: minmax(0, 1fr)`, so a wide table no longer pushes a phone page past the screen (it scrolls in its own box).
 
 ## Changed files
 
@@ -161,7 +162,7 @@ green when up and red when down.
   `testdata/catalog_prompt.md`.
 - Front: `a2ui/agenda.tsx` (was `day.tsx`), `a2ui/spark.tsx`, `a2ui/catalog.tsx`, `a2ui/chart.tsx`,
   `a2ui/inline.tsx`, `espace.css`.
-- Words FR/EN: `core/web_text_espace.go` → `strings.json` (`espace.a2.agenda.*`,
+- Words FR/EN: `core/web_text_espace.go` → `strings.json` (`espace.a2.days.*`: the word « agenda » is a tool word the guard test refuses in workspace strings,
   `espace.a2.progress.of`).
 - Dev data: `data/sampledays.ts` (Ma journée, Investissements, gallery sections),
   `data/sampleviews.ts` (Mes mails: Quote, week figures), `data/samplecore.ts` (an Agenda's rows
@@ -169,7 +170,7 @@ green when up and red when down.
 - Tests: `components.test.tsx` (agenda placement and now line, statuses in words, next days,
   ghosts with their Oui, Person, Quote, trend, step, change, dated timeline), `catalog.test.ts`.
   `npx tsc --noEmit` and `npx vitest run` (287 tests) pass, as do the Go `a2ui` tests,
-  `TestEspaceStrings` and `TestEspaceGalleryIsValid`.
+  the whole core module (`go build ./... && go vet ./... && go test ./...`, gofmt clean).
 
 ## For the implementation PR (not done here)
 
@@ -180,7 +181,7 @@ green when up and red when down.
 - Brain prompt (`brain-prompt.md`) and catalog instructions: « une journée : Agenda », and when to
   use Person, Quote and a figure row. Also `docs/node-format.md`, `docs/workspace.md`, and the core
   README's catalog list.
-- The e2e specs that mention Day (if any) and the rebuilt bundle.
+- `core/README.md` still describes `Day` (lines ~3702, 3777, 3782, 3870-3888: the catalog list, bindings, dated ghosts); no e2e spec, doc or brain prompt names it.
 
 ## Open questions for you
 
@@ -205,3 +206,4 @@ green when up and red when down.
    the espace still writing `Day`?
 8. **Other candidates not built**: a media gallery (Image already exists in a Grid), a map-free
    place card, and a checklist that is not buttons. Is any of them worth the next pass?
+9. **Two events side by side on a phone**: each lane is about 150 px wide, so the ghost shows « à répondre 12 h 30 – 1… » (the place is dropped beside another event). Is that enough, or should a clash on a phone stack the events instead of placing them side by side?

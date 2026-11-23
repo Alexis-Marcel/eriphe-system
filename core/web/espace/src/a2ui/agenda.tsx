@@ -160,8 +160,8 @@ function dayName(lang: Lang, t: T, date: string, now: Date, small = false): [str
   const d = today(now).date;
   const long = day(lang, w);
   const short = new Intl.DateTimeFormat(locale(lang), { weekday: "short", day: "numeric", timeZone: "UTC" }).format(w.at);
-  if (date === d) return [t("espace.a2.agenda.today"), long];
-  if (date === addDays(d, 1)) return [t("espace.a2.agenda.tomorrow"), small ? short : long];
+  if (date === d) return [t("espace.a2.days.today"), long];
+  if (date === addDays(d, 1)) return [t("espace.a2.days.tomorrow"), small ? short : long];
   return small ? [short, ""] : [long.charAt(0).toUpperCase() + long.slice(1), ""];
 }
 
@@ -177,8 +177,8 @@ function Head({ name }: { name: [string, string] }) {
 // What an entry says of itself besides its title: « à répondre », « peut-être »,
 // « Proposé »…
 function said(t: T, ev: Entry): string {
-  if (ev.ghost) return t(ev.tainted ? "espace.a2.agenda.proposed.tainted" : "espace.a2.agenda.proposed");
-  return ev.st ? t(`espace.a2.agenda.status.${ev.st}`) : "";
+  if (ev.ghost) return t(ev.tainted ? "espace.a2.days.proposed.tainted" : "espace.a2.days.proposed");
+  return ev.st ? t(`espace.a2.days.status.${ev.st}`) : "";
 }
 
 const stClass = (ev: Entry) => [ev.waits ? "a2-ev-waits" : "", ev.st ? `a2-ev-${ev.st}` : ""].filter(Boolean).join(" ");
@@ -235,7 +235,7 @@ function HourDay({ date, items, cards, lang, t, now }: { date: string; items: En
             {String(h).padStart(2, "0")}
           </span>
         ))}
-        {!timed.length && !allDay.length && <p className="a2-empty a2-agenda-none a2-r-0">{t("espace.a2.agenda.none")}</p>}
+        {!timed.length && !allDay.length && <p className="a2-empty a2-agenda-none a2-r-0">{t("espace.a2.days.none")}</p>}
         {timed.map((p, i) => {
           const rows = Math.max(1, Math.ceil((p.end - p.start) / SLOT));
           const past = isToday && p.end <= here.min;
@@ -268,12 +268,12 @@ function HourDay({ date, items, cards, lang, t, now }: { date: string; items: En
               )}
               {rows > 3 && p.ev.waits && p.clash.length > 0 && (
                 <span className="a2-ev-line a2-ev-sub">
-                  <span className="a2-ev-clash">{t("espace.a2.agenda.clash", p.clash.join(", "))}</span>
+                  <span className="a2-ev-clash">{t("espace.a2.days.clash", p.clash.join(", "))}</span>
                 </span>
               )}
               {yes(p.ev, cards)}
-              {p.ev.waits && p.clash.length > 0 && rows <= 3 && <span className="sr-only">{t("espace.a2.agenda.clash", p.clash.join(", "))}</span>}
-              {p.overlap && !(p.ev.waits && p.clash.length) && <span className="sr-only">{t("espace.a2.agenda.overlap")}</span>}
+              {p.ev.waits && p.clash.length > 0 && rows <= 3 && <span className="sr-only">{t("espace.a2.days.clash", p.clash.join(", "))}</span>}
+              {p.overlap && !(p.ev.waits && p.clash.length) && <span className="sr-only">{t("espace.a2.days.overlap")}</span>}
             </div>
           );
         })}
@@ -283,7 +283,7 @@ function HourDay({ date, items, cards, lang, t, now }: { date: string; items: En
               {time(lang, nowW, true)}
             </span>
             <span className={`a2-now a2-r-${row(here.min)} a2-now-${Math.floor((nowAt % SLOT) / 10)}`} role="presentation">
-              <span className="sr-only">{t("espace.a2.agenda.now", time(lang, nowW))}</span>
+              <span className="sr-only">{t("espace.a2.days.now", time(lang, nowW))}</span>
             </span>
           </>
         )}
@@ -308,7 +308,7 @@ function ListDay({ date, items, cards, lang, t, now, small = false }: { date: st
             const word = said(t, ev);
             return (
               <li key={i} className={`a2-agenda-line ${stClass(ev)}`} data-proposal={ev.ghost}>
-                <span className="a2-agenda-at">{at || t("espace.a2.agenda.allday")}</span>
+                <span className="a2-agenda-at">{at || t("espace.a2.days.allday")}</span>
                 <span className="a2-agenda-what">
                   <span className="a2-ev-title">{ev.title}</span>
                   {!small && ev.place && <span className="a2-ev-place">{ev.place}</span>}
@@ -320,7 +320,7 @@ function ListDay({ date, items, cards, lang, t, now, small = false }: { date: st
           })}
         </ul>
       ) : (
-        <p className="a2-empty a2-agenda-free">{t("espace.a2.agenda.free")}</p>
+        <p className="a2-empty a2-agenda-free">{t("espace.a2.days.free")}</p>
       )}
     </Tag>
   );

@@ -888,7 +888,7 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
    scrolls to. */
 .pg-foot { border-top: 1px solid var(--line); padding: 10px 12px; background: var(--fill); }
 .pg-body > .pg-foot { margin: 20px -20px -20px; }
-.pg-doc { display: grid; gap: 14px; }
+.pg-doc { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .pg-doc .a2-markdown > :first-child { margin-top: 0; }
 .a2-block { display: flex; flex-direction: column; gap: 10px; }
 /* A block someone else's words reached: a thin amber edge, a small dot at
@@ -1210,3 +1210,5 @@ li:hover .a2-inline-no, .a2-inline-no:focus-visible { opacity: 1; }
 @media (max-width: 560px) { .proto-blocks { padding: 28px 12px 60px; } .proto-page { padding: 16px 14px; } }
 .a2-block.ext .a2-quote { padding-left: 0; border-left: 0; } /* the block's edge already sets the words apart */
 .a2-metric > .a2-spark { margin-top: auto; padding-top: 6px; box-sizing: content-box; }
+/* An event beside another: room for its time, its place left out. */
+.a2-ev:not(.a2-lane-all) .a2-ev-sub .a2-ev-place { display: none; }
