@@ -780,7 +780,7 @@ func (c *core) resolveByText(ctx context.Context, seq int) (convoCard, bool) {
 	if !ok || me.Time.Sub(brain.Time) > cardTextAnswer {
 		return none, false
 	}
-	if c.store.get(taintKey(brain.Seq)) != "" {
+	if c.store.msgTaint(brain.Seq) != "" {
 		return none, false // written in a tainted turn: the buttons only
 	}
 	cards, err := c.cardsWhere(`seq = ?`, brain.Seq)

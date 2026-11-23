@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS access_asks (
 	source        TEXT NOT NULL DEFAULT '',   -- with item: the node's source that lists it
 	item          TEXT NOT NULL DEFAULT '',   -- the item's id in that source
 	batch         INTEGER NOT NULL DEFAULT 0,  -- the card it is on, kind calls: its first call's id
-	labels        TEXT NOT NULL DEFAULT ''); -- the items it acts on, as its node listed them when kept: JSON (call_words.go)`
+	labels        TEXT NOT NULL DEFAULT '',   -- the items it acts on, as its node listed them when kept: JSON (call_words.go)
+	settled       INTEGER NOT NULL DEFAULT 0); -- a calls card's first call: its item settled once decided (item_cards.go's itemCardMoved)`
 
 func init() {
 	extraSchema = append(extraSchema, accessCardSchema)

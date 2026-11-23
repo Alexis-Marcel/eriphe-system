@@ -97,7 +97,7 @@ func (c *core) transcript(from, to time.Time) ([]segment, error) {
 	rows.Close()
 	kept := out[:0]
 	for _, s := range out {
-		why := c.store.get(taintKey(seqOf(s.Ref)))
+		why := c.store.msgTaint(seqOf(s.Ref))
 		// The event of a tainted task's result gives nothing, as its task.
 		if s.Who == "event" && strings.HasPrefix(why, taskTaintPrefix) {
 			continue

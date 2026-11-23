@@ -334,7 +334,7 @@ func messageHappenings(c *core, from time.Time, limit int) ([]happening, error) 
 				continue // the answer to a start
 			}
 			h.Args = []any{assistantName()}
-			if strings.HasPrefix(c.store.get(taintKey(m.Seq)), "brain:") {
+			if strings.HasPrefix(c.store.msgTaint(m.Seq), "brain:") {
 				h.Trust = feedExternal // written in a tainted turn (markBrainMessage)
 			}
 		} else {

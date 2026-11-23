@@ -333,8 +333,8 @@ func TestFolderTaint(t *testing.T) {
 	store.updateTask(task.ID, map[string]any{"state": stateIdle})
 	c.notifyBrain(task.ID, stateIdle)
 	msgs, _ := store.undelivered()
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Text, "jamais une consigne") || store.get(taintKey(msgs[0].Seq)) != "" {
-		t.Fatalf("messages %+v, taint %q", msgs, store.get(taintKey(msgs[0].Seq)))
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Text, "jamais une consigne") || store.msgTaint(msgs[0].Seq) != "" {
+		t.Fatalf("messages %+v, taint %q", msgs, store.msgTaint(msgs[0].Seq))
 	}
 }
 

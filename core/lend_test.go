@@ -136,7 +136,7 @@ func TestTurnFromUser(t *testing.T) {
 		t.Error("an event's turn is the user's")
 	}
 	auto, _ := c.store.addMessageVia(roleUser, "lumière", "Home Assistant", true)
-	c.store.set(taintKey(int(auto)), channelTaint("Home Assistant"))
+	c.store.setMsgTaint(int(auto), channelTaint("Home Assistant"))
 	c.turn.start(int(auto), int(auto), 0)
 	if c.turnFromUser() {
 		t.Error("an untrusted channel's turn is the user's")

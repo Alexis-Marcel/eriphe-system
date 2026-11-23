@@ -124,7 +124,8 @@ CREATE TABLE IF NOT EXISTS messages (
   filed TEXT NOT NULL DEFAULT '',  -- the brain's answer: the node code filed it in (node_net.go)
   user_act INTEGER NOT NULL DEFAULT 0,   -- an event that tells the brain what came of the user's Oui or Non (web_orb.go)
   answer_to INTEGER NOT NULL DEFAULT 0,  -- Eriphe's words in a turn that answered the user: the last message it read (web_orb.go)
-  card_answer TEXT NOT NULL DEFAULT ''); -- the user's plain yes or no: the card it decided, state|ref|text (convo_cards.go)
+  card_answer TEXT NOT NULL DEFAULT '', -- the user's plain yes or no: the card it decided, state|ref|text (convo_cards.go)
+  taint TEXT NOT NULL DEFAULT '');      -- why its delivery taints the brain's turn, if it does (folders.go's msgTaint)
 CREATE INDEX IF NOT EXISTS messages_node ON messages (node, seq);
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS inbox (

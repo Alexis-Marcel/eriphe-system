@@ -141,7 +141,7 @@ func (c *core) notifyBrain(id, state string) {
 	}
 	if err == nil && len(taint) > 0 {
 		// Delivered, it taints the turn that reads it.
-		c.store.set(taintKey(int(seq)), taskTaintPrefix+t.ID)
+		c.store.setMsgTaint(int(seq), taskTaintPrefix+t.ID)
 	}
 	c.ping()
 }
@@ -309,7 +309,7 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		}
 	}
 	for _, m := range msgs {
-		if why := c.store.get(taintKey(m.Seq)); why != "" {
+		if why := c.store.msgTaint(m.Seq); why != "" {
 			c.turn.taint(why) // a tainted task's result, an untrusted channel, a tool's result run on a card
 		}
 	}

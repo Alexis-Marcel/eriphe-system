@@ -58,7 +58,7 @@ func TestOrbWords(t *testing.T) {
 		t.Errorf("all of it: %q", x.Answer.Full)
 	}
 	// Written in a tainted turn: marked.
-	st.set(taintKey(int(said)), "brain:task:t-1")
+	st.setMsgTaint(int(said), "brain:task:t-1")
 	if x, _ = tw.w.orbFor("", false); x.Answer == nil || !x.Answer.External {
 		t.Errorf("a tainted answer is not marked: %+v", x.Answer)
 	}

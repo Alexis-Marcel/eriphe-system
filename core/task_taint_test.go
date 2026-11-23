@@ -23,7 +23,7 @@ func resultTaint(t *testing.T, c *core, id string) string {
 		t.Fatal("no event")
 	}
 	m := msgs[len(msgs)-1]
-	return c.store.get(taintKey(m.Seq))
+	return c.store.msgTaint(m.Seq)
 }
 
 // A task's result taints according to what the task read: a tool not

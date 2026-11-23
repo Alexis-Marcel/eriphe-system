@@ -261,7 +261,7 @@ func TestCardAnsweredInWords(t *testing.T) {
 		"tainted turn": {func() int {
 			proposedRule(t, c, "d1", "")
 			seq := brainSays(c, "Je propose ça ?")
-			c.store.set(taintKey(seq), "brain:mail.read")
+			c.store.setMsgTaint(seq, "brain:mail.read")
 			return user("oui")
 		}, "tainted turn"},
 		"not right after": {func() int {
@@ -283,7 +283,7 @@ func TestCardAnsweredInWords(t *testing.T) {
 			proposedRule(t, c, "g1", "")
 			brainSays(c, "Je propose ça ?")
 			seq, _ := c.store.addMessageVia(roleUser, "oui", "Home Assistant", false)
-			c.store.set(taintKey(int(seq)), channelTaint("Home Assistant"))
+			c.store.setMsgTaint(int(seq), channelTaint("Home Assistant"))
 			return int(seq)
 		}, "untrusted"},
 	} {
@@ -386,7 +386,7 @@ func TestAPIMessageAnswersNoCard(t *testing.T) {
 func TestChannelCardConfirm(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	seq, _ := c.store.addMessageVia(roleUser, "Moins de notifications pour les factures", "Home Assistant, Salon", false)
-	c.store.set(taintKey(int(seq)), channelTaint("Home Assistant"))
+	c.store.setMsgTaint(int(seq), channelTaint("Home Assistant"))
 	r := proposedRule(t, c, "facture", "")
 	brainSays(c, "D'accord.")
 	x, say := c.channelCardConfirm(int(seq), "fr")
@@ -397,7 +397,7 @@ func TestChannelCardConfirm(t *testing.T) {
 		t.Fatalf("note %q", n.Body["fr"])
 	}
 	yes, _ := c.store.addMessageVia(roleUser, "oui", "Home Assistant, Salon", false)
-	c.store.set(taintKey(int(yes)), channelTaint("Home Assistant"))
+	c.store.setMsgTaint(int(yes), channelTaint("Home Assistant"))
 	if _, ok := c.resolveByText(context.Background(), int(yes)); ok {
 		t.Fatal("a spoken yes answered a card")
 	}

@@ -490,7 +490,7 @@ func (c *core) readMemories(xs []*Memory) {
 // tainted turn (taintKey): the extraction reads it as external content.
 func (c *core) markBrainMessage(seq int) {
 	if tainted := c.turnTaint(); len(tainted) > 0 {
-		c.store.set(taintKey(seq), "brain:"+strings.Join(tainted, ","))
+		c.store.setMsgTaint(seq, "brain:"+strings.Join(tainted, ","))
 	}
 }
 

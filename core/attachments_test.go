@@ -317,7 +317,7 @@ func TestReadAttachmentUntrustedChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.store.set(taintKey(stored.Seq), channelTaint("Salon"))
+	c.store.setMsgTaint(stored.Seq, channelTaint("Salon"))
 	if res := callReadAttachment(t, c, map[string]any{"id": a.ID}); res.IsError {
 		t.Fatalf("result: %+v", res)
 	}

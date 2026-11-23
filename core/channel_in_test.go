@@ -135,7 +135,7 @@ func TestVoiceReply(t *testing.T) {
 	// The channel is not trusted: anyone may have said it, so it taints its
 	// turn and a write goes on a card.
 	if !c.fromUntrusted(msgs[0].Seq) {
-		t.Fatalf("taint = %q", c.store.get(taintKey(msgs[0].Seq)))
+		t.Fatalf("taint = %q", c.store.msgTaint(msgs[0].Seq))
 	}
 	// The brain's turn shows where it was said.
 	c.store.db.Exec(`UPDATE messages SET delivered = 0 WHERE seq = ?`, msgs[0].Seq)

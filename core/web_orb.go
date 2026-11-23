@@ -235,7 +235,7 @@ func (c *core) nodeEvent(node, text string, userAct bool, taint ...string) {
 	}
 	seq, _ := res.LastInsertId()
 	if len(why) > 0 {
-		c.store.set(taintKey(int(seq)), strings.Join(why, ", "))
+		c.store.setMsgTaint(int(seq), strings.Join(why, ", "))
 	}
 	c.store.undeliver(int(seq), int(seq))
 	c.ping()
@@ -267,7 +267,7 @@ func (s *Store) orbWordsOf(msgs []Message) *orbWords {
 		}
 		parts = append(parts, strings.TrimSpace(m.Text))
 		w.Seq = m.Seq
-		w.External = w.External || strings.HasPrefix(s.get(taintKey(m.Seq)), "brain:")
+		w.External = w.External || strings.HasPrefix(s.msgTaint(m.Seq), "brain:")
 	}
 	text := strings.Join(parts, "\n\n")
 	if _, cut := ackLine(text); place == "" && cut {
