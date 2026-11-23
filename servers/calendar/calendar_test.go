@@ -392,6 +392,13 @@ func TestToolAnnotations(t *testing.T) {
 		if tl.Title == "" {
 			t.Errorf("%s has no title", tl.Name)
 		}
+		// What writes says its call in French and English (eriphe-core's
+		// cards).
+		says, _ := tl.Meta["eriphe/says"].(map[string]any)
+		text, _ := says["text"].(map[string]any)
+		if writes := tl.Annotations == nil || !tl.Annotations.ReadOnlyHint; writes && tl.Name != "test_account" && (text["fr"] == nil || text["en"] == nil) {
+			t.Errorf("%s says its call in no French and English sentence: %v", tl.Name, tl.Meta)
+		}
 	}
 	if len(got) != 10 {
 		t.Errorf("tools: %v", got)

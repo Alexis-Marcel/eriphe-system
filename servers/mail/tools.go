@@ -509,7 +509,7 @@ var titles = map[string]string{
 }
 
 func tool[In, Out any](s *mcp.Server, name, desc string, ann *mcp.ToolAnnotations, fn func(context.Context, In) (Out, error)) {
-	mcp.AddTool(s, &mcp.Tool{Name: name, Title: titles[name], Description: desc, Annotations: ann},
+	mcp.AddTool(s, &mcp.Tool{Name: name, Title: titles[name], Description: desc, Annotations: ann, Meta: metaOf(name)},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
 			start := time.Now()
 			out, err := fn(ctx, in)

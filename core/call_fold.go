@@ -323,7 +323,7 @@ func (c *core) callsDecidedText(asks []accessQuestion, lang string, live bool) s
 	}
 	// Done, as a list action says it (doneText); until then, what it does.
 	s := c.kindSentence(asks[0], done, lang)
-	if state, _ := c.callsExec(asks[0].Batch); live && state == callDone {
+	if state, _, _, _ := c.asksExec(c.batchAsks(asks[0].Batch)); live && state == callDone {
 		s = doneText(callTool(asks[0].Call), done, lang)
 	}
 	if left > 0 {

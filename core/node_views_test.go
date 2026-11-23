@@ -316,6 +316,35 @@ func TestInvitationReplyCard(t *testing.T) {
 			t.Errorf("the card of %s does not say its answer: %s", asks[0].Item, f)
 		}
 	}
+	// Each card says what its yes does as the tool declares it, in the
+	// user's language, the invitation by its title and organizer (marked:
+	// someone else's words), never its id: in its
+	// sentence, its origin and its Détails (the exact call, one click
+	// further, keeps it).
+	for item, want := range map[string][2]string{
+		"i1": {"Accepter « Point projet » · sam@example.org ⚠", "Accept “Point projet” · sam@example.org ⚠"},
+		"i2": {"Refuser « Apéro » · sam@example.org ⚠", "Decline “Apéro” · sam@example.org ⚠"},
+		"i3": {"Proposer un autre moment pour « Revue » · sam@example.org ⚠, vendredi 6 novembre, 10 h", "Propose another time for “Revue” · sam@example.org ⚠, Friday, November 6, 10:00"},
+	} {
+		p := byItem[item]
+		if got := p.Text("fr"); got != want[0] {
+			t.Errorf("%s: %q, want %q", item, got, want[0])
+		}
+		if got := p.Text("en"); got != want[1] {
+			t.Errorf("%s: %q, want %q", item, got, want[1])
+		}
+		if s := p.SummaryIn("fr"); len(s) != 0 {
+			t.Errorf("%s: its item said twice: %q", item, s)
+		}
+		if o := p.Origin("fr"); strings.Contains(o.From, item) || !strings.Contains(o.From, "«") {
+			t.Errorf("%s: origin %q", item, o.From)
+		}
+		for _, f := range p.FieldsIn("fr") {
+			if !f.Raw && strings.Contains(f.Value, item) {
+				t.Errorf("%s: its id in its Détails: %+v", item, f)
+			}
+		}
+	}
 	if len(sentNow(fm)) != 0 {
 		t.Fatal("answered before the yes")
 	}

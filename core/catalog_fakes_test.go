@@ -33,6 +33,8 @@ type fakeMonitor struct {
 	invites  []map[string]any // monitor://invitations: invitations, each id, title
 	sent     []map[string]any // send and respond: what they were called with
 	opened   []string         // message and letter: tool:id of each call
+	// moveFails: move answers with this error, moving nothing.
+	moveFails string
 }
 
 func (m *fakeMonitor) server() *mcp.Server {
@@ -135,10 +137,23 @@ func (m *fakeMonitor) server() *mcp.Server {
 		}) (*mcp.CallToolResult, map[string]any, error) {
 			m.mu.Lock()
 			defer m.mu.Unlock()
+			if m.moveFails != "" {
+				return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: m.moveFails}}}, nil, nil
+			}
 			m.sent = append(m.sent, map[string]any{"tool": "move", "ids": in.IDs, "to": in.To, "account": in.Account})
 			return nil, map[string]any{"moved": len(in.IDs)}, nil
 		})
-	mcp.AddTool(s, &mcp.Tool{Name: "respond"},
+	// respond says its call itself, as the calendar server's respond_event
+	// does (call_says.go).
+	mcp.AddTool(s, &mcp.Tool{Name: "respond", Title: "Answer an invitation", Meta: mcp.Meta{saysMetaKey: map[string]any{
+		"text": map[string]string{"fr": "{answer} {item}[, {start}]", "en": "{answer} {item}[, {start}]"},
+		"item": map[string]string{"fr": "l'invitation", "en": "the invitation"},
+		"values": map[string]any{"answer": map[string]any{
+			"accept":  map[string]string{"fr": "Accepter", "en": "Accept"},
+			"decline": map[string]string{"fr": "Refuser", "en": "Decline"},
+			"propose": map[string]string{"fr": "Proposer un autre moment pour", "en": "Propose another time for"},
+		}},
+	}}},
 		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 			ID     string `json:"id"`
 			Answer string `json:"answer"`

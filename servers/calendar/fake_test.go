@@ -35,6 +35,9 @@ type memCalDAV struct {
 	// go-webdav has none, so the cache falls back to ETags without it.
 	ctag    bool
 	reports map[string]int // calendar-data REPORTs per calendar path
+	// refuse makes every write answer 403 Forbidden, as a server does to
+	// an account that may not write there.
+	refuse bool
 }
 
 func newMemCalDAV(names ...string) *memCalDAV {
@@ -106,6 +109,9 @@ func (m *memCalDAV) PutCalendarObject(_ context.Context, p string, cal *ical.Cal
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	cur, exists := m.objs[p]
+	if m.refuse {
+		return nil, webdav.NewHTTPError(http.StatusForbidden, errors.New("forbidden"))
+	}
 	if opts != nil && opts.IfNoneMatch.IsWildcard() && exists {
 		return nil, webdav.NewHTTPError(http.StatusPreconditionFailed, errors.New("exists"))
 	}

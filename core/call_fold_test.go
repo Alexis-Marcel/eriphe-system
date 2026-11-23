@@ -214,7 +214,7 @@ func TestChosenCallsRunAlone(t *testing.T) {
 		}
 	}
 	c.yeses.Wait() // the chosen calls ran
-	if s, _ := c.callsExec(a); s != callDone {
+	if s, _, _, _ := c.asksExec(c.batchAsks(a)); s != callDone {
 		t.Fatalf("the chosen calls: %s", s)
 	}
 	moved := movedIDs(fm)

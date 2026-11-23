@@ -170,6 +170,91 @@ func TestRespondByAlias(t *testing.T) {
 	}
 }
 
+// googleInvite is an invitation as Google's CalDAV gives it to the
+// invited user: Google's attendee parameters, the organizer elsewhere,
+// the object named by a UID with an @.
+const googleInvite = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Google Inc//Google Calendar 70.9054//EN
+BEGIN:VEVENT
+DTSTART:20261123T131000Z
+DTEND:20261123T141000Z
+DTSTAMP:20261120T090000Z
+ORGANIZER;CN=Sam:mailto:sam@example.org
+UID:7kq3p0c2v1@google.com
+ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CN=Sam;X-NUM-GUESTS=0:mailto:sam@example.org
+ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=me@icloud.example;X-NUM-GUESTS=0:mailto:me@icloud.example
+CREATED:20261120T090000Z
+LAST-MODIFIED:20261120T090000Z
+SEQUENCE:0
+STATUS:CONFIRMED
+SUMMARY:Picnic
+TRANSP:OPAQUE
+END:VEVENT
+END:VCALENDAR
+`
+
+// An invitation as Google's CalDAV gives it is answered like any other:
+// listed as waiting, accepted, its other attendees and Google's
+// parameters kept.
+func TestRespondGoogleInvite(t *testing.T) {
+	e := newEnv(t)
+	e.perso.put(t, "/u/calendars/travail/7kq3p0c2v1@google.com.ics", googleInvite)
+	cs := e.connect(t)
+	list := call[listEventsOut](t, cs, "list_events", map[string]any{"account": "icloud", "from": "2026-11-23", "days": 1})
+	if len(list.Events) != 1 || list.Events[0].MyStatus != "needs-action" {
+		t.Fatalf("events: %+v", list.Events)
+	}
+	if ans := call[Event](t, cs, "respond_event", map[string]any{"id": list.Events[0].ID, "account": "icloud", "response": "accept"}); ans.MyStatus != "accepted" {
+		t.Fatalf("answered: %+v", ans)
+	}
+	raw := strings.ReplaceAll(e.perso.raw(t, "/u/calendars/travail/7kq3p0c2v1@google.com.ics"), "\r\n ", "")
+	if !strings.Contains(raw, "PARTSTAT=ACCEPTED") || strings.Count(raw, "X-NUM-GUESTS=0") != 2 || strings.Contains(raw, "NEEDS-ACTION") {
+		t.Fatalf("saved:\n%s", raw)
+	}
+}
+
+// What stops an answer is said in words a person acts on: no address
+// set for the account, an invitation sent to an address the account does
+// not know, a server that refuses the change.
+func TestRespondSaysWhatIsWrong(t *testing.T) {
+	e := newEnv(t)
+	e.family.put(t, "/u/calendars/famille/picnic.ics", googleInvite)
+	e.perso.put(t, "/u/calendars/travail/alias.ics", strings.NewReplacer("me@icloud.example", "sam.alias@example.org", "7kq3p0c2v1", "alias-1").Replace(googleInvite))
+	e.perso.put(t, "/u/calendars/travail/picnic.ics", googleInvite)
+	cs := e.connect(t)
+	first := func(account, from string) string {
+		t.Helper()
+		list := call[listEventsOut](t, cs, "list_events", map[string]any{"account": account, "from": from, "days": 1})
+		if len(list.Events) == 0 {
+			t.Fatalf("%s: no event", account)
+		}
+		return list.Events[0].ID
+	}
+	// The Nextcloud account's username is not an address.
+	if msg := callErr(t, cs, "respond_event", map[string]any{"id": first("cloud", "2026-11-23"), "response": "accept"}); !strings.Contains(msg, "no address is set") || !strings.Contains(msg, "emails") {
+		t.Errorf("no address: %s", msg)
+	}
+	list := call[listEventsOut](t, cs, "list_events", map[string]any{"account": "icloud", "from": "2026-11-23", "days": 1})
+	var alias, picnic string
+	for _, ev := range list.Events {
+		if ev.MyStatus == "" { // the user not found among its attendees
+			alias = ev.ID
+		} else {
+			picnic = ev.ID
+		}
+	}
+	if msg := callErr(t, cs, "respond_event", map[string]any{"id": alias, "response": "accept"}); !strings.Contains(msg, "me@icloud.example") || !strings.Contains(msg, "add it to the account's addresses") {
+		t.Errorf("another address: %s", msg)
+	}
+	e.perso.mu.Lock()
+	e.perso.refuse = true
+	e.perso.mu.Unlock()
+	if msg := callErr(t, cs, "respond_event", map[string]any{"id": picnic, "response": "accept"}); !strings.Contains(msg, "refused") || !strings.Contains(msg, "403") {
+		t.Errorf("refused: %s", msg)
+	}
+}
+
 func TestGraphAttendeesAndRespond(t *testing.T) {
 	e := newEnv(t)
 	people := []any{

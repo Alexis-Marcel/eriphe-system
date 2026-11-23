@@ -803,7 +803,7 @@ var toolTitles = map[string]string{
 }
 
 func tool[In, Out any](s *mcp.Server, name, desc string, ann *mcp.ToolAnnotations, fn func(context.Context, In) (Out, error)) {
-	mcp.AddTool(s, &mcp.Tool{Name: name, Title: toolTitles[name], Description: desc, Annotations: ann},
+	mcp.AddTool(s, &mcp.Tool{Name: name, Title: toolTitles[name], Description: desc, Annotations: ann, Meta: metaOf(name)},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
 			start := time.Now()
 			o, err := fn(ctx, in)

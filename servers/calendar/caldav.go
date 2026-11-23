@@ -146,8 +146,10 @@ func statusError(acct, what string, resp *http.Response) error {
 		return errNotFound
 	case http.StatusPreconditionFailed:
 		return fmt.Errorf("%s: %s: the event changed meanwhile, read it again", acct, what)
-	case http.StatusUnauthorized, http.StatusForbidden:
-		return fmt.Errorf("%s: %s: not allowed (%s)", acct, what, resp.Status)
+	case http.StatusUnauthorized:
+		return fmt.Errorf("%s: %s: the calendar server refused the sign-in (%s): sign in to the account again, or check its password", acct, what, resp.Status)
+	case http.StatusForbidden:
+		return fmt.Errorf("%s: %s: the calendar server refused it (%s): the account is not allowed to do this in this calendar", acct, what, resp.Status)
 	}
 	return fmt.Errorf("%s: %s: %s", acct, what, resp.Status)
 }
@@ -476,7 +478,8 @@ func (d *CalDAV) Respond(ctx context.Context, calID, id string, r Response) (*It
 	}
 	me := d.acct.me()
 	if len(me) == 0 {
-		return nil, fmt.Errorf("%s: the account's address is not known (username or emails): cannot find the user among the attendees", d.acct.Name)
+		return nil, fmt.Errorf("%s: no address is set for this account, so the user cannot be found among the invited people: "+
+			"add the address the invitations are sent to in the account's settings (its username, or its other addresses: emails)", d.acct.Name)
 	}
 	for _, c := range ic.Children {
 		if p := c.Props.Get(ical.PropOrganizer); c.Name == ical.CompEvent && p != nil && isMe(me, mailto(p.Value)) {
@@ -507,7 +510,8 @@ func (d *CalDAV) Respond(ctx context.Context, calID, id string, r Response) (*It
 		}
 	}
 	if !found {
-		return nil, fmt.Errorf("%s: the user (%s) is not among the attendees of this event", d.acct.Name, strings.Join(me, ", "))
+		return nil, fmt.Errorf("%s: the user (%s) is not among the attendees of this event: if the invitation was sent to another "+
+			"address of theirs, add it to the account's addresses (emails) in its settings", d.acct.Name, strings.Join(me, ", "))
 	}
 	hdr := map[string]string{}
 	if etag != "" {

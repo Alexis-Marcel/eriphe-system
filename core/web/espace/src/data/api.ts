@@ -371,7 +371,8 @@ export type ProposalView = {
   // fields: its technical words, a detail one under Détails, a Markdown
   // one (a skill's instructions) drawn as such.
   summary?: string[];
-  fields?: { name: string; value: string; detail?: boolean; markdown?: boolean }[];
+  // A raw one is a call's exact call, one click further than Détails.
+  fields?: { name: string; value: string; detail?: boolean; markdown?: boolean; raw?: boolean }[];
   // Where it comes from, in words, with its node; what its Oui does: facts
   // of eriphe-core's, never the model's words.
   node?: string;
@@ -381,12 +382,22 @@ export type ProposalView = {
   when?: Span[];
   exec?: "running" | "done" | "failed";
   execWhy?: string;
+  // Failed: why, in the tool's own words (external: marked).
+  execError?: string;
+  execErrorExternal?: boolean;
   // A card of several calls: each one the user may leave out (its id,
   // what it acts on, how many items, where it stands), and what Oui says
   // for 1, 2… items chosen (call_fold.go).
   choices?: Choice[];
   acts?: string[];
 };
+
+// stillAsks tells a card that still asks something of the user: it waits,
+// or its yes runs. Done, failed, declined or withdrawn, it is decided:
+// it leaves the page (its ⋯ menu lists it), and the orb says how it went.
+export function stillAsks(p: Pick<ProposalView, "state" | "exec">): boolean {
+  return p.state === "pending" || (p.state === "approved" && p.exec === "running");
+}
 
 // items: the items a choice acts on, by id: a batch's rows unticked leave
 // out the choices all of whose items they are (call_fold.go).

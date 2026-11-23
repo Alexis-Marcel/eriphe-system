@@ -31,6 +31,10 @@ type proposalView struct {
 	When    []spanView  `json:"when,omitempty"`         // when it takes place, if it has a time
 	Exec    string      `json:"exec,omitempty"`         // approved, its call: running, done or failed (access_card.go)
 	ExecWhy string      `json:"execWhy,omitempty"`      // failed: notkept, gone, notallowed or error
+	// ExecError: failed, why in words: the tool's own for an error
+	// (callError), external when its server is not trusted (shown marked).
+	ExecError    string `json:"execError,omitempty"`
+	ExecErrorExt bool   `json:"execErrorExternal,omitempty"`
 	// A calls card of several calls: each one the user may leave out, and
 	// what Oui says for 1, 2… items chosen (call_fold.go).
 	Choices []proposalChoice `json:"choices,omitempty"`
@@ -55,11 +59,19 @@ func (w *web) proposalView(x convoCard, p proposal, lang string) proposalView {
 	if p.acts != nil && x.State == cardPending {
 		v.Acts = p.acts(lang)
 	}
-	switch {
-	case p.Kind == cardAccess && x.State == cardApproved:
-		v.Exec, v.ExecWhy = w.c.callState(p.ID)
-	case p.Kind == cardCalls && x.State == cardApproved:
-		v.Exec, v.ExecWhy = w.c.callsExec(p.ID)
+	if x.State == cardApproved {
+		var asks []accessQuestion
+		switch p.Kind {
+		case cardAccess:
+			if a, err := w.c.accessAskOf(p.ID); err == nil {
+				asks = []accessQuestion{a}
+			}
+		case cardCalls:
+			asks = w.c.batchAsks(p.ID)
+		case cardRunCalls:
+			asks = w.c.runAsks(p.ID)
+		}
+		v.Exec, v.ExecWhy, v.ExecError, v.ExecErrorExt = w.c.asksExec(asks)
 	}
 	if x.State == cardPending {
 		for _, s := range w.c.proposalSpans(p.Kind, p.ID, w.c.userZone()) {

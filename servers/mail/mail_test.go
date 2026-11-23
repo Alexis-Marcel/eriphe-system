@@ -511,6 +511,11 @@ func TestToolAnnotations(t *testing.T) {
 		if tool.Title == "" {
 			t.Errorf("%s has no title", tool.Name)
 		}
+		// What changes or sends says its call in French and English
+		// (eriphe-core's cards).
+		if want[tool.Name] != "read" && !saysBoth(tool.Meta) {
+			t.Errorf("%s says its call in no French and English sentence: %v", tool.Name, tool.Meta)
+		}
 		a, got := tool.Annotations, "send"
 		if tool.Name == "send_message" && (a == nil || a.DestructiveHint == nil || !*a.DestructiveHint) {
 			t.Errorf("send_message annotations: %+v", a)
@@ -533,6 +538,15 @@ func TestToolAnnotations(t *testing.T) {
 	if len(want) != 0 {
 		t.Errorf("missing: %v", want)
 	}
+}
+
+// saysBoth tells a tool's _meta that says its call in French and English.
+func saysBoth(meta map[string]any) bool {
+	says, _ := meta["eriphe/says"].(map[string]any)
+	text, _ := says["text"].(map[string]any)
+	fr, _ := text["fr"].(string)
+	en, _ := text["en"].(string)
+	return fr != "" && en != ""
 }
 
 // An IMAP4rev1 server without MOVE or UIDPLUS: copy then expunge, and find

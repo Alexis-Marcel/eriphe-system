@@ -127,8 +127,8 @@ func TestSkillCardsWaitInTheirView(t *testing.T) {
 	if got := one.SummaryIn("fr"); !slices.Equal(got, []string{"« STAGE – Data Engineer » · Emplois Example ⚠"}) {
 		t.Errorf("summary %q", got)
 	}
-	if fs := one.FieldsIn("fr"); len(fs) != 1 || !fs[0].Detail || fs[0].Name != "monitor/move" ||
-		!strings.Contains(fs[0].Value, `["m1"]`) || !strings.Contains(fs[0].Value, "archive") || !strings.Contains(fs[0].Value, "sam@example.org") {
+	if fs := one.FieldsIn("fr"); rawCall(fs) == nil || rawCall(fs).Name != "monitor/move" || !strings.Contains(rawCall(fs).Value, `["m1"]`) ||
+		!strings.Contains(rawCall(fs).Value, "archive") || !strings.Contains(rawCall(fs).Value, "sam@example.org") {
 		t.Errorf("details %+v", fs)
 	}
 	if one.Tainted == "" {
@@ -149,7 +149,7 @@ func TestSkillCardsWaitInTheirView(t *testing.T) {
 			t.Errorf("the summary lacks %q:\n%s", want, said)
 		}
 	}
-	if fs := two.FieldsIn("fr"); len(fs) != 1 || !fs[0].Detail || !strings.Contains(fs[0].Value, `["m1","m2"]`) {
+	if fs := two.FieldsIn("fr"); rawCall(fs) == nil || !strings.Contains(rawCall(fs).Value, `["m1","m2"]`) {
 		t.Errorf("details %+v", fs)
 	}
 }

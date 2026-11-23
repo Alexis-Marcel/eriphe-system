@@ -2,6 +2,7 @@ import { useContext, useEffect, useState } from "react";
 import { Icon as IconView } from "../a2ui/icons";
 import { Markdown as MarkdownView } from "../a2ui/markdown";
 import { HomeNode, useMoved, useProposals, type ProposalView } from "../a2ui/proposals";
+import { stillAsks } from "../data/api";
 import { useWords } from "../i18n";
 
 // Card draws one proposal of Eriphe's, read from eriphe-core by its ref
@@ -18,14 +19,6 @@ import { useWords } from "../i18n";
 // buttons say Garder and Oublier; any other kind does something once
 // accepted: Proposition, Oui and ✕.
 const KEEPS: Record<string, string> = { memory: "espace.a2.proposal.memory", intention: "espace.a2.proposal.intention" };
-
-// decidedWord is the header of a decided proposal: kept or forgotten for
-// what only asked to keep, approved or declined otherwise.
-function decidedWord(state: string, keeps: boolean): string {
-  if (state !== "approved" && state !== "rejected") return "espace.a2.proposal.gone";
-  if (keeps) return state === "approved" ? "espace.a2.proposal.kept" : "espace.a2.proposal.forgotten";
-  return `espace.a2.proposal.${state}`;
-}
 
 // Fields are a proposal's fields, by name: a Markdown value (a skill's
 // instructions) drawn as Markdown, in a box that scrolls when long.
@@ -100,17 +93,21 @@ export function Card({ refText, surface }: { refText: string; surface: string })
       </div>
     );
   if (p === null) return <p className="a2-empty">{t("espace.a2.proposal.none")}</p>;
+  // Decided (done, failed, declined, withdrawn), it leaves: the page's ⋯
+  // menu lists it, and the orb says how its yes went.
+  if (!stillAsks(p)) return null;
   const pending = p.state === "pending";
   const keeps = KEEPS[p.kind ?? ""];
-  // Approved, an action's call runs, then is done or failed: the stream's
-  // "proposals" moves bring each step. What only keeps something runs
-  // nothing: Gardé or Oublié.
-  const exec = p.state === "approved" && !keeps ? p.exec : undefined;
-  const kicker = pending ? t(keeps ?? "espace.a2.proposal") : exec ? t(`espace.a2.proposal.${exec === "failed" ? "execfailed" : exec}`) : t(decidedWord(p.state, Boolean(keeps)));
+  // Approved, an action's call runs (the stream's "proposals" moves bring
+  // it), until it is done or failed, and the card leaves.
+  const exec = pending ? undefined : "running";
+  const kicker = pending ? t(keeps ?? "espace.a2.proposal") : t("espace.a2.proposal.running");
   // On its own node's page, where it comes from (its node, its skill) and
   // what Oui does in general are under Détails: the page says it.
   const home = Boolean(homeNode && p.node === homeNode);
-  const aside = home && (p.kind === "calls" || p.kind === "runcalls") ? p.why : undefined;
+  // A call's origin (the skill that kept it) is a quiet line, never its
+  // subtitle: beside where it comes from, under Détails on its own page.
+  const aside = p.kind === "calls" || p.kind === "runcalls" ? p.why : undefined;
   const why = aside ? undefined : p.why;
   // Its origin quotes words that may be someone else's (fromExternal):
   // shown as eriphe-core marked them, in the external amber.
@@ -123,8 +120,9 @@ export function Card({ refText, surface }: { refText: string; surface: string })
   );
   const from = p.from && (p.node ? <a href={`/espace?open=node-${p.node}`}>{said}</a> : said);
   const yesWord = choosing && p.acts && count > 0 ? p.acts[Math.min(count, p.acts.length) - 1] : t(keeps ? "espace.a2.keep" : "espace.a2.yes");
+  const raw = (p.fields ?? []).filter((f) => f.detail && f.raw);
   const details = Boolean(p.fields?.some((f) => f.detail) || (home && (aside || p.from || (pending && p.yes))));
-  const icon = pending ? "star" : exec === "failed" || p.state !== "approved" ? "close" : exec === "running" ? "clock" : "check";
+  const icon = pending ? "star" : "clock";
   return (
     <section className={`a2-proposal a2-proposal-${pending ? "pending" : "decided"}${exec ? " a2-proposal-exec-" + exec : ""}`} aria-label={t(keeps ?? "espace.a2.proposal")} aria-busy={exec === "running" || undefined}>
       <p className="a2-proposal-kicker" role={exec ? "status" : undefined}>
@@ -138,7 +136,6 @@ export function Card({ refText, surface }: { refText: string; surface: string })
           </span>
         )}
       </p>
-      {exec === "failed" && p.execWhy && <p className="a2-proposal-failed">{t(`espace.a2.proposal.why.${p.execWhy}`)}</p>}
       <p className="a2-proposal-text">
         {p.text}
         {p.context && <span className="a2-proposal-context"> · {p.context}</span>}
@@ -187,13 +184,27 @@ export function Card({ refText, surface }: { refText: string; surface: string })
       {details && (
         <details className="a2-proposal-details">
           <summary>{t("espace.a2.proposal.details")}</summary>
-          {aside && <p className="a2-proposal-why">{aside}</p>}
+          {home && aside && <p className="a2-proposal-from">{aside}</p>}
           {home && from && <p className="a2-proposal-from">{from}</p>}
           {home && pending && p.yes && <p className="a2-proposal-yes">{p.yes}</p>}
-          <Fields fields={(p.fields ?? []).filter((f) => f.detail)} />
+          <Fields fields={(p.fields ?? []).filter((f) => f.detail && !f.raw)} />
+          {/* Its exact call, one click further: its parameters as the
+              tool reads them. */}
+          {raw.length > 0 && (
+            <details className="a2-proposal-raw">
+              <summary>{t("espace.a2.proposal.raw")}</summary>
+              <Fields fields={raw} />
+            </details>
+          )}
         </details>
       )}
-      {!home && from && <p className="a2-proposal-from">{from}</p>}
+      {!home && (from || aside) && (
+        <p className="a2-proposal-from">
+          {from}
+          {from && aside && " · "}
+          {aside}
+        </p>
+      )}
       {!home && pending && p.yes && <p className="a2-proposal-yes">{p.yes}</p>}
       {pending && (
         <div className="a2-proposal-actions">
