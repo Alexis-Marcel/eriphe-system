@@ -47,13 +47,14 @@ const (
 // statusFacts are what nodes' statuses are computed from, read in a
 // constant number of queries, whatever the size of the graph.
 type statusFacts struct {
-	cards   map[string]bool     // nodes a waiting card is linked to
-	tasks   map[string]bool     // nodes a live task works in, not held for its start
-	steps   map[string]string   // step's node → its status
-	results map[string]bool     // results of a finished work, waiting until the user says them done
-	settled map[string]bool     // nodes the steps' engine finished
-	homes   map[string][]string // node → the skills that maintain it (node_home.go)
-	depths  map[string]int      // node → its depth, for the whole graph's rows (nodeDepths); nil: read up its parents
+	cards    map[string]bool     // nodes a waiting card is linked to
+	tasks    map[string]bool     // nodes a live task works in, not held for its start
+	steps    map[string]string   // step's node → its status
+	results  map[string]bool     // results of a finished work, waiting until the user says them done
+	settled  map[string]bool     // nodes the steps' engine finished
+	homes    map[string][]string // node → the skills that maintain it (node_home.go)
+	depths   map[string]int      // node → its depth, for the whole graph's rows (nodeDepths); nil: read up its parents
+	incoming map[string]int      // node → the nodes that link to it or sit under it, the same (nodeIncoming)
 }
 
 // of is a node's status.
@@ -212,7 +213,7 @@ func (c *core) activeNodes(limit int) []statusNode {
 			out = append(out, x)
 		}
 	}
-	byWeight(out, nodeDepths(xs), time.Now()) // the heaviest first (node_weight.go)
+	byWeight(out, nodeDepths(xs), nodeIncoming(xs), time.Now()) // the heaviest first (node_weight.go)
 	if limit > 0 && len(out) > limit {
 		out = out[:limit]
 	}

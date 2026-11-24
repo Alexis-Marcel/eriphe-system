@@ -147,10 +147,12 @@ func (c *core) graphRowWith(sum nodestore.Summary, f statusFacts) graphNode {
 		g.Done = &d
 	}
 	depth, ok := f.depths[sum.ID]
-	if !ok {
+	incoming := f.incoming[sum.ID]
+	if !ok { // one row: read in the index
 		depth = c.nodeDepth(sum)
+		incoming, _ = c.nodes.Incoming(sum.ID)
 	}
-	g.Weight = nodeWeight(depth, len(sum.Links), g.Status, sum.Updated, time.Now())
+	g.Weight = nodeWeight(depth, incoming, g.Status, sum.Updated, time.Now())
 	g.Glance = c.nodeGlance(sum.ID)
 	if p, ok := c.progressOf(sum.ID); ok && g.Status == nodeRunning && sum.Archived.IsZero() {
 		g.Line = p.Text
@@ -170,7 +172,7 @@ func (c *core) graphRows() ([]graphNode, error) {
 	}
 	c.warmNodeCaches(xs)
 	f := c.statusFacts("")
-	f.depths = nodeDepths(xs)
+	f.depths, f.incoming = nodeDepths(xs), nodeIncoming(xs)
 	out := make([]graphNode, 0, len(xs))
 	for _, x := range xs {
 		out = append(out, c.graphRowWith(x, f))

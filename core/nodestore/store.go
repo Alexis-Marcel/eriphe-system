@@ -46,8 +46,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -113,6 +115,10 @@ type Options struct {
 const (
 	ChangedDoc   = "doc"   // a new version of its file
 	ChangedTrace = "trace" // its trace grew
+	// ChangedLinked: the nodes that link to it, or sit under it, changed
+	// (one of them was written, moved, archived): what counts them reads
+	// it again.
+	ChangedLinked = "linked"
 )
 
 // Change is a node that changed, and what of it.
@@ -602,7 +608,9 @@ func (s *Store) indexVersions(now time.Time, xs []indexed) error {
 		return err
 	}
 	defer tx.Rollback()
+	near := map[string]bool{} // the nodes each one linked or sat under, before and after
 	for _, x := range xs {
+		neighbours(tx, x.node.Meta.ID, near)
 		if err := indexNode(tx, x.node, x.file, x.raw, x.v.N, now); err != nil {
 			return err
 		}
@@ -619,10 +627,17 @@ func (s *Store) indexVersions(now time.Time, xs []indexed) error {
 	if err != nil {
 		return err
 	}
+	for _, x := range xs { // after: its text's links resolved
+		neighbours(tx, x.node.Meta.ID, near)
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	s.changed(ChangedDoc, linked...)
+	for _, x := range xs {
+		delete(near, x.node.Meta.ID) // told as written
+	}
+	s.changed(ChangedLinked, slices.Sorted(maps.Keys(near))...)
 	return nil
 }
 

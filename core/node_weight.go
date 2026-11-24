@@ -11,8 +11,9 @@ import (
 )
 
 // A node's weight is computed once, here, from what it is, never chosen
-// by a model: its links (how deep it sits under its parents, how many
-// nodes it links to), its status (what waits for the user weighs most,
+// by a model: its links (how deep it sits under its parents, and above
+// all how many nodes link to it or sit under it: a hub, « Ma garde-robe »
+// with its studies and choices, is heavy), its status (what waits for the user weighs most,
 // what runs a little more, what is done less) and its freshness (a node
 // untouched for a week weighs less). The graph draws by it, a bubble's
 // size and light (its row's weight); the brain sees the nodes at work or
@@ -21,15 +22,20 @@ import (
 const (
 	// weightOld is when a node no longer counts as fresh.
 	weightOld = 7 * 24 * time.Hour
-	// weightLinksMost is how many of its links count.
-	weightLinksMost = 5
+	// weightIncomingMost is how many of the nodes that link to it or sit
+	// under it count, weightIncoming what each adds.
+	weightIncomingMost = 10
+	weightIncoming     = 0.04
+	// weightMost is the heaviest a node is.
+	weightMost = 1.8
 	// weightDepthMost is how far up its parents a depth is read.
 	weightDepthMost = 32
 )
 
-// nodeWeight is a node's weight, between 0.15 and 1.3, to the hundredth:
-// depth 0 for a node at the top, links the nodes it links to.
-func nodeWeight(depth, links int, status string, updated, now time.Time) float64 {
+// nodeWeight is a node's weight, between 0.15 and 1.8, to the hundredth:
+// depth 0 for a node at the top, incoming the live nodes that link to it
+// or sit under it.
+func nodeWeight(depth, incoming int, status string, updated, now time.Time) float64 {
 	v := 0.42
 	switch depth {
 	case 0:
@@ -37,7 +43,7 @@ func nodeWeight(depth, links int, status string, updated, now time.Time) float64
 	case 1:
 		v = 0.55
 	}
-	v += 0.03 * float64(min(links, weightLinksMost))
+	v += weightIncoming * float64(min(incoming, weightIncomingMost))
 	switch status {
 	case nodeWaits:
 		v += 0.35
@@ -49,7 +55,7 @@ func nodeWeight(depth, links int, status string, updated, now time.Time) float64
 	if now.Sub(updated) > weightOld {
 		v -= 0.12
 	}
-	return math.Round(max(0.15, min(1.3, v))*100) / 100
+	return math.Round(max(0.15, min(weightMost, v))*100) / 100
 }
 
 // nodeDepths is each node's depth under its parents, from the list
@@ -87,12 +93,33 @@ func (c *core) nodeDepth(sum nodestore.Summary) int {
 	return d
 }
 
+// nodeIncoming is, for each node of the list, how many others of it link
+// to it or sit under it (each counted once), as Store.Incoming counts
+// them for one.
+func nodeIncoming(xs []nodestore.Summary) map[string]int {
+	out := make(map[string]int, len(xs))
+	for _, x := range xs {
+		to := map[string]bool{}
+		if x.Parent != "" {
+			to[x.Parent] = true
+		}
+		for _, l := range x.Links {
+			to[l] = true
+		}
+		delete(to, x.ID)
+		for t := range to {
+			out[t]++
+		}
+	}
+	return out
+}
+
 // byWeight sorts nodes the heaviest first, then the last changed, then by
-// id; depths from nodeDepths.
-func byWeight(xs []statusNode, depths map[string]int, now time.Time) {
+// id; depths from nodeDepths, incoming from nodeIncoming.
+func byWeight(xs []statusNode, depths, incoming map[string]int, now time.Time) {
 	w := make(map[string]float64, len(xs))
 	for _, x := range xs {
-		w[x.ID] = nodeWeight(depths[x.ID], len(x.Links), x.Status, x.Updated, now)
+		w[x.ID] = nodeWeight(depths[x.ID], incoming[x.ID], x.Status, x.Updated, now)
 	}
 	slices.SortStableFunc(xs, func(a, b statusNode) int {
 		return cmp.Or(cmp.Compare(w[b.ID], w[a.ID]), b.Updated.Compare(a.Updated), strings.Compare(a.ID, b.ID))

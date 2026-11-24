@@ -3435,12 +3435,17 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
 
 **A node's weight** (`node_weight.go`). Computed once, by code, never chosen by a model, from its
 links (its depth under its parents, from the list itself, a loop or a parent out of it ending the
-climb, and the nodes it links to, five at most), its status (waits +0.35, running +0.18, done −0.1)
-and its freshness (−0.12 when untouched for a week): 0.95 at the top, 0.55 one level down, 0.42
-below, +0.03 a link, between 0.15 and 1.3, to the hundredth. The graph's row carries it, the
-bubble's size and light are drawn from it (`model.ts`), and the brain sees the nodes running or
-waiting in its order (`activeNodes`: the pack, `node_find` without words). Computed when a row is
-sent: a node that ages, or whose parent moves, shows its new weight with its next row.
+climb; above all the live nodes that link to it or sit under it, each once, ten at most: a hub,
+« Ma garde-robe » with its studies and choices, is heavy), its status (waits +0.35, running +0.18,
+done −0.1) and its freshness (−0.12 when untouched for a week): 0.95 at the top, 0.55 one level
+down, 0.42 below, +0.04 for each node that links to it or sits under it, between 0.15 and 1.8, to
+the hundredth (a fresh subject 0.95, a hub of ten 1.35, a subject that waits 1.3, a hub that waits
+1.7). The graph's row carries it (the whole graph's counted from its list, `nodeIncoming`; one row
+from the index, `Store.Incoming`), the bubble's size and light are drawn from it (`model.ts`), and
+the brain sees the nodes running or waiting in its order (`activeNodes`: the pack, `node_find`
+without words). When a node is written, moved or archived, the store also tells the nodes it
+linked to or sat under, before and after (`nodestore.ChangedLinked`), and their rows are sent again
+with their new weight. Computed when a row is sent: a node that ages shows it with its next row.
 
 **The stream** (`/events?tab=<tab>&node=<id>`, `web_sse.go`). JSON events, the graph's from
 `graph_feed.go`, which the node store tells of each change (`nodestore.Watch`):
