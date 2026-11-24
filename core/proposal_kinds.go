@@ -32,6 +32,11 @@ type proposalKind struct {
 	// decided runs once its card said a decision: by is who answered
 	// ("text" for a plain yes or no, told with the user's message).
 	decided func(c *core, id int64, approve bool, by string)
+	// outcome is what came of the user's yes or no, as the brain is told
+	// it (cardOutcome, card_outcome.go): every kind says it, so that the
+	// brain can update what it wrote of the card. A call's yes is told
+	// once it ran (callToBrain, callsCardRan): its Text is "" then.
+	outcome func(c *core, id int64, approve bool) cardTold
 }
 
 // proposalKinds names the kinds in the order what waits is listed.
@@ -43,7 +48,7 @@ var kindsOf map[string]proposalKind
 
 func init() {
 	kindsOf = map[string]proposalKind{
-		cardMemory: {read: (*core).memoryProposal, waiting: (*core).proposedMemories,
+		cardMemory: {read: (*core).memoryProposal, waiting: (*core).proposedMemories, outcome: told("le souvenir est retenu", "il est oublié"),
 			decides: func(c *core, _ context.Context, id int64, yes bool) error {
 				if yes {
 					_, err := c.mem.approve(id, "owner")
@@ -52,9 +57,9 @@ func init() {
 				return c.mem.forget(id, "owner", "rejected")
 			},
 			withdraw: func(c *core, _ context.Context, id int64) error {
-				return c.mem.forget(id, "owner", "withdrawn: its node was archived")
+				return c.mem.forget(id, "eriphe", "withdrawn: it no longer waits")
 			}},
-		cardIntention: {read: (*core).intentionProposal, waiting: (*core).proposedIntentions,
+		cardIntention: {read: (*core).intentionProposal, waiting: (*core).proposedIntentions, outcome: told("l'intention est ouverte", "elle est annulée"),
 			decides: func(c *core, _ context.Context, id int64, yes bool) error {
 				ch, action := intentionChange{State: intentOpen}, "approve"
 				if !yes {
@@ -62,8 +67,12 @@ func init() {
 				}
 				_, err := c.mem.changeIntention(id, ch, "owner", action)
 				return err
+			},
+			withdraw: func(c *core, _ context.Context, id int64) error { // taken back, not refused by the user
+				_, err := c.mem.changeIntention(id, intentionChange{State: intentCancelled}, "eriphe", "withdrawn")
+				return err
 			}},
-		cardRule: {read: (*core).ruleProposal, waiting: (*core).proposedRules,
+		cardRule: {read: (*core).ruleProposal, waiting: (*core).proposedRules, outcome: told("la règle est en vigueur", "elle est écartée"),
 			decides: func(c *core, _ context.Context, id int64, yes bool) error {
 				if yes {
 					_, err := c.approveNotifyRule(id)
@@ -71,16 +80,11 @@ func init() {
 				}
 				return c.deleteNotifyRule(id)
 			}},
-		cardSetting: {read: (*core).settingProposal, waiting: (*core).proposedSettings,
+		cardSetting: {read: (*core).settingProposal, waiting: (*core).proposedSettings, outcome: told("le réglage est appliqué", "rien ne change"),
 			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideSetting(id, yes) }},
-		cardTaskStart: {read: (*core).taskStartProposal, waiting: (*core).proposedStarts, // task_start.go
-			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideTaskStart(id, yes) },
-			decided: func(c *core, id int64, yes bool, by string) {
-				if !yes && by != byText {
-					c.taskStartDeclined(id) // a "non" in words is told with the message
-				}
-			}},
-		cardUnlearn: {read: (*core).unlearnProposal, waiting: (*core).proposedUndos,
+		cardTaskStart: {read: (*core).taskStartProposal, waiting: (*core).proposedStarts, outcome: (*core).taskStartTold, // task_start.go
+			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideTaskStart(id, yes) }},
+		cardUnlearn: {read: (*core).unlearnProposal, waiting: (*core).proposedUndos, outcome: told("l'apprentissage est défait", "il est gardé"),
 			decides: func(c *core, _ context.Context, id int64, yes bool) error {
 				e, err := c.mem.learning(id)
 				if err != nil {
@@ -92,7 +96,7 @@ func init() {
 				}
 				return c.mem.setUndo(id, undoRejected, e.UndoWhy)
 			}},
-		cardAccess: {read: (*core).accessProposal, waiting: (*core).proposedAccess, decides: (*core).decideAccess, // access_card.go
+		cardAccess: {read: (*core).accessProposal, waiting: (*core).proposedAccess, decides: (*core).decideAccess, outcome: (*core).accessTold, // access_card.go
 			withdraw: func(c *core, ctx context.Context, id int64) error {
 				a, err := c.accessAskOf(id)
 				if err != nil {
@@ -106,15 +110,10 @@ func init() {
 					return cmpOr(a.Node, c.taskNode(a.TaskID)) // its call's node, else its task's
 				}
 				return ""
-			},
-			decided: func(c *core, id int64, yes bool, by string) {
-				if by != byText {
-					c.accessDecidedTold(id, yes)
-				}
 			}},
-		cardSkill: {read: (*core).skillProposal, waiting: (*core).proposedSkills, // skill_write.go
+		cardSkill: {read: (*core).skillProposal, waiting: (*core).proposedSkills, outcome: told("le skill est en place", "cette version est écartée"), // skill_write.go
 			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideSkill(id, yes) }},
-		cardRunCalls: {read: (*core).runCallsProposal, waiting: (*core).runsWithCalls, decides: (*core).decideRunCalls, // skill_cards.go
+		cardRunCalls: {read: (*core).runCallsProposal, waiting: (*core).runsWithCalls, decides: (*core).decideRunCalls, outcome: callsTold, // skill_cards.go
 			withdraw: func(c *core, ctx context.Context, id int64) error {
 				for _, a := range c.runAsks(id) {
 					c.withdrawAsk(ctx, a)
@@ -127,7 +126,7 @@ func init() {
 				}
 				return ""
 			}},
-		cardCalls: {read: (*core).callsProposal, waiting: (*core).proposedBatches, decides: (*core).decideCalls, // item_cards.go
+		cardCalls: {read: (*core).callsProposal, waiting: (*core).proposedBatches, decides: (*core).decideCalls, outcome: callsTold, // item_cards.go
 			withdraw: func(c *core, ctx context.Context, id int64) error {
 				for _, a := range c.batchAsks(id) {
 					c.withdrawAsk(ctx, a)
@@ -141,9 +140,9 @@ func init() {
 				return ""
 			},
 			decided: func(c *core, id int64, _ bool, _ string) { c.itemCardMoved(id) }}, // its item's row
-		cardMonitor: {read: (*core).monitorProposal, waiting: (*core).proposedMonitors, // monitors.go
+		cardMonitor: {read: (*core).monitorProposal, waiting: (*core).proposedMonitors, outcome: told("la surveillance tourne", "elle est écartée"), // monitors.go
 			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideMonitor(id, yes) }},
-		cardViewKind: {read: (*core).viewProposalOf, waiting: (*core).proposedViews, // view_card.go
+		cardViewKind: {read: (*core).viewProposalOf, waiting: (*core).proposedViews, outcome: (*core).viewTold, // view_card.go
 			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideView(id, yes) },
 			withdraw: func(c *core, _ context.Context, id int64) error {
 				_, err := c.store.db.Exec(`UPDATE view_proposals SET state = ? WHERE id = ? AND state = ?`, viewDropped, id, viewProposed)
@@ -156,7 +155,7 @@ func init() {
 			}},
 	}
 	for _, k := range proposalKinds {
-		if kindsOf[k].read == nil || kindsOf[k].waiting == nil || kindsOf[k].decides == nil {
+		if kindsOf[k].read == nil || kindsOf[k].waiting == nil || kindsOf[k].decides == nil || kindsOf[k].outcome == nil {
 			panic("proposal kind " + k + " is incomplete")
 		}
 	}

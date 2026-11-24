@@ -479,9 +479,9 @@ func TestBrainCardReads(t *testing.T) {
 	if v := (&web{c: c}).proposalView(convoCard{Kind: cardAccess, State: cardPending}, p, "fr"); v.Yes != "" {
 		t.Errorf("Oui says %q", v.Yes)
 	}
-	msgs, _ := c.store.messagesAfter(0, 10)
-	if len(msgs) == 0 || strings.Contains(msgs[len(msgs)-1].Text, "publish page") {
-		t.Errorf("the message says it twice: %+v", msgs)
+	// No message asks it again: the card is the question (#750).
+	if msgs, _ := c.store.messagesAfter(0, 10); len(msgs) != 0 {
+		t.Errorf("a message says it twice: %+v", msgs)
 	}
 }
 

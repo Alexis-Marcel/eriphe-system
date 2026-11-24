@@ -93,7 +93,7 @@ func wakes(c *core) []string {
 	msgs, _ := c.store.messagesAfter(0, 500)
 	var out []string
 	for _, m := range msgs {
-		if m.Role == roleEvent && strings.HasPrefix(m.Text, "[nœud ") {
+		if m.Role == roleEvent && !m.UserAct && strings.HasPrefix(m.Text, "[nœud ") { // the work's, not what came of a card
 			out = append(out, m.Text)
 		}
 	}

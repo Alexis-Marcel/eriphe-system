@@ -146,3 +146,161 @@ func (c *core) asksExec(asks []accessQuestion) (state, why, words string, extern
 	}
 	return state, why, words, external
 }
+
+// What became of a card: every kind tells the brain (#750). A card
+// decided on the workspace, a page or a channel tells it at once, as the
+// user's act (nodeEvent), on the card's node: what was decided, and what
+// came of it, so that the brain updates what it wrote of the card (a
+// view's subject that still called it a draft). A call's yes is told once
+// it ran (callToBrain, callsCardRan). A plain yes or no in words is told
+// with the user's message (cardAnswerLine), which carries the outcome.
+// A card withdrawn tells nobody: with its node, the user set the subject
+// aside; by Eriphe, its tool's answer says it (withdraw_proposal).
+
+// cardTold is what came of a card, in the words of an event: Node is the
+// node it is of, "" for the card's own (cardNodes).
+type cardTold struct{ Node, Text string }
+
+// told is the outcome of a kind whose yes and no say all: the card's own
+// text says what it was.
+func told(yes, no string) func(*core, int64, bool) cardTold {
+	return func(_ *core, _ int64, approve bool) cardTold {
+		if approve {
+			return cardTold{Text: yes + "."}
+		}
+		return cardTold{Text: no + "."}
+	}
+}
+
+// callsTold is a calls card's outcome: its yes is told once its calls
+// ran (callsCardRan); its no, at once.
+func callsTold(_ *core, _ int64, approve bool) cardTold {
+	if approve {
+		return cardTold{}
+	}
+	return cardTold{Text: "aucun de ses appels n'est exécuté."}
+}
+
+func cardOutcomeKey(ref string) string { return "card_outcome:" + ref }
+
+// cardOutcome tells the brain what came of the user's answer to card x,
+// p its proposal as it waited. Called by decideCardWith, the one way a
+// card is answered.
+func (c *core) cardOutcome(x convoCard, p proposal, kind string, id int64, approve bool, by string) {
+	k, ok := kindsOf[kind]
+	if !ok {
+		return
+	}
+	t := k.outcome(c, id, approve)
+	if t.Text == "" {
+		return // told once it ran
+	}
+	if by == byText {
+		c.store.set(cardOutcomeKey(x.Ref), t.Text) // told with the message (cardAnswerLine)
+		return
+	}
+	verb := "non"
+	if approve {
+		verb = "oui"
+	}
+	what := tr("fr", "card.kind."+kind)
+	if p.Tainted == "" { // one that may carry someone else's words is named by its ref only
+		if s := cmpOr(p.Text("fr"), x.Text); s != "" {
+			what += " « " + truncate(packQuote(s), 200) + " »"
+		}
+	}
+	node := t.Node
+	if node == "" {
+		node = c.liveCardNode(x.Ref)
+	}
+	c.nodeEvent(node, fmt.Sprintf("%s a dit %s à la carte %s (%s) : %s", c.conf().User, verb, x.Ref, what, t.Text), true)
+}
+
+// liveCardNode is the live node a card waits in, "" for none.
+func (c *core) liveCardNode(ref string) string {
+	if c.nodes == nil {
+		return ""
+	}
+	for _, id := range c.cardNodes(ref) {
+		if sum, err := c.nodes.Get(id); err == nil && sum.Archived.IsZero() {
+			return id
+		}
+	}
+	return ""
+}
+
+// accessTold is an access card's outcome: a release's, a grant's. A
+// call's is told once it ran, or at once when refused (decideAccess).
+func (c *core) accessTold(id int64, approve bool) cardTold {
+	a, err := c.accessAskOf(id)
+	if err != nil || a.Call != "" {
+		return cardTold{}
+	}
+	node := c.taskEventNode(a.TaskID)
+	switch {
+	case len(a.Refs) > 0 && approve:
+		return cardTold{node, fmt.Sprintf("%s est débloqué pour la tâche %s ; transmets-le-lui si elle attend.", strings.Join(a.Refs, ", "), a.TaskID)}
+	case len(a.Refs) > 0:
+		return cardTold{node, fmt.Sprintf("%s reste retenu pour la tâche %s ; transmets-le-lui si elle attend.", strings.Join(a.Refs, ", "), a.TaskID)}
+	case approve:
+		return cardTold{node, fmt.Sprintf("la tâche %s peut %s %s ; elle continue.", a.TaskID, verbs([]string{a.Need.Category}, "fr"), a.Need.TargetIn("fr"))}
+	}
+	return cardTold{node, fmt.Sprintf("la tâche %s ne le fera pas ; elle continue sans.", a.TaskID)}
+}
+
+// taskStartTold is a task's start card's outcome.
+func (c *core) taskStartTold(id int64, approve bool) cardTold {
+	s, err := c.taskStart(id)
+	if err != nil {
+		return cardTold{Text: "la tâche est introuvable."}
+	}
+	node := c.taskEventNode(s.TaskID)
+	if approve {
+		return cardTold{node, fmt.Sprintf("la tâche %s démarre ; sa fin te réveillera.", s.TaskID)}
+	}
+	return cardTold{node, fmt.Sprintf("la tâche %s ne démarre pas. Ne la relance pas telle quelle ; dis-le en une phrase seulement s'il attend une suite.", s.TaskID)}
+}
+
+// viewTold is a view card's outcome, told in the subject it came from:
+// what the subject says of its draft is to be updated.
+func (c *core) viewTold(id int64, approve bool) cardTold {
+	v, err := c.viewOf(id)
+	if err != nil {
+		return cardTold{Text: "la vue est introuvable."}
+	}
+	var subjects []string
+	if c.nodes != nil {
+		if d, err := c.nodes.Read(v.Node, 0); err == nil {
+			for _, s := range d.Node.Meta.Links {
+				if sum, err := c.nodes.Get(s); err == nil && sum.Archived.IsZero() {
+					subjects = append(subjects, s)
+				}
+			}
+		}
+	}
+	node, of := "", ""
+	if len(subjects) > 0 {
+		node, of = subjects[0], fmt.Sprintf(" Mets à jour ce qu'en dit son sujet (%s) : ", strings.Join(subjects, ", "))
+	}
+	if approve {
+		if of != "" {
+			of += "ce n'est plus un brouillon, la vue est en place."
+		} else {
+			node = v.Node
+		}
+		made := ""
+		switch {
+		case v.Spec != nil && v.MD != "":
+			made = fmt.Sprintf(" ; sa surveillance « %s » et son skill « %s » tournent", v.Monitor, v.Skill)
+		case v.Spec != nil:
+			made = fmt.Sprintf(" ; sa surveillance « %s » tourne", v.Monitor)
+		case v.MD != "":
+			made = fmt.Sprintf(" ; son skill « %s » tourne", v.Skill)
+		}
+		return cardTold{node, fmt.Sprintf("la vue est en place sur le nœud %s, ce n'est plus un brouillon%s.%s", v.Node, made, of)}
+	}
+	if of != "" {
+		of += "la vue n'a pas été retenue."
+	}
+	return cardTold{node, fmt.Sprintf("son brouillon, le nœud %s, est archivé ; rien ne tourne.%s", v.Node, of)}
+}

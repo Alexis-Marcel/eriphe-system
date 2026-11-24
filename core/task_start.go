@@ -247,17 +247,6 @@ func (c *core) decideTaskStart(id int64, approve bool) error {
 	return nil
 }
 
-// taskStartDeclined tells the brain that a start it launched was declined
-// on its card (a "non" in words is told with the user's message).
-func (c *core) taskStartDeclined(id int64) {
-	s, err := c.taskStart(id)
-	if err != nil {
-		return
-	}
-	c.nodeEvent(c.taskEventNode(s.TaskID), fmt.Sprintf("%s a refusé le lancement de la tâche %s : elle ne démarre pas. Ne la relance pas telle quelle ; "+
-		"dis-le en une phrase seulement s'il attend une suite.", c.conf().User, s.TaskID), true) // the user's act: what the brain says of it answers them
-}
-
 // startState says, for the brain, what a task's start waits for, as it is
 // when run_task returns: started now, held for the user's card (its ref
 // and what it asks), or pending with no device. The brain says that and
