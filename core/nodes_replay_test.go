@@ -29,21 +29,21 @@ import (
 // ($day, $substack, $mails and $mail for the scenario's nodes, $n1… for
 // those a recorded call opened, $c1… for its cards, $hash for the last
 // version, $stale for an older one), and a call that names a node code
-// opened ($x1…: a task's, a view's) is not played.
+// opened ($x1…: a task's) is not played.
 //
 // Its last turn is the bench's last: « tu peux suivre et gérer mes
 // journées ? », asked at the home. Its subject opens first (node_open,
-// before anything is read), then propose_view in that turn opens the
-// view's draft beside it, its Agenda showing the day, its choices
-// adjustable after (ask buttons, in a tainted turn too), no questionnaire.
-// Until a run records it, it is written by hand after a real case: the
-// view proposed after a recall that read a mail's fact, the turn tainted.
-// Turn 13's subject names the mails' view by a link where it placed its
-// card before: the card waits on the draft now (edited by hand too).
+// before anything is read), then the page is written in it in that turn,
+// no card: its Agenda showing the day, its choices adjustable after (ask
+// buttons, in a tainted turn too), no questionnaire. Until a run records
+// it, it is written by hand after a real case: the page written after a
+// recall that read a mail's fact, the turn tainted. Turn 13 writes the
+// mails' page at once, then proposes the skill that maintains it, its
+// monitor on the same card (edited by hand too, from the views they were).
 
-// replayTools are the calls recorded: those that write a node or propose
-// what a node shows.
-var replayTools = []string{"node_open", "node_write", "node_edit", "node_set", "propose_view", "item_note"}
+// replayTools are the calls recorded: those that write a node, or propose
+// the skill that maintains one.
+var replayTools = []string{"node_open", "node_write", "node_edit", "node_set", "write_skill", "item_note"}
 
 // replayCall is one recorded call.
 type replayCall struct {
@@ -155,9 +155,6 @@ func (r *replayNames) gives(tool string, out map[string]any) map[string]string {
 	}
 	if card, _ := out["card"].(string); card != "" {
 		g["card"] = r.fresh("c", card)
-	}
-	if id, _ := out["node"].(string); id != "" && tool == "propose_view" { // its draft
-		g["node"] = r.fresh("n", id)
 	}
 	if steps, ok := out["steps"].(map[string]any); ok {
 		for key, v := range steps {
@@ -272,11 +269,10 @@ func TestNodesReplay(t *testing.T) {
 }
 
 // replayDay checks the recording's last turn, the day asked to be
-// followed: its first call opens the subject, untainted; a view proposed
-// in that very turn opens its draft linked to it, its card waiting there,
-// no questionnaire written before it. The draft's yes makes the standing
-// page whose Agenda reads the calendar and whose buttons offer the
-// changes, its taint marked; the subject is done and stays linked.
+// followed: its first call opens the subject, untainted; the page is
+// written in it in that very turn, no card, no questionnaire written
+// before it: its Agenda reads the calendar and its buttons offer the
+// changes, its taint marked. Nothing waits for a yes.
 func replayDay(t *testing.T, c *core, calls []replayCall, names *replayNames) {
 	t.Helper()
 	last := calls[len(calls)-1].Turn
@@ -290,7 +286,6 @@ func replayDay(t *testing.T, c *core, calls []replayCall, names *replayNames) {
 		t.Fatalf("the day's turn starts with %s (tainted %v): the subject does not open first", first.Tool, first.Tainted)
 	}
 	subject := names.from[turn[0].Gives["id"]]
-	proposed := false
 	for _, call := range turn {
 		var args map[string]any
 		json.Unmarshal(call.Args, &args)
@@ -299,28 +294,8 @@ func replayDay(t *testing.T, c *core, calls []replayCall, names *replayNames) {
 				t.Errorf("the day's turn: %s writes a questionnaire:\n%s", call.Tool, s)
 			}
 		}
-		proposed = proposed || call.Tool == "propose_view" && call.OK
 	}
-	if !proposed {
-		t.Fatal("the day's turn proposes no view: the page is not shown first")
-	}
-	var id int64
-	var node string
-	if err := c.store.db.QueryRow(`SELECT id, node FROM view_proposals WHERE state = ? ORDER BY id DESC LIMIT 1`, viewProposed).Scan(&id, &node); err != nil {
-		t.Fatal(err)
-	}
-	ref := proposalRef(cardViewKind, id)
-	if sum, err := c.nodes.Get(node); err != nil || !slices.Equal(sum.Links, []string{subject}) || !slices.Equal(c.cardNodes(ref), []string{node}) {
-		t.Fatalf("the day's draft %+v (%v): not beside its subject %s, or its card not on it (%v)", sum, err, subject, c.cardNodes(ref))
-	}
-	xs, err := c.cardsWhere(`ref = ? AND state = ?`, ref, cardPending)
-	if err != nil || len(xs) != 1 {
-		t.Fatalf("the day's card: %v %v", xs, err)
-	}
-	if _, err := c.decideCard(context.Background(), xs[0].ID, true, "web"); err != nil {
-		t.Fatal(err)
-	}
-	d, err := c.nodes.Read(node, 0)
+	d, err := c.nodes.Read(subject, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,11 +304,11 @@ func replayDay(t *testing.T, c *core, calls []replayCall, names *replayNames) {
 		agenda = agenda || strings.Contains(string(b.Components), `"Agenda"`) && len(b.Sources) > 0
 		asks = asks || blockAsks(b.Components) && (b.External || !calls[len(calls)-1].Tainted) // marked when written after a read
 	}
-	if !agenda || !asks || d.Node.Meta.Lifetime != "standing" {
-		t.Errorf("the day's view: agenda %v, asks marked %v:\n%s", agenda, asks, d.Raw)
+	if !agenda || !asks {
+		t.Errorf("the day's page: agenda %v, asks marked %v:\n%s", agenda, asks, d.Raw)
 	}
-	if sum, _ := c.nodes.Get(subject); sum.Done.IsZero() {
-		t.Error("the day's subject is not done once its view stands")
+	if cardWaitsOn(c, subject) {
+		t.Error("the day's page waits on a card")
 	}
 }
 

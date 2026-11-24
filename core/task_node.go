@@ -87,7 +87,7 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest) error {
 	if c.nodes == nil {
 		return nil
 	}
-	if r.inNode != "" { // a step's task in the step's node (node_steps.go), a skill's run in its standing node
+	if r.inNode != "" { // a step's task in the step's node (node_steps.go), a skill's run in its home node
 		if _, err := c.store.db.Exec(`INSERT INTO task_nodes (task, node) VALUES (?, ?)`, t.ID, r.inNode); err != nil {
 			return err
 		}
@@ -146,10 +146,9 @@ func (c *core) taskAuthor(task string) string {
 
 // fileTaskReport files a task's report, its last message, in its node:
 // whole in its trace (in several entries past the store's limit for
-// one), and as its doc when the task wrote none (never a standing
-// node's: its runs report in its trace only). Filed once a turn: the
-// same report is not filed again. It says what went wrong, for the
-// brain; "" when nothing did.
+// one), and as its doc when the task wrote none and the node holds
+// nothing. Filed once a turn: the same report is not filed again. It
+// says what went wrong, for the brain; "" when nothing did.
 func (c *core) fileTaskReport(task string, r *checkedReceipt) string {
 	id := c.taskNode(task)
 	if id == "" || c.nodes == nil {

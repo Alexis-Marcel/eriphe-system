@@ -40,9 +40,9 @@ const (
 var rowProps = []string{"rows", "events", "items"}
 
 // pageReport reads node id's sources, waiting pageReportWait at most, and
-// says what each of its blocks shows. lasting: a page that lasts (a view,
-// or its draft), where a figure written by hand goes stale.
-func (c *core) pageReport(id string, lasting bool) []map[string]any {
+// says what each of its blocks shows. A page whose blocks read sources
+// lasts: a figure written by hand on it goes stale.
+func (c *core) pageReport(id string) []map[string]any {
 	if c.nodes == nil {
 		return nil
 	}
@@ -71,6 +71,7 @@ func (c *core) pageReport(id string, lasting bool) []map[string]any {
 	case <-time.After(time.Until(deadline)):
 	}
 	reads := c.keptReads(id)
+	lasting := slices.ContainsFunc(d.Node.Blocks(), func(b *nodefile.Block) bool { return len(b.Sources) > 0 })
 	var out []map[string]any
 	for _, b := range d.Node.Blocks() {
 		if b.Card != "" {

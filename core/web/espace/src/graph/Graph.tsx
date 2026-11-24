@@ -663,7 +663,7 @@ export function Graph({ live }: { live: boolean }) {
               held={held === x.id}
               light={0.3 + 0.7 * Math.min(1, weight(x, nodes, now) / 0.85)}
               waitsWord={t("espace.waits")}
-              standingWord={t("espace.standing")}
+              maintainedWord={x.maintained?.length ? t("espace.maintained", x.maintained.join(", ")) : ""}
               onGrab={onGrab}
               onOpen={onOpen}
               onHover={onHover}
@@ -797,7 +797,7 @@ function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, Motion
 const Bubble = memo(function Bubble(p: {
   place: (el: HTMLElement | null) => void;
   x: GraphNode; title: string; said: string; d: number; r: number; tile?: [number, number]; lang: Lang; glanceWord: string;
-  open: boolean; held: boolean; light: number; waitsWord: string; standingWord: string;
+  open: boolean; held: boolean; light: number; waitsWord: string; maintainedWord: string;
   onGrab: (id: string, e: PtrEvent) => void; onOpen: (id: string, beside: boolean) => void; onHover: (id: string | null) => void;
 }) {
   const { x, d, r, tile } = p;
@@ -811,7 +811,7 @@ const Bubble = memo(function Bubble(p: {
   // the same with pages open or not: only a hover fades (Graph, hoverOn)
   const opacity = p.open ? 0 : tile ? 1 : x.status === "done" ? Math.max(0.35, p.light * 0.8) : Math.max(0.5, p.light);
   const ring = R + (d === 0 ? 9 : 7);
-  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.status, yours && "yours", p.held && "held", x.lifetime === "standing" && "standing", x.external && "external", x.unasked && "unasked", tile && "tiled"]
+  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.status, yours && "yours", p.held && "held", p.maintainedWord && "maintained", x.external && "external", x.unasked && "unasked", tile && "tiled"]
     .filter(Boolean)
     .join(" ");
   return (
@@ -826,9 +826,9 @@ const Bubble = memo(function Bubble(p: {
       aria-hidden={p.open || undefined}
     >
       {yours && <span className="gr-halo" style={{ width: r * 5, height: r * 5 }} />}
-      {/* A permanent subject: a small satellite orbits it, slowly (still
+      {/* A node a skill maintains: a small satellite orbits it, slowly (still
           when the user asks for less motion). */}
-      {x.lifetime === "standing" && (
+      {p.maintainedWord && (
         <motion.span className="gr-sat" style={{ width: (R + 3) * 2, height: (R + 3) * 2 }} initial={false} animate={{ opacity: tile ? 0 : 1 }} transition={{ duration: 0.3 }} aria-hidden="true">
           <i />
         </motion.span>
@@ -858,7 +858,7 @@ const Bubble = memo(function Bubble(p: {
         onPointerEnter={() => p.onHover(x.id)}
         onPointerLeave={() => p.onHover(null)}
         onClick={(e) => p.onOpen(x.id, e.metaKey || e.ctrlKey || e.shiftKey)}
-        title={x.lifetime === "standing" ? p.standingWord : undefined}
+        title={p.maintainedWord || undefined}
         aria-label={[x.line && run ? `${p.said} : ${x.line}` : p.said, tile && p.glanceWord, yours && p.waitsWord].filter(Boolean).join(", ")}
       >
         <AnimatePresence initial={false}>

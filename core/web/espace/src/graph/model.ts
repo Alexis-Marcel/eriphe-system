@@ -10,7 +10,7 @@ export const OLD = 7 * 24 * 3600 * 1000;
 
 export function weight(x: GraphNode, nodes: Record<string, GraphNode>, now = Date.now()): number {
   const d = depthOf(nodes, x.id);
-  let v = d === 0 ? (x.lifetime === "standing" ? 0.82 : 0.95) : d === 1 ? 0.55 : 0.42;
+  let v = d === 0 ? (x.maintained?.length ? 0.82 : 0.95) : d === 1 ? 0.55 : 0.42;
   if (x.status === "waits") v += 0.35;
   if (x.status === "running") v += 0.18;
   if (x.status === "done") v -= 0.1;

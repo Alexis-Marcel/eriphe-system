@@ -29,7 +29,6 @@ func TestOneWayToSayYes(t *testing.T) {
 		"decideSetting":     {"init"},           // the rows of kindsOf
 		"decideSkill":       {"init"},
 		"decideMonitor":     {"init"},
-		"decideView":        {"init"},
 		"decideTaskStart":   {"init"},
 	}
 	files, _ := filepath.Glob("*.go")

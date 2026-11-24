@@ -89,8 +89,8 @@ A page shows:
   code from its records, never from the page's words: once answered it says **Approved** or
   **Declined**, and **Proposal withdrawn** when it went with its archived page; a card that is not
   this page's shows as **Card not found**, with no Yes. What is decided leaves the page's foot: the
-  **⋯** menu lists it under **Already decided** (Done, Set aside), with **What we decided** (what
-  you asked a view for) and **What keeps it alive**;
+  **⋯** menu lists it under **Already decided** (Done, Set aside), with **What keeps it alive** (the
+  skills that maintain it, their monitors and its sources);
 - **Archive**: see below.
 
 A page is like a window: its **enlarge** button (or a double click on its title line) gives it most
@@ -98,7 +98,7 @@ of the screen, its text at a width that reads, a table or a chart the whole widt
 dragged (or its arrow keys), gives it a size. Sizes last for the session; the graph makes room
 around the page.
 
-A view that follows things (your mails, the alerts of a service) reads as a **bilan**: a sentence
+A page that follows things (your mails, the alerts of a service) reads as a **bilan**: a sentence
 or two on top, what waits for you first, then **For info** in a few words; under it, « To handle »,
 one line per item saying what Eriphe proposes, with its one **Yes** (No is a discreet ✕ on hover);
 what goes as a batch (« 38 useless mails to throw away ») on one line with the one **Yes** of the
@@ -132,7 +132,7 @@ Drag the background to look around, scroll or use two fingers to move, hold ⌘ 
 wheel to zoom; a double click gives the view back to Eriphe. The graph is a force graph, like
 Obsidian's: everything is pulled to the centre, everything pushes everything else away, and two
 linked things (a bubble and its subject, two subjects a link joins) hold together like a spring.
-An open page is a node like any other, only bigger: a subject and the view it links to end up side
+An open page is a node like any other, only bigger: a subject and a page it links to end up side
 by side. Each link is a thin grey line. Any change (a bubble come or gone, a page opened or
 closed) sets the graph moving until it settles again, then it rests; a new bubble appears in free
 space near what it links to. Hover a bubble or a page's title line: it, its neighbours and their
@@ -203,27 +203,26 @@ What it writes on a page is of two kinds:
 A live block only reads what you let Eriphe read freely: a tool whose reading needs your approval
 each time, or that you blocked, cannot feed it. Eriphe tells you.
 
-## Follow something: views
+## Follow something: a page kept up
 
-What you want to follow all the time ("keep an eye on my mail", "follow the production alerts",
-"show me the pull requests to review") is a **view**: a standing bubble whose blocks Eriphe's core
-keeps up to date. It can come with a monitor that sees what arrives and a skill that works in the
-view when it does: the skill reads each new item, notes what you should know of it, and prepares
-what it asks of you (a draft and its card). Eriphe shows it first: asked for a page kept up to
-date ("can you follow and manage my days?", "keep an eye on my mail"), it opens the subject at once
-(a bubble that says what it is doing), then the view as a **draft** beside it, in the same turn,
-with sensible defaults (what it remembers refines them), no questions before: the draft is the
-real page (your day as an agenda), its card says in one line what will run by itself ("Every 15
-min · every day at 7:30"), and neither the monitor nor the skill exists before your yes. You talk
-about it in the subject; what you change, Eriphe proposes again on the same draft. Your yes makes it
-the view and closes the subject, which stays linked; your no archives the draft. Its page says its
-choices in a line ("I only tell you at the brief, never at night") and offers the likely changes
-as buttons ("Add my mail"); you change them after, never through a questionnaire first. Your day is a view like any other: Eriphe never makes one on its own. What you said matters
-to you is remembered as a preference; when to tell you is a notification rule.
+There are only bubbles. What you want to follow all the time ("keep an eye on my mail", "follow
+the production alerts", "can you follow and manage my days?") is a page Eriphe writes at once, no
+card: its blocks read their sources live, with sensible defaults (what it remembers refines
+them), no questions before. Its page says its choices in a line ("I only tell you at the brief,
+never at night") and offers the likely changes as buttons ("Add my mail"); you change them after,
+never through a questionnaire first.
 
-What you want to see once ("open the production for me") is not a view: Eriphe opens a bubble
-under the one you are talking about, with a live block, and shows it beside your page. If you want
-to follow it, it proposes the view.
+When the page needs work as things arrive (sort each new mail, prepare a reply, rewrite the bilan),
+Eriphe proposes a **skill** that maintains it: the page is its home, and the skill may still act on
+other bubbles. If what it reacts to needs a new monitor, the monitor is on the same card: one yes
+makes both, and nothing runs before it. While a skill maintains it, the bubble wears a small
+satellite on the graph, is never marked done, and its **⋯** menu says **What keeps it alive**; the
+skill turned off, it is a bubble like any other. What you said matters to you is remembered as a
+preference; when to tell you is a notification rule.
+
+What you want to see once ("open the production for me"): Eriphe opens a bubble under the one you
+are talking about, with a live block, and shows it beside your page. If you want to follow it, it
+proposes the skill that keeps it up.
 
 ## Make it come back
 
@@ -234,7 +233,7 @@ Say it with a time or an event:
 > Keep an eye on my mail.
 
 Eriphe writes a **skill** for it: a short set of instructions with its trigger, which works on its
-own bubble each time it runs. As for a view, it first asks in one message what changes it (what it
+own bubble (or the page it maintains) each time it runs. As for a page, it first asks in one message what changes it (what it
 covers, what matters, whether and when to tell you, what to prepare), with a default for each, unless
 you already said. You see it on a card, recalling your choices, in plain words, and **nothing runs before you
 say yes**. Then it is in Settings → Skills with its runs; to change it or stop it, ask, or do it

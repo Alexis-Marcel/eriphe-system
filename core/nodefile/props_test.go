@@ -10,7 +10,7 @@ import (
 // A node's properties are read from its front matter as written, typed by
 // their YAML: an unquoted date and a quoted one are both dates.
 func TestPropsRead(t *testing.T) {
-	raw := "---\nid: a1\ntitle: Tarte\nlifetime: work\ncreated: 2026-11-17T09:00:00Z\n" +
+	raw := "---\nid: a1\ntitle: Tarte\ncreated: 2026-11-17T09:00:00Z\n" +
 		"tags: [cuisine/recette, \"#rapide\"]\ntemps: 15\nnote: 4.5\ncuit: 2026-10-01\nprevu: \"2026-12-24\"\n" +
 		"chef: [[Sam]]\nami: \"[[Sam]]\"\nbio: true\nvide:\nreste: {a: 1}\nmots: [sucre, 3]\n---\nText.\n"
 	n, err := Parse([]byte(raw))
@@ -41,7 +41,7 @@ func TestPropsRead(t *testing.T) {
 }
 
 func TestSetProp(t *testing.T) {
-	n, err := New(Meta{ID: "a1", Title: "Tarte", Lifetime: Work, Created: time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC)}, "Text.\n")
+	n, err := New(Meta{ID: "a1", Title: "Tarte", Created: time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC)}, "Text.\n")
 	if err != nil {
 		t.Fatal(err)
 	}

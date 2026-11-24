@@ -84,7 +84,7 @@ func TestWriteOverCodeChange(t *testing.T) {
 func TestCreateWithID(t *testing.T) {
 	s, _ := newEnv(t).open(t)
 	id := s.NewID()
-	d := mustCreate(t, s, New{ID: id, Title: "Mails", Lifetime: nodefile.Standing})
+	d := mustCreate(t, s, New{ID: id, Title: "Mails"})
 	if d.Node.Meta.ID != id {
 		t.Fatalf("id %s, not %s", d.Node.Meta.ID, id)
 	}
@@ -104,7 +104,7 @@ func TestCreateWithID(t *testing.T) {
 func TestCheckMakesNothing(t *testing.T) {
 	s, _ := newEnv(t).open(t)
 	id := s.NewID()
-	if err := s.Check(New{ID: id, Title: "Mails", Lifetime: nodefile.Standing, Author: "user", Body: "Les mails."}); err != nil {
+	if err := s.Check(New{ID: id, Title: "Mails", Author: "user", Body: "Les mails."}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Get(id); err == nil {
@@ -120,7 +120,7 @@ func TestCheckMakesNothing(t *testing.T) {
 	if err := s.Check(New{Title: "Many", Author: "user", Body: many.String()}); err == nil || !strings.Contains(err.Error(), "blocks at most") {
 		t.Fatalf("too many blocks: %v", err)
 	}
-	mustCreate(t, s, New{ID: id, Title: "Mails", Lifetime: nodefile.Standing})
+	mustCreate(t, s, New{ID: id, Title: "Mails"})
 	if err := s.Check(New{ID: id, Title: "Again", Author: "user"}); err == nil {
 		t.Fatal("an id taken passed")
 	}

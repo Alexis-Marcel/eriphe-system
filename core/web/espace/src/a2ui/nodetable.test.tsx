@@ -20,7 +20,7 @@ import { Surfaces } from "./Surfaces";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const node = (id: string, title: string, titleExternal = false): GraphNode => ({
-  id, title, titleExternal, lifetime: "work", status: "idle", created: "2026-11-01T09:00:00Z", updated: "2026-11-01T09:00:00Z", version: 1,
+  id, title, titleExternal, status: "idle", created: "2026-11-01T09:00:00Z", updated: "2026-11-01T09:00:00Z", version: 1,
 });
 const graph: Record<string, GraphNode> = { a1: node("a1", "Étude sur le sommeil"), b2: node("b2", "Un mail reçu", true) };
 

@@ -25,7 +25,7 @@ var SourceRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
 const fenceOpen = "```eriphe:block"
 
 // CardRe is a card block's ref: a proposal's kind and its number
-// (view:3, memory:12). What the card says is never in the block: code
+// (skill:3, memory:12). What the card says is never in the block: code
 // reads it from its records.
 var CardRe = regexp.MustCompile(`^[a-z][a-z_]{0,31}:[1-9][0-9]{0,17}$`)
 
@@ -446,10 +446,10 @@ func (b *Block) Validate() error {
 func (b *Block) validateCard() error {
 	var problems []string
 	if !CardRe.MatchString(b.Card) {
-		problems = append(problems, "card: the ref a propose tool gave (view:3, memory:12)")
+		problems = append(problems, "card: the ref a propose tool gave (skill:3, memory:12)")
 	}
 	if !isEmpty(b.Components) && string(bytes.TrimSpace(b.Components)) != "[]" || b.Data != nil || len(b.Sources) > 0 {
-		problems = append(problems, "a card block holds its card's ref only: {\"card\": \"view:3\"}; what the card says comes from it")
+		problems = append(problems, "a card block holds its card's ref only: {\"card\": \"skill:3\"}; what the card says comes from it")
 	}
 	if len(problems) > 0 {
 		return blockErr(b.Name, problems...)

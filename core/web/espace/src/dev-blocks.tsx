@@ -21,7 +21,7 @@ function pageOf(s: GallerySection): NodePage {
   const now = new Date().toISOString();
   return {
     ...base,
-    node: { id: s.id, title: s.title, lifetime: "standing", status: "idle", created: now, updated: now, version: 1 },
+    node: { id: s.id, title: s.title, maintained: ["vitrine"], status: "idle", created: now, updated: now, version: 1 },
     parts: p.parts,
     cards: p.cards,
     settled: p.settled,

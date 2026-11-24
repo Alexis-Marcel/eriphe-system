@@ -31,15 +31,6 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// Lifetime says how long a node lives: work ends when it is done, a
-// standing node (the day, the mails) stays.
-type Lifetime string
-
-const (
-	Work     Lifetime = "work"
-	Standing Lifetime = "standing"
-)
-
 // TitleMax is the most runes of a node's title.
 const TitleMax = 120
 
@@ -59,8 +50,7 @@ type Meta struct {
 	Title    string
 	Parent   string   // the parent's id, "" for a node at the top
 	Links    []string // ids of the nodes it links to
-	Lifetime Lifetime
-	Goal     string // what the node is for, never shown to the user
+	Goal     string   // what the node is for, never shown to the user
 	Created  time.Time
 	Done     time.Time // zero while not done
 	Archived time.Time // zero while not archived
@@ -117,7 +107,7 @@ type Field struct {
 }
 
 // known are the front matter's fields, in the order they are written.
-var known = []string{"format", "id", "title", "parent", "links", "lifetime", "goal", "created", "done", "archived", "external", "title_trusted", "opened_by"}
+var known = []string{"format", "id", "title", "parent", "links", "goal", "created", "done", "archived", "external", "title_trusted", "opened_by"}
 
 // Node is a node's file, parsed.
 type Node struct {
@@ -285,8 +275,6 @@ func (m Meta) validate() error {
 		return fmt.Errorf("front matter: parent %q is a node's id", m.Parent)
 	case m.Parent == m.ID:
 		return errors.New("front matter: a node is not its own parent")
-	case m.Lifetime != Work && m.Lifetime != Standing:
-		return fmt.Errorf("front matter: lifetime is %s or %s, not %q", Work, Standing, m.Lifetime)
 	case m.Created.IsZero():
 		return errors.New("front matter: created is needed")
 	}
@@ -368,8 +356,6 @@ func decodeMeta(yml []byte) (m Meta, err error) {
 			err = v.Decode(&m.Parent)
 		case "links":
 			err = v.Decode(&m.Links)
-		case "lifetime":
-			err = v.Decode(&m.Lifetime)
 		case "goal":
 			err = v.Decode(&m.Goal)
 		case "created":
@@ -430,8 +416,6 @@ func encodeMeta(m Meta) ([]byte, error) {
 			if len(m.Links) > 0 {
 				v = m.Links
 			}
-		case "lifetime":
-			v = string(m.Lifetime)
 		case "goal":
 			v = nonEmpty(m.Goal)
 		case "created":

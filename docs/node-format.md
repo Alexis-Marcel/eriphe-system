@@ -1,7 +1,7 @@
 # The node file format
 
 Eriphe's workspace is a graph of **nodes**. A node is one piece of work and its result: a subject, a
-research, an incident, a reply to write, a standing view like the mails. Each node is one markdown
+research, an incident, a reply to write, a page kept up by a skill like the mails. Each node is one markdown
 file with YAML front matter and typed **blocks**. This page describes that file, for the brain, for
 tasks, and for anyone who reads or reuses the files.
 
@@ -12,10 +12,10 @@ Eriphe goes through it.
 
 ````markdown
 ---
+format: 2
 id: k3v9q2m7
 title: Substack
 links: [p8d2x4c1]
-lifetime: standing
 goal: Grow the newsletter. Write the first article with Sam's notes.
 created: 2026-11-17T09:00:00+01:00
 ---
@@ -66,9 +66,8 @@ The titles proposed for the first article:
 | `id` | text | The node's id: lowercase letters and digits, 32 at most, no dash. Required. |
 | `title` | text | Its title for the user: one line, 120 characters at most. Required. |
 | `parent` | id | The node it belongs to; none for a node at the top. Code writes it: at creation, and when Eriphe moves the node (`node_set parent`), never under itself or a node below it. |
-| `links` | list of ids | Written by code only (a view's draft links the subject it was proposed from): the nodes it links to; no duplicate, never itself. An author's write keeps them. An author links nodes in the text instead ([Links between nodes](#links-between-nodes)). |
-| `lifetime` | `work` or `standing` | Work ends when it is done; a standing node (the day, the mails) stays. Required. A standing node is a view: only `propose_view` makes one, its draft a work node until the user's yes turns it standing; `node_open` opens work only. |
-| `goal` | text | What the node is for. Never shown to the user. |
+| `links` | list of ids | Written by code only: the nodes it links to; no duplicate, never itself. An author's write keeps them. An author links nodes in the text instead ([Links between nodes](#links-between-nodes)). |
+| `goal` | text | What the node is for, and what is written in it (« tableau de bord des mails à traiter, tenu par le skill mails ; on n'y écrit pas de réponses »). Never shown to the user. Whether a skill maintains the node is never in its file: code computes it from the skills that name it as their home. |
 | `created` | timestamp | When it was created (RFC 3339). Required. |
 | `done` | timestamp | Written by code (Eriphe's `node_set` `done`, the user's gestures): when it was marked done; absent while not done. An author's write keeps it. |
 | `archived` | timestamp | When the user archived it; absent while not archived. |
@@ -100,16 +99,20 @@ A node is the user's note: it outlives every change of Eriphe. No code wipes a n
 archived, by the user), and a change of this format converts the files instead of leaving them
 unread.
 
-- **Where:** each file says its own format, in its front matter's `format`. The format is 1 today,
-  the only one, and a file that does not say it is in format 1: no file is rewritten to say it.
-  It is in the file rather than once for the repository because the file is the unit: a file
+- **Where:** each file says its own format, in its front matter's `format`. The format is 2 today;
+  a file that does not say it is in format 1. It is in the file rather than once for the
+  repository because the file is the unit: a file
   copied in from elsewhere, and each old version in the history, says the format it was written
   in, so it is read as it was meant (a version read from the history is converted in memory).
   Whatever else changes, the front matter stays YAML between two `---` lines, with `format` in it.
 - **A change of the format** comes with its conversion, from the format before it (a function of
   the file's bytes, in [`core/nodefile`](../core/nodefile)), and a test that reads a file of the old
   format. The new format is the one after the last conversion; files are written in it, `format`
-  then in their front matter.
+  then in their front matter. A conversion keeps every byte it does not change: `format: N` is
+  written as the front matter's first line (or its `format` line replaced), in the file's own line
+  ends, nothing else rewritten.
+- **The conversions so far:** 1 → 2 drops `lifetime` (`work` or `standing`): there are only
+  nodes, and a node a skill maintains is told by the skill (its `node:`), never by its file.
 - **At start**, a file of an older format is converted to today's, through each conversion in
   turn: all of them in one commit by `convert`, each node a version of its own, the old one kept in
   the history. A file changed by hand meanwhile is first committed as it is (`outside`). A file
@@ -255,7 +258,7 @@ or a page in Réglages, goes through the same code, which keeps the card in step
 
 ### Sections
 
-A view may show a source's items in sections (« À traiter », « À supprimer », « Pour info »): its
+A page may show a source's items in sections (« À traiter », « À supprimer », « Pour info »): its
 author notes each item with a `group` (`item_note`), a short label it chooses, and writes one `List`
 per section whose template's path filters the source's items by a field:
 
@@ -277,7 +280,7 @@ per section whose template's path filters the source's items by a field:
 - An item is done only by its note: a card on an item, once its yes ran, notes the item `done`
   (code's, its note and group kept, until a skill notes it again), and the source is read again: a
   List that keeps `[_state!=done]` lets it go at once. Said yes or no, the skills that work in the
-  node are woken (a journal event `node.gesture`): the view's skill writes its bilan again.
+  node are woken (a journal event `node.gesture`): the skill that maintains it writes its bilan again.
 - Code filters, never the page: the page draws the List bound to the source's items as a whole and
   shows only the rows code kept, in the source's order; a List whose filter keeps nothing shows its
   `emptyText`.

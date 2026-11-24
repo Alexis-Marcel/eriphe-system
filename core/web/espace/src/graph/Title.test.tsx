@@ -13,7 +13,6 @@ const node = (title: string, titleExternal?: boolean): GraphNode => ({
   id: "n1",
   title,
   titleExternal,
-  lifetime: "work",
   status: "idle",
   created: "",
   updated: "",

@@ -175,7 +175,6 @@ func newMCPServer(c *core) *mcp.Server {
 	registerSkillWriteTool(s, c)   // write_skill (skill_write.go)
 	registerSkillRunsTool(s, c)    // skill_runs (skill_report.go)
 	registerMonitorTools(s, c)     // write_monitor, monitors (monitors.go)
-	registerViewTool(s, c)         // propose_view (view_card.go)
 	registerCardWithdrawTool(s, c) // withdraw_proposal (card_withdraw.go)
 	registerNodeTools(s, c)        // node_open, node_find, node_read, node_write, node_edit, node_set, node_show, item_note, node_settle (node_tools.go)
 	c.registerCatalogTools(s)      // catalog_read, sources_read (node_catalog.go)
@@ -249,7 +248,7 @@ func checkWhole(whole *jsonschema.Resolved, raw json.RawMessage) error {
 // its field's description naming the tool that says it. Code checks them
 // whole when it reads the call.
 var sharedShapes = map[string][]reflect.Type{
-	"run_task":     {reflect.TypeFor[taskContract](), reflect.TypeFor[[]ResourceRef]()},  // node_open's steps
-	"node_settle":  {reflect.TypeFor[[]stepSpec]()},                                      // node_open's
-	"propose_view": {reflect.TypeFor[writeMonitorIn](), reflect.TypeFor[writeSkillIn]()}, // write_monitor's, write_skill's
+	"run_task":    {reflect.TypeFor[taskContract](), reflect.TypeFor[[]ResourceRef]()}, // node_open's steps
+	"node_settle": {reflect.TypeFor[[]stepSpec]()},                                     // node_open's
+	"write_skill": {reflect.TypeFor[writeMonitorIn]()},                                 // write_monitor's
 }

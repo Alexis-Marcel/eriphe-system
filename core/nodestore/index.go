@@ -24,7 +24,7 @@ import (
 // schemaVersion is the schema nodes.db is at; meta.schema_version says
 // it. A file at an older version is made again from the files and the
 // log (openIndex); one at a newer version is refused, never changed.
-const schemaVersion = 5
+const schemaVersion = 6
 
 // refsSchema holds the [[links]] of the nodes' text: each name a node's
 // text links (its LinkKey) and the node it was resolved to, ” while no
@@ -41,7 +41,6 @@ const schema = `CREATE TABLE nodes (
 	  file TEXT NOT NULL UNIQUE,         -- <slug>-<id>.md, frozen at creation
 	  title TEXT NOT NULL,
 	  parent TEXT NOT NULL DEFAULT '',
-	  lifetime TEXT NOT NULL,
 	  created INTEGER NOT NULL,
 	  updated INTEGER NOT NULL,
 	  done INTEGER NOT NULL DEFAULT 0,
@@ -233,13 +232,13 @@ func indexNode(tx querier, n *nodefile.Node, file string, raw []byte, version in
 	if fts, err = res.LastInsertId(); err != nil {
 		return err
 	}
-	_, err = tx.Exec(`INSERT INTO nodes (id, file, title, parent, lifetime, created, updated, done, archived, external, title_trusted, opened_by, version, blob, title_key, fts)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err = tx.Exec(`INSERT INTO nodes (id, file, title, parent, created, updated, done, archived, external, title_trusted, opened_by, version, blob, title_key, fts)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET file = excluded.file, title = excluded.title, parent = excluded.parent,
-		  lifetime = excluded.lifetime, updated = excluded.updated, done = excluded.done, archived = excluded.archived,
+		  updated = excluded.updated, done = excluded.done, archived = excluded.archived,
 		  external = excluded.external, title_trusted = excluded.title_trusted, opened_by = excluded.opened_by, version = excluded.version, blob = excluded.blob,
 		  title_key = excluded.title_key, fts = excluded.fts`,
-		m.ID, file, m.Title, m.Parent, string(m.Lifetime), m.Created.Unix(), updated.Unix(),
+		m.ID, file, m.Title, m.Parent, m.Created.Unix(), updated.Unix(),
 		unixOr0(m.Done), unixOr0(m.Archived), m.External, m.External && m.TitleTrusted, by, version, blobHash(raw), nodefile.LinkKey(m.Title), fts)
 	if err != nil {
 		return err

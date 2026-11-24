@@ -21,7 +21,7 @@ vi.mock("./glance", async (importOriginal) => {
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const node = (id: string, parent?: string, links?: string[]): GraphNode => ({
-  id, title: `Sujet ${id}`, parent, links, lifetime: "work", status: "idle", created: `2026-11-18T10:0${id.length}:00Z`, updated: new Date().toISOString(), version: 1,
+  id, title: `Sujet ${id}`, parent, links, status: "idle", created: `2026-11-18T10:0${id.length}:00Z`, updated: new Date().toISOString(), version: 1,
 });
 
 // The frames, played by hand.
@@ -78,6 +78,45 @@ describe("the graph's frames", () => {
     expect(el.querySelectorAll("line.gr-link")).toHaveLength(4);
     expect(el.querySelector("path.gr-link")).toBeNull();
     for (const l of el.querySelectorAll("line.gr-link")) expect(l.getAttribute("x1")).not.toBeNull();
+
+    act(() => root.unmount());
+    el.remove();
+    store.setState(empty(), true);
+  });
+});
+
+// A satellite orbits a bubble only while a skill maintains its node, as
+// eriphe-core says it (maintained, computed from its skills); its core's
+// words name them.
+describe("the satellite", () => {
+  it("shows only on a node a skill maintains", async () => {
+    store.setState(empty(), true);
+    step(store, applyNodes, { reset: true, nodes: [{ ...node("m"), maintained: ["tri-mails"] }, node("w"), { ...node("e"), maintained: [] }] });
+    const el = document.createElement("div");
+    document.body.append(el);
+    const root = createRoot(el);
+    await act(async () =>
+      root.render(
+        <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}>
+          <OrbProvider>
+            <Graph live />
+          </OrbProvider>
+        </WordsContext.Provider>,
+      ),
+    );
+    frame();
+    const bubble = (id: string) => el.querySelector<HTMLElement>(`.gr-node[data-node="${id}"]`)!;
+    expect(bubble("m").querySelector(".gr-sat")).not.toBeNull();
+    expect(bubble("m").classList.contains("maintained")).toBe(true);
+    expect(bubble("m").querySelector(".gr-core")?.getAttribute("title")).toBe("Entretenu par tri-mails");
+    for (const id of ["w", "e"]) {
+      expect(bubble(id).querySelector(".gr-sat")).toBeNull();
+      expect(bubble(id).classList.contains("maintained")).toBe(false);
+    }
+    // Its skill gone, the satellite goes.
+    await act(async () => step(store, applyNodes, { nodes: [{ ...node("m"), version: 2 }] }));
+    frame();
+    expect(bubble("m").querySelector(".gr-sat")).toBeNull();
 
     act(() => root.unmount());
     el.remove();

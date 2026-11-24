@@ -14,7 +14,7 @@ import (
 //     with the last of them (node_open, an answer filed in a new node);
 //     in a turn of events only (a wake, an intention, a monitor's event):
 //     an event;
-//   - the user's yes on a view's card: the user, with the card;
+//   - the user's yes on a card: the user, with the card;
 //   - a skill's run: the skill, with what started it (its first event's
 //     source, or its schedule);
 //   - a task, a step: who wanted the work they belong to (the task's

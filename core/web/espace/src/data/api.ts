@@ -139,7 +139,8 @@ export type GraphNode = {
   unasked?: boolean;
   parent?: string;
   links?: string[];
-  lifetime: "work" | "standing";
+  // maintained: the skills that keep it up, approved and on (eriphe-core computes it): its satellite, its ∞
+  maintained?: string[];
   status: "idle" | "running" | "waits" | "done";
   created: string;
   updated: string;
@@ -198,12 +199,11 @@ export type NodePage = {
 export type PageProp = { key: string; value: unknown; kind: "text" | "number" | "date"; media?: PageMedia[] };
 // One of a node's files: its address on eriphe-core, an image or a file to download (a PDF).
 export type PageMedia = { src: string; image: boolean };
-// What keeps a permanent subject alive (pageAlive, node_alive.go): its
+// What keeps a node a skill maintains alive (pageAlive, node_alive.go): its
 // sources, monitors and skills, each named, what it does in code's words.
 export type AliveLine = { name: string; what: string };
 export type PageOrigin = { unasked?: boolean; text: string };
-// decided: the goal of the view the user approved (« Ce qu'on a décidé »), decidedExternal when written after an external read.
-export type PageAlive = { decided?: string; decidedExternal?: boolean; sources?: AliveLine[]; monitors?: AliveLine[]; skills?: AliveLine[]; updated: string };
+export type PageAlive = { sources?: AliveLine[]; monitors?: AliveLine[]; skills?: AliveLine[]; updated: string };
 // The node a [[link]] of a page's text opens, by the name as written
 // (pageRef, web_graph.go): its title, titleExternal when it may be someone
 // else's words (shown marked); archived, it opens nothing. A name no node

@@ -196,7 +196,7 @@ func TestArchiveCascade(t *testing.T) {
 	mustCreate(t, s, New{Title: "Reply", Parent: "n1", Body: "Draft."})
 	mustCreate(t, s, New{Title: "Research the error", Parent: "n1", Body: "Logs."})
 	mustCreate(t, s, New{Title: "Deeper", Parent: "n3", Body: "More logs."})
-	mustCreate(t, s, New{Title: "Substack", Lifetime: nodefile.Standing, Body: "Newsletter."})
+	mustCreate(t, s, New{Title: "Substack", Body: "Newsletter."})
 	if err := s.Archive("n1", "user"); err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +234,7 @@ func TestArchiveCascade(t *testing.T) {
 func TestFind(t *testing.T) {
 	e := newEnv(t)
 	s, _ := e.open(t)
-	mustCreate(t, s, New{Title: "Substack", Lifetime: nodefile.Standing, Body: "The newsletter and its first article."})
+	mustCreate(t, s, New{Title: "Substack", Body: "The newsletter and its first article."})
 	mustCreate(t, s, New{Title: "Style", Parent: "n1", Goal: "Analyse the articles that work.", Body: "Short paragraphs."})
 	mustCreate(t, s, New{Title: "Prod errors", Body: "```eriphe:block errors\n{\"components\": {\"component\": \"Text\", \"text\": \"Spike of timeouts at night\"}}\n```\n"})
 	cases := map[string][]string{
@@ -361,7 +361,7 @@ func TestFileRemovedByHand(t *testing.T) {
 func TestIndexRebuiltFromFiles(t *testing.T) {
 	e := newEnv(t)
 	s, _ := e.open(t)
-	d := mustCreate(t, s, New{Title: "Substack", Lifetime: nodefile.Standing, Body: "Newsletter." +
+	d := mustCreate(t, s, New{Title: "Substack", Body: "Newsletter." +
 		"\n```eriphe:block readers\n{\"components\": {\"component\": \"Text\", \"text\": \"Readers\"}, \"sources\": {\"subs\": {\"tool\": \"substack/stats\", \"every\": 60}}}\n```\n"})
 	mustCreate(t, s, New{Title: "Style", Parent: "n1", Links: []string{"n1"}, Body: "Short."})
 	if _, err := write(s, "n1", "Newsletter, v2.", d.Version.Hash, "user"); err != nil {
@@ -451,7 +451,7 @@ func TestBackup(t *testing.T) {
 		}
 		if f, err := c.File(d.File); err != nil {
 			t.Fatalf("v%d: %v", v.N, err)
-		} else if text, _ := f.Contents(); !strings.Contains(text, "lifetime: work") {
+		} else if text, _ := f.Contents(); !strings.Contains(text, "title: Plan") {
 			t.Fatalf("v%d: %q", v.N, text)
 		}
 	}

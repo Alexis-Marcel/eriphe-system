@@ -195,7 +195,6 @@ type Summary struct {
 	File     string
 	Title    string
 	Parent   string
-	Lifetime nodefile.Lifetime
 	Created  time.Time
 	Updated  time.Time
 	Done     time.Time
@@ -347,7 +346,6 @@ type New struct {
 	Title    string
 	Parent   string
 	Links    []string
-	Lifetime nodefile.Lifetime // work by default
 	Goal     string
 	Body     string // the author's: text and blocks, short forms accepted
 	External bool   // code's: it holds someone else's words, and so do its blocks
@@ -396,9 +394,6 @@ func (s *Store) Check(nw New) error {
 
 // prepare checks a node to create and builds it.
 func (s *Store) prepare(nw New) (*nodefile.Node, error) {
-	if nw.Lifetime == "" {
-		nw.Lifetime = nodefile.Work
-	}
 	if err := s.refuse(nw.Title, nw.Goal, nw.Body); err != nil {
 		return nil, err
 	}
@@ -424,7 +419,7 @@ func (s *Store) prepare(nw New) (*nodefile.Node, error) {
 	now := s.opts.Now().Truncate(time.Second)
 	n, err := nodefile.New(nodefile.Meta{
 		ID: id, Title: strings.TrimSpace(nw.Title), Parent: nw.Parent, Links: nw.Links,
-		Lifetime: nw.Lifetime, Goal: nw.Goal, Created: now, External: nw.External, OpenedBy: nw.OpenedBy,
+		Goal: nw.Goal, Created: now, External: nw.External, OpenedBy: nw.OpenedBy,
 	}, "")
 	if err != nil {
 		return nil, err
@@ -806,7 +801,7 @@ func (s *Store) summary(id string) (Summary, error) {
 }
 
 func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
-	rows, err := s.db.Query(`SELECT n.id, n.file, n.title, n.parent, n.lifetime, n.created, n.updated,
+	rows, err := s.db.Query(`SELECT n.id, n.file, n.title, n.parent, n.created, n.updated,
 		n.done, n.archived, n.external, n.title_trusted, n.opened_by, n.version,
 		(SELECT group_concat(t, ' ') FROM (SELECT l.target AS t FROM node_links l WHERE l.id = n.id
 		  UNION SELECT r.target FROM node_refs r WHERE r.id = n.id AND r.target != '' AND r.target != n.id)) FROM nodes n `+where, args...)
@@ -819,7 +814,7 @@ func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
 		var x Summary
 		var created, updated, done, archived int64
 		var links sql.NullString
-		if err := rows.Scan(&x.ID, &x.File, &x.Title, &x.Parent, &x.Lifetime, &created, &updated,
+		if err := rows.Scan(&x.ID, &x.File, &x.Title, &x.Parent, &created, &updated,
 			&done, &archived, &x.External, &x.TitleTrusted, &x.OpenedBy, &x.Version, &links); err != nil {
 			return nil, err
 		}

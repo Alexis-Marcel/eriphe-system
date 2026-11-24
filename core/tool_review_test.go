@@ -91,10 +91,10 @@ func TestToolChangesListed(t *testing.T) {
 		t.Errorf("gone: %+v", g)
 	}
 
-	// The node: standing, its title code's, its block external (the
+	// The node: its goal and title code's, its block external (the
 	// servers' words), made once.
 	sum, err := c.nodes.Get(id)
-	if err != nil || sum.Lifetime != nodefile.Standing || sum.Title != "Outils à revoir" || sum.TitleExternal() {
+	if d, _ := c.nodes.Read(id, 0); err != nil || d.Node.Meta.Goal != reviewGoal || sum.Title != "Outils à revoir" || sum.TitleExternal() {
 		t.Fatalf("node: %+v %v", sum, err)
 	}
 	if b := block(t, c, id, "tools"); !b.External {
@@ -287,8 +287,8 @@ func TestToolReviewNeverForAgents(t *testing.T) {
 	if why := c.sourceWhy(monitorSpec{Way: wayPoll, Server: reviewServer, Tool: "catalog_changes"}); why == "" {
 		t.Error("a monitor may look at the changes")
 	}
-	id := mustNode(t, c, nodestore.New{Title: "Ailleurs", Lifetime: nodefile.Standing, Body: "x\n"})
-	_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error {
+	id := mustNode(t, c, nodestore.New{Title: "Ailleurs", Body: "x\n"})
+	_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error {
 		return n.AuthorBody("x\n\n" + listBlock("b", "ch", map[string]any{"tool": reviewServer + "/catalog_changes", "items": map[string]any{"path": "changes", "id": "id"}}))
 	})
 	if err == nil {

@@ -745,7 +745,7 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
   background: var(--accent); box-shadow: 0 0 0 2px var(--bg), 0 0 8px color-mix(in oklab, var(--accent) 70%, transparent); }
 @keyframes orbit { to { rotate: 360deg; } }
 @media (prefers-reduced-motion: reduce) { .gr-sat { animation: none; rotate: 40deg; } }
-.gr-node.standing .gr-core { box-shadow: 0 0 0 1px var(--line-strong), inset 0 0 0 4px color-mix(in oklab, var(--bg) 60%, transparent), 0 0 24px -8px var(--accent); }
+.gr-node.maintained .gr-core { box-shadow: 0 0 0 1px var(--line-strong), inset 0 0 0 4px color-mix(in oklab, var(--bg) 60%, transparent), 0 0 24px -8px var(--accent); }
 .gr-node.held .gr-core { cursor: grabbing; }
 .gr-code { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; }
 .gr-glyph { font-size: 10px; color: var(--ok); }
@@ -849,8 +849,8 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .unasked-mark { display: inline-block; margin-left: 0.3em; font-size: 0.8em; font-weight: 600; color: var(--fg3); cursor: help; text-shadow: none; }
 .gr-label .unasked-mark { pointer-events: auto; }
 .pg-title h2 .unasked-mark { margin-left: 8px; padding: 0 5px; vertical-align: 0.25em; border: 1px dashed var(--line-strong); border-radius: 5px; font-size: var(--fs-tiny); font-weight: 600; line-height: 15px; color: var(--fg2); white-space: nowrap; }
-.pg-standing { font-size: var(--fs-lead); line-height: 1; color: var(--accent-text); cursor: help; margin-left: calc(-1 * var(--sp-1)); }
-.ls-row .pg-standing { margin-left: 0; font-size: 13px; }
+.pg-maintained { font-size: var(--fs-lead); line-height: 1; color: var(--accent-text); cursor: help; margin-left: calc(-1 * var(--sp-1)); }
+.ls-row .pg-maintained { margin-left: 0; font-size: 13px; }
 .pg-live { display: inline-flex; align-items: center; gap: var(--sp-2); color: var(--run); }
 /* Its versions: one chip, the version shown (amber when not the last),
    opening a short list under it, the newest first (page/Versions.tsx). */

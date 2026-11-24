@@ -12,16 +12,6 @@ import (
 // it and on the nodes under it are withdrawn with it (withdrawCards), and
 // nothing else's.
 
-// viewState is a view proposal's state.
-func viewState(t *testing.T, c *core, id int64) string {
-	t.Helper()
-	var state string
-	if err := c.store.db.QueryRow(`SELECT state FROM view_proposals WHERE id = ?`, id).Scan(&state); err != nil {
-		t.Fatal(err)
-	}
-	return state
-}
-
 func TestArchiveWithdrawsItsCards(t *testing.T) {
 	c, answer := netCore(t, "Tu peux garder un œil sur mes mails ?", "")
 	node := func(title, parent string) string {

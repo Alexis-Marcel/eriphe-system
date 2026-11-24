@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
@@ -145,9 +144,8 @@ func TestBrainNodeTools(t *testing.T) {
 	if _, msg := brainNodes(t, c, "node_open", map[string]any{"title": "Enfant", "parent": "nothere"}); msg == "" {
 		t.Error("a child of a missing node")
 	}
-	// node_open opens a piece of work only: it has no lifetime to ask for
-	// (a view is made only by propose_view, on the user's yes); nothing is
-	// made.
+	// node_open has no lifetime to ask for (a node is maintained by a
+	// skill homed on it, never by a kind of its own); nothing is made.
 	n := len(mustGraph(t, c))
 	if _, msg := brainNodes(t, c, "node_open", map[string]any{"title": "Ma journée", "lifetime": "standing"}); msg == "" {
 		t.Error("a node_open with a lifetime")
@@ -240,13 +238,14 @@ func TestBrainNodeSetShow(t *testing.T) {
 	if n := c.mem.count(`kind = 'decision' AND status = 'active' AND superseded_by IS NULL AND source_ref = '` + nodeRef(id) + `'`); n != 1 {
 		t.Errorf("%d current decisions", n)
 	}
-	dd, err := c.nodes.Create(nodestore.New{Title: "Ma journée", Lifetime: nodefile.Standing, Author: "user"}) // a view the user said yes to
+	dd, err := c.nodes.Create(nodestore.New{Title: "Ma journée", Author: "user"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	day := dd.Node.Meta.ID
-	if _, msg := brainNodes(t, c, "node_set", map[string]any{"id": day, "done": true}); !strings.Contains(msg, "standing") {
-		t.Errorf("a standing node done: %q", msg)
+	addTriggered(t, c, "---\nname: journee\ndescription: La journée.\nwhen: time daily 07:00\nnode: "+day+"\n---\nTiens la journée.\n") // it maintains it
+	if _, msg := brainNodes(t, c, "node_set", map[string]any{"id": day, "done": true}); !strings.Contains(msg, "maintained by a skill (journee)") {
+		t.Errorf("a node a skill maintains done: %q", msg)
 	}
 	before, _ := c.lastShown()
 	_, seq, _, ch := c.graphAfter(0)

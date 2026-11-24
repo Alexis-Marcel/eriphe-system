@@ -32,7 +32,7 @@ func writeBenchNode(t testing.TB, dir string, i, nodes int, extra string) {
 	tags := []string{"cuisine/recette", "cuisine/recette/dessert", "etude", "maison/travaux", "lecture"}
 	id := fmt.Sprintf("b%d", i)
 	text := fmt.Sprintf("Text of node %d, about apples %d. See [[Node %d]] and [[Node %d]].%s\n", i, i%50, (i+1)%nodes, (i*7)%nodes, extra)
-	n, err := nodefile.New(nodefile.Meta{ID: id, Title: fmt.Sprintf("Node %d", i), Lifetime: nodefile.Work, Created: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}, text)
+	n, err := nodefile.New(nodefile.Meta{ID: id, Title: fmt.Sprintf("Node %d", i), Created: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}, text)
 	if err != nil {
 		t.Fatal(err)
 	}

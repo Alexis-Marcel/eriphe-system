@@ -325,7 +325,7 @@ type runRequest struct {
 	approvedInAdvance bool
 	taint             []string
 	// inNode: a step's task works in the step's node (node_steps.go), a
-	// skill's run in its standing node (skill_runs.go), not in a node of
+	// skill's run in its home node (skill_runs.go), not in a node of
 	// its own.
 	inNode string
 	// origin: who wanted it, when its starter knows (a skill's run);

@@ -7,7 +7,7 @@ import {
 import { DEFAULT_FORCES, FORCE_RANGES } from "../graph/layout";
 
 const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
-  id, title: id.toUpperCase(), lifetime: "work", status: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
+  id, title: id.toUpperCase(), status: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
 });
 
 function withGraph(): State {

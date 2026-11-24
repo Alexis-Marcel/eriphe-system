@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
 func TestSkillTriggerParse(t *testing.T) {
@@ -355,7 +357,7 @@ func TestSkillRunRefused(t *testing.T) {
 // write_skill keeps a version waiting and puts it on a card; the yes
 // approves it, then it runs; a tainted turn's card says so.
 func TestWriteSkill(t *testing.T) {
-	c, now := skillCore(t)
+	c, now := skillCore(t, withGraph(t))
 	out, err := c.writeSkill(writeSkillIn{Name: "mails-rdv", Description: "Les rendez-vous des mails",
 		Instructions: "Repère les rendez-vous et propose de les ajouter.", When: "monitor.new", Every: "15m", Tools: []string{"monitor"}},
 		[]string{"mail.read_message"})
@@ -392,8 +394,17 @@ func TestWriteSkill(t *testing.T) {
 	if _, err := c.writeSkill(writeSkillIn{Name: "x", Description: "y", Instructions: "z", When: "Mail"}, nil); err == nil {
 		t.Fatal("a bad trigger accepted")
 	}
-	// The repositories its steps borrow and the node it works in: on its
-	// card, approved with it.
+	// The repositories its steps borrow and the node it maintains: on its
+	// card, approved with it. Its home is a node of the graph.
+	if _, err := c.writeSkill(writeSkillIn{Name: "tri", Description: "y", Instructions: "z", When: "monitor.new", Node: "k3x9m2p7qa"}, nil); err == nil {
+		t.Fatal("a home node not in the graph accepted")
+	}
+	if _, err := c.nodes.Create(nodestore.New{ID: "k3x9m2p7qa", Title: "Mes mails", Author: "user"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.writeSkill(writeSkillIn{Name: "tri", Description: "y", Instructions: "z", When: "monitor.new", Node: "nowhere1"}, nil); err == nil {
+		t.Fatal("a home node gone accepted")
+	}
 	if _, err := c.writeSkill(writeSkillIn{Name: "tri", Description: "y", Instructions: "z", When: "monitor.new", Tools: []string{"monitor"},
 		Repos: []string{"example/infra"}, Node: "k3x9m2p7qa"}, nil); err != nil {
 		t.Fatal(err)
@@ -409,7 +420,7 @@ func TestWriteSkill(t *testing.T) {
 			fields = x.Fields
 		}
 	}
-	if len(fields) != 4 || fields[1].Value != "example/infra" || fields[2].Value != "k3x9m2p7qa" {
+	if len(fields) != 4 || fields[1].Value != "example/infra" || fields[2].Value != "Mes mails" {
 		t.Fatalf("card fields %+v", fields)
 	}
 }

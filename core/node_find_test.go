@@ -164,7 +164,7 @@ func TestNodeFindSource(t *testing.T) {
 		t.Fatal("the page is external")
 	}
 	// The page draws the block from it, a work node's as a standing one's.
-	std, err := c.nodes.Create(nodestore.New{Title: "Études en attente", Lifetime: nodefile.Standing, Body: block(`{"tags": ["etude"]}`), Author: byBrain})
+	std, err := c.nodes.Create(nodestore.New{Title: "Études en attente", Body: block(`{"tags": ["etude"]}`), Author: byBrain})
 	if err != nil {
 		t.Fatal(err)
 	}

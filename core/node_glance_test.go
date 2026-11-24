@@ -115,7 +115,7 @@ func glanceBody(glance string) string {
 func TestNodeGlance(t *testing.T) {
 	tw, csrf := graphWeb(t)
 	c := tw.c
-	id := mustNode(t, c, nodestore.New{Title: "Investissements", Lifetime: nodefile.Standing, Body: glanceBody(`{"label": "PEA", "path": "total", "threshold": 2}`), Author: byBrain})
+	id := mustNode(t, c, nodestore.New{Title: "Investissements", Body: glanceBody(`{"label": "PEA", "path": "total", "threshold": 2}`), Author: byBrain})
 	read := func(v any, at time.Time) *graphGlance {
 		t.Helper()
 		reads := c.nodeReads(id)

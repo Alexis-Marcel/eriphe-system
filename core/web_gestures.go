@@ -91,7 +91,7 @@ func (w *web) handleNodeSave(rw http.ResponseWriter, r *http.Request, _ *session
 		return
 	}
 	c := w.c
-	d, err := c.authorWrite(sum.ID, in.Expect, byUser, false, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(in.Body) })
+	d, err := c.authorWrite(sum.ID, in.Expect, byUser, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(in.Body) })
 	switch {
 	case errors.Is(err, nodestore.ErrConflict):
 		out := map[string]any{"error": "conflict"}

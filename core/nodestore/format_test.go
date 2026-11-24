@@ -14,7 +14,7 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
 
-// greyToGray is a fake format 2: the word grey is written gray.
+// greyToGray is a fake format after today's: the word grey is written gray.
 func greyToGray(raw []byte) ([]byte, error) {
 	return bytes.ReplaceAll(raw, []byte("grey"), []byte("gray")), nil
 }
@@ -58,7 +58,7 @@ func TestFormatConversionKeepsEveryNode(t *testing.T) {
 	}
 	s.Close()
 
-	e.opts.conversions = []nodefile.Conversion{greyToGray}
+	e.opts.conversions = append(nodefile.Conversions(), greyToGray)
 	s2, rep := e.open(t)
 	if !slices.Equal(rep.Converted, ids) || len(rep.Changed) != 0 || len(rep.Broken) != 0 {
 		t.Fatalf("report: %+v", rep)
@@ -67,10 +67,10 @@ func TestFormatConversionKeepsEveryNode(t *testing.T) {
 	for _, id := range ids {
 		d := mustRead(t, s2, id)
 		was := before[id]
-		if d.Version.N != len(was)+1 || d.Version.Author != Convert || d.Node.Meta.Format != 2 {
+		if d.Version.N != len(was)+1 || d.Version.Author != Convert || d.Node.Meta.Format != 3 {
 			t.Fatalf("%s: v%d by %s, format %d", id, d.Version.N, d.Version.Author, d.Node.Meta.Format)
 		}
-		if !strings.HasPrefix(string(d.Raw), "---\nformat: 2\n") || strings.Contains(string(d.Raw), "grey") {
+		if !strings.HasPrefix(string(d.Raw), "---\nformat: 3\n") || strings.Contains(string(d.Raw), "grey") {
 			t.Fatalf("%s converted:\n%s", id, d.Raw)
 		}
 		if hash == "" {
@@ -89,11 +89,11 @@ func TestFormatConversionKeepsEveryNode(t *testing.T) {
 				t.Fatalf("%s: version %d was %+v, is %+v", id, v.N, v, vs[i])
 			}
 			old, err := s2.fileAt(v.Hash, d.File)
-			if err != nil || bytes.Contains(old, []byte("format:")) {
+			if err != nil || bytes.Contains(old, []byte("format: 3")) {
 				t.Fatalf("%s v%d in git: %v\n%s", id, v.N, err, old)
 			}
 			r, err := s2.Read(id, v.N)
-			if err != nil || r.Node.Meta.Format != 2 || strings.Contains(r.Node.Text(), "grey") {
+			if err != nil || r.Node.Meta.Format != 3 || strings.Contains(r.Node.Text(), "grey") {
 				t.Fatalf("%s v%d read: %v %+v", id, v.N, err, r)
 			}
 		}
@@ -104,11 +104,11 @@ func TestFormatConversionKeepsEveryNode(t *testing.T) {
 	// Written again, on the version read before the conversion (only
 	// code wrote since), and made after: in the new format.
 	pre := before[ids[0]][len(before[ids[0]])-1].Hash
-	if w, err := write(s2, ids[0], "The wall is gray.", pre, "brain"); err != nil || w.Node.Meta.Format != 2 {
+	if w, err := write(s2, ids[0], "The wall is gray.", pre, "brain"); err != nil || w.Node.Meta.Format != 3 {
 		t.Fatalf("a write on the version before the conversion: %v", err)
 	}
 	n := mustCreate(t, s2, New{Title: "New", Body: "x"})
-	if !strings.HasPrefix(string(n.Raw), "---\nformat: 2\n") {
+	if !strings.HasPrefix(string(n.Raw), "---\nformat: 3\n") {
 		t.Fatalf("a new node:\n%s", n.Raw)
 	}
 	s2.Close()
@@ -127,7 +127,7 @@ func TestFormatConversionKeepsEveryNode(t *testing.T) {
 		t.Fatalf("rebuilt: %+v", rep)
 	}
 	for _, id := range append(ids, n.Node.Meta.ID) {
-		if d := mustRead(t, s3, id); d.Node.Meta.Format != 2 {
+		if d := mustRead(t, s3, id); d.Node.Meta.Format != 3 {
 			t.Fatalf("%s: format %d", id, d.Node.Meta.Format)
 		}
 	}
@@ -143,7 +143,7 @@ func TestNewerFormatRefused(t *testing.T) {
 	d := mustCreate(t, s, New{Title: "Future", Body: "x"})
 	s.Close()
 	path := filepath.Join(e.dir, d.File)
-	future := []byte(strings.Replace(string(d.Raw), "---\n", "---\nformat: 3\n", 1))
+	future := []byte(strings.Replace(string(d.Raw), "format: 2\n", "format: 9\n", 1))
 	if err := os.WriteFile(path, future, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -169,11 +169,11 @@ func TestBrokenFileNotConverted(t *testing.T) {
 	b := mustCreate(t, s, New{Title: "Fine", Body: "grey"})
 	s.Close()
 	path := filepath.Join(e.dir, a.File)
-	bad := []byte(strings.Replace(string(a.Raw), "lifetime: work", "lifetime: forever", 1))
+	bad := []byte(strings.Replace(string(a.Raw), "title: Broken\n", "", 1))
 	if err := os.WriteFile(path, bad, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	e.opts.conversions = []nodefile.Conversion{greyToGray}
+	e.opts.conversions = append(nodefile.Conversions(), greyToGray)
 	s2, rep := e.open(t)
 	if len(rep.Broken) != 1 || !strings.Contains(rep.Broken[0], a.File) || !slices.Equal(rep.Converted, []string{b.Node.Meta.ID}) {
 		t.Fatalf("report: %+v", rep)
@@ -198,7 +198,7 @@ func TestOlderFormatChangedByHand(t *testing.T) {
 	if err := os.WriteFile(path, byHand, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	e.opts.conversions = []nodefile.Conversion{greyToGray}
+	e.opts.conversions = append(nodefile.Conversions(), greyToGray)
 	s2, rep := e.open(t)
 	id := d.Node.Meta.ID
 	if !slices.Equal(rep.Changed, []string{id}) || !slices.Equal(rep.Converted, []string{id}) {
@@ -213,5 +213,41 @@ func TestOlderFormatChangedByHand(t *testing.T) {
 	}
 	if last := mustRead(t, s2, id); !strings.Contains(last.Node.Text(), "Now gray.") {
 		t.Fatalf("converted: %q", last.Node.Text())
+	}
+}
+
+// A node of format 1 said its lifetime: at start it is converted to
+// today's format, the field dropped and every other byte kept; with its
+// index kept, or made again (an index at an older schema, as the same
+// start finds it).
+func TestFormat1LifetimeDropped(t *testing.T) {
+	for _, rebuilt := range []bool{false, true} {
+		e := newEnv(t)
+		s, _ := e.open(t)
+		d := mustCreate(t, s, New{Title: "Mails", Goal: "Les mails à traiter.", Body: "Rien de neuf." + statusBlock})
+		s.Close()
+		old := strings.Replace(string(d.Raw), "format: 2\n", "", 1)
+		old = strings.Replace(old, "goal:", "lifetime: standing\ngoal:", 1)
+		path := filepath.Join(e.dir, d.File)
+		if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if rebuilt {
+			if err := os.Remove(e.index); err != nil {
+				t.Fatal(err)
+			}
+		}
+		s2, rep := e.open(t)
+		id := d.Node.Meta.ID
+		if !slices.Equal(rep.Converted, []string{id}) || len(rep.Broken) != 0 || rep.Rebuilt != rebuilt {
+			t.Fatalf("rebuilt %v: report: %+v", rebuilt, rep)
+		}
+		if got := mustRead(t, s2, id); !bytes.Equal(got.Raw, d.Raw) || got.Node.Meta.Format != 2 {
+			t.Fatalf("rebuilt %v: converted:\n%s\nwant:\n%s", rebuilt, got.Raw, d.Raw)
+		}
+		if got, _ := os.ReadFile(path); !bytes.Equal(got, d.Raw) {
+			t.Fatalf("rebuilt %v: its file:\n%s", rebuilt, got)
+		}
+		s2.Close()
 	}
 }

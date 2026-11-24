@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
@@ -114,7 +113,7 @@ func TestAgendaPlacesDatedCards(t *testing.T) {
 		if tc.agenda != "" {
 			body += "\n```eriphe:block jour\n" + `{"components": [{"id": "root", "component": "Agenda", ` + tc.agenda + `, "events": []}], "data": {"jour": "` + tomorrow + `"}}` + "\n```\n"
 		}
-		id := mustNode(t, c, nodestore.New{Title: "Ma journée", Lifetime: nodefile.Standing, Body: body})
+		id := mustNode(t, c, nodestore.New{Title: "Ma journée", Body: body})
 		c.store.db.Exec(`INSERT INTO node_cards (node, ref, created) VALUES (?, ?, 1)`, id, ref)
 		page, err := tw.w.nodePageOf(id, 0, "fr")
 		if err != nil {
