@@ -554,3 +554,42 @@ func TestMonitorChangeCardAgain(t *testing.T) {
 		t.Fatalf("the sync left it decided: seq %d %s", seq, state)
 	}
 }
+
+// A change the brain proposed on an approved monitor that leaves its card
+// some other way than by its card (refused before the card heard of it,
+// or replaced by the user's own version on the Monitors page) is never
+// read back as approved: its card says it is gone.
+func TestMonitorChangeGoneNotApproved(t *testing.T) {
+	for _, how := range []string{"refused", "replaced"} {
+		t.Run(how, func(t *testing.T) {
+			c, _, _ := pollCore(t)
+			spec := monitorSpec{Server: "monitor", Tool: "status", Args: map[string]any{"service": "web"}, Every: 5}
+			approvedMonitor(t, c, "etat", spec)
+			spec.Every = 15
+			c.writeMonitor("etat", spec, nil)
+			m, _ := c.monitorNamed("etat")
+			ref := proposalRef(cardMonitor, m.ID)
+			c.syncCard(c.proposalOf(cardMonitor, m.ID))
+			if got := c.cardState(ref); got != cardPending {
+				t.Fatalf("the change's card: %s", got)
+			}
+			switch how {
+			case "refused": // a stop between the proposal's no and its card's
+				if err := c.decideProposal(context.Background(), cardMonitor, m.ID, false); err != nil {
+					t.Fatal(err)
+				}
+				c.reconcileCards()
+			case "replaced":
+				spec.Every = 30
+				if err := c.saveMonitor("etat", spec); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var state string
+			c.store.db.QueryRow(`SELECT state FROM convo_cards WHERE ref = ?`, ref).Scan(&state)
+			if state != cardGone {
+				t.Fatalf("the change's card says %q", state)
+			}
+		})
+	}
+}

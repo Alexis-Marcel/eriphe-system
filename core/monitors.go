@@ -832,7 +832,9 @@ func (c *core) checkMonitor(name string, s *monitorSpec) (string, error) {
 }
 
 // monitorProposal is a monitor's card, pending while the brain's proposal
-// waits.
+// waits. One that no longer waits is gone, never approved: an approved
+// monitor is the same whether its last change was taken, refused or
+// replaced by the user's own, so only its card's answer can tell.
 func (c *core) monitorProposal(p proposal) proposal {
 	m, err := c.monitorByID(p.ID)
 	if err != nil {
@@ -843,7 +845,6 @@ func (c *core) monitorProposal(p proposal) proposal {
 	case m.Pending != nil:
 		s = *m.Pending
 	case m.State != monitorProposed:
-		p.Outcome = cardApproved
 		return p
 	}
 	p.Pending, p.Tainted = true, m.Tainted

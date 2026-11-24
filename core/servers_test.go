@@ -24,6 +24,8 @@ func TestServersConfig(t *testing.T) {
 	}{
 		{"Git_Hub", Server{URL: "https://x", Auth: &ServerAuth{None: true}, Use: "x"}, "name"},
 		{"eriphe-core", Server{URL: "https://x", Auth: &ServerAuth{None: true}, Use: "x"}, "name"},
+		{"eriphe-catalog", Server{URL: "https://x", Auth: &ServerAuth{None: true}, Use: "x"}, "name"}, // provided (providedServers)
+		{"eriphe-folders", Server{URL: "https://x", Auth: &ServerAuth{None: true}, Use: "x"}, "name"},
 		{"x", Server{URL: "https://x", Auth: &ServerAuth{None: true}}, "use"},
 		{"x", Server{URL: "ftp://x", Auth: &ServerAuth{None: true}, Use: "x"}, "url"},
 		{"x", Server{Use: "x"}, "url"},

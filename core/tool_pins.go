@@ -39,19 +39,15 @@ func init() {
 	})
 }
 
-// eripheImages is where Eriphe's own images are published: a server run
-// from one of them (eriphe-mail, eriphe-calendar, eriphe-files,
-// eriphe-signal) is shipped with Eriphe.
-const eripheImages = "ghcr.io/alexis-marcel/eriphe-"
-
-// shipped tells a server shipped with Eriphe: its definitions change with
-// Eriphe's updates, which the user already chooses, so they are not pinned.
+// shipped tells a server shipped with Eriphe, run from one of its own
+// tools' images (ownImage): its definitions change with Eriphe's updates,
+// which the user already chooses, so they are not pinned.
 func (s Server) shipped() bool {
 	if !s.local() {
 		return false
 	}
 	spec, err := decodeRun(s.Run)
-	return err == nil && strings.HasPrefix(strings.ToLower(spec.Image), eripheImages)
+	return err == nil && ownImage(imageName(strings.ToLower(spec.Image)))
 }
 
 // toolHash fingerprints what a server says of a tool.

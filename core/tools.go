@@ -168,17 +168,17 @@ func newMCPServer(c *core) *mcp.Server {
 		func(ctx context.Context, in idIn) (map[string]string, error) {
 			return map[string]string{"result": "stopping"}, c.stopByBrain(ctx, in.TaskID)
 		})
-	registerMemoryTools(s, c)      // remember, recall, update_memory, forget, commitments
+	registerMemoryTools(s, c)      // remember, recall, update_memory, forget; intend, intentions, update_intention (memory_intention_tools.go)
 	registerLearningTools(s, c)    // learned, unlearn
 	registerAttachmentTools(s, c)  // read_attachment
 	registerSkillTools(s, c)       // list_skills, read_skill
 	registerSkillWriteTool(s, c)   // write_skill (skill_write.go)
 	registerSkillRunsTool(s, c)    // skill_runs (skill_report.go)
-	registerMonitorTools(s, c)     // write_monitor, monitors (monitors.go)
+	registerMonitorTools(s, c)     // write_monitor, try_monitor, monitors (monitors.go)
 	registerCardWithdrawTool(s, c) // withdraw_proposal (card_withdraw.go)
-	registerNodeTools(s, c)        // node_open, node_find, node_read, node_write, node_edit, node_set, node_show, item_note, node_settle (node_tools.go)
+	registerNodeTools(s, c)        // node_open, node_find, node_read, node_write, node_edit, node_set, node_show, turn_home, item_note, node_settle (node_tools.go)
 	c.registerCatalogTools(s)      // catalog_read, sources_read (node_catalog.go)
-	registerNotifyTools(s, c)      // notify, notifications, rule
+	registerNotifyTools(s, c)      // notify, notifications, rule; setting (settings_brain.go), where_now (where_now.go)
 	registerSinceTools(s, c)       // since
 	return s
 }

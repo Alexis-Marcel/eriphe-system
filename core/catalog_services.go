@@ -38,10 +38,20 @@ func (c *Config) localServers() (map[string]RunSpec, error) {
 	return checkServices(specs)
 }
 
-// ownImage tells one of Eriphe's own tools' images, by its card: it runs
-// the version of eriphe-core (RunSpec.Own, pinnedImage).
+// ownImage tells one of Eriphe's own tools' images (an image named
+// without its tag), by its card: it runs the version of eriphe-core
+// (RunSpec.Own, pinnedImage), and its tools are not pinned (shipped).
 func ownImage(image string) bool {
 	return slices.ContainsFunc(toolCards, func(c toolCard) bool { return c.OwnVersion && c.Image == image })
+}
+
+// imageName is an image without its tag or digest.
+func imageName(image string) string {
+	image, _, _ = strings.Cut(image, "@")
+	if i := strings.LastIndexByte(image, ':'); i > strings.LastIndexByte(image, '/') {
+		image = image[:i]
+	}
+	return image
 }
 
 // ownToolVersion is the version one of Eriphe's own tools must be, the
@@ -54,11 +64,7 @@ func ownToolVersion(s Server) string {
 	if err != nil {
 		return ""
 	}
-	image := spec.Image
-	if i := strings.LastIndexByte(image, ':'); i > strings.LastIndexByte(image, '/') {
-		image = image[:i]
-	}
-	if !ownImage(image) {
+	if !ownImage(imageName(spec.Image)) {
 		return ""
 	}
 	return version

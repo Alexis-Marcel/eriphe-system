@@ -57,7 +57,7 @@ var resourceKinds = map[string][]string{
 // ResourceRef is one thing lent to a task. Branch, Base and Dir are a
 // repository's only.
 type ResourceRef struct {
-	Kind   string `json:"kind" jsonschema:"repo, folder, place, tool, access or file"`
+	Kind   string `json:"kind" jsonschema:"repo, folder, place, tool or access"`
 	Ref    string `json:"ref" jsonschema:"repo: owner/name (list_repos); folder or place: its name (list_folders); tool: a server or server.tool glob (list_tools); access: its name (list_tools' accesses)"`
 	Access string `json:"access,omitempty" jsonschema:"read (default) or write: push to a repo, change a folder (a snapshot first) or a place, within their rights; tool: from its annotations if empty; access: leave it empty"`
 	Branch string `json:"branch,omitempty" jsonschema:"repo: the work branch to push to"`
