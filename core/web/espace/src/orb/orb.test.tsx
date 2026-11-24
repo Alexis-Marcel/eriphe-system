@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { motionValue } from "motion/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Boot, GraphNode, OrbFeed } from "../data/api";
-import { empty, store } from "../data/store";
+import { applyShow, empty, store } from "../data/store";
 import type { LNode } from "../graph/layout";
 import { makeT, WordsContext } from "../i18n";
 import strings from "../strings.json";
@@ -194,11 +194,23 @@ describe("the orb", () => {
     expect(say()?.textContent).toBe("Je regarde");
   });
 
-  it("points at the card that waits, and says when it could not answer, without its error", async () => {
+  it("says the answer that raised a card as any other, never a placeholder, wherever the card waits", async () => {
     await draw();
-    await feed({ asked: 2, wait: { card: 7, node: "mail" } });
-    expect(orb().getAttribute("aria-label")).toBe("Eriphe, à côté de Urgent : la prod ⚠ : l'ouvrir");
-    expect(say()?.textContent).toContain("Il me faut ton oui ici.");
+    // the answer belongs to Substack, the card waits in the mail's page: the orb says the answer beside Substack
+    await feed({ asked: 2, answer: { seq: 3, node: "sub", text: "J'ai lancé le tri : dis oui sur sa carte." }, cards: [] });
+    expect(orb().getAttribute("aria-label")).toBe("Eriphe, à côté de Substack : l'ouvrir");
+    expect(say()?.textContent).toContain("J'ai lancé le tri : dis oui sur sa carte.");
+    expect(say()?.textContent).not.toContain("Il me faut ton oui ici.");
+    expect(say()?.querySelectorAll("button.orb-link")).toHaveLength(0);
+    // Eriphe opens the card's page beside it (a show: the bar still talks to Substack): the answer stays
+    await act(async () => store.setState({ talk: "sub" }));
+    await act(async () => store.setState(applyShow(store.getState(), { node: "mail", seq: 1, at: new Date().toISOString() })));
+    expect(store.getState().open).toContain("mail");
+    expect(say()?.textContent).toContain("J'ai lancé le tri : dis oui sur sa carte.");
+  });
+
+  it("says when it could not answer, without its error", async () => {
+    await draw();
     await feed({ asked: 3, failed: { seq: 4 } });
     expect(say()?.querySelector('[role="alert"]')?.textContent).toContain("n'a pas pu répondre");
     expect(say()?.textContent).toContain("Réessayer");

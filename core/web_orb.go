@@ -14,11 +14,12 @@ import (
 // while Eriphe works on their message, it goes beside
 // the subject it works on and shows it; when Eriphe has answered, it goes
 // beside the subject its answer belongs to, or to a free spot of the home
-// when it belongs to none, and says it in a few lines; when that turn
-// raised a card that waits for the user's yes, it goes beside the subject
-// that holds it; when that turn failed, it says so. What Eriphe does or
-// says unasked (an event's words, a subject that began to wait) never
-// moves it: the graph shows it (a node's ring).
+// when it belongs to none, and says it in a few lines, whether or not
+// that turn raised a card; when that turn failed, it says so. It only
+// answers: what waits for the user's yes is the graph's to show (the
+// node's ring, the card in its page), never the orb's; and what Eriphe
+// does or says unasked (an event's words, a subject that began to wait)
+// never moves it either.
 //
 // The subject's document is the conversation: beside a subject the orb
 // says its first lines; its « voir plus » unfolds the whole answer in
@@ -42,7 +43,7 @@ import (
 // that wait for Eriphe (messages_waiting.go), and the cards no node holds
 // (one proposed in a turn about no node, from the home): those show above
 // the bar, with their Oui and Non. A card linked to a node waits in its
-// page: the orb points at it (wait).
+// page, the node's ring says so.
 
 const (
 	askedMax  = 500  // the user's message that waits, as the bar folds it
@@ -66,9 +67,6 @@ type orbEvent struct {
 	// Failed: Eriphe could not answer the user's message; its error's seq
 	// and node, never its text.
 	Failed *orbFailed `json:"failed,omitempty"`
-	// Wait is the newest card raised in answer to the user that waits for
-	// their yes in a node.
-	Wait *orbWait `json:"wait,omitempty"`
 	// Cards are the cards that wait and no node holds: their refs.
 	Cards []string `json:"cards,omitempty"`
 	// Waiting are the user's messages that wait for Eriphe, whatever node
@@ -101,12 +99,6 @@ type orbWords struct {
 type orbFailed struct {
 	Seq  int    `json:"seq"`
 	Node string `json:"node,omitempty"`
-}
-
-// orbWait is a card that waits for the user's yes, and the node that holds it.
-type orbWait struct {
-	Card int64  `json:"card"`
-	Node string `json:"node"`
 }
 
 // orbFor is the orb's event: Eriphe's answer to the user, its work on
@@ -171,7 +163,6 @@ func (w *web) orbFor(draft string, thinking bool) (orbEvent, error) {
 	if (working || line != "") && c.turnAnswersUser() {
 		x.Work = &orbWork{Node: c.workNode(), Draft: line}
 	}
-	x.Wait = c.newestWait(from)
 	x.Cards = c.unheldCards()
 	x.Waiting = c.waiting(thinking)
 	return x, nil
@@ -293,61 +284,6 @@ func (c *core) workNode() string {
 		return id
 	}
 	return c.turn.talkNode()
-}
-
-// newestWait is the newest card that waits for the user's yes in a live
-// node, raised in answer to the user's last message read (after: its seq):
-// shown with that answer, or in the turn under way that answers it; nil
-// when none does. An older card, or one raised unasked (an event's turn,
-// a brief), waits in its page, its bubble says so.
-func (c *core) newestWait(after int) *orbWait {
-	if c.nodes == nil {
-		return nil
-	}
-	xs, err := c.cardsWhere(`state = ? AND (seq > ? OR turn = 1) ORDER BY id DESC LIMIT 20`, cardPending, after)
-	if err != nil {
-		return nil
-	}
-	asked := c.turnAnswersUser()
-	for _, x := range xs {
-		if !c.cardAsked(x, asked) {
-			continue // not raised in answer to the user
-		}
-		if x, _ = c.liveCard(x); x.State != cardPending {
-			continue
-		}
-		for _, id := range c.cardNodes(x.Ref) {
-			if sum, err := c.nodes.Get(id); err == nil && sum.Archived.IsZero() {
-				return &orbWait{Card: x.ID, Node: id}
-			}
-		}
-	}
-	return nil
-}
-
-// cardAsked tells a card raised in answer to the user: shown with an
-// answer of Eriphe's to them (markAnswer), raised in the turn under way
-// when it answers them (asked), or a call of the brain's it asked a yes
-// for in such a turn (markCardAsked), whatever message then showed it.
-func (c *core) cardAsked(x convoCard, asked bool) bool {
-	switch {
-	case x.Asked:
-		return true
-	case x.Seq > 0:
-		var to int
-		c.store.db.QueryRow(`SELECT answer_to FROM messages WHERE seq = ?`, x.Seq).Scan(&to)
-		return to > 0
-	}
-	return asked
-}
-
-// markCardAsked marks a card the brain just raised, when its turn answers
-// the user: the orb points at it, whatever message of code's shows it (an
-// access card is shown at once).
-func (c *core) markCardAsked(ref string) {
-	if c.turnAnswersUser() {
-		c.store.db.Exec(`UPDATE convo_cards SET asked = 1 WHERE ref = ?`, ref)
-	}
 }
 
 // unheldCardsMax is the most cards no node holds the event carries.

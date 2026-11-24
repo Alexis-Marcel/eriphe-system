@@ -361,7 +361,7 @@ func (c *core) askBrainAccess(ctx context.Context, t *TaskRow, pid, tool string,
 		if node, labels := c.callRows(prefer, tool, input); node != "" {
 			q.Node, q.Source, q.Labels, q.source = node, labels[0].Source, labels, nodeRef(node)
 		}
-		c.markCardAsked(proposalRef(cardAccess, c.newAccessAsk(q))) // the orb points at it (web_orb.go)
+		c.newAccessAsk(q)
 	} else {
 		c.cardRaisedFor(source, proposalRef(cardAccess, id)) // the same call asked again
 	}

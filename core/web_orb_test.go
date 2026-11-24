@@ -136,58 +136,36 @@ func TestFewLines(t *testing.T) {
 	}
 }
 
-// The orb points at the newest card that waits in a node; a card no node
-// holds waits above the bar.
-func TestOrbWait(t *testing.T) {
+// The orb only answers: a turn that raised a card in a node says its
+// answer as any other, wherever the answer belongs, and never points at
+// the card (the node's ring and its page show it); a card no node holds
+// waits above the bar.
+func TestOrbAnswersWithACard(t *testing.T) {
 	c, answer := netCore(t, "Tu peux garder un œil sur mes mails ?", "")
-	out, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Title: "Garder un œil sur mes mails", Body: "Ce qu'on suit.\n"})
-	if err != nil {
+	if _, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Title: "Garder un œil sur mes mails", Body: "Ce qu'on suit.\n"}); err != nil {
 		t.Fatal(err)
 	}
-	subject := out["id"].(string)
 	res, err := c.proposeView(proposeViewIn{Title: "Mes mails", Body: "Les mails.\n"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	draft := res["node"].(string) // the card waits on the view's draft
-	answer("Dis oui sur sa carte.")
 	w := &web{c: c}
+	// While the turn is under way, the orb is at work, nothing else.
+	if x, _ := w.orbFor("", true); x.Work == nil || x.Answer != nil {
+		t.Fatalf("under way: %+v", x)
+	}
+	answer("Dis oui sur sa carte.")
 	x, _ := w.orbFor("", false)
-	if x.Wait == nil || x.Wait.Node != draft || len(x.Cards) != 0 {
-		t.Fatalf("wait %+v, cards %v", x.Wait, x.Cards)
+	if x.Answer == nil || x.Answer.Text != "Dis oui sur sa carte." || x.Answer.Node == draft || len(x.Cards) != 0 {
+		t.Fatalf("answer %+v, cards %v", x.Answer, x.Cards)
 	}
-	// The user writes again: the card waits in its page, the orb moves on.
-	next, _ := c.store.addUserMessage("Et ensuite ?", nil, "")
-	c.store.markDelivered(int(next))
-	if x, _ := w.orbFor("", false); x.Wait != nil {
-		t.Errorf("the orb still points at a card the user moved on from: %+v", x.Wait)
+	raw, _ := json.Marshal(x)
+	if strings.Contains(string(raw), `"wait"`) {
+		t.Errorf("the orb's event points at a card: %s", raw)
 	}
-	c.store.db.Exec(`DELETE FROM messages WHERE seq = ?`, next)
-	if _, err := c.decideCard(context.Background(), x.Wait.Card, true, "web"); err != nil {
-		t.Fatal(err)
-	}
-	if x, _ = w.orbFor("", false); x.Wait != nil {
-		t.Errorf("a decided card still waits: %+v", x.Wait)
-	}
-	// A card raised in an event's turn waits in its page: the orb does
-	// not go to it unasked.
-	ev, _ := c.store.addMessage(roleEvent, "Un nouveau mail.", true)
-	c.turn.goOn(int(ev), int(ev), 0, nil)
-	c.turnNode(subject)
-	res, err = c.proposeView(proposeViewIn{Title: "Mes mails urgents", Body: "Les urgents.\n"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	urgent := res["node"].(string)
-	if x, _ = w.orbFor("", true); x.Wait != nil {
-		t.Errorf("the orb points at a card raised unasked, in the turn: %+v", x.Wait)
-	}
-	answer("Une carte de plus.")
-	if x, _ = w.orbFor("", false); x.Wait != nil || x.Answer == nil || x.Answer.Text != "Dis oui sur sa carte." {
-		t.Errorf("the orb points at a card raised unasked: %+v", x)
-	}
-	if ids, _ := c.cardsWhere(`state = ?`, cardPending); len(ids) != 1 || !cardWaitsOn(c, urgent) {
-		t.Errorf("the card raised unasked does not wait in its page: %v", ids)
+	if !cardWaitsOn(c, draft) {
+		t.Error("the card does not wait in its node's page")
 	}
 }
 
@@ -315,43 +293,13 @@ func TestOrbAnswerToTheLastMessage(t *testing.T) {
 	}
 }
 
-func TestOrbCardAsked(t *testing.T) {
+// The orb's marks are columns of their message: they go with it, nothing
+// is left in kv.
+func TestOrbMarks(t *testing.T) {
 	tw := newTestWeb(t)
 	c := tw.c
-	// card is the card of ref as kept, made if it is not yet.
-	card := func(ref string, seq int64) convoCard {
-		c.store.db.Exec(`INSERT OR IGNORE INTO convo_cards (ref, kind, seq, created) VALUES (?, ?, ?, ?)`, ref, cardAccess, seq, time.Now().Unix())
-		xs, _ := c.cardsWhere(`ref = ?`, ref)
-		return xs[0]
-	}
-	said, _ := c.store.addMessage(roleBrain, "Voilà.", true)
-	brief := card("access:1", said)
-	if c.cardAsked(brief, false) || c.cardAsked(card("view:2", 0), false) {
-		t.Fatal("a card raised unasked is the orb's")
-	}
-	if !c.cardAsked(card("view:2", 0), true) {
-		t.Error("a card raised in the turn that answers the user is not the orb's")
-	}
-	c.store.db.Exec(`UPDATE messages SET answer_to = 8 WHERE seq = ?`, said)
-	if !c.cardAsked(brief, false) {
-		t.Error("a card shown with the answer is not the orb's")
-	}
-	ev, _ := c.store.addMessage(roleEvent, "Un mail.", true)
-	c.turn.goOn(int(ev), int(ev), 0, nil)
-	card("access:3", 0)
-	c.markCardAsked("access:3")
-	if c.cardAsked(card("access:3", 0), false) {
-		t.Error("a call asked in an event's turn is the orb's")
-	}
 	asked, _ := c.store.addMessage(roleUser, "Réponds-lui.", true)
 	c.turn.start(int(asked), int(asked), 0)
-	card("access:4", 0)
-	c.markCardAsked("access:4")
-	if !c.cardAsked(card("access:4", 0), false) {
-		t.Error("a call the brain asked a yes for, answering the user, is not the orb's")
-	}
-	// The marks are columns of their message or card: they go with it,
-	// nothing is left in kv.
 	answer, _ := c.store.addMessage(roleBrain, "C'est fait.", true)
 	c.markAnswer(int(answer))
 	c.nodeEvent("", "Sam a dit oui.", true)

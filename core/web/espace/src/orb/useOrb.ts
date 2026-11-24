@@ -118,8 +118,6 @@ export function orbText(s: Show, t: T, nodes: Record<string, GraphNode>): string
       return s.draft ?? (s.node ? t("espace.orb.working.on", title(s.node)) : t("espace.orb.working"));
     case "failed":
       return t("espace.orb.failed");
-    case "wait":
-      return s.words?.text ?? t("espace.orb.wait");
     case "answer":
       return s.words?.text ?? "";
   }

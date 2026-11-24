@@ -211,7 +211,7 @@ func TestEspaceViewKept(t *testing.T) {
 			t.Errorf("%+v: %d", bad, code)
 		}
 	}
-	gesture(t, tw, csrf, "PUT", "/api/espace/view", espaceView{Open: []string{id, "zzzzzzzzzz"}, Talk: id, Theme: "light", Orb: &espaceOrbClose{Answer: 41, Seen: 12, Wait: 3, Failed: -2}})
+	gesture(t, tw, csrf, "PUT", "/api/espace/view", espaceView{Open: []string{id, "zzzzzzzzzz"}, Talk: id, Theme: "light", Orb: &espaceOrbClose{Answer: 41, Seen: 12, Failed: -2}})
 	_, body, _ := tw.do("GET", "/espace/boot", nil, nil)
 	var boot espaceBoot
 	json.Unmarshal([]byte(body), &boot)
@@ -219,7 +219,7 @@ func TestEspaceViewKept(t *testing.T) {
 		t.Fatalf("boot: %s", body)
 	}
 	// What the user closed of the orb's: no screen shows it again.
-	if o := boot.View.Orb; o == nil || *o != (espaceOrbClose{Answer: 41, Seen: 12, Wait: 3}) {
+	if o := boot.View.Orb; o == nil || *o != (espaceOrbClose{Answer: 41, Seen: 12}) {
 		t.Fatalf("orb closed: %s", body)
 	}
 	if _, page, _ := tw.do("GET", "/espace", nil, nil); !strings.Contains(page, `data-theme="light"`) || !strings.Contains(page, `name="color-scheme" content="light"`) {

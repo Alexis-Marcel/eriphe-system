@@ -3452,7 +3452,7 @@ token in `X-CSRF-Token`:
 - `PUT /api/espace/view` `{open, talk, shown, theme, orb, forces, centring}`: the pages open, the one the bar talks
   to, the last of Eriphe's shows the page took (a page the user closed does not open again on the
   next visit), the theme (`""` follows the system, `light`, `dark`), and what the user closed of
-  the orb's (`orb`: `{answer, seen, wait, failed}`, seqs and a card id that only grow); the graph's
+  the orb's (`orb`: `{answer, seen, failed}`, seqs that only grow); the graph's
   forces the user changed (`forces`: `{centre, repulsion, link, distance}`, each brought within its
   range, `espaceForceRanges`, a name that is not a force dropped; absent, the defaults) and
   `centring: false` when the open node is not the graph's centre (absent, it is); in the kv `espace_view`. The boot gives
@@ -3542,11 +3542,12 @@ token in `X-CSRF-Token`:
   messages that wait**, below). The orb rests in the bar (`.cs-dock`). What it shows comes from the
   stream's `orb` event and what the user just sent (`model.ts`, `orbShow`, pure, in this order).
   It only answers: it leaves the bar in reply to what the user said to it, never unasked (what an
-  event made Eriphe say, a node that began to wait: the graph shows it, by the node's halo).
+  event made Eriphe say, a node that began to wait: the graph shows it, by the node's halo). It
+  never points at a card either: what waits for the user's yes is the graph's (the node's halo,
+  the card in its page), and an answer whose turn raised a card is said as any other.
   At work on the user's message (`work`, from the moment the user sends: the first line of what
-  it writes, or dots); that turn failed (`failed`: Réessayer, the agents' settings); a card that
-  turn raised waits for the user's yes (`wait`); the answer to the user's message (`answer`);
-  else it rests. It glides beside the subject that is about (`placeBeside`: its bubble, or its
+  it writes, or dots); that turn failed (`failed`: Réessayer, the agents' settings); the answer
+  to the user's message (`answer`); else it rests. It glides beside the subject that is about (`placeBeside`: its bubble, or its
   page when open, as drawn): the first side of six where it and its words cover no bubble, no
   title, no page, not the bar nor the corner's icons, keeping the side it had while it stays free;
   when none is, the free spot nearest around it (`NEAR`, 120 px further at most); at the home, a
@@ -3555,8 +3556,7 @@ token in `X-CSRF-Token`:
   follows its subject; still, it reads nothing. One `OrbProvider` works out what it shows, once, for the orb, the bar and its line. Its words show once it is there, open away from the subject, in a few
   lines (`fewLines` on eriphe-core's side: six lines, 600 characters at most) with « Voir plus »,
   which unfolds the whole answer in place, as Markdown (`full`, scrolling past 40 % of the
-  screen); unfolded, it stays until the user moves on. For a waiting card it sits at the card's height and its
-  « Voir » scrolls the card into view. Its answer beside a subject stays until something else
+  screen); unfolded, it stays until the user moves on. Its answer beside a subject stays until something else
   happens: a newer answer replaces it, or the user moves on (writes, opens another subject,
   closes it with ✕); else they go after two minutes of the page being seen (`WORDS_MS`: a hidden tab does
   not count). What went is remembered by eriphe-core with the view (`orb`, sent at once), so a
@@ -3700,13 +3700,6 @@ so that nothing Eriphe says is lost on a page the user is not looking at: `orb` 
 - `failed`: the last line of a turn that answered the user is an error (`{seq, node}`, never its
   raw text; `brainFailed` marks it as `markAnswer` does; a failure to start, or of an event's
   turn, is not the orb's);
-- `wait`: the newest card that waits for the user's yes in a live node, raised in answer to the
-  user's last message read: shown with a message `markAnswer` marked, raised in the turn under
-  way that answers it, or a call of the brain's it asked a yes for in such a turn, whatever
-  message of code's showed it (`markCardAsked`, `convo_cards.asked`) (`newestWait`,
-  `cardAsked`, `{card, node}`): the orb goes beside that node and points at it.
-  An older one, or one raised unasked (an event's turn, a brief), waits in its page, its bubble
-  says so;
 - `cards`: the cards that wait and no node holds (`unheldCards`: shown already, linked to no live
   node, such as one proposed at the home before any subject), shown above the bar with their Oui
   and Non wherever it talks, so no card waits out of sight;

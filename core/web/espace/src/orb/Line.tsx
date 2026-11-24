@@ -23,7 +23,7 @@ export function Line({ mini = true }: { mini?: boolean }) {
           {t("espace.orb.on", titleOf(nodes[show.node], t("espace.external")))}
         </button>
       )}
-      <Words show={show} dismiss={dismiss} open={open} unfold={unfold} />
+      <Words show={show} dismiss={dismiss} unfold={unfold} />
     </div>
   );
 }

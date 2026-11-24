@@ -111,10 +111,9 @@ describe("the store", () => {
 
   it("keeps what the orb shows, whatever page the bar talks to", () => {
     let s = openPage(withGraph(), "a");
-    s = applyOrb(s, { asked: 2, answer: { seq: 3, node: "b", text: "Oui." }, cards: ["view:1", 2 as unknown as string], wait: { card: 4, node: "b" } });
+    s = applyOrb(s, { asked: 2, answer: { seq: 3, node: "b", text: "Oui." }, cards: ["view:1", 2 as unknown as string] });
     expect(s.orb?.answer).toEqual({ seq: 3, node: "b", text: "Oui." });
     expect(s.orb?.cards).toEqual(["view:1"]);
-    expect(s.orb?.wait).toEqual({ card: 4, node: "b" });
     // words that are not words are dropped, never drawn
     s = applyOrb(s, { answer: { seq: "x", text: 1 } as unknown as OrbWords, work: { node: 3 as unknown as string } });
     expect(s.orb?.answer).toBeUndefined();
@@ -158,7 +157,7 @@ describe("the store", () => {
   });
 
   it("comes back as the user left it: its pages once their nodes come, the theme", () => {
-    const orb = { answer: 41, seen: 12, wait: 3, failed: 0 };
+    const orb = { answer: 41, seen: 12, failed: 0 };
     let s = restore(empty(), { open: ["a1", "gone", "b"], talk: "a1", shown: 4, theme: "dark", orb });
     expect(s).toMatchObject({ open: ["a1", "gone", "b"], talk: "a1", shown: 4, theme: "dark", closed: orb });
     s = applyNodes(s, { reset: true, nodes: [node("a"), node("a1", { parent: "a" }), node("b")] });
@@ -167,7 +166,7 @@ describe("the store", () => {
     expect(viewOf(s)).toEqual({ open: ["a1", "b"], talk: "a1", shown: 4, theme: "dark", orb });
     // What the user closed of the orb's: a closed one again changes nothing.
     expect(setClosed(s, s.closed)).toBe(s);
-    expect(restore(empty(), { open: [], orb: { answer: -1, seen: "x" } as never }).closed).toEqual({ answer: 0, seen: 0, wait: 0, failed: 0 });
+    expect(restore(empty(), { open: [], orb: { answer: -1, seen: "x" } as never }).closed).toEqual({ answer: 0, seen: 0, failed: 0 });
     // A show the user already took, given again as the stream opens, opens nothing.
     expect(applyShow(s, { node: "a", seq: 4, at: new Date().toISOString() }).open).toEqual(["a1", "b"]);
     // What eriphe-core kept that is not a view reads as nothing.

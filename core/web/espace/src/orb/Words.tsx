@@ -1,17 +1,15 @@
 import { Markdown } from "../a2ui/markdown";
 import * as api from "../data/api";
-import { openPage, step, store } from "../data/store";
 import { useWords } from "../i18n";
 import type { Show } from "./model";
 
 // Words are what the orb says, in its bubble (Orb.tsx) or the phone's line
 // (Line.tsx): Eriphe's few lines, marked when written after reading
 // external content, never replaced; the home's answer whole, as Markdown;
-// that it works; that it could not answer, and the way to try again; the
-// card its answer raised. « Voir plus » unfolds the whole answer in place,
-// as Markdown; « Voir » opens the page that holds the card; ✕ closes what
-// stays until the user moves on.
-export function Words({ show, dismiss, open, unfold }: { show: Show; dismiss: () => void; open: (id: string) => void; unfold: () => void }) {
+// that it works; that it could not answer, and the way to try again.
+// « Voir plus » unfolds the whole answer in place, as Markdown; ✕ closes
+// what stays until the user moves on.
+export function Words({ show, dismiss, unfold }: { show: Show; dismiss: () => void; unfold: () => void }) {
   const { t } = useWords();
   const ext = <span className="orb-ext" role="img" title={t("espace.orb.external")} aria-label={t("espace.orb.external")} />;
   const x = <Close onClick={dismiss} label={t("espace.orb.close")} />;
@@ -42,19 +40,6 @@ export function Words({ show, dismiss, open, unfold }: { show: Show; dismiss: ()
             </a>
             {" · "}
             <a href="/settings/agents">{t("espace.orb.account")}</a>
-          </p>
-          {x}
-        </>
-      );
-    case "wait":
-      return (
-        <>
-          <p className="orb-text">
-            {show.words ? show.words.text : t("espace.orb.wait")}
-            {show.words?.external && ext}{" "}
-            <button type="button" className="orb-link" onClick={() => pointCard(show.node!, open)}>
-              {t("espace.orb.show")}
-            </button>
           </p>
           {x}
         </>
@@ -99,18 +84,4 @@ function Close({ onClick, label }: { onClick: () => void; label: string }) {
       ✕
     </button>
   );
-}
-
-// pointCard opens the page that holds the card that waits, and brings the
-// card into view once it is drawn.
-export function pointCard(id: string, open: (id: string) => void) {
-  if (!store.getState().open.includes(id)) open(id);
-  else step(store, openPage, id, true);
-  let n = 0;
-  const find = () => {
-    const card = document.querySelector<HTMLElement>(`[data-page="${CSS.escape(id)}"] .a2-proposal-pending, .ls-page .a2-proposal-pending`);
-    if (card) card.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-    else if (n++ < 20) setTimeout(find, 150);
-  };
-  setTimeout(find, 100);
 }
