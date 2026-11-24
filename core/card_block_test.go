@@ -57,7 +57,7 @@ func TestCardBlock(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Opened elsewhere, a node has no card of its own yet: none placed.
-	if _, msg := brainNodes(t, c, "node_open", map[string]any{"title": "Ailleurs", "body": "```eriphe:block vue\n{\"card\": \"" + mine + "\"}\n```\n"}); msg == "" {
+	if _, msg := brainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Ailleurs", "body": "```eriphe:block vue\n{\"card\": \"" + mine + "\"}\n```\n"}); msg == "" {
 		t.Error("a new node placed another node's card")
 	}
 

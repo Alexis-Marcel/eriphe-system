@@ -99,7 +99,7 @@ type nodeAppendIn struct {
 // and a task (its node_open) alike: openNode.
 type nodeOpenFields struct {
 	Title  string     `json:"title" jsonschema:"a short name of what it is about, in the user's language (Mes mails), never their sentence, no ids"`
-	Goal   string     `json:"goal,omitempty" jsonschema:"what it is for, one or two sentences, never shown; with steps, what a fresh agent checks once every step is accepted"`
+	Goal   string     `json:"goal" jsonschema:"what it is for, in one line: what is written in it follows it; with steps, what a fresh agent checks once every step is accepted"`
 	Body   string     `json:"body,omitempty" jsonschema:"its first body: markdown and blocks (catalog_read)"`
 	Steps  []stepSpec `json:"steps,omitempty" jsonschema:"its work in steps, each a child an agent runs: a step starts once those it comes after are accepted (in parallel when it can), and is accepted when its receipt says done and its contract's checks pass"`
 	Budget int        `json:"budget_minutes,omitempty" jsonschema:"with steps: the running minutes the work may take, 60 by default"`

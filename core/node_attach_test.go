@@ -21,7 +21,7 @@ func TestAttachmentToNodeMedia(t *testing.T) {
 	c := tw.c
 	photo := pngBytes(t)
 	a := attach(t, c, "chemise.png", photo)
-	id := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Chemise bleue", "aside": true})["id"].(string)
+	id := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Chemise bleue", "aside": true})["id"].(string)
 	out := mustBrainNodes(t, c, "node_set", map[string]any{"id": id, "props": map[string]any{"tags": []any{"vêtement"}, "couleur": "bleu", "photo": a.ID}})
 	src, _ := out["media"].(map[string]any)["photo"].(string)
 	name, ok := strings.CutPrefix(src, mediaScheme)
@@ -65,7 +65,7 @@ func TestAttachmentToNodeMedia(t *testing.T) {
 	// that node.
 	block := "```eriphe:block garde\n" + `{"components": {"component": "Table", "columns": [{"key": "title", "label": "Vêtement"}, {"key": "photo", "label": "Photo"}], "rows": {"@path": "/garde/nodes"}},
  "sources": {"garde": {"tool": "eriphe-core/node_find", "args": {"tags": ["vêtement"], "columns": ["photo"]}}}}` + "\n```\n"
-	page := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Garde-robe", "aside": true, "body": block})["id"].(string)
+	page := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Garde-robe", "aside": true, "body": block})["id"].(string)
 	c.live.wg.Wait()
 	gp, err := tw.w.nodePageOf(page, 0, "fr")
 	if err != nil {
@@ -118,7 +118,7 @@ func TestAttachmentToNodeMedia(t *testing.T) {
 func TestAttachmentToNodeLimits(t *testing.T) {
 	tw, _ := graphWeb(t)
 	c := tw.c
-	id := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Tarte aux pommes", "aside": true})["id"].(string)
+	id := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Tarte aux pommes", "aside": true})["id"].(string)
 	pdf := attach(t, c, "recette.pdf", []byte("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"))
 	out := mustBrainNodes(t, c, "node_set", map[string]any{"id": id, "props": map[string]any{"recette": []any{pdf.ID}}})
 	kept, _ := out["media"].(map[string]any)["recette"].([]any)
@@ -163,7 +163,7 @@ func TestAttachmentToNodeLimits(t *testing.T) {
 	}
 	// From a channel the user did not trust: the turn is tainted, the node
 	// external.
-	other := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Autre", "aside": true})["id"].(string)
+	other := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Autre", "aside": true})["id"].(string)
 	stored, _ := c.store.attachment(photo.ID)
 	c.store.setMsgTaint(stored.Seq, channelTaint("Salon"))
 	mustBrainNodes(t, c, "node_set", map[string]any{"id": other, "props": map[string]any{"photo": photo.ID}})

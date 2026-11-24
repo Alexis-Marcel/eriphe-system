@@ -194,6 +194,7 @@ type Summary struct {
 	ID       string
 	File     string
 	Title    string
+	Goal     string // what it is for, one line (nodefile's Meta.Goal)
 	Parent   string
 	Created  time.Time
 	Updated  time.Time
@@ -801,7 +802,7 @@ func (s *Store) summary(id string) (Summary, error) {
 }
 
 func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
-	rows, err := s.db.Query(`SELECT n.id, n.file, n.title, n.parent, n.created, n.updated,
+	rows, err := s.db.Query(`SELECT n.id, n.file, n.title, n.goal, n.parent, n.created, n.updated,
 		n.done, n.archived, n.external, n.title_trusted, n.opened_by, n.version,
 		(SELECT group_concat(t, ' ') FROM (SELECT l.target AS t FROM node_links l WHERE l.id = n.id
 		  UNION SELECT r.target FROM node_refs r WHERE r.id = n.id AND r.target != '' AND r.target != n.id)) FROM nodes n `+where, args...)
@@ -814,7 +815,7 @@ func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
 		var x Summary
 		var created, updated, done, archived int64
 		var links sql.NullString
-		if err := rows.Scan(&x.ID, &x.File, &x.Title, &x.Parent, &created, &updated,
+		if err := rows.Scan(&x.ID, &x.File, &x.Title, &x.Goal, &x.Parent, &created, &updated,
 			&done, &archived, &x.External, &x.TitleTrusted, &x.OpenedBy, &x.Version, &links); err != nil {
 			return nil, err
 		}

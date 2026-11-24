@@ -201,6 +201,10 @@ func (c *core) openNode(ctx context.Context, in nodeOpenFields, parent string, b
 	if title == "" {
 		return nil, nil, errors.New("a title is needed")
 	}
+	goal := oneLine(in.Goal)
+	if goal == "" {
+		return nil, nil, errors.New("a goal is needed: one line, what the node is for (« Les mails qui demandent une réponse, triés »)")
+	}
 	if err := c.nodeParent(parent); err != nil {
 		return nil, nil, err
 	}
@@ -220,7 +224,7 @@ func (c *core) openNode(ctx context.Context, in nodeOpenFields, parent string, b
 			return nil, nil, err
 		}
 	}
-	d, err := c.nodes.Create(nodestore.New{Title: title, Parent: parent, Goal: strings.TrimSpace(in.Goal),
+	d, err := c.nodes.Create(nodestore.New{Title: title, Parent: parent, Goal: goal,
 		Body: in.Body, External: tainted, OpenedBy: by.origin, Author: by.author})
 	if err != nil {
 		return nil, nil, err
@@ -247,14 +251,16 @@ type nodeFound struct {
 	ID    string `json:"id"`
 	Title string `json:"title,omitempty"` // one that may be someone else's words only with include_external
 	// TitleExternal: its title was written after an external read
-	TitleExternal bool     `json:"title_external,omitempty"`
-	Status        string   `json:"status"`               // running, waits, done or idle (node_status.go)
-	Maintained    []string `json:"maintained,omitempty"` // the skills that maintain it (node_home.go)
-	Parent        string   `json:"parent,omitempty"`
-	Changed       string   `json:"changed"`
-	Done          bool     `json:"done,omitempty"`
-	Archived      bool     `json:"archived,omitempty"`
-	External      bool     `json:"external,omitempty"`
+	TitleExternal bool `json:"title_external,omitempty"`
+	// Goal: what it is for, one line; an external node's only with include_external
+	Goal       string   `json:"goal,omitempty"`
+	Status     string   `json:"status"`               // running, waits, done or idle (node_status.go)
+	Maintained []string `json:"maintained,omitempty"` // the skills that maintain it (node_home.go)
+	Parent     string   `json:"parent,omitempty"`
+	Changed    string   `json:"changed"`
+	Done       bool     `json:"done,omitempty"`
+	Archived   bool     `json:"archived,omitempty"`
+	External   bool     `json:"external,omitempty"`
 	// Withheld: it has properties asked for (columns), not given: it is
 	// external, and include_external was not said.
 	Withheld bool `json:"withheld,omitempty"`
@@ -270,6 +276,9 @@ func (c *core) foundNode(x statusNode, quote bool, homes map[string][]string) no
 		Done: !x.Done.IsZero(), Archived: !x.Archived.IsZero(), External: x.External, TitleExternal: x.TitleExternal()}
 	if !f.TitleExternal || quote {
 		f.Title = x.Title
+	}
+	if !x.External || quote { // an external node's goal may be someone else's words, as its properties
+		f.Goal = truncate(oneLine(x.Goal), nodeGoalMax)
 	}
 	return f
 }
@@ -420,7 +429,7 @@ func (c *core) brainNodeSet(in brainNodeSetIn) (map[string]any, error) {
 	if !sum.Archived.IsZero() {
 		return nil, fmt.Errorf("%s: %w", id, nodestore.ErrArchived)
 	}
-	title, goal := strings.TrimSpace(in.Title), strings.TrimSpace(in.Goal)
+	title, goal := strings.TrimSpace(in.Title), oneLine(in.Goal) // a goal is one line
 	if title == "" && goal == "" && in.Done == nil && in.Parent == nil && len(in.Props) == 0 {
 		return nil, errors.New("title, goal, props, done or parent")
 	}

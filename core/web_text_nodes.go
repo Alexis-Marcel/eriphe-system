@@ -17,6 +17,8 @@ func init() {
 var nodeStrings = map[string]map[string]string{
 	"fr": {
 		"tasknode.title":       "Tâche %s",
+		"tasknode.goal":        "Le travail de la tâche %s",
+		"net.goal":             "Garder la réponse donnée, pour la retrouver",
 		"tasknode.reply":       "Eriphe a répondu : %s",
 		"tasknode.checks":      "Eriphe a corrigé les contrôles (%s).",
 		"tasknode.checksreply": "Eriphe a corrigé les contrôles (%s) et a répondu : %s",
@@ -47,6 +49,8 @@ var nodeStrings = map[string]map[string]string{
 	},
 	"en": {
 		"tasknode.title":       "Task %s",
+		"tasknode.goal":        "The work of task %s",
+		"net.goal":             "Keep the answer given, to find it again",
 		"tasknode.reply":       "Eriphe answered: %s",
 		"tasknode.checks":      "Eriphe fixed the checks (%s).",
 		"tasknode.checksreply": "Eriphe fixed the checks (%s) and answered: %s",

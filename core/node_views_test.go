@@ -581,7 +581,7 @@ func TestRunInExternalNodeIsExternal(t *testing.T) {
 	if len(c.taskTaint(in[0].Task)) == 0 {
 		t.Fatal("reading an external block did not taint the run")
 	}
-	kid := mustNodes(t, c, in[0].Task, "node_open", map[string]any{"title": "Suite", "body": "Après lecture."})
+	kid := mustNodes(t, c, in[0].Task, "node_open", map[string]any{"goal": "Un but.", "title": "Suite", "body": "Après lecture."})
 	if sum, _ := c.nodes.Get(kid["id"].(string)); !sum.External {
 		t.Fatal("a tainted run's child is not external")
 	}
@@ -633,7 +633,7 @@ func TestMonitorRaisesItsNodes(t *testing.T) {
 // tool or resource. A source out of the catalog is refused.
 func TestSkillMonitorAllOrNothing(t *testing.T) {
 	c, _, _ := viewCore(t)
-	page, isErr := callBrainTool(t, c, "node_open", map[string]any{"title": "La prod",
+	page, isErr := callBrainTool(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "La prod",
 		"body": "```eriphe:block etat\n" + `{"components": {"component": "Text", "text": {"@path": "/cpu/data/cpu"}}, "sources": {"cpu": {"tool": "monitor/status", "args": {"service": "web"}}}}` + "\n```\n"})
 	if isErr {
 		t.Fatal(page)
@@ -738,7 +738,7 @@ func TestSkillMonitorAllOrNothing(t *testing.T) {
 		`{"x": {"tool": "nowhere/read"}}`: "nowhere/read",
 	} {
 		body := "```eriphe:block etat\n" + `{"components": {"component": "Text", "text": "x"}, "sources": ` + src + "}\n```\n"
-		if _, msg := callOn(t, srv, "node_open", map[string]any{"title": "Ailleurs", "body": body}); !strings.Contains(msg, want) {
+		if _, msg := callOn(t, srv, "node_open", map[string]any{"goal": "Un but.", "title": "Ailleurs", "body": body}); !strings.Contains(msg, want) {
 			t.Errorf("%s: %q", src, msg)
 		}
 	}

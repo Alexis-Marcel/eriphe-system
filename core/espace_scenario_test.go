@@ -925,7 +925,7 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		// shown beside it (the prompt's « Les vues »).
 		mail := node
 		// A tall page: a long document with a table, as a real one is.
-		out := b.self("node_open", map[string]any{"title": "Production", "parent": mail, "body": "Les erreurs de l'app.\n\n" + prodNotes + "```eriphe:block errors\n" +
+		out := b.self("node_open", map[string]any{"goal": "Un but.", "title": "Production", "parent": mail, "body": "Les erreurs de l'app.\n\n" + prodNotes + "```eriphe:block errors\n" +
 			`{"components": [{"id": "root", "component": "Metric", "label": "Erreurs 5xx par minute", "value": {"@path": "/errors/rate"}}], "sources": {"errors": {"tool": "prod/erreurs"}}}` + "\n```\n"})
 		if id, _ := out["id"].(string); id != "" {
 			keep("prod", id)
@@ -1012,7 +1012,7 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 	case strings.Contains(said, "Garde un œil sur la consommation"):
 		// A glance on the figure the user asked to watch, on a node of its
 		// own, on the side (view-glance.spec.ts).
-		out := b.self("node_open", map[string]any{"title": "Énergie maison", "aside": true, "body": "La consommation de la maison.\n\n```eriphe:block conso\n" +
+		out := b.self("node_open", map[string]any{"goal": "Un but.", "title": "Énergie maison", "aside": true, "body": "La consommation de la maison.\n\n```eriphe:block conso\n" +
 			`{"components": [{"id": "root", "component": "Metric", "label": "Consommation (kW)", "value": {"@path": "/conso/kw"}}], "sources": {"conso": {"tool": "maison/conso", "glance": {"label": "Conso", "path": "kw", "threshold": 10}}}}` + "\n```\n"})
 		if id, _ := out["id"].(string); id != "" {
 			keep("conso", id)
@@ -1030,7 +1030,7 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		sc.mu.Lock()
 		att := attachmentRe.FindString(sc.given[len(sc.given)-1])
 		sc.mu.Unlock()
-		out := b.self("node_open", map[string]any{"title": "Chemise bleue", "body": "Une chemise en lin."})
+		out := b.self("node_open", map[string]any{"goal": "Un but.", "title": "Chemise bleue", "body": "Une chemise en lin."})
 		if id, _ := out["id"].(string); id != "" && att != "" {
 			b.self("node_set", map[string]any{"id": id, "props": map[string]any{"tags": []any{"vêtement"}, "couleur": "bleu", "photo": att}})
 		}
@@ -1060,7 +1060,7 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		// where things stand.
 		_, hash := b.read(node)
 		b.self("node_write", map[string]any{"id": node, "expect": hash, "body": "## Ce qu'on a décidé\n\nL'angle des managers : ce qui change pour eux.\n"})
-		out := b.self("node_open", map[string]any{"title": "L'article", "parent": n("write"), "aside": true,
+		out := b.self("node_open", map[string]any{"goal": "Un but.", "title": "L'article", "parent": n("write"), "aside": true,
 			"body": "# Télétravail : ce qui change pour les managers\n\nTrois études le disent : on travaille autant, autrement.\n"})
 		if id, _ := out["id"].(string); id != "" {
 			keep("deliverable", id)
@@ -1102,7 +1102,7 @@ func (sc *scenario) event(b *brainPlay, turn string) string {
 	b.self("node_write", map[string]any{"id": research, "expect": hash, "body": "## Ce qu'on a trouvé\n\n" + articleSummary + "\n"})
 	_, hash = b.read(write)
 	b.self("node_write", map[string]any{"id": write, "expect": hash, "body": articleDoc(articleDecided, articleResearch, "[[Choisir l'angle]].", articleLinked[:2]...)})
-	out := b.self("node_open", map[string]any{"title": "Choisir l'angle", "parent": write, "aside": true,
+	out := b.self("node_open", map[string]any{"goal": "Un but.", "title": "Choisir l'angle", "parent": write, "aside": true,
 		"body": "Deux angles tiennent, d'après la recherche.\n\n- Les managers : ce qui change pour eux.\n- Les salariés : comment s'organiser.\n\n" +
 			askBlock("angles", "L'angle des managers", "L'angle des salariés")})
 	if id, _ := out["id"].(string); id != "" {

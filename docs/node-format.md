@@ -67,7 +67,7 @@ The titles proposed for the first article:
 | `title` | text | Its title for the user: one line, 120 characters at most. Required. |
 | `parent` | id | The node it belongs to; none for a node at the top. Code writes it: at creation, and when Eriphe moves the node (`node_set parent`), never under itself or a node below it. |
 | `links` | list of ids | Written by code only: the nodes it links to; no duplicate, never itself. An author's write keeps them. An author links nodes in the text instead ([Links between nodes](#links-between-nodes)). |
-| `goal` | text | What the node is for, and what is written in it (« tableau de bord des mails à traiter, tenu par le skill mails ; on n'y écrit pas de réponses »). Never shown to the user. Whether a skill maintains the node is never in its file: code computes it from the skills that name it as their home. |
+| `goal` | text | What the node is for, and what is written in it, in one line (« tableau de bord des mails à traiter, tenu par le skill mails ; on n'y écrit pas de réponses »). Every node Eriphe opens has one (`node_open` requires it); a file without one still reads. Not shown on its page; `node_find` and Eriphe's list of nodes give it. Whether a skill maintains the node is never in its file: code computes it from the skills that name it as their home. |
 | `created` | timestamp | When it was created (RFC 3339). Required. |
 | `done` | timestamp | Written by code (Eriphe's `node_set` `done`, the user's gestures): when it was marked done; absent while not done. An author's write keeps it. |
 | `archived` | timestamp | When the user archived it; absent while not archived. |

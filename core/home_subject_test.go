@@ -39,7 +39,7 @@ func cardOfRef(t *testing.T, c *core, ref string) convoCard {
 func TestHomeSubjectTakesTheExchange(t *testing.T) {
 	c, answer := netCore(t, "Tu peux garder un œil sur mes mails ?", "")
 	asked := c.turn.answer
-	out, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Title: "Garder un œil sur mes mails", Body: "Ce qu'on suit, et comment.\n"})
+	out, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Goal: "Un but.", Title: "Garder un œil sur mes mails", Body: "Ce qu'on suit, et comment.\n"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestHomeSubjectTakesTheExchange(t *testing.T) {
 func TestAsideNodeStaysInTheBackground(t *testing.T) {
 	c, answer := netCore(t, "Lance une recherche à part sur les devis", "")
 	asked := c.turn.answer
-	if _, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Title: "Devis", Aside: true}); err != nil {
+	if _, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Goal: "Un but.", Title: "Devis", Aside: true}); err != nil {
 		t.Fatal(err)
 	}
 	answer("Je lance la recherche.")
@@ -123,7 +123,7 @@ func TestNodeOpenFromANodeShowsBeside(t *testing.T) {
 	seq, _ := c.store.addUserMessage("Compare les devis", nil, id)
 	c.turn.start(int(seq), int(seq), 0)
 	c.turn.answersIn(id)
-	out, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Title: "Devis", Parent: id})
+	out, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Goal: "Un but.", Title: "Devis", Parent: id})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestHomeMovesOnlyTheUsersWorkspaceTurn(t *testing.T) {
 	asked := c.turn.answer
 	c.turn.goOn(0, 0, 0, nil) // a due intention wakes it (brain_wake.go)
 	c.turn.answersIn("")
-	if _, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Title: "Devis"}); err != nil {
+	if _, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Goal: "Un but.", Title: "Devis"}); err != nil {
 		t.Fatal(err)
 	}
 	if m := messageAt(t, c, asked); m.Node != "" {
@@ -192,7 +192,7 @@ func TestHomeMovesOnlyTheUsersWorkspaceTurn(t *testing.T) {
 	seq, _ := c.store.addNodeMessage(roleUser, "Garde un œil sur mes mails", "telegram", "", false)
 	c.turn.start(int(seq), int(seq), 0)
 	c.turn.answersIn("")
-	out, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Title: "Mails"})
+	out, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Goal: "Un but.", Title: "Mails"})
 	if err != nil {
 		t.Fatal(err)
 	}

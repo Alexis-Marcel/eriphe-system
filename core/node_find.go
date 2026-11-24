@@ -30,6 +30,9 @@ const (
 	// the most it gives.
 	nodeFindMax  = 30
 	nodeFindMost = 200
+	// nodeGoalMax is how much of a node's goal node_find and the brain's
+	// node list give.
+	nodeGoalMax = 200
 	// coreServer is eriphe-core's own name as a source's server: no
 	// catalog server may take it (reserved).
 	coreServer = "eriphe-core"
@@ -41,7 +44,7 @@ const (
 )
 
 type nodeFindIn struct {
-	Query string `json:"query,omitempty" jsonschema:"words to look for; with neither words nor filters, the nodes at work or waiting, then the last changed"`
+	Query string `json:"query,omitempty" jsonschema:"words to look for; with neither words nor filters, the nodes at work or waiting, the heaviest first, then the last changed"`
 	// Tags and Where filter on the node's properties.
 	Tags     []string     `json:"tags,omitempty" jsonschema:"tags it has, each one or one below it (cuisine finds cuisine/recette)"`
 	Where    []nodeCondIn `json:"where,omitempty" jsonschema:"conditions on its properties, all must hold"`
@@ -89,7 +92,7 @@ func (f nodeFound) MarshalJSON() ([]byte, error) {
 }
 
 // fixedFound are the fields of a node found, which no column replaces.
-var fixedFound = []string{"id", "title", "title_external", "status", "maintained", "parent", "changed", "done", "archived", "external", "withheld"}
+var fixedFound = []string{"id", "title", "title_external", "goal", "status", "maintained", "parent", "changed", "done", "archived", "external", "withheld"}
 
 // findNodes is node_find, for the brain and a block's source alike: it
 // never taints; quoted says it gave words that may be someone else's.
@@ -149,7 +152,7 @@ func (c *core) findNodes(in nodeFindIn) (found []nodeFound, quoted bool, err err
 	homes := c.homeSkills()
 	for _, x := range xs {
 		f := c.foundNode(x, in.IncludeExternal, homes)
-		quoted = quoted || f.TitleExternal && f.Title != ""
+		quoted = quoted || f.TitleExternal && f.Title != "" || x.External && f.Goal != ""
 		if len(cols[x.ID]) > 0 {
 			if x.External && !in.IncludeExternal {
 				f.Withheld = true // its properties may be someone else's words

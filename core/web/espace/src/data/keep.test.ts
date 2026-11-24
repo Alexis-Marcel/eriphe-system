@@ -9,7 +9,7 @@ const { keep, KEEP_AFTER } = await import("./keep");
 const { applyNodes, closePage, makeStore, openPage, setClosed } = await import("./store");
 
 const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
-  id, title: id, status: "idle", created: "", updated: "", version: 1, ...more,
+  id, title: id, weight: 0.6, status: "idle", created: "", updated: "", version: 1, ...more,
 });
 const glance = { label: "Conso", unit: "percent" as const, value: 2.6, ref: 2, delta: 30, threshold: 10, series: [2, 2.6], shown: true };
 

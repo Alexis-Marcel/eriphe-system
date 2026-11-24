@@ -37,7 +37,7 @@ func TestUserTurnOpensAskedNodes(t *testing.T) {
 	asked := int(seq)
 	c.turn.start(asked, asked, 0)
 	c.store.markDelivered(asked)
-	out, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Title: "Garder un œil sur mes mails"})
+	out, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Goal: "Un but.", Title: "Garder un œil sur mes mails"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestUserTurnOpensAskedNodes(t *testing.T) {
 func TestEventTurnOpensUnasked(t *testing.T) {
 	c := graphCore(t)
 	c.turn.start(0, 0, 3)
-	id := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Alerte disque"})["id"].(string)
+	id := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Alerte disque"})["id"].(string)
 	o, g, line := originNow(t, c, id)
 	if o == nil || o.By != nodefile.OpenedEvent {
 		t.Fatalf("origin %+v", o)
@@ -113,7 +113,7 @@ func TestSkillRunOpensUnasked(t *testing.T) {
 	if !g.Unasked || line.Text != "Ouvert par le skill mails-rdv, après ce qu'a vu la surveillance « mails », sans demande de ta part." {
 		t.Errorf("row %+v, line %+v", g, line)
 	}
-	kid := mustNodes(t, c, task, "node_open", map[string]any{"title": "Rendez-vous du 8"})["id"].(string)
+	kid := mustNodes(t, c, task, "node_open", map[string]any{"goal": "Un but.", "title": "Rendez-vous du 8"})["id"].(string)
 	if o, g, _ := originNow(t, c, kid); o == nil || o.By != nodefile.OpenedSkill || o.Skill != "mails-rdv" || o.Task != task || o.Node != mine || !g.Unasked {
 		t.Fatalf("its child %+v", o)
 	}
@@ -144,7 +144,7 @@ func TestPlaceAndUnknownOrigins(t *testing.T) {
 func TestOpenedByOutlivesWrites(t *testing.T) {
 	c := graphCore(t)
 	c.turn.start(0, 0, 3)
-	id := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Alerte disque"})["id"].(string)
+	id := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Alerte disque"})["id"].(string)
 	d, _ := c.nodes.Read(id, 0)
 	mustBrainNodes(t, c, "node_write", map[string]any{"id": id, "expect": d.Version.Hash, "body": "Le disque est plein."})
 	mustBrainNodes(t, c, "node_set", map[string]any{"id": id, "title": "Disque plein"})

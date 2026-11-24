@@ -32,8 +32,8 @@ func TestOneNodeOpen(t *testing.T) {
 	task, own := startInNode(t, c, runRequest{Title: "Style", Prompt: "Analyse le style.", Node: sid})
 
 	// Clean, both open a work node with the same body.
-	b := mustBrainNodes(t, c.core, "node_open", map[string]any{"title": "Plan", "parent": sid, "body": askBody, "aside": true})
-	k := mustNodes(t, c.core, task.ID, "node_open", map[string]any{"title": "Pages", "body": askBody})
+	b := mustBrainNodes(t, c.core, "node_open", map[string]any{"goal": "Un but.", "title": "Plan", "parent": sid, "body": askBody, "aside": true})
+	k := mustNodes(t, c.core, task.ID, "node_open", map[string]any{"goal": "Un but.", "title": "Pages", "body": askBody})
 	for id, parent := range map[string]string{b["id"].(string): sid, k["id"].(string): own} {
 		sum, _ := c.nodes.Get(id)
 		if sum.Parent != parent || sum.External {
@@ -45,8 +45,8 @@ func TestOneNodeOpen(t *testing.T) {
 	// external; words bound to the data are refused, and nothing is made.
 	c.turn.taint("web.fetch")
 	c.store.set(taskTaintKey(task.ID), "external:mail")
-	b = mustBrainNodes(t, c.core, "node_open", map[string]any{"title": "Plan 2", "body": askBody, "aside": true})
-	k = mustNodes(t, c.core, task.ID, "node_open", map[string]any{"title": "Pages 2", "body": askBody})
+	b = mustBrainNodes(t, c.core, "node_open", map[string]any{"goal": "Un but.", "title": "Plan 2", "body": askBody, "aside": true})
+	k = mustNodes(t, c.core, task.ID, "node_open", map[string]any{"goal": "Un but.", "title": "Pages 2", "body": askBody})
 	for _, id := range []string{b["id"].(string), k["id"].(string)} {
 		d, _ := c.nodes.Read(id, 0)
 		if q := d.Node.Block("q"); q == nil || !q.External || !blockAsks(q.Components) {
@@ -54,8 +54,8 @@ func TestOneNodeOpen(t *testing.T) {
 		}
 	}
 	n := len(mustGraph(t, c.core))
-	_, bmsg := brainNodes(t, c.core, "node_open", map[string]any{"title": "Plan 2b", "body": boundAskBody, "aside": true})
-	_, kmsg := callNodes(t, c.core, task.ID, "node_open", map[string]any{"title": "Pages 2b", "body": boundAskBody})
+	_, bmsg := brainNodes(t, c.core, "node_open", map[string]any{"goal": "Un but.", "title": "Plan 2b", "body": boundAskBody, "aside": true})
+	_, kmsg := callNodes(t, c.core, task.ID, "node_open", map[string]any{"goal": "Un but.", "title": "Pages 2b", "body": boundAskBody})
 	for who, msg := range map[string]string{"brain": bmsg, "task": kmsg} {
 		if !strings.Contains(msg, "your own words only") {
 			t.Errorf("%s: an ask bound to the data: %q", who, msg)
@@ -66,8 +66,8 @@ func TestOneNodeOpen(t *testing.T) {
 	}
 
 	// Tainted, what they open is external.
-	b = mustBrainNodes(t, c.core, "node_open", map[string]any{"title": "Plan 3", "aside": true})
-	k = mustNodes(t, c.core, task.ID, "node_open", map[string]any{"title": "Pages 3"})
+	b = mustBrainNodes(t, c.core, "node_open", map[string]any{"goal": "Un but.", "title": "Plan 3", "aside": true})
+	k = mustNodes(t, c.core, task.ID, "node_open", map[string]any{"goal": "Un but.", "title": "Pages 3"})
 	for _, id := range []string{b["id"].(string), k["id"].(string)} {
 		if sum, _ := c.nodes.Get(id); !sum.External {
 			t.Errorf("node %s opened tainted is not external", id)
@@ -122,9 +122,9 @@ func TestRunTaskUnderTurnNode(t *testing.T) {
 // nor below it, never a step; node_read gives the nodes that link it.
 func TestBrainNodeReparentAndBacklinks(t *testing.T) {
 	c := graphCore(t)
-	home := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Maison", "aside": true})["id"].(string)
-	works := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Travaux", "parent": home, "aside": true})["id"].(string)
-	quote := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Devis", "aside": true, "body": "Pour [[Travaux]]."})["id"].(string)
+	home := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Maison", "aside": true})["id"].(string)
+	works := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Travaux", "parent": home, "aside": true})["id"].(string)
+	quote := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Devis", "aside": true, "body": "Pour [[Travaux]]."})["id"].(string)
 
 	if _, msg := brainNodes(t, c, "node_set", map[string]any{"id": home, "parent": works}); !strings.Contains(msg, "under itself") {
 		t.Errorf("a cycle: %q", msg)

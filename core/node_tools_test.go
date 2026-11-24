@@ -58,7 +58,7 @@ func TestBrainNodeEditNeedsID(t *testing.T) {
 	if d := schema.Properties["id"].Description; d == "" || strings.Contains(d, "leave it out") {
 		t.Errorf("id says %q", d)
 	}
-	id := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Liste de courses", "body": "Du pain."})["id"].(string)
+	id := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Liste de courses", "body": "Du pain."})["id"].(string)
 	d, _ := c.nodes.Read(id, 0)
 	mustBrainNodes(t, c, "node_edit", map[string]any{"id": id, "expect": d.Version.Hash, "old": "pain", "new": "lait"})
 	if d, _ := c.nodes.Read(id, 0); d.Node.Text() != "Du lait." {
@@ -141,13 +141,13 @@ func TestBrainNodeTools(t *testing.T) {
 		t.Error("the brain archived a node")
 	}
 	// A parent that is not there.
-	if _, msg := brainNodes(t, c, "node_open", map[string]any{"title": "Enfant", "parent": "nothere"}); msg == "" {
+	if _, msg := brainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Enfant", "parent": "nothere"}); msg == "" {
 		t.Error("a child of a missing node")
 	}
 	// node_open has no lifetime to ask for (a node is maintained by a
 	// skill homed on it, never by a kind of its own); nothing is made.
 	n := len(mustGraph(t, c))
-	if _, msg := brainNodes(t, c, "node_open", map[string]any{"title": "Ma journée", "lifetime": "standing"}); msg == "" {
+	if _, msg := brainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Ma journée", "lifetime": "standing"}); msg == "" {
 		t.Error("a node_open with a lifetime")
 	}
 	if len(mustGraph(t, c)) != n {
@@ -178,14 +178,14 @@ func TestBrainNodeTextLinks(t *testing.T) {
 			t.Fatal("node_link is still a tool")
 		}
 	}
-	research := mustBrainNodes(t, c, "node_open", map[string]any{"title": "La recherche"})["id"].(string)
-	out := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Écrire l'article",
+	research := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "La recherche"})["id"].(string)
+	out := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Écrire l'article",
 		"body": "Voir [[La recherche]], puis [[Choisir l'angle]]. Écrire `[[Rien]]` pour lier."})
 	write := out["id"].(string)
 	if w, _ := out["links_waiting"].([]any); len(w) != 1 || w[0] != "Choisir l'angle" {
 		t.Fatalf("waiting links: %v", out)
 	}
-	angle := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Choisir l'angle", "parent": write, "aside": true})["id"].(string)
+	angle := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Choisir l'angle", "parent": write, "aside": true})["id"].(string)
 	read := mustBrainNodes(t, c, "node_read", map[string]any{"id": write})
 	links, _ := read["links"].([]any)
 	if len(links) != 2 || !slices.Contains(links, any(research)) || !slices.Contains(links, any(angle)) {
@@ -206,8 +206,8 @@ func TestBrainNodeSetShow(t *testing.T) {
 	c.useMemory(m)
 	var evs []journalEvent
 	c.subscribeEvents(func(e journalEvent) { evs = append(evs, e) })
-	id := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Garage", "body": "Rendez-vous pris jeudi."})["id"].(string)
-	other := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Voiture"})["id"].(string)
+	id := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Garage", "body": "Rendez-vous pris jeudi."})["id"].(string)
+	other := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Voiture"})["id"].(string)
 	mustBrainNodes(t, c, "node_set", map[string]any{"id": id, "title": "Garage du jeudi", "goal": "La voiture est réparée."})
 	if d, _ := c.nodes.Read(id, 0); d.Node.Meta.Title != "Garage du jeudi" || d.Node.Meta.Goal != "La voiture est réparée." {
 		t.Fatalf("set: %+v", d.Node.Meta)
@@ -296,7 +296,7 @@ func TestBrainNodeTaint(t *testing.T) {
 	if _, _, _, tainted := c.turn.snapshot(); len(tainted) == 0 {
 		t.Fatal("reading an external node did not taint the turn")
 	}
-	mine := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Réponse au mail"})["id"].(string)
+	mine := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Réponse au mail"})["id"].(string)
 	if sum, _ := c.nodes.Get(mine); !sum.External {
 		t.Error("a node opened in a tainted turn is not external")
 	}
@@ -318,7 +318,7 @@ func TestSubjectKeepsTheBrainsTitle(t *testing.T) {
 		t.Fatalf("opened in a clean turn: %+v", sum)
 	}
 	c.turn.taint(taintExternalMemory) // a recall that gave a fact read in a mail
-	opened := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Mes rendez-vous", "body": "Trois rendez-vous."})
+	opened := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Mes rendez-vous", "body": "Trois rendez-vous."})
 	sum, _ := c.nodes.Get(opened["id"].(string))
 	if sum.Title != "Mes rendez-vous" || !sum.External || !sum.TitleExternal() {
 		t.Fatalf("opened after a read: %+v (title external %v)", sum, sum.TitleExternal())
@@ -333,7 +333,7 @@ func TestSubjectKeepsTheBrainsTitle(t *testing.T) {
 // node external, never its title (#666's rule, the prompt's order).
 func TestSubjectOpenedFirstKeepsItsTitle(t *testing.T) {
 	c := graphCore(t)
-	id := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Gérer ma journée", "body": "Ce qui t'attend aujourd'hui."})["id"].(string)
+	id := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Gérer ma journée", "body": "Ce qui t'attend aujourd'hui."})["id"].(string)
 	if sum, _ := c.nodes.Get(id); sum.External || sum.TitleExternal() {
 		t.Fatalf("opened in a clean turn: %+v", sum)
 	}
@@ -359,10 +359,10 @@ func TestSubjectOpenedFirstKeepsItsTitle(t *testing.T) {
 // and finds them with archived.
 func TestArchiveCascadesFindFinds(t *testing.T) {
 	c := graphCore(t)
-	top := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Déménagement"})["id"].(string)
-	kid := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Cartons du déménagement", "parent": top})["id"].(string)
-	grand := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Scotch du déménagement", "parent": kid})["id"].(string)
-	keep := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Déménagement du bureau"})["id"].(string)
+	top := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Déménagement"})["id"].(string)
+	kid := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Cartons du déménagement", "parent": top})["id"].(string)
+	grand := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Scotch du déménagement", "parent": kid})["id"].(string)
+	keep := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Déménagement du bureau"})["id"].(string)
 	c.cardRaisedFor(nodeRef(kid), "card:1")
 	if err := c.archiveNode(context.Background(), top, byUser); err != nil {
 		t.Fatal(err)

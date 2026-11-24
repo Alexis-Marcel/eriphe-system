@@ -141,6 +141,8 @@ export type GraphNode = {
   links?: string[];
   // maintained: the skills that keep it up, approved and on (eriphe-core computes it): its satellite, its ∞
   maintained?: string[];
+  // weight: how much it weighs, computed once by eriphe-core (node_weight.go): its bubble's size and light
+  weight: number;
   status: "idle" | "running" | "waits" | "done";
   created: string;
   updated: string;

@@ -202,7 +202,7 @@ func TestPageReportQuotesNoUntrustedWords(t *testing.T) {
 		"sources":    map[string]any{"web": map[string]any{"tool": "monitor/status", "args": map[string]any{"service": "web"}}},
 	})
 	c.turn.start(0, 0, 0)
-	out := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Mes mails", "body": body})
+	out := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Mes mails", "body": body})
 	r := reportOf(t, out, "recus")
 	problems, _ := json.Marshal(r["problems"])
 	if !strings.Contains(string(problems), "nothing at /mails/total in what the source mails gave") || strings.Contains(string(problems), "there:") {
@@ -227,7 +227,7 @@ func TestPageReportWaitsForTheRead(t *testing.T) {
 		"components": map[string]any{"component": "Table", "columns": []map[string]any{{"key": "title", "label": "Étude"}}, "rows": map[string]any{"@path": "/etudes/nodes"}},
 		"sources":    map[string]any{"etudes": map[string]any{"tool": "eriphe-core/node_find", "args": map[string]any{"tags": []string{"etude"}}}},
 	})
-	out := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Mes études", "aside": true, "body": body})
+	out := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Mes études", "aside": true, "body": body})
 	r := reportOf(t, out, "etudes")
 	if r["state"] != pageOK || r["rows"].(map[string]any)["root"] != float64(2) {
 		t.Fatalf("report %v", r)

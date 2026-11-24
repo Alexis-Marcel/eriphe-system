@@ -12,7 +12,7 @@ import "./dev.css";
 
 const at = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
 const row = (id: string, title: string, more: Partial<GraphNode> = {}): GraphNode => ({
-  id, title, status: "idle", created: at(600), updated: at(30), version: 1, ...more,
+  id, title, weight: more.parent ? 0.55 : 0.95, status: "idle", created: at(600), updated: at(30), version: 1, ...more,
 });
 
 // The owner's graph. The views take the sample's ids: their pages are the
@@ -46,7 +46,7 @@ function scaleGraph(): GraphNode[] {
   }
   out.push(row("sub0a", "Idées de titres", { parent: "sub0", created: at(m--) }));
   out.push(row("day", "Ma journée", { maintained: ["journee"], links: ["voy0", "mai0"], created: at(m--) }));
-  out.push(row("mails", "Mes mails", { maintained: ["tri-mails"], links: ["sub"], status: "waits", created: at(m--) }));
+  out.push(row("mails", "Mes mails", { maintained: ["tri-mails"], links: ["sub"], weight: 1.3, status: "waits", created: at(m--) }));
   out.push(row("invest", "Mon portefeuille", { maintained: ["portefeuille"], created: at(m--) }));
   out.push(row("fac", "Factures du mois", { links: ["mai1"], created: at(m--) }));
   out.push(row("tools", "Outils à revoir", { created: at(m--) }));

@@ -1,26 +1,13 @@
 import type { GraphNode } from "../data/api";
 import { depthOf } from "../data/store";
 
-// What a node looks like on the graph comes from what it is, computed
-// here, never chosen by a model: a subject is bigger than its bubbles,
-// what waits for the user brighter, what runs a little, what is done or
-// old quieter.
+// What a node looks like on the graph comes from what it is, never chosen
+// by a model: its weight, computed once by eriphe-core from its links, its
+// status and its freshness (node_weight.go), sizes and lights its bubble;
+// a subject is bigger than its bubbles.
 
-export const OLD = 7 * 24 * 3600 * 1000;
-
-export function weight(x: GraphNode, nodes: Record<string, GraphNode>, now = Date.now()): number {
-  const d = depthOf(nodes, x.id);
-  let v = d === 0 ? (x.maintained?.length ? 0.82 : 0.95) : d === 1 ? 0.55 : 0.42;
-  if (x.status === "waits") v += 0.35;
-  if (x.status === "running") v += 0.18;
-  if (x.status === "done") v -= 0.1;
-  if (now - Date.parse(x.updated) > OLD) v -= 0.12;
-  return Math.max(0.15, Math.min(1.3, v));
-}
-
-export function radiusOf(x: GraphNode, nodes: Record<string, GraphNode>, now = Date.now()): number {
-  const wt = weight(x, nodes, now);
-  return depthOf(nodes, x.id) === 0 ? 20 + 18 * wt : 9 + 13 * wt;
+export function radiusOf(x: GraphNode, nodes: Record<string, GraphNode>): number {
+  return depthOf(nodes, x.id) === 0 ? 20 + 18 * x.weight : 9 + 13 * x.weight;
 }
 
 // waits tells whether a node waits for the user (its status, eriphe-core's).

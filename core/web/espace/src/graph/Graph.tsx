@@ -9,7 +9,7 @@ import { onReads, readsUnderWay } from "../page/usePage";
 import { bigBox, bigRoom, boxAt, edgeMark, frameAll, frameAlone, frameAround, framePages, pageMax, type Box, type Cam } from "./camera";
 import { CENTRING, edgePush, edgeStep, extent, onForces, pairs, Sim, type LNode, type Pos, type Pt } from "./layout";
 import { coreShape, pickTiles, TILE, variation } from "./glance";
-import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits, weight } from "./model";
+import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits } from "./model";
 import { TileFace } from "./Tile";
 import { UnaskedMark } from "./Title";
 
@@ -84,8 +84,7 @@ export function Graph({ live }: { live: boolean }) {
   const openKey = open.filter((id) => ids.has(id)).join(",");
   const openIds = useMemo(() => (openKey ? openKey.split(",") : []), [openKey]);
   const lit = useMemo(() => new Set(openIds.flatMap((id) => subtree(nodes, id))), [openIds, nodes]);
-  const now = Date.now();
-  const rOf = (x: GraphNode) => radiusOf(x, nodes, now);
+  const rOf = (x: GraphNode) => radiusOf(x, nodes);
   // The nodes drawn as tiles (graph/glance.ts): a tile's body is its
   // rounded rectangle, for the layout and the camera alike.
   const tilesWas = useRef<string[]>([]);
@@ -661,7 +660,7 @@ export function Graph({ live }: { live: boolean }) {
               glanceWord={x.glance ? glanceSaid(x.glance, lang, t) : ""}
               open={openIds.includes(x.id)}
               held={held === x.id}
-              light={0.3 + 0.7 * Math.min(1, weight(x, nodes, now) / 0.85)}
+              light={0.3 + 0.7 * Math.min(1, x.weight / 0.85)}
               waitsWord={t("espace.waits")}
               maintainedWord={x.maintained?.length ? t("espace.maintained", x.maintained.join(", ")) : ""}
               onGrab={onGrab}

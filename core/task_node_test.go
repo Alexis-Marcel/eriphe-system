@@ -275,7 +275,7 @@ func TestTaintedTaskWritesExternal(t *testing.T) {
 		t.Fatalf("a tainted ask:\n%s", d.Raw)
 	}
 	// A child it opens tainted is external.
-	kid := mustNodes(t, c.core, task.ID, "node_open", map[string]any{"title": "Réponse à Sam", "body": "Brouillon."})
+	kid := mustNodes(t, c.core, task.ID, "node_open", map[string]any{"goal": "Un but.", "title": "Réponse à Sam", "body": "Brouillon."})
 	if k, _ := c.nodes.Get(kid["id"].(string)); !k.External {
 		t.Fatal("a tainted task's child is clean")
 	}
@@ -392,11 +392,11 @@ func TestNodeCallsDoNotTaint(t *testing.T) {
 }
 
 // A title or a goal the filter refuses does not stop the task: its node
-// goes without them.
+// goes with neutral ones (every node has a goal).
 func TestTaskNodeRefusedGoal(t *testing.T) {
 	c := nodeCore(t)
 	_, id := startInNode(t, c, runRequest{Title: "Le jeton", Prompt: "Renouvelle le token: expiré-depuis-hier, puis dis-le."})
-	if d, _ := c.nodes.Read(id, 0); d.Node.Meta.Goal != "" || d.Node.Meta.Title != "Le jeton" {
+	if d, _ := c.nodes.Read(id, 0); !strings.HasPrefix(d.Node.Meta.Goal, "Le travail de la tâche ") || d.Node.Meta.Title != "Le jeton" {
 		t.Fatalf("node %+v", d.Node.Meta)
 	}
 	task, id := startInNode(t, c, runRequest{Title: "password: hunter2hunter2", Prompt: "x"})

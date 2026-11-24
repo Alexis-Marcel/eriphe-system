@@ -15,7 +15,7 @@ import { OrbProvider, resetOrb } from "./useOrb";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const node = (id: string, title: string, more: Partial<GraphNode> = {}): GraphNode => ({
-  id, title, status: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
+  id, title, weight: 0.6, status: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
 });
 const nodes = { sub: node("sub", "Substack"), mail: node("mail", "Urgent : la prod", { titleExternal: true }) };
 const bodies: LNode[] = [

@@ -15,7 +15,7 @@ import (
 // openStudy opens a node as the brain and sets its properties.
 func openStudy(t *testing.T, c *core, title string, props map[string]any) string {
 	t.Helper()
-	id := mustBrainNodes(t, c, "node_open", map[string]any{"title": title, "aside": true})["id"].(string)
+	id := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": title, "aside": true})["id"].(string)
 	mustBrainNodes(t, c, "node_set", map[string]any{"id": id, "props": props})
 	return id
 }
@@ -150,10 +150,10 @@ func TestNodeFindSource(t *testing.T) {
 		return "Mes études.\n\n```eriphe:block etudes\n" + `{"components": {"component": "Table", "columns": [{"key": "title", "label": "Étude"}, {"key": "statut", "label": "Statut"}], "rows": {"@path": "/etudes/nodes"}},
  "sources": {"etudes": {"tool": "eriphe-core/node_find", "args": ` + args + `}}}` + "\n```\n"
 	}
-	if _, msg := brainNodes(t, c, "node_open", map[string]any{"title": "Mes études", "body": block(`{"tags": ["etude"], "nope": 1}`)}); !strings.Contains(msg, "node_find") {
+	if _, msg := brainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Mes études", "body": block(`{"tags": ["etude"], "nope": 1}`)}); !strings.Contains(msg, "node_find") {
 		t.Fatalf("a source with args node_find does not read: %q", msg)
 	}
-	page := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Mes études", "aside": true, "body": block(`{"tags": ["etude"], "sort": "title", "columns": ["statut"]}`)})["id"].(string)
+	page := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Mes études", "aside": true, "body": block(`{"tags": ["etude"], "sort": "title", "columns": ["statut"]}`)})["id"].(string)
 	value := func() string {
 		r, _ := c.nodeValue(page, "etudes")
 		raw, _ := json.Marshal(r.Value)

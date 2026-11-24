@@ -147,7 +147,7 @@ func (c *core) fileText(id, author, text string, tainted, doc bool, sourceOK fun
 // is the user's words, never marked external. It gives the node, "" when
 // the store refused it.
 func (c *core) fileInNew(title string, trusted bool, answer string, tainted bool) string {
-	nw := nodestore.New{Title: title, Body: answer, External: tainted, TitleTrusted: trusted, OpenedBy: c.turnOrigin(), Author: byBrain}
+	nw := nodestore.New{Title: title, Goal: tr(c.userLang(), "net.goal"), Body: answer, External: tainted, TitleTrusted: trusted, OpenedBy: c.turnOrigin(), Author: byBrain}
 	d, err := c.nodes.Create(nw)
 	if err != nil {
 		nw.Body = "" // a block that does not hold, the size: the answer goes in its trace
