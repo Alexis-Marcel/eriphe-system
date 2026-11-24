@@ -425,6 +425,9 @@ export type ProposalView = {
   // for 1, 2… items chosen (call_fold.go).
   choices?: Choice[];
   acts?: string[];
+  // What its yes button says: always a verb, never a bare « Oui »
+  // (card_verb.go: « Envoyer », « Jeter les 102 »).
+  verb: string;
 };
 
 // stillAsks tells a card that still asks something of the user: it waits,

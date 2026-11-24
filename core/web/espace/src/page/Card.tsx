@@ -119,7 +119,7 @@ export function Card({ refText, surface }: { refText: string; surface: string })
     p.from
   );
   const from = p.from && (p.node ? <a href={`/espace?open=node-${p.node}`}>{said}</a> : said);
-  const yesWord = choosing && p.acts && count > 0 ? p.acts[Math.min(count, p.acts.length) - 1] : t(keeps ? "espace.a2.keep" : "espace.a2.yes");
+  const yesWord = choosing && p.acts && count > 0 ? p.acts[Math.min(count, p.acts.length) - 1] : p.verb;
   const raw = (p.fields ?? []).filter((f) => f.detail && f.raw);
   const details = Boolean(p.fields?.some((f) => f.detail) || (home && (aside || p.from || (pending && p.yes))));
   const icon = pending ? "star" : "clock";

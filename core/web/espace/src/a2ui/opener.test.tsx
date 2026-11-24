@@ -43,7 +43,7 @@ let reads: { item: string }[];
 let answer: (item: string) => Opened;
 let answered: string[];
 const proposals: Proposals = {
-  read: async (ref) => (ref === "calls:5" ? { ref, card: 5, kind: "calls", state: "pending", text: "Répondre à Sam", fields: [{ name: "Ta réponse", value: "Bonjour Sam,\n\nÇa me va." }] } : null),
+  read: async (ref) => (ref === "calls:5" ? { ref, card: 5, verb: "Faire", kind: "calls", state: "pending", text: "Répondre à Sam", fields: [{ name: "Ta réponse", value: "Bonjour Sam,\n\nÇa me va." }] } : null),
   answer: async (a) => {
     answered.push(a.ref);
     return true;

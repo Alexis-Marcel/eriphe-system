@@ -11,7 +11,7 @@ import (
 // The catalog holds the shapes agreed for the workspace (#416), in this
 // order: a new one is a decision, not a side effect.
 func TestCatalogComponents(t *testing.T) {
-	want := []string{"Text", "Markdown", "Image", "Icon", "Link", "Code", "Row", "Column", "List", "Grid", "Card", "Tabs", "Fold", "Divider",
+	want := []string{"Text", "Markdown", "Image", "Icon", "Link", "Code", "Sections", "Figures", "Gallery", "Asks", "Row", "Column", "List", "Grid", "Card", "Tabs", "Fold", "Divider",
 		"Button", "Choice", "TextField", "DateField", "Metric", "Progress", "Chart", "Table", "Timeline", "Item", "Message", "Person", "Quote", "Agenda",
 		"Alert", "Placeholder"}
 	c := Eriphe()

@@ -66,11 +66,12 @@ func parseFeedbackData(s string) (int64, string, bool) {
 	return id, parts[2], err == nil && id > 0
 }
 
-// card sends a card with its Oui and Non.
+// card sends a card with its yes, which says its verb (card_verb.go),
+// and its Non.
 func (b *botChannel) card(x convoCard, p proposal) {
 	lang := b.lang()
 	b.post(botMessage{Text: cardText(x, p, lang), Buttons: [][]botButton{{
-		{Text: "✓ " + tr(lang, "card.yes"), Data: cardData(x.ID, true)},
+		{Text: "✓ " + p.VerbIn(lang), Data: cardData(x.ID, true)},
 		{Text: "✕ " + tr(lang, "card.no"), Data: cardData(x.ID, false)},
 	}}})
 }

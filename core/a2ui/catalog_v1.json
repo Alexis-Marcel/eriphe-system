@@ -5,7 +5,7 @@
   "title": "Eriphe workspace catalog",
   "description": "The shapes a block of a node's page is made of. Shapes only: no component belongs to a tool.",
   "catalogId": "urn:eriphe:a2ui:workspace:v1",
-  "instructions": "Un bloc est une partie de la page d'un nœud : des composants de ce catalogue, entre le texte. Il s'écrit comme une liste plate de composants ; chacun a un `id` unique (lettres, chiffres et `_`, ni tiret ni chiffre au début), un `component` (un nom ci-dessous) et ses propriétés. Un seul composant a l'id `root` : la racine. Un composant désigne ses enfants par leur id (`child`, `children`, `tabs`), jamais en les écrivant dedans.\n\n**Valeurs.** Une propriété de type texte, nombre, booléen ou valeur prend un littéral (`\"Bonjour\"`, `42`), une liaison vers les données du bloc `{\"@path\": \"/ventes/total\"}` (un pointeur JSON) ou un appel de fonction `{\"@call\": \"formatNumber\", \"args\": {\"value\": {\"@path\": \"/total\"}}}`. Une propriété marquée « ou liaison » prend une liste littérale ou une liaison vers une liste de même forme.\n\n**Listes répétées.** `children` prend une liste d'ids `[\"a\", \"b\"]` ou un modèle `{\"path\": \"/mails\", \"componentId\": \"ligne\"}` qui répète le composant `ligne` pour chaque élément de `/mails`. Dans ce modèle et ses enfants, un chemin sans `/` au début (`{\"@path\": \"sujet\"}`) se lit dans l'élément ; un chemin qui commence par `/` se lit depuis la racine des données.\n\n**Règles.**\n- Les composants sont des formes, jamais des outils : montre ce qu'un outil rend avec la forme qui lui va (un chiffre : Metric ; une série : Chart ; une répartition, aujourd'hui et la cible : Chart `stack` ; des lignes : Table ; des étapes : Timeline ; un mail ou un message : Message ; une personne : Person ; des mots d'un autre, cités : Quote ; un calendrier, une journée ou une semaine : Agenda ; des cartes en galerie : Grid ; un lien vers une page : Link ; du code ou un diff : Code). Des options, une liste, un brouillon ne sont pas des composants : compose-les de ceux-ci.\n- Un bloc dit une chose : peu de composants, l'essentiel d'abord. Pas de texte qui répète un titre.\n- Lie les composants aux champs que l'outil rend (`@path`) plutôt que de recopier les valeurs : le code relit l'outil et le bloc reste à jour.\n- Une page qui dure ne dit aucun fait en texte figé, faux demain (« 18 385 € », « 3 mails », « Rien ne t'attend ») : un Metric lié au champ de sa source, ou qui compte les lignes d'une List (`list`) ; un `emptyText` pour « rien ». Pas de paragraphe qui explique la page ou son fonctionnement.\n- Un bouton ne fait qu'une chose : `ask`, il demande quelque chose à Eriphe avec tes propres mots : `{\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Relance la sauvegarde\"}}}`, un texte écrit tel quel et rien d'autre, jamais une liaison ; le code le relit dans le bloc, et Eriphe le reçoit comme un message de l'utilisateur sur ce nœud. Il n'agit sur rien. Tout autre nom est refusé.\n- Un oui n'est jamais un composant : ce qui attend le oui de l'utilisateur est une carte, que le code dessine d'après ses registres. La carte d'un élément se montre d'elle-même sur sa ligne (un seul Oui, ✕ pour refuser) ; une autre, là où un bloc carte la place, sinon au pied de la page.\n- Un Link montre son adresse en clair et ne s'ouvre que si l'utilisateur clique. Son `url` est une adresse http(s) écrite telle quelle, ou une liaison vers un champ que l'outil rend déjà comme une adresse (`{\"@path\": \"url\"}` dans un modèle) ; jamais une adresse construite à partir des données : pas de formatString, rien d'ajouté à la requête, pas d'identifiant ni de mot de passe dans l'adresse. Une adresse qui ne suit pas cette règle est refusée, ou n'est pas montrée.\n- Du code se montre avec Code, tel quel ; un diff unifié avec `\"mode\": \"diff\"`. Pour relire des modifications : leur description (Markdown), le diff (Code), les vérifications (Timeline) et un Link « Ouvrir dans … » vers leur page, pour aller plus loin là où elles sont.\n- N'invente ni composant, ni propriété, ni fonction : ce qui n'est pas ci-dessous est refusé.\n\n## Exemple : des mails, liés aux données\n```json\n[\n  {\"id\": \"root\", \"component\": \"List\", \"children\": {\"path\": \"/messages\", \"componentId\": \"mail\"}, \"emptyText\": \"Rien à traiter\"},\n  {\"id\": \"mail\", \"component\": \"Message\", \"from\": {\"@path\": \"from\"}, \"date\": {\"@path\": \"date\"}, \"subject\": {\"@path\": \"subject\"}, \"excerpt\": {\"@path\": \"snippet\"}}\n]\n```\nDonnées : `{\"messages\": [{\"from\": \"Sam\", \"date\": \"2026-11-12T08:10:00Z\", \"subject\": \"Devis\", \"snippet\": \"Voici le devis…\"}]}`\n\n## Exemple : des chiffres composés une fois\n```json\n[\n  {\"id\": \"root\", \"component\": \"Row\", \"children\": [\"cpu\", \"disque\"]},\n  {\"id\": \"cpu\", \"component\": \"Metric\", \"label\": \"Processeur\", \"value\": 37, \"unit\": \"%\", \"delta\": -5},\n  {\"id\": \"disque\", \"component\": \"Metric\", \"label\": \"Disque libre\", \"value\": 1.2, \"unit\": \"To\"}\n]\n```",
+  "instructions": "Un bloc est une partie de la page d'un nœud, entre le texte. Le plus souvent, un seul composant : `{\"component\": \"Sections\", \"items\": \"mails\"}`, que le code complète avec l'id `root`. Pour en composer plusieurs, une liste plate : chacun a un `id` unique (lettres, chiffres et `_`, ni tiret ni chiffre au début), un seul est `root`, et un composant désigne ses enfants par leur id (`child`, `children`, `tabs`), jamais en les écrivant dedans.\n\n**Valeurs.** Une propriété de type texte, nombre, booléen ou valeur prend un littéral (`\"Bonjour\"`, `42`), une liaison vers les données du bloc `{\"@path\": \"/ventes/total\"}` (un pointeur JSON ; la valeur d'une source est en `/<nom>`) ou un appel de fonction `{\"@call\": \"formatNumber\", \"args\": {\"value\": {\"@path\": \"/total\"}}}`. « ou liaison » : une liste littérale ou une liaison vers une liste de même forme. Le nom d'une source (Sections, Gallery, Table) : le code y lit ses éléments, toujours à jour.\n\n**Règles.**\n- Les composants sont des formes, jamais des outils : des chiffres : Figures ; les éléments d'une source, rangés d'après tes notes : Sections ; des images : Gallery ; des lignes : Table ; une série : Chart (une répartition, aujourd'hui et la cible : `stack`) ; des étapes : Timeline ; des réponses probables : Asks ; un message : Message ; une personne : Person ; des mots d'un autre, cités : Quote ; des jours : Agenda ; un lien : Link ; du code ou un diff : Code.\n- Le code fait le reste : groupes, comptes, unités, mise en page, et ce qui est vide, en lecture ou en erreur. Pas de texte qui répète un titre, ni « Rien à traiter ».\n- Une page qui dure tient ses faits de ses sources (une liaison), jamais d'un texte figé, faux demain (« 18 385 € », « 3 mails »).\n- Asks n'agit sur rien : un clic t'envoie son texte tel quel, comme un message de l'utilisateur sur ce nœud. Un oui n'est jamais un composant : ce qui attend le oui de l'utilisateur est une carte, que le code dessine d'après ses registres, sur la ligne de son élément, sinon au pied de la page.\n- Un Link montre son adresse en clair et ne s'ouvre qu'au clic. Son `url` est une adresse http(s) écrite telle quelle, ou une liaison vers un champ qui est déjà une adresse ; jamais construite à partir des données (pas de formatString, rien d'ajouté à la requête, ni identifiant ni mot de passe) : sinon elle est refusée, ou n'est pas montrée.\n- Du code se montre avec Code, tel quel ; un diff unifié avec `\"mode\": \"diff\"`. Pour relire des modifications : leur description (Markdown), le diff (Code), les vérifications (Timeline) et un Link « Ouvrir dans … » vers leur page.\n- N'invente ni composant, ni propriété, ni fonction : ce qui n'est pas ci-dessous est refusé.\n\n## Exemple : des chiffres, l'un lié à sa source\n```json\n{\"component\": \"Figures\", \"items\": [{\"label\": \"Processeur\", \"value\": {\"@path\": \"/machine/cpu\"}, \"unit\": \"%\", \"delta\": -5}, {\"label\": \"Disque libre\", \"value\": 1.2, \"unit\": \"To\"}]}\n```\n\n## Exemple : deux composants côte à côte\n```json\n[\n  {\"id\": \"root\", \"component\": \"Row\", \"children\": [\"sam\", \"etapes\"]},\n  {\"id\": \"sam\", \"component\": \"Person\", \"name\": \"Sam\", \"detail\": \"Artisan, la terrasse\"},\n  {\"id\": \"etapes\", \"component\": \"Timeline\", \"items\": [{\"label\": \"Devis signé\", \"state\": \"done\"}, {\"label\": \"Acompte\", \"state\": \"current\"}]}\n]\n```",
   "components": {
     "Text": {
       "type": "object",
@@ -97,6 +97,7 @@
     },
     "List": {
       "type": "object",
+      "x-legacy": true,
       "description": "Une liste d'éléments semblables, souvent répétés depuis les données par un modèle.",
       "properties": {
         "component": {"const": "List"},
@@ -108,6 +109,7 @@
     },
     "Grid": {
       "type": "object",
+      "x-legacy": true,
       "description": "Des enfants en grille, autant par rangée qu'il en tient : une galerie de cartes.",
       "properties": {
         "component": {"const": "Grid"},
@@ -119,6 +121,7 @@
     },
     "Card": {
       "type": "object",
+      "x-legacy": true,
       "description": "Un cadre autour d'un enfant, avec un titre.",
       "properties": {
         "component": {"const": "Card"},
@@ -150,6 +153,7 @@
     },
     "Fold": {
       "type": "object",
+      "x-legacy": true,
       "description": "Une ligne qui se déplie : ce qu'elle résume (« 4 étapes faites »), et en dessous un enfant, montré quand on l'ouvre.",
       "properties": {
         "component": {"const": "Fold"},
@@ -171,6 +175,7 @@
     },
     "Button": {
       "type": "object",
+      "x-legacy": true,
       "description": "Un bouton qui demande quelque chose à Eriphe (`ask`) : il envoie tes mots, n'agit sur rien.",
       "properties": {
         "component": {"const": "Button"},
@@ -178,18 +183,7 @@
         "icon": {"$ref": "#/$defs/IconName"},
         "variant": {"type": "string", "enum": ["primary", "default", "quiet"], "default": "default"},
         "action": {"$ref": "common_types.json#/$defs/Action"},
-        "until": {
-          "type": "object",
-          "description": "Ce qu'il met en place, un seul : tool (le serveur d'un outil à brancher), monitor (une surveillance à mettre en marche), skill (un skill à approuver) ; le code le cache une fois fait",
-          "properties": {
-            "tool": {"type": "string", "minLength": 1},
-            "monitor": {"type": "string", "minLength": 1},
-            "skill": {"type": "string", "minLength": 1}
-          },
-          "minProperties": 1,
-          "maxProperties": 1,
-          "additionalProperties": false
-        }
+        "until": {"$ref": "#/$defs/Until"}
       },
       "required": ["component", "label", "action"],
       "examples": [
@@ -245,6 +239,7 @@
     },
     "Metric": {
       "type": "object",
+      "x-legacy": true,
       "description": "Un chiffre clé et son évolution. Plusieurs dans un Row font une rangée de chiffres.",
       "properties": {
         "component": {"const": "Metric"},
@@ -266,6 +261,7 @@
     },
     "Progress": {
       "type": "object",
+      "x-legacy": true,
       "description": "Où en est un travail : son mot d'état et, quand il a des étapes, une barre de leur avancée (faites, en cours, sur le total) et le nom de celle en cours.",
       "properties": {
         "component": {"const": "Progress"},
@@ -290,7 +286,8 @@
             {"$ref": "common_types.json#/$defs/DataBinding"}
           ]
         },
-        "unit": {"$ref": "common_types.json#/$defs/DynamicString", "description": "L'unité des valeurs."}
+        "unit": {"$ref": "common_types.json#/$defs/DynamicString", "description": "L'unité des valeurs."},
+        "title": {"$ref": "common_types.json#/$defs/DynamicString"}
       },
       "required": ["component", "kind", "series"],
       "examples": [
@@ -300,29 +297,34 @@
     },
     "Table": {
       "type": "object",
-      "description": "Des lignes en colonnes.",
+      "x-source": "rows",
+      "description": "Des lignes en colonnes. Sans columns : les champs de la première ligne, dans l'ordre, la clé en en-tête ; les nombres à droite.",
       "properties": {
         "component": {"const": "Table"},
-        "columns": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/TableColumn"}},
         "rows": {
           "description": "Une ligne est un objet ; chaque colonne lit le champ de sa clé.",
           "oneOf": [
+            {"$ref": "#/$defs/SourceName"},
             {"type": "array", "items": {"type": "object"}},
             {"$ref": "common_types.json#/$defs/DataBinding"}
           ]
         },
-        "emptyText": {"$ref": "common_types.json#/$defs/DynamicString"}
+        "title": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "columns": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/TableColumn"}, "description": "Quand les clés ne sont pas ses mots."},
+        "units": {"$ref": "#/$defs/Units", "description": "Par colonne : €, %, ±% (un écart signé), ★ (une note sur 5) ou un mot (« min »)"},
+        "emptyText": {"$ref": "common_types.json#/$defs/DynamicString", "x-legacy": true}
       },
-      "required": ["component", "columns", "rows"],
+      "required": ["component", "rows"],
       "examples": [
-        {"id": "tickets", "component": "Table", "columns": [{"key": "title", "label": "Ticket"}, {"key": "age", "label": "Âge", "kind": "number"}], "rows": {"@path": "/issues"}}
+        {"id": "recettes", "component": "Table", "title": "Mes recettes", "rows": "recettes", "units": {"note": "★", "temps": "min"}}
       ]
     },
     "Timeline": {
       "type": "object",
-      "description": "Des étapes dans l'ordre, chacune avec son état ; quand toutes ont une date, ce qui s'est passé, la date en marge.",
+      "description": "Des étapes dans l'ordre, chacune avec son état ; elle dit d'elle-même où en est le travail (« 2 sur 6 », l'étape en cours) ; quand toutes ont une date, ce qui s'est passé, la date en marge.",
       "properties": {
         "component": {"const": "Timeline"},
+        "title": {"$ref": "common_types.json#/$defs/DynamicString"},
         "items": {
           "oneOf": [
             {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/TimelineItem"}},
@@ -337,6 +339,7 @@
     },
     "Item": {
       "type": "object",
+      "x-legacy": true,
       "description": "Une ligne d'une liste : ce qu'elle est, à côté d'où elle vient, en dessous une note ; à droite une échéance et une marque.",
       "properties": {
         "component": {"const": "Item"},
@@ -348,6 +351,74 @@
         "level": {"$ref": "common_types.json#/$defs/DynamicString", "description": "normal (par défaut) ou low (une ligne, discrète). Ce qui attend l'utilisateur est la carte de l'élément, sur sa ligne."}
       },
       "required": ["component", "title"]
+    },
+    "Sections": {
+      "type": "object",
+      "x-source": "items",
+      "x-rows": "items",
+      "description": "Les éléments d'une source, rangés par le code d'après tes notes (item_note) : d'abord les groupes où il y a à faire, une ligne par élément avec ta note et sa carte ; un groupe dont les éléments partagent une carte, un lot replié qui porte son oui ; les autres groupes repliés. Vide, en lecture, en erreur : le code le dit.",
+      "properties": {
+        "component": {"const": "Sections"},
+        "items": {"oneOf": [{"$ref": "#/$defs/SourceName"}, {"$ref": "common_types.json#/$defs/DataBinding"}], "description": "La source du bloc qui liste ses éléments (items)."},
+        "title": {"$ref": "common_types.json#/$defs/DynamicString"}
+      },
+      "required": ["component", "items"],
+      "examples": [
+        {"id": "mails", "component": "Sections", "items": "mails"}
+      ]
+    },
+    "Figures": {
+      "type": "object",
+      "description": "Quelques chiffres côte à côte, en bandeau.",
+      "properties": {
+        "component": {"const": "Figures"},
+        "items": {
+          "oneOf": [
+            {"type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "#/$defs/Figure"}},
+            {"$ref": "common_types.json#/$defs/DataBinding"}
+          ]
+        },
+        "title": {"$ref": "common_types.json#/$defs/DynamicString"}
+      },
+      "required": ["component", "items"],
+      "examples": [
+        {"id": "chiffres", "component": "Figures", "items": [{"label": "PEA", "value": 18385, "unit": "€", "delta": 1.8, "deltaLabel": "cette semaine"}, {"label": "Lignes", "value": 6}]}
+      ]
+    },
+    "Gallery": {
+      "type": "object",
+      "x-source": "items",
+      "description": "Des images en vignettes, leur titre dessous ; by ajoute un filtre par la valeur d'un champ.",
+      "properties": {
+        "component": {"const": "Gallery"},
+        "items": {
+          "oneOf": [
+            {"$ref": "#/$defs/SourceName"},
+            {"type": "array", "minItems": 1, "maxItems": 60, "items": {"type": "object"}},
+            {"$ref": "common_types.json#/$defs/DataBinding"}
+          ],
+          "description": "Chacun a title et son image en photo (ou image)."
+        },
+        "title": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "by": {"type": "string", "description": "Le champ qui fait les filtres."},
+        "units": {"$ref": "#/$defs/Units", "description": "Les champs montrés sous le titre, et leur unité, comme Table"}
+      },
+      "required": ["component", "items"],
+      "examples": [
+        {"id": "pieces", "component": "Gallery", "items": "pieces", "by": "categorie", "units": {"portee": "fois"}}
+      ]
+    },
+    "Asks": {
+      "type": "object",
+      "description": "Des réponses probables en boutons : un clic t'envoie son texte, tel quel, comme son message dans ce nœud ; il n'agit sur rien. La première est celle par défaut. Chacune dit ce qu'elle demande, jamais un « Oui » seul.",
+      "properties": {
+        "component": {"const": "Asks"},
+        "items": {"type": "array", "minItems": 1, "maxItems": 6, "items": {"$ref": "#/$defs/Ask"}}
+      },
+      "required": ["component", "items"],
+      "examples": [
+        {"id": "reponses", "component": "Asks", "items": ["Fais comme tu proposes", "Écris-le pour des managers"]}
+      ]
     },
     "Message": {
       "type": "object",
@@ -516,6 +587,10 @@
         {"$ref": "#/components/Icon"},
         {"$ref": "#/components/Link"},
         {"$ref": "#/components/Code"},
+        {"$ref": "#/components/Sections"},
+        {"$ref": "#/components/Figures"},
+        {"$ref": "#/components/Gallery"},
+        {"$ref": "#/components/Asks"},
         {"$ref": "#/components/Row"},
         {"$ref": "#/components/Column"},
         {"$ref": "#/components/List"},
@@ -600,6 +675,58 @@
         }
       },
       "required": ["name", "points"],
+      "additionalProperties": false
+    },
+    "SourceName": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$", "description": "Le nom d'une source du bloc : ses éléments (items), ou les nodes de node_find."},
+    "Units": {
+      "type": "object",
+      "description": "Par champ : €, %, ±% (un écart signé), ★ (une note sur 5), ou un mot (« min »).",
+      "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 16},
+      "maxProperties": 20
+    },
+    "Figure": {
+      "type": "object",
+      "properties": {
+        "label": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "value": {"$ref": "#/$defs/TextOrNumber"},
+        "unit": {"$ref": "common_types.json#/$defs/DynamicString"},
+        "delta": {"$ref": "common_types.json#/$defs/DynamicNumber", "description": "L'écart signé, à l'encre avec ▲ ou ▼."},
+        "deltaLabel": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Depuis quand (« depuis hier »)."},
+        "trend": {
+          "description": "Ses dernières valeurs : une petite courbe.",
+          "oneOf": [
+            {"type": "array", "items": {"type": "number"}, "maxItems": 120},
+            {"$ref": "common_types.json#/$defs/DataBinding"}
+          ]
+        }
+      },
+      "required": ["label"],
+      "additionalProperties": false
+    },
+    "Ask": {
+      "oneOf": [
+        {"type": "string", "minLength": 1, "maxLength": 1000},
+        {
+          "type": "object",
+          "properties": {
+            "text": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "until": {"$ref": "#/$defs/Until"}
+          },
+          "required": ["text", "until"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Until": {
+      "type": "object",
+      "description": "Ce qu'il met en place, un seul : tool (le serveur d'un outil à brancher), monitor (une surveillance à mettre en marche), skill (un skill à approuver) ; le code le cache une fois fait",
+      "properties": {
+        "tool": {"type": "string", "minLength": 1},
+        "monitor": {"type": "string", "minLength": 1},
+        "skill": {"type": "string", "minLength": 1}
+      },
+      "minProperties": 1,
+      "maxProperties": 1,
       "additionalProperties": false
     },
     "TableColumn": {

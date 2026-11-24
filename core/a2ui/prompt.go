@@ -25,6 +25,9 @@ func (c *Catalog) Prompt() string {
 	b.WriteString("`*` : obligatoire. « fixe » : une valeur écrite telle quelle, sans liaison.\n\n")
 	for _, name := range c.component {
 		def, _ := comps[name].(map[string]any)
+		if Legacy(def) {
+			continue // still read in the nodes written before it, never offered
+		}
 		b.WriteString("- **" + name + "**")
 		if d, _ := def["description"].(string); d != "" {
 			b.WriteString(" : " + d)
@@ -58,6 +61,29 @@ func (c *Catalog) Prompt() string {
 	return b.String()
 }
 
+// Legacy tells whether a component's or a property's schema is marked
+// "x-legacy": the catalog still validates and draws it, so that a node
+// written with it keeps its page, but no model is told of it: another
+// component does its job (List, Item and Fold: Sections; Row of Metric:
+// Figures; Grid and Card: Gallery; Button: Asks; Progress: Timeline).
+func Legacy(schema any) bool {
+	m, _ := schema.(map[string]any)
+	l, _ := m["x-legacy"].(bool)
+	return l
+}
+
+// IsLegacy tells whether a component of Eriphe's catalog is legacy.
+func IsLegacy(componentType string) bool { return Legacy(componentDoc(componentType)) }
+
+// SourceProp is the property of a component that may name one of its
+// block's sources ("x-source": Sections', Gallery's items, Table's rows):
+// code reads that source's rows there (nodefile's Block.Bound). "" when
+// it has none.
+func SourceProp(componentType string) string {
+	p, _ := componentDoc(componentType)["x-source"].(string)
+	return p
+}
+
 var returnTypes = map[string]string{
 	"string": "texte", "number": "nombre", "boolean": "booléen", "array": "liste", "object": "objet",
 	"validationResult": "vérification", "any": "valeur",
@@ -83,7 +109,9 @@ func (c *Catalog) describeProps(def map[string]any, skip string) string {
 	gather = func(m map[string]any) {
 		if p, ok := m["properties"].(map[string]any); ok {
 			for k, v := range p {
-				props[k] = v
+				if !Legacy(v) {
+					props[k] = v
+				}
 			}
 		}
 		if r, ok := stringList(m["required"]); ok {
@@ -186,6 +214,9 @@ func (c *Catalog) typeOf(s map[string]any, depth int) string {
 		case "object":
 			if _, ok := s["properties"]; ok {
 				return "{" + c.describeProps(s, "") + "}"
+			}
+			if ap, ok := s["additionalProperties"].(map[string]any); ok {
+				return "{clé: " + c.typeOf(ap, depth+1) + "}"
 			}
 			return "objet"
 		}

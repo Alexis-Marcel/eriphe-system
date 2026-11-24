@@ -18,18 +18,16 @@ const nodeGrammar = "# Un bloc d'Eriphe\n\n" +
 	"Le code les lit sans modèle et les tient à jour (une lecture qui échoue garde la dernière bonne valeur) ; la valeur d'une source est en `/<nom>`. Une source est :\n" +
 	"- un outil, une lecture libre (une tâche : un outil qu'on lui a prêté) : `{\"tool\": \"serveur/outil\", \"args\": {…}}` (sources_read les liste, avec leurs arguments) ;\n" +
 	"- des nœuds du graphe, comme `node_find` les trouve : `{\"tool\": \"eriphe-core/node_find\", \"args\": {\"tags\": [\"etude\"], \"where\": [{\"key\": \"temps\", \"op\": \"<\", \"value\": 20}], \"sort\": \"temps\", \"columns\": [\"temps\"]}}` ; " +
-	"sa valeur est `{\"nodes\": [{\"id\", \"title\", \"status\", \"changed\", et chaque colonne}]}`, relue dès qu'un nœud change ; une `Table` les montre (`\"rows\": {\"@path\": \"/<nom>/nodes\"}`), une ligne ouvre son nœud. Un titre écrit après une lecture extérieure, les propriétés d'un nœud extérieur n'y sont qu'avec `include_external` : le bloc est alors extérieur ;\n" +
+	"sa valeur est `{\"nodes\": [{\"id\", \"title\", \"status\", \"changed\", et chaque colonne}]}`, relue dès qu'un nœud change ; une `Table` ou une `Gallery` les montre (`\"rows\": \"<nom>\"`), une ligne ouvre son nœud. Un titre écrit après une lecture extérieure, les propriétés d'un nœud extérieur n'y sont qu'avec `include_external` : le bloc est alors extérieur ;\n" +
 	"- une ressource : `{\"resource\": \"serveur\", \"uri\": \"…\"}` ;\n" +
 	"- une surveillance approuvée, par son nom : `{\"monitor\": \"nom\"}`.\n" +
 	"`every` : les minutes entre deux lectures (1 à 1440 ; le défaut sinon). Après un appel qui change quelque chose sur un serveur, ses sources sont relues aussitôt : rien à rafraîchir.\n\n" +
 	"**Éléments.** Une source qui liste des choses dit où elles sont : `\"items\": {\"path\": \"messages\", \"id\": \"id\", \"title\": \"subject\", \"detail\": \"from\"}` ; " +
 	"chaque élément est une ligne qu'un skill note (`item_note`). `\"open\": {\"tool\": \"serveur/outil\", \"id\": \"<paramètre>\"}`, dans `items`, " +
 	"nomme l'outil de lecture du même serveur qui lit un élément entier par son id : l'utilisateur ouvre la ligne sur place.\n\n" +
-	"**Champs du code.** Chaque élément porte dans les données `_note`, `_state` (act, look, info, none, done), `_group` (sa section) et `_card` " +
-	"(la carte qui attend sur lui), écrits par le code d'après `item_note` et les cartes : `{\"@path\": \"_note\"}` les montre.\n\n" +
-	"**Sections.** Une `List` filtre les éléments par leurs champs, après le `path` des éléments : `/mails/messages[_group=À traiter][_state!=done]` " +
-	"(`[champ=valeur]` ou `[champ!=valeur]`, tous doivent tenir ; `[_group=]` garde ceux sans groupe). Un élément fait (`done`) quitte de lui-même une liste qui garde `[_state!=done]`. " +
-	"Un lot (le même appel sur plusieurs éléments) est une seule carte : un `Fold` avec `\"list\"` (l'id de sa `List`) et `\"label\": \"{n} mails à jeter\"` porte son Oui ; déplié, on décoche.\n\n" +
+	"**Sections.** `Sections` range les éléments d'après leurs notes (`item_note` : sa note, son état act, look, info, none ou done, son groupe) : " +
+	"d'abord les groupes où un élément est à faire (act) ou à regarder (look), une ligne chacun, ta note et sa carte (`_card`) ; " +
+	"un groupe dont les éléments partagent une carte (le même appel sur plusieurs) est un lot replié qui porte son oui, où l'on décoche ; les autres groupes se replient ; un élément fait (done) s'en va.\n\n" +
 	"**Coup d'œil.** Une source peut porter `glance`, un seul par nœud : `{\"label\": \"PEA\", \"path\": \"total\", \"threshold\": 2}` " +
 	"(`path` : champs séparés par des points, l'indice d'une liste en chiffre ; `threshold` en % de la référence, ou dans l'unité du chiffre avec `\"unit\": \"amount\"` ; " +
 	"référence : la première valeur du jour, `\"compare\": \"previous\"` la précédente, `\"compare\": \"fixed\"` avec `\"base\"`). " +
@@ -41,9 +39,4 @@ const nodeGrammar = "# Un bloc d'Eriphe\n\n" +
 // TestNodeGrammarExample.
 const nodeGrammarExample = `{"sources": {"mails": {"tool": "mail/search_messages", "args": {"query": "in:inbox"}, "every": 15,
   "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from", "open": {"tool": "mail/read_message", "id": "id"}}}},
- "components": [
-  {"id": "root", "component": "Column", "children": ["todo", "drop"]},
-  {"id": "todo", "component": "List", "children": {"path": "/mails/messages[_group=À traiter][_state!=done]", "componentId": "row"}, "emptyText": "Rien à traiter"},
-  {"id": "row", "component": "Item", "title": {"@path": "_note"}, "detail": {"@path": "from"}, "note": {"@path": "subject"}},
-  {"id": "drop", "component": "Fold", "label": "{n} mails à jeter", "list": "droplist", "child": "droplist"},
-  {"id": "droplist", "component": "List", "children": {"path": "/mails/messages[_group=À jeter][_state!=done]", "componentId": "row"}}]}`
+ "components": {"component": "Sections", "items": "mails"}}`

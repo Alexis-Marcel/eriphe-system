@@ -154,6 +154,22 @@ func TestNodeAsk(t *testing.T) {
 	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/ask", nodeAskIn{Block: "go", Component: "nope"}); code != http.StatusNotFound {
 		t.Fatalf("no such button: %d", code)
 	}
+
+	// An Asks: the page names an ask by its place, its words read again
+	// from the stored block; a place that holds none is no button.
+	asks := mustNode(t, c, nodestore.New{Title: "Plan", Body: "```eriphe:block suite\n" + `{"components": {"component": "Asks", "items": ["Fais comme tu proposes", "Écris-le pour des managers"]}}` + "\n```\n"})
+	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+asks+"/ask", nodeAskIn{Block: "suite", Component: "root#1"}); code != http.StatusNoContent {
+		t.Fatalf("an Asks' ask: %d", code)
+	}
+	msgs, _ = c.store.messagesAfter(seq, 10)
+	if len(msgs) != 1 || msgs[0].Text != "Écris-le pour des managers" || msgs[0].Node != asks {
+		t.Fatalf("messages: %+v", msgs)
+	}
+	for _, at := range []string{"root", "root#2", "root#x"} {
+		if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+asks+"/ask", nodeAskIn{Block: "suite", Component: at}); code != http.StatusNotFound {
+			t.Errorf("%s: %d", at, code)
+		}
+	}
 }
 
 // The user archives a node and what is under it, finds it in the

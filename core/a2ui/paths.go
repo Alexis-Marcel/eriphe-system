@@ -31,6 +31,11 @@ type Bound struct {
 // by component type.
 var mediaProps = map[string]string{"Image": "url"}
 
+// ImageFields are the fields of an item a Gallery shows as its image, the
+// first it has: an address the page loads, which core serves itself, as
+// an Image's url (web_graph.go's blockView); the page shows no other.
+var ImageFields = []string{"photo", "image"}
+
 // IsMedia tells whether a component's property is an address the page
 // loads (an image's): core serves those itself, never the page directly.
 func IsMedia(componentType, prop string) bool {

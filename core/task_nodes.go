@@ -426,7 +426,7 @@ func (c *core) nodeGuard(n *nodefile.Node, names []string, sourceOK func(nodefil
 		// click goes back marked as the block is (handleNodeAsk).
 		sid := "block:" + name
 		errs := a2ui.CheckActions(sid, b.Components)
-		for _, bound := range a2ui.Eriphe().BoundPaths(b.Components) {
+		for _, bound := range a2ui.Eriphe().BoundPaths(b.Bound()) {
 			head, _, _ := strings.Cut(strings.TrimPrefix(bound.Path, "/"), "/")
 			if _, ok := b.Sources[head]; ok && bound.Link {
 				errs = append(errs, a2ui.ValidationError{SurfaceID: sid, Path: "/components" + bound.At,

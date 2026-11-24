@@ -9,7 +9,7 @@ import (
 
 // What came of a yes. A card decided (its yes done or failed, its no, or
 // withdrawn) leaves the page: neither its body, its foot nor its rows
-// show it (pendingAsks, callsAsk, accessAsks); its ⋯ menu lists it under
+// show it (pendingAsks, callsAsk); its ⋯ menu lists it under
 // « Déjà décidé » with its outcome. The orb says the outcome: the yes is
 // the user talking (#698), so how it went reaches the brain as the user's
 // act (nodeEvent), whose words are the orb's, « C'est fait » or why it

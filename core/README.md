@@ -726,7 +726,7 @@ whatever address it dials) and one client certificate per device.
 | `node_set` | change a node's `title` or `goal`, its properties and tags (`props`: `{"tags": ["cuisine/recette"], "temps": 15, "source": null}`, `null` removes one; set in a tainted turn, they mark the node external: [node-format](../docs/node-format.md#front-matter); an attachment's id as a value keeps that file in the node: [A file the user sent](#a-file-the-user-sent-kept-with-a-node-node_attachgo)), move it under another node (`parent`, `""` for the top; never under itself or a node below it, never a step: `nodestore.SetParent`), or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a node a skill maintains is not set done |
 | `node_show` | open a node's page on the user's screen (kv `node_show`, read by the page): asked at the home, the turn and the bar move into it (`moveHomeTurn`), from a node it opens beside; writes nothing |
 | `turn_home` | the user's message, said in a node's bar, is not about that node: the turn is about no node from then on, as at the home (`turnHome`, node_turn.go). What it raises waits above the bar (a card it raised already is unlinked from that node), and nothing of it is filed there; its lines stay in that node's bar, where the user reads them. At the home, or on events only, it does nothing |
-| `item_note` | note an item of a node's source: what the user should know, a state (`act`, `look`, `info`, `none`, `done`) and a group, the section a page shows it in (`À supprimer`; a List filters on `_group`) |
+| `item_note` | note an item of a node's source: what the user should know, a state (`act`, `look`, `info`, `none`, `done`) and a group, the section a page shows it in (`À supprimer`; a `Sections` groups by it) |
 
 The brain has no archive tool: only the user archives a node (`archiveNode`, by `user` alone), which
 archives every node under it, stops their tasks and their steps' work, and withdraws their cards;
@@ -1010,20 +1010,35 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   included, goes with its message of the turn (`cardProposedBy`); a task's access card, with the
   queue's message, which says the card's line, not a question of its own.
 - **A row's own card.** There is no yes in a block (no actions, no marks, no Proposal component):
-  the page draws a row's card itself, on every List row code told it waits on
-  (`lists[].items[].card`, out of band, never from the block's data), even in a block written on
-  a tainted turn: its ref is code's. A `Fold` with `list` (a batch) must name a List of the same
-  block bound to a source's items (`listsOK`); its line carries the card its rows share. A
-  `Metric` with `list` names one the same way: its figure is that List's rows, told to the page
+  the page draws a row's card itself, on every row code told it waits on (a `Sections`' rows are
+  always told, a List's when it must know them: `lists[].items[].card`, out of band, never from the
+  block's data), even in a block written on a tainted turn: its ref is code's. A `Sections` group
+  whose rows share one card is a batch: its folded line carries that card. Pages written before
+  keep a `Fold` with `list` (a batch), which must name a List of the same block bound to a source's
+  items (`listsOK`), and a `Metric` with `list`, whose figure is that List's rows, told to the page
   with them (`blockLists`), its filters applied.
-- **Setup buttons** (`setup_buttons.go`). A `Button` with `until` (`tool`, `monitor` or `skill`)
-  leaves the page once what it sets up holds: `blockView` drops it, and what only held it, each
+- **Every yes says its verb** (`card_verb.go`). A card's yes button, on the page, in a channel,
+  on a row, never says a bare « Oui »: `proposal.VerbIn` gives the proposal's own verb, else its
+  kind's (`kindVerbs`: « Garder », « Autoriser », « Lancer »…); a call's is the verb its tool
+  declares in its `says` (`"verb": {"fr": "Jeter", "en": "Trash"}`), else the first word of its
+  sentence, with the count for several items (« Jeter les 102 »). `proposalView.verb` carries it;
+  `TestEveryCardHasItsVerb` checks every kind in both languages.
+- **Blocks that name a source** (`nodefile/rows.go`). `Sections`, `Gallery` and `Table` may name one
+  of the block's sources (`"items": "mails"`, the catalog's `x-source`); `Block.Bound` is the block
+  as code and the page read it, the name turned into the binding to its rows (`RowsPath`). The
+  components a model wrote before (`List`, `Item`, `Fold`, `Grid`, `Card`, `Button`, `Metric`,
+  `Progress`) are `x-legacy`: out of the prompt (`a2ui.Legacy`), still checked and drawn. A
+  `Gallery`'s images go through `mediaOrDrop` as an `Image`'s do (`gallery_media.go`).
+- **Setup buttons** (`setup_buttons.go`). An ask of an `Asks` with `until` (`tool`, `monitor` or
+  `skill`), or a `Button` with one, leaves the page once what it sets up holds: `blockView` blanks
+  the ask (the others keep their place, `<id>#<n>`) or drops the button and what only held it, each
   time it draws the block, from code's records (the pool, `monitors`, the skills).
 - **The render report** (`page_report.go`). `node_open`, `node_write` and `node_edit` read the
   node's sources at once (5 s at most, a read under way waited for, then « still reading ») and answer `page`: per block its
   state (`ok`, `error`, `waiting`, `empty`), each source's (a failure's words, and what a
   source holds in place of a missing field, only from a trusted server), the rows each list shows (filters applied), the bindings that lead nowhere in what a
-  source gave, the setup buttons hidden and, on a page that lasts, the `Metric`s written by hand.
+  source gave, the setup buttons and asks hidden and, on a page that lasts, the figures written by
+  hand (a `Metric`'s value, a `Figures` item's).
   Code's words and numbers only: the report taints nothing.
 - **Done.** `node_set` `done` (`setNodeDone`) marks the front matter's `done` and the state
   `done` (`nodestore.SetDone`, a version of its own that never conflicts with an author's write),
@@ -1279,7 +1294,8 @@ decided), and a run or a step that ends, or the node archived, drops its progres
   external: code marks its node and the blocks it writes, in the same version; a child it opens is
   external; its item notes carry the taint. Reading an external node taints the task.
 - **Guards** nodefile does not hold, on every block a write adds or changes (a block, or a fence
-  written in its text): a Button only asks, in its author's literal words (`a2ui.CheckActions`),
+  written in its text): a Button or an `Asks` only asks, in its author's literal words, never a
+  bare « Oui » (`a2ui.CheckActions`),
   tainted or not (written tainted, the block is external, and its click comes back marked: see
   `POST /api/nodes/{id}/ask`); a `Link` never opens a
   source's value; a block's source reads a tool or server the task is lent, or a monitor the user
@@ -3999,20 +4015,27 @@ template) or computed by a function (`{"@call": "formatDate", "args": {…}}`). 
 
 - **The catalog** (`a2ui/catalog_v1.json`, id `urn:eriphe:a2ui:workspace:v1`): a JSON Schema
   2020-12 document by A2UI's catalog rules. Shapes only, never tools, none named after a
-  subject: Text, Markdown, Image, Icon, Link, Code, Row, Column, List, Grid (a gallery of cards,
-  as many to a row as fit), Card, Tabs, Fold, Divider, Button (it only asks), Choice, TextField, DateField, Metric, Progress, Chart (`line`,
-  `bar`, or `stack`: one bar per x, the series its parts, an allocation now against its
-  target), Table, Timeline, Item, Message, Agenda, Person, Quote, Alert, Placeholder. No component says yes: a yes is
-  a card, which code draws. Steps, notes, options, checklists and drafts are compositions of
-  these (a `Timeline`, a `Markdown`, a `List` of `Item`, `Text` sections), never components of
-  their own; and the functions
-  formatString, formatNumber, formatDate, formatRelative. A property that carries data takes a
-  binding (Metric's `value`, Chart's `series`, Table's `rows`, Agenda's `events`…). Its descriptions
-  and `instructions` are for the models, in French. Two keywords of its own on a component's
-  schema tell eriphe-core what it needs without naming a component (`a2ui/days.go`):
-  `x-rows` names the property that, bound to a source's items, makes them rows (their cards are
-  drawn there, not at the page's foot: the Agenda's `events`), and `x-days` says the component
-  draws the dated proposals of its days (`a2ui.DaysShown`). Served to the app, with a session, at
+  subject. A model writes a block as one component that says what it shows, and the page
+  supplies the rest (groups, counts, units, columns, the layout on a phone, the empty and reading
+  states): Sections (a source's items grouped by Eriphe's notes, a batch folded with its card's
+  yes), Figures (a band of figures), Gallery (images in tiles, a filter by a field), Table (its
+  columns inferred, `units` per column), Chart (`line`, `bar`, or `stack`: one bar per x, the
+  series its parts, an allocation now against its target), Timeline (it says its own progress),
+  Asks (likely answers: each sends its words, none acts), Agenda, Person, Quote, Alert, Message,
+  Text, Markdown, Image, Icon, Link, Code, Row, Column, Tabs, Divider, Choice, TextField,
+  DateField, Placeholder. No component says yes: a yes is a card, which code draws, and says its
+  verb. The components a model wrote before (List, Item, Fold, Grid, Card, Button, Metric,
+  Progress, and Table's `emptyText`) are marked `"x-legacy": true`: left out of the prompt
+  (`a2ui.Legacy`, `IsLegacy`), still validated and drawn, so that no node written with them
+  breaks. The functions: formatString, formatNumber, formatDate, formatRelative. A property that
+  carries data takes a binding (Figures' `items`, Chart's `series`, Table's `rows`, Agenda's
+  `events`…). Its descriptions and `instructions` are for the models, in French. Keywords of its
+  own on a component's schema tell eriphe-core what it needs without naming a component
+  (`a2ui/days.go`, `prompt.go`): `x-source` names the property that may name one of the block's
+  sources instead of a binding (`a2ui.SourceProp`: Sections' and Gallery's `items`, Table's
+  `rows`); `x-rows` names the property that, bound to a source's items, makes them rows (their
+  cards are drawn there, not at the page's foot: the Agenda's `events`, a Sections' `items`), and
+  `x-days` says the component draws the dated proposals of its days (`a2ui.DaysShown`). Served to the app, with a session, at
   `GET /espace/catalog/v1.json`; a new version gets a new path.
 - **Validation**: `a2ui.Validate(raw)` takes one agent message or an array of them (the whole
   life of their surfaces), `a2ui.ValidateSurface(a2ui.Surface{ID, Components, DataModel})` what

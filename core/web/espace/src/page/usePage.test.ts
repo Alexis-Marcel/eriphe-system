@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { NodePage, ProposalView } from "../data/api";
 import { concerns } from "./usePage";
 
-const card = (ref: string): ProposalView => ({ ref, card: 1, state: "pending", text: ref });
+const card = (ref: string): ProposalView => ({ ref, card: 1, state: "pending", text: ref, verb: "Faire" });
 
 // A page as eriphe-core sends it: a card at its foot, one decided, a card
 // block, a List whose row a card waits on.

@@ -23,7 +23,7 @@ const surface = "n1--mails";
 const views: ProposalView[] = [
   {
     ref: "calls:1",
-    card: 1,
+    card: 1, verb: "Faire",
     state: "pending",
     text: "Envoyer la réponse à Sam",
     fields: [
@@ -32,10 +32,10 @@ const views: ProposalView[] = [
       { name: "mail/send_message", value: "account : perso\nreply_to : m1", detail: true },
     ],
   },
-  { ref: "calls:2", card: 2, state: "pending", text: "Autre chose" },
+  { ref: "calls:2", card: 2, verb: "Faire", state: "pending", text: "Autre chose" },
   {
     ref: "calls:3",
-    card: 3,
+    card: 3, verb: "Faire",
     state: "pending",
     text: "Mettre 3 mails à la corbeille",
     choices: ["t1", "t2", "t3"].map((id, i) => ({ id: 30 + i, text: id, n: 1, state: "proposed", items: [id] })),
@@ -179,7 +179,7 @@ describe("an item opened with its card", () => {
     await act(async () => el.querySelector<HTMLButtonElement>(".a2-openbtn")!.click());
     await act(async () => new Promise((r) => setTimeout(r, 0)));
     const box = el.querySelector(".a2-onyes")!;
-    expect(box.querySelector(".a2-onyes-what")?.textContent).toBe("Sur OuiEnvoyer la réponse à Sam");
+    expect(box.querySelector(".a2-onyes-what")?.textContent).toBe("Si tu acceptesEnvoyer la réponse à Sam");
     expect(box.querySelector(".a2-onyes-content figcaption")?.textContent).toBe("Ta réponse, prête");
     expect(box.querySelector(".a2-onyes-text")?.textContent).toContain("<b>À bientôt</b>"); // text, never HTML
     expect(box.querySelector("b")).toBeNull();
@@ -187,7 +187,7 @@ describe("an item opened with its card", () => {
     expect(box.textContent).not.toContain("account : perso"); // the call is under « détails »
     const opened = el.querySelector(".a2-opened")!;
     expect([...opened.querySelectorAll("summary")].map((s) => s.textContent)).toEqual(["détails"]);
-    expect([...opened.querySelectorAll(".a2-read-more h5")].map((h) => h.textContent)).toEqual(["Ce que Oui lance", "L'élément, tel que lu"]);
+    expect([...opened.querySelectorAll(".a2-read-more h5")].map((h) => h.textContent)).toEqual(["Ce qui sera lancé", "L'élément, tel que lu"]);
     await act(async () => box.querySelector<HTMLButtonElement>(".a2-inline-yes")!.click());
     expect(answered).toEqual(["calls:1"]);
   });

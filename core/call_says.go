@@ -58,6 +58,7 @@ type toolSays struct {
 	Item   map[string]string                       `json:"item,omitempty"`
 	Items  map[string][]string                     `json:"items,omitempty"`
 	Done   map[string][]string                     `json:"done,omitempty"`
+	Verb   map[string]string                       `json:"verb,omitempty"` // what its yes button says (card_verb.go), when not its sentence's first word
 	Values map[string]map[string]map[string]string `json:"values,omitempty"`
 }
 

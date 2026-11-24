@@ -94,6 +94,10 @@ func TestSameKindCallsWaitAsOneCard(t *testing.T) {
 	if got := p.acts("fr"); !slices.Equal(got, []string{moveWords("1 mail"), moveWords("2 mails")}) {
 		t.Errorf("acts %q", got)
 	}
+	// Its yes says its verb, for how many (card_verb.go).
+	if fr, en := p.VerbIn("fr"), p.VerbIn("en"); fr != "Déplacer les 2" || en != "Move all 2" {
+		t.Errorf("verbs %q, %q", fr, en)
+	}
 	if len(p.Fields) != 2 || !p.Fields[0].Detail || !p.Fields[1].Detail {
 		t.Errorf("each exact call is under Détails: %+v", p.Fields)
 	}

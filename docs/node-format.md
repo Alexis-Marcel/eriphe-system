@@ -25,21 +25,15 @@ The newsletter and its first article. The articles that work are short and
 open on a question.
 
 ```eriphe:block readers
-{"components": [
-  {"id":"root","component":"Card","title":"Subscribers","child":"chart"},
-  {"id":"chart","component":"Chart","kind":"line","unit":"readers","series":{"@path":"/subscribers/series"}}
-],
+{"components": [{"id":"root","component":"Chart","kind":"line","title":"Subscribers","unit":"readers","series":{"@path":"/subscribers/series"}}],
  "sources": {"subscribers":{"tool":"substack/stats","args":{"metric":"subscribers"},"every":60}}}
 ```
 
 The titles proposed for the first article:
 
 ```eriphe:block titles
-{"components": [
-  {"id":"root","component":"List","children":{"path":"/titles","componentId":"row"}},
-  {"id":"row","component":"Item","title":{"@path":"label"},"detail":{"@path":"why"}}
-],
- "data": {"titles":[{"id":"t1","label":"Why I write by hand","why":"opens on a question"},{"id":"t2","label":"Ten years of notes","why":"short"}]}}
+{"components": [{"id":"root","component":"Table","rows":{"@path":"/titles"}}],
+ "data": {"titles":[{"id":"t1","title":"Why I write by hand","why":"opens on a question"},{"id":"t2","title":"Ten years of notes","why":"short"}]}}
 ```
 ````
 
@@ -159,7 +153,7 @@ section that starts with a line `` ```eriphe:block <name> `` and ends at the nex
 
 | Key | Who writes it | What |
 |---|---|---|
-| `components` | the author | A flat list of components of Eriphe's catalog (`core/a2ui/catalog_v1.json`), one with id `root`. |
+| `components` | the author | One component of Eriphe's catalog (`core/a2ui/catalog_v1.json`), written alone (code gives it the id `root`), or a flat list of them, one with id `root`. |
 | `data` | the author | An object: the values its components read. |
 | `sources` | the author | Live sources read by code, by name: each one's value is at `/<name>`. |
 | `external` | code | `true` when the block was written after reading external content, or binds a source of a server that is not trusted. |
@@ -177,6 +171,19 @@ Each block is checked alone, as an A2UI surface of its own:
 - bindings (`{"@path": "/…"}`, and a template's `path`): each one reads the block's own `data`, one
   of its `sources` (`/<name>/…`, checked when code reads it). A binding to anything else is an
   error that names the block.
+- a source named: a property the catalog marks `x-source` (`Sections`' and `Gallery`'s `items`,
+  `Table`'s `rows`) may name one of the block's sources instead of a binding (`"items": "mails"`).
+  It reads that source's rows: its items, where its `items` path says (`/mails/messages`), or
+  node_find's nodes (`/<name>/nodes`). The file keeps the name; code and the page read the binding
+  (`Block.Bound`). A name that is not one of the block's sources, a `Sections` over a source with no
+  `items`, or a source whose items' path is not plain fields, is an error.
+
+The catalog the brain reads is the one a model writes: a few blocks that each say what they show
+(`Sections`, `Figures`, `Gallery`, `Table`, `Chart`, `Timeline`, `Asks`, `Agenda`, …), the page
+supplying the rest (groups, counts, units, columns, layout on a phone, empty and reading states).
+The components it wrote before (`List`, `Item`, `Fold`, `Grid`, `Card`, `Button`, `Metric`,
+`Progress`, `Table`'s `emptyText`) are marked `x-legacy` in the catalog: no longer offered, still
+checked and drawn, so that every node written with them reads as it did.
 
 Where a card shows follows from the components, never from a name: a component whose catalog
 schema says `x-rows` (the Agenda's `events`) bound to a source's items draws their cards on its
@@ -250,26 +257,34 @@ item (its `_card`, below), at the foot of the page otherwise, or where a `card` 
 ref alone, so never `external`: a turn that read external content places one too). A
 key `actions` or `marks` is an unknown field, refused like any other.
 
-A card is one thing proposed: the user says Oui, or ✕. Calls that do the same thing to several
-items of a node (the same tool and arguments but for the ids) wait as one card: on each of their
-rows, the same card; folded in a `Fold` with `list`, the batch carries its Oui, and unfolded the
-user unticks the rows that should not go. Every answer, from a card, a word in the bar, a channel
+A card is one thing proposed: the user says yes, or ✕. Its yes button says its verb, never a bare
+« Oui » (« Envoyer », « Archiver », « Jeter les 102 »): the tool's own (its `says` declares a
+`verb`), else the first word of what the card says, else its kind's (« Garder », « Autoriser »).
+Calls that do the same thing to several items of a node (the same tool and arguments but for the
+ids) wait as one card: on each of their rows, the same card; in a `Sections` group whose rows all
+share it, the batch carries its yes on its folded line, and unfolded the user unticks the rows that
+should not go. Every answer, from a card, a word in the bar, a channel
 or a page in Réglages, goes through the same code, which keeps the card in step.
 
 ### Sections
 
-A page may show a source's items in sections (« À traiter », « À supprimer », « Pour info »): its
-author notes each item with a `group` (`item_note`), a short label it chooses, and writes one `List`
-per section whose template's path filters the source's items by a field:
+A page shows a source's items in sections (« À traiter », « À jeter », « Pour info »): its author
+notes each item with a `group` (`item_note`), a short label it chooses, and a state, and writes one
+`Sections` that names the source:
 
 ```json
-{"id": "drop", "component": "List", "children": {"path": "/mails/messages[_group=À supprimer]", "componentId": "row"}}
+{"components": {"component": "Sections", "items": "mails"}}
 ```
 
-- A filter is `[field=value]` or `[field!=value]`, one or more after the source's items as their
-  `items` path says them (all must hold: `[_group=À traiter][_state!=done]`), on a `List` only;
-  checked when an author writes the block. A field the item has not reads as empty: `[_group=]`
-  keeps the items in no group.
+- The page groups the rows by `_group`, in the source's order: first the groups with something to
+  do (a state `act` or `look`, or a card waiting), a row each, Eriphe's note first, then who and
+  what, six shown then « n de plus »; a group whose rows all share one card is a batch, folded, its
+  card's yes on its line; the other groups folded. Rows noted `done` leave. With nothing to do it
+  says so; empty, and while its source is read, it says that too.
+- Pages written before keep their `List`s, one per section, whose template's path filters the
+  source's items by a field (`[_group=À supprimer]`, `[_state!=done]`, all must hold; on a `List`
+  only, checked when the block is written; a field the item has not reads as empty), their `Fold`
+  with `list` (a batch) and their `Metric` with `list` (a count): still checked and drawn.
 - Each item of a source with `items` carries, in the block's data (never in its file), its note's
   fields: `_note`, `_state` and `_group` (empty when it has none), `_card`, the ref of the card that
   waits on it while it still asks something (its yes to give, or a yes that runs or failed; empty
@@ -281,22 +296,22 @@ per section whose template's path filters the source's items by a field:
   (code's, its note and group kept, until a skill notes it again), and the source is read again: a
   List that keeps `[_state!=done]` lets it go at once. Said yes or no, the skills that work in the
   node are woken (a journal event `node.gesture`): the skill that maintains it writes its bilan again.
-- Code filters, never the page: the page draws the List bound to the source's items as a whole and
-  shows only the rows code kept, in the source's order; a List whose filter keeps nothing shows its
-  `emptyText`.
-- A `Fold` with `list` names a `List` of the block bound to a source's items: its line counts that
-  List's rows and carries the Oui of the card they share, if any.
-- A `Metric` with `list` (in place of `value`) names such a `List` too: its figure is the number of
-  rows code keeps, its filters applied, and follows each read of the source. A page that lasts says
-  its facts so, or with a `Metric` bound to a source's field, never in frozen text.
+- Code filters, never the page: the page draws a List bound to the source's items as a whole and
+  shows only the rows code kept, in the source's order.
+- A page that lasts says its facts from its sources, never in frozen text: a `Figures` value bound
+  to a source's field (`{"@path": "/pea/total"}`); one written by hand is said back to its author
+  as a problem (the render report).
 
 ### Setup buttons
 
-A `Button` that sets something up says what with `until`, one of `{"tool": "<server>"}` (a tool in
-the catalog that waits for no authorization), `{"monitor": "<name>"}` (a monitor that runs) or
-`{"skill": "<name>"}` (a skill approved and on). Code hides it from the page once that holds (and a
-`Row` or `Column` it leaves empty, a `Card` or `Fold` whose child it was), reading its own records
-each time the page is drawn: its author need not take it away.
+An ask of an `Asks` that sets something up says what with `until` (`{"text": "Branche l'agenda",
+"until": {"tool": "calendar"}}`), one of `{"tool": "<server>"}` (a tool in the catalog that waits
+for no authorization), `{"monitor": "<name>"}` (a monitor that runs) or `{"skill": "<name>"}` (a
+skill approved and on). Code hides it from the page once that holds, reading its own records each
+time the page is drawn: its author need not take it away. The page names an ask by its component
+and its place (`root#1`), so a hidden ask leaves its place empty; an `Asks` left with none goes. A
+`Button` with `until`, on pages written before, goes the same way (and a `Row` or `Column` it leaves
+empty, a `Card` or `Fold` whose child it was).
 
 A skill's run whose call acts on an item without naming it (an event made from a mail) puts it on
 that item with `item_note`'s `call` (the reference the run was told when the call was kept): its
@@ -310,7 +325,7 @@ A source's `items` may say how one item is read in full: `"open": {"tool": "<ser
 "<param>"}`, a read tool of the source's own server and its parameter that takes an item's id
 (nothing else required). Code checks it against the catalog when an author writes it.
 
-A row of a `List` bound to that source opens below itself on a click (or its disclosure button; a
+A row of a `Sections` (or a `List`) of that source opens below itself on a click (or its disclosure button; a
 click on its card, a button or a link of the row does not), and closes the same way or by its ✕.
 Code reads the open again in the block as stored, checks that the id is one the source lists now,
 and calls the tool with it, as the source gave it, under the tool's access policy: a free read that

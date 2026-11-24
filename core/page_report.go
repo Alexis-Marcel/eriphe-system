@@ -125,7 +125,7 @@ func (c *core) blockReport(id string, b *nodefile.Block, reads []nodeRead, lasti
 		r["sources"] = srcs
 	}
 	var comps []map[string]any
-	json.Unmarshal(b.Components, &comps)
+	json.Unmarshal(b.Bound(), &comps)
 	rows, nowhere := c.blockRows(b, comps, v.Data, read, trusted)
 	if len(rows) > 0 {
 		r["rows"] = rows
@@ -142,6 +142,16 @@ func (c *core) blockReport(id string, b *nodefile.Block, reads []nodeRead, lasti
 		for _, comp := range comps {
 			if _, written := comp["value"].(map[string]any); comp["component"] == "Metric" && comp["value"] != nil && !written {
 				problems = append(problems, fmt.Sprintf("Metric %v: a figure written by hand goes stale on a page that lasts: bind it to its source's field (@path) or count a List (list)", comp["id"]))
+			}
+			if comp["component"] != "Figures" {
+				continue
+			}
+			figs, _ := comp["items"].([]any)
+			for _, f := range figs {
+				fig, _ := f.(map[string]any)
+				if _, written := fig["value"].(map[string]any); fig["value"] != nil && !written {
+					problems = append(problems, fmt.Sprintf("Figures %v, %v: a figure written by hand goes stale on a page that lasts: bind its value to its source's field (@path)", comp["id"], fig["label"]))
+				}
 			}
 		}
 	}
@@ -174,7 +184,7 @@ func (c *core) blockRows(b *nodefile.Block, comps []map[string]any, data map[str
 	rows := map[string]int{}
 	var nowhere []string
 	seen := map[string]bool{}
-	for _, bound := range a2ui.Eriphe().BoundPaths(b.Components) {
+	for _, bound := range a2ui.Eriphe().BoundPaths(b.Bound()) {
 		toks := tokens(bound.Path)
 		name := at0(toks)
 		if _, ok := b.Sources[name]; ok && !read[name] {

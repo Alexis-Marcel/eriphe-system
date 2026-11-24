@@ -37,7 +37,7 @@ const (
 	// catalog server may take it (reserved).
 	coreServer = "eriphe-core"
 	// nodeFindSource is node_find as a block's source.
-	nodeFindSource = coreServer + "/node_find"
+	nodeFindSource = nodefile.NodeFindTool
 	// nodeFindTaint is what node_find makes the turn when it quotes words
 	// that may be someone else's.
 	nodeFindTaint = "node_find.external"

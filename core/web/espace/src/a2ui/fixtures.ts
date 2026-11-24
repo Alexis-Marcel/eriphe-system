@@ -73,7 +73,7 @@ export function sampleProposals(lang: Lang): Proposals {
   const views: ProposalView[] = [
     {
       ref: "rule:7",
-      card: 7,
+      card: 7, verb: "Faire",
       state: "pending",
       text: en ? "Stop telling me about invoices before the brief?" : "Ne plus te prévenir des factures avant le brief ?",
       why: en ? "You opened none of the last five." : "Tu n'as ouvert aucune des cinq dernières.",
@@ -81,7 +81,7 @@ export function sampleProposals(lang: Lang): Proposals {
     ...queueViews(lang),
     {
       ref: "access:5",
-      card: 5,
+      card: 5, verb: "Faire",
       state: "approved",
       exec: "done",
       kind: "access",
@@ -89,7 +89,7 @@ export function sampleProposals(lang: Lang): Proposals {
     },
     {
       ref: "calls:1",
-      card: 9,
+      card: 9, verb: "Faire",
       state: "pending",
       kind: "calls",
       text: en ? "Move funds · 1 item" : "Move funds · 1 élément",
@@ -99,7 +99,7 @@ export function sampleProposals(lang: Lang): Proposals {
     },
     {
       ref: "intention:3",
-      card: 8,
+      card: 8, verb: "Faire",
       state: "pending",
       text: en ? "An hour to read the quote again" : "Une heure pour relire le devis",
       when: [{ start: "2026-11-12T14:30:00+01:00", end: "2026-11-12T15:30:00+01:00" }],
@@ -152,7 +152,7 @@ const queue = {
 };
 
 export function queueViews(lang: Lang): ProposalView[] {
-  return queue[lang].map((q, i) => ({ ref: `card:${20 + i}`, card: 20 + i, state: "pending", ...q }));
+  return queue[lang].map((q, i) => ({ ref: `card:${20 + i}`, card: 20 + i, state: "pending", verb: lang === "fr" ? "Garder" : "Keep", ...q }));
 }
 
 // sampleOrb is the dev server's orb: Eriphe's answer beside a subject of
