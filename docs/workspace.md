@@ -35,6 +35,11 @@ JPEG, GIF, WebP), PDFs and texts (`.txt`, `.md`, `.csv`), five at most, 20 MB ea
 chips above the bar, a ✕ each, until you send; files alone are a message too. While the message
 waits for Eriphe, the bar shows their names with it. Eriphe reads them when it reads the message.
 
+A photo or a PDF can stay with a subject: send the photo of a shirt with « ajoute cette chemise à
+ma garde-robe » and Eriphe keeps it with the shirt's node, tagged; its page shows the photo (a PDF
+as a link to download it), and a page listing your clothes shows each one's photo as a thumbnail.
+A node keeps 20 files of 5 MB at most: Eriphe tells you when a photo is too large.
+
 ## Eriphe's orb
 
 Eriphe is the small blue orb resting in the bar. It only answers: it leaves the bar in reply to

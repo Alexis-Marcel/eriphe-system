@@ -68,7 +68,7 @@ type brainNodeSetIn struct {
 	Done  *bool  `json:"done,omitempty" jsonschema:"true once its goal is reached; false when it comes back"`
 	// Parent is a pointer: "" moves the node to the top.
 	Parent *string        `json:"parent,omitempty" jsonschema:"the node it becomes a part of, never itself nor one below it; \"\" for the top"`
-	Props  map[string]any `json:"props,omitempty" jsonschema:"properties to set: a text, a number, a date (2026-10-01), a [[link]] or a list of them; null removes one; tags is a list (cuisine/recette)"`
+	Props  map[string]any `json:"props,omitempty" jsonschema:"properties to set: a text, a number, a date (2026-10-01), a [[link]] or a list of them; null removes one; tags is a list (cuisine/recette); an attachment's id (att_…, an image or a PDF) keeps that file in the node (media:…)"`
 }
 
 type nodeShowIn struct {
@@ -427,11 +427,22 @@ func (c *core) brainNodeSet(in brainNodeSetIn) (map[string]any, error) {
 		if len([]rune(title)) > nodefile.TitleMax {
 			return nil, fmt.Errorf("a title is %d characters at most", nodefile.TitleMax)
 		}
-		tainted := len(c.turnTaint()) > 0
 		cur, err := c.nodes.Read(id, 0)
 		if err != nil {
 			return nil, err
 		}
+		props, media, err := c.nodeAttach(id, cur.Node.Meta, in.Props) // an attachment's id: kept in the node's files
+		if err != nil {
+			return nil, err
+		}
+		if len(media) > 0 {
+			if cur, err = c.nodes.Read(id, 0); err != nil {
+				return nil, err
+			}
+			out["media"] = media
+			out["note"] = "Kept in the node: its page shows it; an Image of a block may show it too (url: media:…), node_find columns give it."
+		}
+		tainted := len(c.turnTaint()) > 0
 		d, err := c.nodes.Change(id, cur.Version.Hash, byBrain, func(n *nodefile.Node) error {
 			if title != "" {
 				n.Meta.Title = title
@@ -442,8 +453,8 @@ func (c *core) brainNodeSet(in brainNodeSetIn) (map[string]any, error) {
 			if goal != "" {
 				n.Meta.Goal = goal
 			}
-			for _, k := range slices.Sorted(maps.Keys(in.Props)) {
-				if err := n.Meta.SetProp(k, in.Props[k]); err != nil {
+			for _, k := range slices.Sorted(maps.Keys(props)) {
+				if err := n.Meta.SetProp(k, props[k]); err != nil {
 					return err
 				}
 			}

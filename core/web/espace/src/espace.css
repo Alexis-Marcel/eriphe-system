@@ -352,6 +352,8 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-table th { padding: var(--sp-2) var(--sp-3); text-align: left; font-size: var(--fs-small); font-weight: 500; color: var(--fg3); border-bottom: 1px solid var(--line); white-space: nowrap; }
 .a2-table td { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); vertical-align: top; }
 .a2-table tr:last-child td { border-bottom: 0; }
+.a2-thumb { display: block; width: 56px; height: 56px; object-fit: cover; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--fill); }
+.a2-thumb + .a2-thumb { margin-top: var(--sp-1); }
 .a2-table th:first-child, .a2-table td:first-child { padding-left: 0; }
 .a2-table .a2-col-number, .a2-table .a2-col-change { text-align: right; font-variant-numeric: tabular-nums; }
 .a2-table .a2-col-date { white-space: nowrap; color: var(--fg3); font-variant-numeric: tabular-nums; }
@@ -916,6 +918,9 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .pg-body > .pg-foot { margin: var(--sp-5) calc(-1 * var(--pg-pad)) calc(-1 * var(--sp-5)); }
 /* Its rhythm: a step of --sp-5 between its parts (a paragraph, a block),
    --sp-3 inside a block, --sp-2 inside a column. */
+.pg-media { margin: 0 0 var(--sp-4); display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-3); }
+.pg-picture { display: block; max-width: min(100%, 420px); max-height: 360px; object-fit: contain; border-radius: var(--r); border: 1px solid var(--line); background: var(--fill); }
+.pg-file { font-size: var(--fs-small); }
 .pg-props { margin: 0 0 var(--sp-4); display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); font-size: var(--fs-small); color: var(--fg3); }
 .pg-tags { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); }
 .pg-tag { color: var(--fg2); }

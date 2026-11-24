@@ -108,4 +108,73 @@ describe("a node's properties", () => {
     await mount(<Props page={{ ...page, tags: [], props: [] }} />);
     expect(el.querySelector(".pg-props")).toBeNull();
   });
+
+  it("shows a photo kept with it as its picture, a PDF as a link", async () => {
+    const page = {
+      node: graph.a1, version: 1, versions: [], parts: [], cards: [],
+      tags: ["vêtement"],
+      props: [
+        { key: "photo", value: "media:med_a.jpg", kind: "text", media: [{ src: "/espace/media?u=media%3Aa1%2Fmed_a.jpg&s=x", image: true }] },
+        { key: "notice", value: "media:med_b.pdf", kind: "text", media: [{ src: "/espace/media?u=media%3Aa1%2Fmed_b.pdf&s=y", image: false }] },
+        { key: "couleur", value: "bleu", kind: "text" },
+      ],
+    } as NodePage;
+    await mount(<Props page={page} />);
+    const img = el.querySelector<HTMLImageElement>("img.pg-picture");
+    expect(img?.getAttribute("src")).toBe("/espace/media?u=media%3Aa1%2Fmed_a.jpg&s=x");
+    expect(img?.alt).toBe("photo");
+    const file = el.querySelector<HTMLAnchorElement>("a.pg-file");
+    expect(file?.getAttribute("href")).toBe("/espace/media?u=media%3Aa1%2Fmed_b.pdf&s=y");
+    expect(file?.getAttribute("download")).toBe("notice.pdf");
+    expect(file?.textContent).toBe("notice · télécharger");
+    // Its other properties as before; the media: value never as text.
+    expect([...el.querySelectorAll(".pg-prop")].map((p) => p.textContent)).toEqual(["couleurbleu"]);
+    expect(el.textContent).not.toContain("media:");
+  });
+});
+
+describe("a Table of nodes with their photo", () => {
+  it("shows each node's photo as a thumbnail, a PDF as a link", async () => {
+    const lists: Lists = { list: () => undefined, node: (id) => graph[id], openNode: (id) => opened.push(id) };
+    await mount(
+      <ListsContext.Provider value={lists}>
+        <Surfaces adapter={adapter} />
+      </ListsContext.Provider>,
+    );
+    await act(async () =>
+      adapter.applyMessages([
+        {
+          version: "1.0" as const,
+          createSurface: {
+            surfaceId: "p1--garde",
+            catalogId: CATALOG.id,
+            components: [
+              {
+                id: "root", component: "Table", rows: { "@path": "/garde/nodes" },
+                columns: [{ key: "title", label: "Vêtement" }, { key: "photo", label: "Photo" }],
+              },
+            ],
+            dataModel: {
+              garde: {
+                nodes: [
+                  { id: "a1", title: "Chemise bleue", status: "idle", photo: "/espace/media?u=media%3Aa1%2Fmed_a.jpg&s=x" },
+                  { id: "b2", title: "Notice", status: "idle", photo: ["/espace/media?u=media%3Ab2%2Fmed_b.pdf&s=y"] },
+                  { id: "c3", title: "Sans photo", status: "idle", photo: "media:med_c.jpg" },
+                ],
+              },
+            },
+          },
+        },
+      ]),
+    );
+    const rows = [...el.querySelectorAll("table.a2-table tbody tr")];
+    expect(rows).toHaveLength(3);
+    const thumb = rows[0].querySelector<HTMLImageElement>("img.a2-thumb");
+    expect(thumb?.getAttribute("src")).toBe("/espace/media?u=media%3Aa1%2Fmed_a.jpg&s=x");
+    expect(thumb?.getAttribute("loading")).toBe("lazy");
+    expect(rows[1].querySelector("img")).toBeNull();
+    expect(rows[1].querySelector("a.a2-file")?.getAttribute("href")).toBe("/espace/media?u=media%3Ab2%2Fmed_b.pdf&s=y");
+    // A value eriphe-core did not sign is text, never loaded.
+    expect(rows[2].querySelector("img")).toBeNull();
+  });
 });

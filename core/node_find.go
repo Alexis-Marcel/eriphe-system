@@ -220,6 +220,48 @@ func (c *core) readNodeFind(args map[string]any) sourceRead {
 	return sourceRead{value: v}
 }
 
+// nodeFindMedia makes each node found's media:<name> columns (a photo
+// kept with node_set) the address of that node's own file on eriphe-core,
+// as a Table of the page loads it: a thumbnail of each node. A node whose
+// columns are withheld gives none.
+func (c *core) nodeFindMedia(value any) {
+	v, _ := value.(map[string]any)
+	rows, _ := v["nodes"].([]any)
+	for _, x := range rows {
+		row, _ := x.(map[string]any)
+		id, _ := row["id"].(string)
+		if id == "" {
+			continue
+		}
+		for k, col := range row {
+			if slices.Contains(fixedFound, k) {
+				continue
+			}
+			row[k] = swapMedia(col, func(s string) string {
+				if src := c.nodeFileSrc(id, s); src != "" {
+					return src
+				}
+				return s
+			})
+		}
+	}
+}
+
+// swapMedia is a value, or each value of a list, through fn when a text.
+func swapMedia(v any, fn func(string) string) any {
+	switch x := v.(type) {
+	case string:
+		return fn(x)
+	case []any:
+		for i := range x {
+			if s, ok := x[i].(string); ok {
+				x[i] = fn(s)
+			}
+		}
+	}
+	return v
+}
+
 // nodeFindExternal tells a node_find source that quotes what may be
 // someone else's words: its block is external.
 func nodeFindExternal(src nodefile.Source) bool {

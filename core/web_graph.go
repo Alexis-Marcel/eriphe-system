@@ -200,21 +200,39 @@ type nodePage struct {
 }
 
 // pageProp is a property of a node: its name, its value or list of them,
-// and its kind (text, number, date; a list's first value's).
+// and its kind (text, number, date; a list's first value's). Media: the
+// node's files it names (media:<name>), as the page loads them.
 type pageProp struct {
-	Key   string `json:"key"`
-	Value any    `json:"value"`
-	Kind  string `json:"kind"`
+	Key   string      `json:"key"`
+	Value any         `json:"value"`
+	Kind  string      `json:"kind"`
+	Media []pageMedia `json:"media,omitempty"`
 }
 
-// pageProps are a node's tags and its other properties.
-func pageProps(m nodefile.Meta) ([]string, []pageProp) {
+// pageMedia is one of a node's files a property names: its address on
+// eriphe-core (web_media.go), and whether it is an image (else a file to
+// download, a PDF).
+type pageMedia struct {
+	Src   string `json:"src"`
+	Image bool   `json:"image"`
+}
+
+// pageProps are node id's tags and its other properties.
+func (c *core) pageProps(id string, m nodefile.Meta) ([]string, []pageProp) {
 	var props []pageProp
 	for _, pr := range m.Props() {
 		if strings.EqualFold(pr.Key, nodefile.TagsKey) {
 			continue
 		}
-		props = append(props, pageProp{Key: pr.Key, Value: pr.Any(), Kind: pr.Values[0].Kind})
+		p := pageProp{Key: pr.Key, Value: pr.Any(), Kind: pr.Values[0].Kind}
+		for _, v := range pr.Values {
+			if s, ok := v.Any().(string); ok {
+				if src := c.nodeFileSrc(id, s); src != "" {
+					p.Media = append(p.Media, pageMedia{Src: src, Image: mediaIsImage(s)})
+				}
+			}
+		}
+		props = append(props, p)
 	}
 	return m.Tags(), props
 }
@@ -292,7 +310,7 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 	}
 	p.Alive = c.nodeAlive(sum, lang)
 	p.Origin = c.nodeOriginLine(d.Node.Meta.OpenedBy, lang)
-	p.Tags, p.Props = pageProps(d.Node.Meta)
+	p.Tags, p.Props = c.pageProps(id, d.Node.Meta)
 	if vs, err := c.nodes.Versions(id); err == nil {
 		if len(vs) > 1 && vs[0].N == 1 && d.Version.N != 1 {
 			if first, err := c.nodes.Read(id, 1); err == nil && strings.TrimSpace(nodeBody(first.Raw)) == "" {
@@ -431,10 +449,13 @@ func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlo
 			v.Data = map[string]any{}
 		}
 	}
-	for name := range b.Sources {
+	for name, src := range b.Sources {
 		for _, r := range reads {
 			if r.Block == b.Name && r.Name == name && r.Value != nil {
 				v.Data[name] = r.Value
+				if src.Tool == nodeFindSource {
+					c.nodeFindMedia(r.Value)
+				}
 			}
 		}
 	}

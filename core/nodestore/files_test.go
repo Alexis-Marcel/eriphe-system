@@ -79,7 +79,7 @@ func TestNodeFilesLimits(t *testing.T) {
 	for _, c := range []struct {
 		ext  string
 		data []byte
-	}{{"gif", []byte("x")}, {"png", nil}, {"png", make([]byte, MaxFile+1)}} {
+	}{{"svg", []byte("x")}, {"html", []byte("x")}, {"png", nil}, {"png", make([]byte, MaxFile+1)}} {
 		if _, err := s.PutFile("n1", "task:t1", c.ext, c.data); err == nil {
 			t.Errorf("%s of %d bytes kept", c.ext, len(c.data))
 		}
@@ -94,5 +94,37 @@ func TestNodeFilesLimits(t *testing.T) {
 	}
 	if _, err := s.PutFile("n1", "task:t1", "jpg", []byte("x")); err == nil {
 		t.Fatal("more than MaxFiles kept")
+	}
+}
+
+// A file the user attached and the brain kept, a PDF too: a node's
+// property names it (media:<name>), which an index made again from the
+// files gives as it was.
+func TestNodeFileNamedByProp(t *testing.T) {
+	e := newEnv(t)
+	s, _ := e.open(t)
+	mustCreate(t, s, New{Title: "Tarte"})
+	pdf, err := s.PutFile("n1", "brain", "pdf", []byte("%PDF-1.4"))
+	if err != nil || !strings.HasSuffix(pdf, ".pdf") {
+		t.Fatalf("pdf: %q %v", pdf, err)
+	}
+	if names, err := s.Files("n1"); err != nil || len(names) != 1 || names[0] != pdf {
+		t.Fatalf("files: %v %v", names, err)
+	}
+	if names, err := s.Files("n9"); !errors.Is(err, ErrNotFound) || len(names) != 0 {
+		t.Fatalf("no such node: %v %v", names, err)
+	}
+	setProps(t, s, "n1", map[string]any{"recette": "media:" + pdf})
+	s.Close()
+	os.Remove(e.index)
+	os.Remove(e.index + "-wal")
+	os.Remove(e.index + "-shm")
+	s2, rep := e.open(t)
+	if !rep.Rebuilt {
+		t.Fatal("not rebuilt")
+	}
+	cols, err := s2.Props([]string{"n1"}, []string{"recette"})
+	if err != nil || cols["n1"]["recette"] != "media:"+pdf {
+		t.Fatalf("after a rebuild: %v %v", cols, err)
 	}
 }
