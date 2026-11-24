@@ -129,3 +129,31 @@ func (s *Store) Backlinks(id string) ([]Summary, error) {
 func (s *Store) Graph() ([]Summary, error) {
 	return s.summaries(`WHERE n.archived = 0 ORDER BY n.created, n.id`)
 }
+
+// Incoming is how many live nodes link to id (by their text or their
+// front matter) or sit under it: what makes a node heavy.
+func (s *Store) Incoming(id string) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM nodes n WHERE n.archived = 0 AND n.id != ? AND (n.parent = ?
+		OR n.id IN (SELECT l.id FROM node_links l WHERE l.target = ? UNION SELECT r.id FROM node_refs r WHERE r.target = ?))`,
+		id, id, id, id).Scan(&n)
+	return n, err
+}
+
+// neighbours adds to near the nodes id links to and its parent, as the
+// index holds them now: their incoming count moves with id's links.
+func neighbours(tx querier, id string, near map[string]bool) {
+	rows, err := tx.Query(`SELECT parent FROM nodes WHERE id = ? AND parent != ''
+		UNION SELECT target FROM node_links WHERE id = ?
+		UNION SELECT target FROM node_refs WHERE id = ? AND target != '' AND target != ?`, id, id, id, id)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var t string
+		if rows.Scan(&t) == nil {
+			near[t] = true
+		}
+	}
+}

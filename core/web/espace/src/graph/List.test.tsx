@@ -12,7 +12,7 @@ import { listOrder } from "./model";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const node = (id: string, created: string, parent?: string): GraphNode => ({
-  id, title: id, parent, status: "idle", created: `2026-11-18T10:${created}:00Z`, updated: "2026-11-18T10:00:00Z", version: 1,
+  id, title: id, parent, weight: 0.6, status: "idle", created: `2026-11-18T10:${created}:00Z`, updated: "2026-11-18T10:00:00Z", version: 1,
 });
 
 describe("the list, on a small screen", () => {

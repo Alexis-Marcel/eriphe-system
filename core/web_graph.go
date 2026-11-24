@@ -130,6 +130,7 @@ type graphNode struct {
 	Line          string       `json:"line,omitempty"`    // while it runs: its task's last word of where it is
 	Unasked       bool         `json:"unasked,omitempty"` // a skill or an event opened it, not the user (node_origin.go)
 	Glance        *graphGlance `json:"glance,omitempty"`  // a figure of one of its sources, shown at a glance when it moved (node_glance.go)
+	Weight        float64      `json:"weight"`            // how much it weighs, computed once: the graph draws by it (node_weight.go)
 }
 
 // graphRow is a node's row.
@@ -145,6 +146,13 @@ func (c *core) graphRowWith(sum nodestore.Summary, f statusFacts) graphNode {
 		d := sum.Done
 		g.Done = &d
 	}
+	depth, ok := f.depths[sum.ID]
+	incoming := f.incoming[sum.ID]
+	if !ok { // one row: read in the index
+		depth = c.nodeDepth(sum)
+		incoming, _ = c.nodes.Incoming(sum.ID)
+	}
+	g.Weight = nodeWeight(depth, incoming, g.Status, sum.Updated, time.Now())
 	g.Glance = c.nodeGlance(sum.ID)
 	if p, ok := c.progressOf(sum.ID); ok && g.Status == nodeRunning && sum.Archived.IsZero() {
 		g.Line = p.Text
@@ -164,6 +172,7 @@ func (c *core) graphRows() ([]graphNode, error) {
 	}
 	c.warmNodeCaches(xs)
 	f := c.statusFacts("")
+	f.depths, f.incoming = nodeDepths(xs), nodeIncoming(xs)
 	out := make([]graphNode, 0, len(xs))
 	for _, x := range xs {
 		out = append(out, c.graphRowWith(x, f))

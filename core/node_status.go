@@ -2,8 +2,8 @@ package main
 
 import (
 	"log"
-	"slices"
 	"strings"
+	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
@@ -47,12 +47,14 @@ const (
 // statusFacts are what nodes' statuses are computed from, read in a
 // constant number of queries, whatever the size of the graph.
 type statusFacts struct {
-	cards   map[string]bool     // nodes a waiting card is linked to
-	tasks   map[string]bool     // nodes a live task works in, not held for its start
-	steps   map[string]string   // step's node → its status
-	results map[string]bool     // results of a finished work, waiting until the user says them done
-	settled map[string]bool     // nodes the steps' engine finished
-	homes   map[string][]string // node → the skills that maintain it (node_home.go)
+	cards    map[string]bool     // nodes a waiting card is linked to
+	tasks    map[string]bool     // nodes a live task works in, not held for its start
+	steps    map[string]string   // step's node → its status
+	results  map[string]bool     // results of a finished work, waiting until the user says them done
+	settled  map[string]bool     // nodes the steps' engine finished
+	homes    map[string][]string // node → the skills that maintain it (node_home.go)
+	depths   map[string]int      // node → its depth, for the whole graph's rows (nodeDepths); nil: read up its parents
+	incoming map[string]int      // node → the nodes that link to it or sit under it, the same (nodeIncoming)
 }
 
 // of is a node's status.
@@ -195,7 +197,7 @@ func (c *core) withStatus(xs []nodestore.Summary) []statusNode {
 }
 
 // activeNodes are the nodes at work or waiting for the user, archived
-// ones left out, the last changed first.
+// ones left out, the heaviest first (node_weight.go).
 func (c *core) activeNodes(limit int) []statusNode {
 	if c.nodes == nil {
 		return nil
@@ -211,12 +213,7 @@ func (c *core) activeNodes(limit int) []statusNode {
 			out = append(out, x)
 		}
 	}
-	slices.SortStableFunc(out, func(a, b statusNode) int {
-		if d := b.Updated.Compare(a.Updated); d != 0 {
-			return d
-		}
-		return strings.Compare(a.ID, b.ID)
-	})
+	byWeight(out, nodeDepths(xs), nodeIncoming(xs), time.Now()) // the heaviest first (node_weight.go)
 	if limit > 0 && len(out) > limit {
 		out = out[:limit]
 	}

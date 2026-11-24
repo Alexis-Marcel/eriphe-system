@@ -15,17 +15,17 @@ setViews([...sampleViews, ...sampleDays]);
 const at = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
 
 const row = (id: string, title: string, more: Partial<GraphNode> = {}): GraphNode => ({
-  id, title, status: "idle", created: at(600), updated: at(30), version: 1, ...more,
+  id, title, weight: more.parent ? 0.55 : 0.95, status: "idle", created: at(600), updated: at(30), version: 1, ...more,
 });
 
 const nodes: GraphNode[] = [
   row("sub", "Substack"),
-  row("plan", "Plan du 1er article", { parent: "sub", version: 2, status: "waits" }),
-  row("style", "Style des articles", { parent: "sub", status: "running", line: "3 articles lus" }),
-  row("day", "Ma journée", { maintained: ["journee"], created: at(700), status: "waits" }),
-  row("invest", "Investissements", { maintained: ["investissements"], created: at(660), status: "waits" }),
-  row("mails", "Mes mails", { maintained: ["tri-mails"], created: at(650), links: ["sub"], status: "waits", external: true, version: 9 }),
-  row("prod", "Alertes de la prod", { maintained: ["prod"], created: at(640), status: "waits", version: 4 }),
+  row("plan", "Plan du 1er article", { parent: "sub", version: 2, weight: 0.9, status: "waits" }),
+  row("style", "Style des articles", { parent: "sub", weight: 0.73, status: "running", line: "3 articles lus" }),
+  row("day", "Ma journée", { maintained: ["journee"], created: at(700), weight: 1.3, status: "waits" }),
+  row("invest", "Investissements", { maintained: ["investissements"], created: at(660), weight: 1.3, status: "waits" }),
+  row("mails", "Mes mails", { maintained: ["tri-mails"], created: at(650), links: ["sub"], weight: 1.3, status: "waits", external: true, version: 9 }),
+  row("prod", "Alertes de la prod", { maintained: ["prod"], created: at(640), weight: 1.3, status: "waits", version: 4 }),
   row("ext", "Virement urgent à valider", { parent: "mails", external: true, titleExternal: true }),
 ];
 

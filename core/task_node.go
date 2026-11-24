@@ -113,12 +113,16 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest) error {
 	}
 	nw := nodestore.New{Title: truncate(oneLine(title), nodefile.TitleMax-1), Parent: strings.TrimSpace(r.Node),
 		Goal: workGoal(r.Contract, r.Prompt), External: len(r.taint) > 0, OpenedBy: origin, Author: c.taskAuthor(t.ID)}
+	neutralGoal := fmt.Sprintf(tr(c.userLang(), "tasknode.goal"), t.ID)
+	if nw.Goal == "" { // no objective, no prompt: every node has a goal
+		nw.Goal = neutralGoal
+	}
 	// A title or a goal the filter refuses (« Renouvelle le token: expiré »)
-	// does not stop the task: its node goes without the goal, then with a
+	// does not stop the task: its node goes with a neutral goal, then with a
 	// neutral title.
 	d, err := c.nodes.Create(nw)
 	if err != nil {
-		nw.Goal = ""
+		nw.Goal = neutralGoal
 		d, err = c.nodes.Create(nw)
 	}
 	if err != nil {

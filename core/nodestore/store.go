@@ -46,8 +46,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -113,6 +115,10 @@ type Options struct {
 const (
 	ChangedDoc   = "doc"   // a new version of its file
 	ChangedTrace = "trace" // its trace grew
+	// ChangedLinked: the nodes that link to it, or sit under it, changed
+	// (one of them was written, moved, archived): what counts them reads
+	// it again.
+	ChangedLinked = "linked"
 )
 
 // Change is a node that changed, and what of it.
@@ -194,6 +200,7 @@ type Summary struct {
 	ID       string
 	File     string
 	Title    string
+	Goal     string // what it is for, one line (nodefile's Meta.Goal)
 	Parent   string
 	Created  time.Time
 	Updated  time.Time
@@ -601,7 +608,9 @@ func (s *Store) indexVersions(now time.Time, xs []indexed) error {
 		return err
 	}
 	defer tx.Rollback()
+	near := map[string]bool{} // the nodes each one linked or sat under, before and after
 	for _, x := range xs {
+		neighbours(tx, x.node.Meta.ID, near)
 		if err := indexNode(tx, x.node, x.file, x.raw, x.v.N, now); err != nil {
 			return err
 		}
@@ -618,10 +627,17 @@ func (s *Store) indexVersions(now time.Time, xs []indexed) error {
 	if err != nil {
 		return err
 	}
+	for _, x := range xs { // after: its text's links resolved
+		neighbours(tx, x.node.Meta.ID, near)
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	s.changed(ChangedDoc, linked...)
+	for _, x := range xs {
+		delete(near, x.node.Meta.ID) // told as written
+	}
+	s.changed(ChangedLinked, slices.Sorted(maps.Keys(near))...)
 	return nil
 }
 
@@ -801,7 +817,7 @@ func (s *Store) summary(id string) (Summary, error) {
 }
 
 func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
-	rows, err := s.db.Query(`SELECT n.id, n.file, n.title, n.parent, n.created, n.updated,
+	rows, err := s.db.Query(`SELECT n.id, n.file, n.title, n.goal, n.parent, n.created, n.updated,
 		n.done, n.archived, n.external, n.title_trusted, n.opened_by, n.version,
 		(SELECT group_concat(t, ' ') FROM (SELECT l.target AS t FROM node_links l WHERE l.id = n.id
 		  UNION SELECT r.target FROM node_refs r WHERE r.id = n.id AND r.target != '' AND r.target != n.id)) FROM nodes n `+where, args...)
@@ -814,7 +830,7 @@ func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
 		var x Summary
 		var created, updated, done, archived int64
 		var links sql.NullString
-		if err := rows.Scan(&x.ID, &x.File, &x.Title, &x.Parent, &created, &updated,
+		if err := rows.Scan(&x.ID, &x.File, &x.Title, &x.Goal, &x.Parent, &created, &updated,
 			&done, &archived, &x.External, &x.TitleTrusted, &x.OpenedBy, &x.Version, &links); err != nil {
 			return nil, err
 		}

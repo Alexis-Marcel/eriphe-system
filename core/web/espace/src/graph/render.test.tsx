@@ -21,7 +21,7 @@ vi.mock("./glance", async (importOriginal) => {
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const node = (id: string, parent?: string, links?: string[]): GraphNode => ({
-  id, title: `Sujet ${id}`, parent, links, status: "idle", created: `2026-11-18T10:0${id.length}:00Z`, updated: new Date().toISOString(), version: 1,
+  id, title: `Sujet ${id}`, parent, links, weight: 0.6, status: "idle", created: `2026-11-18T10:0${id.length}:00Z`, updated: new Date().toISOString(), version: 1,
 });
 
 // The frames, played by hand.

@@ -116,6 +116,16 @@ func TestCreateWriteAndVersions(t *testing.T) {
 	if len(vs) != 2 || vs[0].Hash != d.Version.Hash {
 		t.Fatalf("versions: %+v", vs)
 	}
+	// Its goal is in the index, changed with it.
+	if sum, _ := s.Get("n1"); sum.Goal != "Answer Sam." {
+		t.Fatalf("goal %q", sum.Goal)
+	}
+	if _, err := s.Change("n1", d2.Version.Hash, "brain", func(n *nodefile.Node) error { n.Meta.Goal = "Answer Sam today."; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if sum, _ := s.Get("n1"); sum.Goal != "Answer Sam today." {
+		t.Fatalf("goal changed: %q", sum.Goal)
+	}
 }
 
 func TestReadAnOldVersion(t *testing.T) {

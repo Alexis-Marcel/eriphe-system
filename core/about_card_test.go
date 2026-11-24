@@ -40,7 +40,7 @@ func siteNode(t *testing.T, c *core) string {
 	return id
 }
 
-// A node's card holds the node (its state, title and the first line of
+// A node's card holds the node (its state, title, goal and the first line of
 // its doc), its last three decisions, its facts and people, its
 // intentions, its cards and its preferences; an external line is named,
 // not quoted; nothing of another; and reading it taints nothing.
@@ -50,7 +50,7 @@ func TestAboutCard(t *testing.T) {
 	key := nodeRef(id)
 	card, st := c.aboutCard(key, 4000)
 	for _, want := range []string{
-		"Fiche de " + key, "- nœud " + id + " [running", "« Site en ligne » : Il reste le certificat.",
+		"Fiche de " + key, "- nœud " + id + " [running", "« Site en ligne » (but : « Le site répond en https. ») : Il reste le certificat.",
 		"Décision 4 du site", "Décision 2 du site",
 		"Le domaine est example.org", "fact tiré d'un contenu extérieur", "Lina relit les pages du site",
 		"Relancer Lina pour le site", "carte memory:", "Une idée à valider", "Le site reste sobre",
@@ -59,7 +59,7 @@ func TestAboutCard(t *testing.T) {
 			t.Errorf("card misses %q:\n%s", want, card)
 		}
 	}
-	for _, not := range []string{"Décision 1 du site", "LU DANS UNE PAGE WEB", "UN FAIT SANS RAPPORT", "Rendre le livre", "Le reste du doc", "https"} {
+	for _, not := range []string{"Décision 1 du site", "LU DANS UNE PAGE WEB", "UN FAIT SANS RAPPORT", "Rendre le livre", "Le reste du doc"} {
 		if strings.Contains(card, not) {
 			t.Errorf("card has %q", not)
 		}

@@ -174,7 +174,7 @@ func (p *packBuilder) lines(title string, lines []string) int {
 
 // The pack's state of things, before the messages.
 const (
-	packNodes         = 20 // nodes at work or waiting, the last changed first
+	packNodes         = 20 // nodes at work or waiting, the heaviest first
 	packNodeMax       = 1000
 	packStateMemories = 20 // decisions, people and facts: each
 	packDecisionDays  = 14 // decisions recorded since
@@ -201,8 +201,8 @@ func (c *core) contextPack() (string, contextPackStats) {
 	share := func(n int) int { return room * n / 1000 }
 
 	// The nodes at work or waiting for the user: the card of each one,
-	// the last changed first, while they fit; any other in a line. What a
-	// card shows is not said again in the sections after it.
+	// the heaviest first (node_weight.go), while they fit; any other in a
+	// line. What a card shows is not said again in the sections after it.
 	open, abouts := c.packNodes(c.cardBudget())
 	var texts []string
 	for _, x := range open {
@@ -210,7 +210,7 @@ func (c *core) contextPack() (string, contextPackStats) {
 			texts = append(texts, x.card.Text)
 		}
 	}
-	fit := p.blocks("cards", "Fiches des nœuds en cours et en attente (les plus récents d'abord) :", texts, share(400))
+	fit := p.blocks("cards", "Fiches des nœuds en cours et en attente (les plus lourds d'abord : liens, état, fraîcheur) :", texts, share(400))
 	var cards []pushedCard
 	var nodes []string
 	shown := map[string]bool{} // the records a card shows
@@ -271,8 +271,8 @@ type packNode struct {
 	card *pushedCard
 }
 
-// packNodes are the nodes at work or waiting for the user, the last
-// changed first, each with its card (within budget), and their refs.
+// packNodes are the nodes at work or waiting for the user, the
+// heaviest first, each with its card (within budget), and their refs.
 func (c *core) packNodes(budget int) (open []packNode, refs map[string]bool) {
 	refs = map[string]bool{}
 	for _, x := range c.activeNodes(packNodes) {
@@ -292,8 +292,8 @@ func notShown(xs []*Memory, shown map[string]bool) []*Memory {
 }
 
 // nodeLine is a node in a line: its id, status, the skills that maintain
-// it, its title and the first line of its doc. One whose words may carry
-// what someone else wrote is named, not quoted.
+// it, its title, its goal and the first line of its doc. One whose words
+// may carry what someone else wrote is named, not quoted.
 func (c *core) nodeLine(x statusNode) string {
 	if x.External {
 		return fmt.Sprintf("- nœud %s [%s] : il peut porter ce qu'un autre a écrit : node_read le relit", x.ID, x.Status)
@@ -307,6 +307,9 @@ func (c *core) nodeLine(x statusNode) string {
 		b.WriteString(", enfant de " + x.Parent)
 	}
 	fmt.Fprintf(&b, ", depuis le %s] « %s »", x.Created.Local().Format("01-02"), packQuote(x.Title))
+	if goal := truncate(oneLine(x.Goal), nodeGoalMax); goal != "" {
+		b.WriteString(" (but : « " + packQuote(goal) + " »)")
+	}
 	if first := c.nodeFirstLine(x.ID); first != "" {
 		b.WriteString(" : " + packQuote(first))
 	}

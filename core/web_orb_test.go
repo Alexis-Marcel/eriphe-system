@@ -142,7 +142,7 @@ func TestFewLines(t *testing.T) {
 // waits above the bar.
 func TestOrbAnswersWithACard(t *testing.T) {
 	c, answer := netCore(t, "Tu peux garder un œil sur mes mails ?", "")
-	opened, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Title: "Mes mails", Body: "Les mails.\n"})
+	opened, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Goal: "Un but.", Title: "Mes mails", Body: "Les mails.\n"})
 	if err != nil {
 		t.Fatal(err)
 	}

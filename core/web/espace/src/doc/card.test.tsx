@@ -17,7 +17,7 @@ import { Doc } from "./Doc";
 const skill = (state: string): ProposalView => ({ ref: "skill:3", card: 7, kind: "skill", state, text: "Créer le skill « tri-mails »" });
 
 const pageWith = (proposal: ProposalView | undefined): NodePage => ({
-  node: { id: "n1", title: "Garder un œil sur mes mails", status: "waits", created: "", updated: "", version: 2 },
+  node: { id: "n1", title: "Garder un œil sur mes mails", weight: 0.6, status: "waits", created: "", updated: "", version: 2 },
   version: 2,
   versions: [],
   parts: [{ text: "## Ce qu'on a décidé\n\nToutes les boîtes.\n" }, { block: { name: "vue", components: [], data: {}, card: "skill:3", proposal } }, { text: "La suite.\n" }],

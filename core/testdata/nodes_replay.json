@@ -60,6 +60,7 @@
     "args": {
       "body": "Les erreurs 5xx par minute, relues en direct.\n\n```eriphe:block erreurs\n{\"sources\": {\"erreurs\": {\"tool\": \"prod/erreurs\", \"every\": 1}}, \"components\": [{\"id\": \"root\", \"component\": \"Column\", \"children\": [\"apercu\"]}, {\"id\": \"apercu\", \"component\": \"Code\", \"text\": \"Données : /erreurs\"}]}\n```\n",
       "parent": "$mail",
+      "goal": "Voir les erreurs 5xx de la prod en direct.",
       "title": "La prod : erreurs 5xx"
     },
     "ok": true,
@@ -186,7 +187,7 @@
     "about": "$mails",
     "tool": "node_write",
     "args": {
-      "body": "Les mails qui comptent. Tu veux que je garde un œil sur ta boîte, t'aide à la gérer et te propose des actions. Avant de mettre quoi que ce soit en place, trois choix :\n\n1. **Ce que je couvre** : tous tes comptes mail. *Sans réponse : tous les comptes.*\n2. **Ce que je fais pour toi** : je lis et trie chaque mail, je prépare un brouillon de réponse ou une action (ranger, supprimer) pour ce qui demande quelque chose ; rien ne part sans ton oui sur une carte. *Sans réponse : brouillons et propositions, jamais d'envoi seul.*\n3. **Te prévenir** : seulement ce qui est urgent, tout de suite ; le reste est dans la vue et au brief. *Sans réponse : urgents seulement, pas la nuit.*\n\n```eriphe:block reponses\n{\"components\": [{\"id\": \"root\", \"component\": \"Row\", \"children\": [\"defaut\", \"tout\", \"rien\"]}, {\"id\": \"defaut\", \"component\": \"Button\", \"variant\": \"primary\", \"label\": \"Fais comme tu proposes\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Fais comme tu proposes\"}}}}, {\"id\": \"tout\", \"component\": \"Button\", \"label\": \"Prévenir même la nuit pour l'urgent\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Fais comme tu proposes, mais prévenir aussi la nuit pour l'urgent\"}}}}, {\"id\": \"rien\", \"component\": \"Button\", \"label\": \"Ne jamais me prévenir\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Fais comme tu proposes, mais ne me préviens jamais : je regarde la vue moi-même\"}}}}]}\n```\n",
+      "body": "Les mails qui comptent. Tu veux que je garde un œil sur ta boîte, t'aide à la gérer et te propose des actions. Avant de mettre quoi que ce soit en place, trois choix :\n\n1. **Ce que je couvre** : tous tes comptes mail. *Sans réponse : tous les comptes.*\n2. **Ce que je fais pour toi** : je lis et trie chaque mail, je prépare un brouillon de réponse ou une action (ranger, supprimer) pour ce qui demande quelque chose ; rien ne part sans ton oui sur une carte. *Sans réponse : brouillons et propositions, jamais d'envoi seul.*\n3. **Te prévenir** : seulement ce qui est urgent, tout de suite ; le reste est dans la page et au brief. *Sans réponse : urgents seulement, pas la nuit.*\n\n```eriphe:block reponses\n{\"components\": [{\"id\": \"root\", \"component\": \"Row\", \"children\": [\"defaut\", \"tout\", \"rien\"]}, {\"id\": \"defaut\", \"component\": \"Button\", \"variant\": \"primary\", \"label\": \"Fais comme tu proposes\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Fais comme tu proposes\"}}}}, {\"id\": \"tout\", \"component\": \"Button\", \"label\": \"Prévenir même la nuit pour l'urgent\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Fais comme tu proposes, mais prévenir aussi la nuit pour l'urgent\"}}}}, {\"id\": \"rien\", \"component\": \"Button\", \"label\": \"Ne jamais me prévenir\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Fais comme tu proposes, mais ne me préviens jamais : je regarde la vue moi-même\"}}}}]}\n```\n",
       "expect": "$hash",
       "id": "$mails"
     },
@@ -199,7 +200,7 @@
     "talk": "$mails",
     "tool": "node_write",
     "args": {
-      "body": "Les mails qui comptent. Tu veux que je garde un œil sur ta boîte, t'aide à la gérer et te propose des actions. Avant de mettre quoi que ce soit en place, trois choix (réponds-moi en une phrase) :\n\n1. **Ce que je couvre** : tous tes comptes mail. *Sans réponse : tous les comptes.*\n2. **Ce que je fais pour toi** : je lis et trie chaque mail, je prépare un brouillon de réponse ou une action (ranger, supprimer) pour ce qui demande quelque chose ; rien ne part sans ton oui sur une carte. *Sans réponse : brouillons et propositions, jamais d'envoi seul.*\n3. **Te prévenir** : seulement ce qui est urgent, tout de suite ; le reste est dans la vue et au brief. *Sans réponse : urgents seulement, pas la nuit.*\n\nRéponds « fais comme tu proposes » pour tout prendre par défaut.\n",
+      "body": "Les mails qui comptent. Tu veux que je garde un œil sur ta boîte, t'aide à la gérer et te propose des actions. Avant de mettre quoi que ce soit en place, trois choix (réponds-moi en une phrase) :\n\n1. **Ce que je couvre** : tous tes comptes mail. *Sans réponse : tous les comptes.*\n2. **Ce que je fais pour toi** : je lis et trie chaque mail, je prépare un brouillon de réponse ou une action (ranger, supprimer) pour ce qui demande quelque chose ; rien ne part sans ton oui sur une carte. *Sans réponse : brouillons et propositions, jamais d'envoi seul.*\n3. **Te prévenir** : seulement ce qui est urgent, tout de suite ; le reste est dans la page et au brief. *Sans réponse : urgents seulement, pas la nuit.*\n\nRéponds « fais comme tu proposes » pour tout prendre par défaut.\n",
       "expect": "$hash",
       "id": "$mails"
     },
@@ -213,7 +214,7 @@
     "tool": "node_open",
     "args": {
       "title": "Garder un œil sur mes mails",
-      "goal": "Suivre tous mes comptes mail : chaque mail est lu et trié, ce qui demande une réponse ou une action vient avec un brouillon ou une proposition, rien ne part sans mon oui. Me prévenir tout de suite seulement pour l'urgent, jamais la nuit ; le reste est dans la vue et au brief.",
+      "goal": "Suivre tous mes comptes mail : chaque mail est lu et trié, ce qui demande une réponse ou une action vient avec un brouillon ou une proposition, rien ne part sans mon oui. Me prévenir tout de suite seulement pour l'urgent, jamais la nuit ; le reste est dans la page et au brief.",
       "body": "**Bilan** : en attente du premier passage.\n\n```eriphe:block mails\n{\"sources\": {\"mails\": {\"tool\": \"mail/recus\", \"every\": 5, \"items\": {\"path\": \"messages\", \"id\": \"id\", \"title\": \"subject\", \"detail\": \"from\", \"open\": {\"tool\": \"mail/lire\", \"id\": \"id\"}}}}, \"components\": [{\"id\": \"root\", \"component\": \"Column\", \"children\": [\"todo\", \"info\"]}, {\"id\": \"todo\", \"component\": \"List\", \"children\": {\"path\": \"/mails/messages[_group=À traiter][_state!=done]\", \"componentId\": \"row\"}, \"emptyText\": \"Rien à traiter\"}, {\"id\": \"info\", \"component\": \"Fold\", \"label\": \"Pour info\", \"child\": \"infolist\"}, {\"id\": \"infolist\", \"component\": \"List\", \"children\": {\"path\": \"/mails/messages[_group=Pour info][_state!=done]\", \"componentId\": \"row\"}, \"emptyText\": \"Rien\"}, {\"id\": \"row\", \"component\": \"Item\", \"title\": {\"@path\": \"subject\"}, \"detail\": {\"@path\": \"from\"}, \"note\": {\"@path\": \"_note\"}}]}\n```\n"
     },
     "ok": true,
@@ -258,7 +259,7 @@
     "talk": "$mails",
     "tool": "node_write",
     "args": {
-      "body": "Les mails qui comptent.\n\n## Ce qu'on a décidé\n- Tous tes comptes mail sont couverts.\n- Je lis et trie chaque mail ; pour ce qui demande quelque chose, je prépare un brouillon ou une action. Rien ne part sans ton oui sur une carte.\n- Je te préviens seulement de l'urgent, tout de suite, jamais la nuit ; le reste est dans la vue et au brief.\n\nLa vue proposée : [[Garder un œil sur mes mails]].\n",
+      "body": "Les mails qui comptent.\n\n## Ce qu'on a décidé\n- Tous tes comptes mail sont couverts.\n- Je lis et trie chaque mail ; pour ce qui demande quelque chose, je prépare un brouillon ou une action. Rien ne part sans ton oui sur une carte.\n- Je te préviens seulement de l'urgent, tout de suite, jamais la nuit ; le reste est dans la page et au brief.\n\nLa vue proposée : [[Garder un œil sur mes mails]].\n",
       "expect": "$hash",
       "id": "$mails"
     },
@@ -269,6 +270,7 @@
     "tool": "node_open",
     "args": {
       "title": "Suivre mes journées",
+      "goal": "Ma journée : ce qui m'attend aujourd'hui, tenu à jour.",
       "body": "En cours : je prépare la page de ta journée.\n"
     },
     "ok": true,

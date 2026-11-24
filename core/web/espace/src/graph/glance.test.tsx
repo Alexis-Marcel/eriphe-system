@@ -19,7 +19,7 @@ const glance = (delta: number, threshold = 2, o: Partial<Glance> = {}): Glance =
 const node = (id: string, g?: Glance, o: Partial<GraphNode> = {}): GraphNode => ({
   id,
   title: id,
-  status: "idle",
+  weight: 0.6, status: "idle",
   created: "",
   updated: "",
   version: 1,
