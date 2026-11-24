@@ -42,10 +42,6 @@ const skillKept = 5
 
 func init() {
 	extraSchema = append(extraSchema, skillSchema)
-	// off_why: never written; a skills table made before has it.
-	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
-		return dropColumn(db, "skills", "off_why")
-	})
 }
 
 // Limits of one skill: a skill is instructions and small scripts.

@@ -2197,7 +2197,8 @@ item, so a skill follows the mail with `when: monitor.new key=mails`. The calend
 - **The user approves it.** The brain proposes one with `write_monitor` (name, server, tool or
   resource, args, every, cond, path, id, above, below): a card (kind `monitor`) says it in words; the yes turns it on from a new
   baseline, the no drops it. A change of an approved one waits the same way, the old one looking
-  meanwhile. Written on a tainted turn, the card says so. A triggered task has no such tool.
+  meanwhile. A proposal that stops waiting other than by its card (the user saves their own
+  version on the Monitors page) leaves its card `gone`, never approved. Written on a tainted turn, the card says so. A triggered task has no such tool.
   `monitors` (free) lists them: state, what each does, its last look, why it waits, its last error.
   `try_monitor` (free) tries one once, with nothing kept or written: a draft before proposing it,
   or one of the user's by name. It says what the path extracts or why it cannot, and for a monitor

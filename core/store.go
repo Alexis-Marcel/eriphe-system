@@ -149,16 +149,6 @@ var extraSchema []string
 // column added), after the schema: CREATE TABLE IF NOT EXISTS never does.
 var schemaFixes []func(*sql.DB) error
 
-// dropColumn drops a column from a table that has it.
-func dropColumn(db *sql.DB, table, column string) error {
-	var n int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, table, column).Scan(&n); err != nil || n == 0 {
-		return err
-	}
-	_, err := db.Exec(`ALTER TABLE ` + table + ` DROP COLUMN ` + column)
-	return err
-}
-
 // addColumn adds a column to a table that lacks it; a table that has it
 // is left as it is.
 func addColumn(db *sql.DB, table, column, def string) error {
