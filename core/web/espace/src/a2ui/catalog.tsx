@@ -64,6 +64,9 @@ const Text = createComponentImplementation(
   ({ props }) => {
     const v = props.variant ?? "body";
     const cls = `a2-text a2-text-${v}`;
+    // An empty text draws nothing: a row's heading or mark bound to a
+    // field only some rows fill.
+    if (props.text === "" || props.text == null) return null;
     // A title is a heading, under the page's: assistive technology can
     // jump between them.
     if (v === "title") return <h3 className={cls}>{props.text}</h3>;

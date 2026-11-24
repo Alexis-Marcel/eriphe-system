@@ -4,8 +4,8 @@ import { expect, test } from "./fixtures";
 // TestEspaceScenario: a node whose block lists five faked mails
 // (mail/tri), noted into two groups, in two Lists that filter them by
 // their group. The brain's one call that deletes the first section's
-// three mails is one card on their three rows: a Oui on any of them runs
-// it, and the faked server gets exactly those. Seeded at /e2e/sections,
+// three mails is one card on their three rows: its Oui, once at the
+// section's head, runs it, and the faked server gets exactly those. Seeded at /e2e/sections,
 // on its own node.
 
 test("one card on a section's rows runs on exactly those", async ({ page, request }) => {
@@ -28,13 +28,14 @@ test("one card on a section's rows runs on exactly those", async ({ page, reques
   await expect(info).not.toContainText("Soldes d'hiver");
   await expect(info.locator(".a2-inline-yes")).toHaveCount(0); // nothing waits on its rows
 
-  // One card on the three rows: each shows it, and says it is shared.
+  // One card on the three rows: its Oui once, at their head, never on
+  // each row.
   const yeses = drop.locator(".a2-inline-yes");
-  await expect(yeses).toHaveCount(3);
-  await expect(drop.locator(".a2-inline-shared")).toHaveCount(3);
-  const refs = await drop.locator(".a2-inline").evaluateAll((ns) => ns.map((n) => n.getAttribute("data-row-card")));
-  expect(new Set(refs).size).toBe(1);
-  await yeses.nth(1).click();
+  await expect(yeses).toHaveCount(1);
+  await expect(drop.locator(".a2-listhead .a2-inline-yes")).toHaveCount(1);
+  await expect(drop.locator(".a2-list > li .a2-inline-yes")).toHaveCount(0);
+  await expect(drop.locator(".a2-inline-shared")).toHaveCount(0);
+  await yeses.first().click();
 
   await expect.poll(async () => (await (await request.get("/e2e/tools")).json()).deleted).toEqual([["s1", "s3", "s4"]]);
   // The source read again: the section is empty, the other as it was.

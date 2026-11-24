@@ -38,7 +38,8 @@ func formIDs(values []string) ([]int64, bool) {
 // handleCard is a card's Oui or Non. A card decided already, here, on a
 // channel or in words, stays as it was decided. Oui on a calls card may
 // carry the user's choice: the calls ticked (only) and those unticked
-// (left), by their ids.
+// (left), by their ids; Non may name some of its calls (left): those
+// alone are refused, the card waits on with the others.
 func (w *web) handleCard(rw http.ResponseWriter, r *http.Request, s *session) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -51,7 +52,15 @@ func (w *web) handleCard(rw http.ResponseWriter, r *http.Request, s *session) {
 		return
 	}
 	r.ParseForm()
-	if _, chosen := r.PostForm["only"]; chosen && action == "yes" {
+	if _, some := r.PostForm["left"]; some && action == "no" {
+		// Non on some calls of a calls card: a row's ✕ (call_fold.go).
+		left, ok := formIDs(r.PostForm["left"])
+		if !ok {
+			http.Error(rw, "bad left", http.StatusBadRequest)
+			return
+		}
+		err = w.c.refuseCalls(r.Context(), id, left, "web")
+	} else if _, chosen := r.PostForm["only"]; chosen && action == "yes" {
 		// Oui on a calls card with the user's choice (call_fold.go).
 		only, ok1 := formIDs(r.PostForm["only"])
 		left, ok2 := formIDs(r.PostForm["left"])

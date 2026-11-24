@@ -24,9 +24,9 @@ func TestOneWayToSayYes(t *testing.T) {
 		"decideCallsChosen": {"decideCardChosen"},
 		"decideCalls":       {"decideProposal"},
 		"decideRunCalls":    {"decideProposal"},
-		"decideAccess":      {"decideProposal", "decideCalls", "decideRunCalls", "decideCallsChosen"},
-		"decides":           {"decideProposal"}, // a kind's decider, from its row (proposal_kinds.go)
-		"decideSetting":     {"init"},           // the rows of kindsOf
+		"decideAccess":      {"decideProposal", "decideCalls", "decideRunCalls", "decideCallsChosen", "refuseCalls"}, // refuseCalls: a row's ✕, some calls of a card that waits on, its words said again
+		"decides":           {"decideProposal"},                                                                      // a kind's decider, from its row (proposal_kinds.go)
+		"decideSetting":     {"init"},                                                                                // the rows of kindsOf
 		"decideSkill":       {"init"},
 		"decideMonitor":     {"init"},
 		"decideTaskStart":   {"init"},

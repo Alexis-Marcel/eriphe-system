@@ -1572,17 +1572,31 @@ definition it was made of, so a change shows what was before.
 The changes wait like any other item, in **« Outils à revoir »**, a node code makes at
 start when there is none (again if it was archived; `tool_review.go`). Its block lists
 `eriphe-catalog/catalog_changes` (each change: `id`, server, tool, kind `new`, `changed` or
-`removed` — a pinned tool its connected server no longer lists —, the description, category and
-parameters before and now); each change waiting gets a card of its own on its row, made by code at
-each read of the list (`reviewCards`: a calls card of one `catalog_accept` call on that id, its
-label the change), withdrawn (`gone`) once the change no longer waits. Its Oui accepts the change:
-the tool is pinned with exactly the definition shown (a change's id carries its hash; a
-tool changed again is a new change, and an id no longer waiting does nothing); a dropped tool's
-pin is forgotten. Its ✕ refuses it (`settleChanges`, at the next read): the change no longer waits,
-the tool stays held (or its pin stays); a later definition is a new change. The node waits for the
-user while a card does, as any node. It is read again whenever what a server lists changes, after
-each card, and every 5 minutes. The block reads a
-server not trusted: it is external. No message tells the brain.
+`removed` — a pinned tool its connected server no longer lists —, `what` changed in a few words,
+its `line`, `risky` and its mark, and its `detail`: only what changed, never both texts whole).
+The list is one line per change, by server (its name over its first row, `group`):
+« search_issues — description modifiée · lecture ». What changed is the category (« lecture →
+modification »), parameters added or removed, the description (opened: the words added and taken
+out), a new tool, a dropped one, or « définition modifiée » when only another part of the
+definition changed (a parameter's description). A pin made before pins kept their definition has
+only its hash: its change says « ancienne version non conservée » and is judged as a new tool. A
+change that gives the tool more power — its category goes up (read, then change, then delete or
+send), it takes new parameters, or it is new (or not kept) and does more than read — is `risky`:
+its server first, it first in its server, marked « plus de pouvoir »; a reworded description stays
+quiet. Each change waiting is a call of its own on its row, made by code at each read of the list
+(`reviewCards`: one `catalog_accept` call on that id, its label the change), all folded into one
+card (`call_fold.go`); a card holding a change that no longer waits is withdrawn (`gone`), never
+read as a no, and the changes it held get a card again. The page draws the card its rows share
+once, at the list's head (« Accepter les 3 »): its Oui accepts them all, each tool pinned with
+exactly the definition listed (a change's id carries its hash; a tool changed again is a new
+change, and an id no longer waiting does nothing); a dropped tool's pin is forgotten. Each row has
+a ✕ that refuses that change alone (`POST /cards/{id}/no` with `left`, `refuseCalls`; recorded by
+`settleChanges` at the next read): the change no longer waits, the tool stays held (or its pin
+stays), the card waits on with the others; a later definition is a new change. The card's own ✕
+refuses them all. The node waits for the user while a card does, as any node. It is read again
+whenever what a server lists changes, after each card, and every 5 minutes; a node made by an
+older Eriphe gets its text and block written again at start (`refreshToolReview`). The block reads
+a server not trusted: it is external. No message tells the brain.
 
 `eriphe-catalog` is a server Eriphe provides in the pool, lent to no agent (no grant may name it):
 `catalog_changes` is a free read that only code calls (a block's source); `catalog_accept` is
@@ -1666,7 +1680,9 @@ lists with their reason, and when a text table keeps a word for a tool's name (`
 turn is about first, else any live node that read them: `node_reads`) is kept on that node and
 those items (`access_asks.node`, `source`, `labels`): `itemCards` gives each row the card's ref,
 so the page draws its Oui on every row it names (one card on several rows: a Oui on any answers
-it, a mark says how many share it, and hovering lights the others), on a folded batch's line, and
+it, a mark says how many share it, and hovering lights the others; one card on every row of a
+List, two or more: its Oui once at the List's head, and on each row only a ✕ that refuses that
+row's own calls, `refuseCalls`, the card waiting on with the others), on a folded batch's line, and
 never in the page's foot (`placed`: any told row's card). A calls card is on every item its
 calls act on (one call on several items, or several calls folded: `call_fold.go`), an item two
 cards act on showing the newest. A call on no row keeps its foot card,

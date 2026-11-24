@@ -143,9 +143,16 @@ func (c *core) foldCalls() map[int64]int64 {
 	return folded
 }
 
-// untouched tells whether every call of a card waits, none running.
+// untouched tells whether every call of a card waits, none running, but
+// those a row's ✕ refused (refuseCalls): left out, the card still waits
+// on the others.
 func (c *core) untouched(asks []accessQuestion) bool {
+	waits := false
 	for _, a := range asks {
+		if a.State == startRejected {
+			continue
+		}
+		waits = true
 		if !c.askWaits(a) {
 			return false
 		}
@@ -153,7 +160,7 @@ func (c *core) untouched(asks []accessQuestion) bool {
 			return false
 		}
 	}
-	return len(asks) > 0
+	return waits
 }
 
 // foldInto moves a card's calls to another: its own card goes, unlinked
@@ -275,6 +282,70 @@ func (c *core) decideCardChosen(ctx context.Context, id int64, only, left []int6
 		}
 		return c.decideCallsChosen(ctx, pid, only, left)
 	})
+}
+
+// refuseCalls is a row's ✕ on a calls card its List's rows share (the
+// card's Oui at the List's head): the calls named are refused, each as a
+// card's Non refuses it, and the card waits on with the others, its words
+// said again. Each must be a call of the card that waits, or nothing is
+// refused; naming them all is the card's Non. The rows' source is read
+// again: what it lists now.
+func (c *core) refuseCalls(ctx context.Context, id int64, left []int64, by string) error {
+	if len(left) == 0 {
+		return errNotOnCard
+	}
+	cardMu.Lock()
+	x, err := c.card(id)
+	if err != nil {
+		cardMu.Unlock()
+		return errNoCard
+	}
+	kind, pid, _ := parseProposalRef(x.Ref)
+	if x.State != cardPending || kind != cardCalls || x.Kind != cardCalls {
+		cardMu.Unlock()
+		if x.State != cardPending {
+			return errCardDecided
+		}
+		return errNotOnCard
+	}
+	asks := c.batchAsks(pid)
+	waiting := map[int64]bool{}
+	for _, a := range asks {
+		if c.askWaits(a) {
+			waiting[a.ID] = true
+		}
+	}
+	named := map[int64]bool{}
+	for _, aid := range left {
+		if !waiting[aid] {
+			cardMu.Unlock()
+			return errNotOnCard
+		}
+		named[aid] = true
+	}
+	if len(named) == len(waiting) {
+		cardMu.Unlock()
+		_, err := c.decideCard(ctx, id, false, by)
+		return err
+	}
+	for aid := range named {
+		if err := c.decideAccess(ctx, aid, false); err != nil && err != errCardDecided {
+			cardMu.Unlock()
+			return err
+		}
+	}
+	p := c.proposalOf(cardCalls, pid)
+	c.store.db.Exec(`UPDATE convo_cards SET text = ? WHERE id = ? AND state = ?`, p.Text(c.userLang()), id, cardPending)
+	cardMu.Unlock()
+	c.proposalMoved(x.Ref)
+	log.Printf("cards: %s: %d of its calls refused by %s", x.Ref, len(named), by)
+	for _, a := range asks {
+		if a.Node != "" && a.Source != "" {
+			c.readNodeLater(context.Background(), a.Node, []string{a.Source})
+			break
+		}
+	}
+	return nil
 }
 
 // callsDecided keeps a decided calls card's words, those of its calls
