@@ -24,7 +24,14 @@ func TestCatalogExamplesAreValid(t *testing.T) {
 		t.Fatalf("%d examples in the instructions", len(blocks))
 	}
 	for i, b := range blocks {
-		if errs := c.ValidateSurface(Surface{ID: "ex", Components: json.RawMessage(b[1])}); len(errs) > 0 {
+		raw := json.RawMessage(b[1])
+		// One component alone: code completes it with the id root.
+		var one map[string]any
+		if json.Unmarshal(raw, &one) == nil {
+			one["id"] = "root"
+			raw, _ = json.Marshal([]any{one})
+		}
+		if errs := c.ValidateSurface(Surface{ID: "ex", Components: raw}); len(errs) > 0 {
 			t.Errorf("instructions, example %d: %v", i+1, errs)
 		}
 	}
@@ -136,8 +143,8 @@ func TestInvalidSurfaces(t *testing.T) {
 			CodeValidationFailed, "/components/0/kind", "'line', 'bar'"},
 		{"nested additional property", surfaceOf(`{"id":"root","component":"Timeline","items":[{"label":"a","state":"done","color":"red"}]}`),
 			CodeValidationFailed, "/components/0/items/0", "additional properties 'color' not allowed"},
-		{"rows not a list", surfaceOf(`{"id":"root","component":"Table","columns":[{"key":"a","label":"A"}],"rows":"a"}`),
-			CodeValidationFailed, "/components/0/rows", "got string, want array or object"},
+		{"rows not a list", surfaceOf(`{"id":"root","component":"Table","columns":[{"key":"a","label":"A"}],"rows":3}`),
+			CodeValidationFailed, "/components/0/rows", "got number, want string or array or object"},
 		{"unknown function", surfaceOf(`{"id":"root","component":"Text","text":{"@call":"formatDat","args":{"value":"x"}}}`),
 			CodeValidationFailed, "/components/0/text/@call", `must be one of "formatString", "formatNumber", "formatDate", "formatRelative", "@index"`},
 		{"missing argument", surfaceOf(`{"id":"root","component":"Text","text":{"@call":"formatDate","args":{"value":"x"}}}`),

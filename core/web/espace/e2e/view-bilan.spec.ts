@@ -39,11 +39,11 @@ test("a page as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect(pg.locator(".a2-block-mark")).toHaveCount(0); // no edge, no dot: the head says it
   await expect(pg.getByText("extérieur", { exact: true })).toHaveCount(0);
 
-  // « À traiter »: each row what Eriphe proposes; Sam's with its one Oui.
+  // « À traiter »: each row what Eriphe proposes; Sam's with its one yes, its verb.
   const todo = pg.locator(".a2-openrow").filter({ hasText: "Répondre à Sam" });
   const lease = pg.locator(".a2-openrow").filter({ hasText: "À lire : l'avenant au bail" });
   await expect(todo).toHaveCount(1);
-  await expect(todo.locator(".a2-inline-yes")).toHaveText("Oui");
+  await expect(todo.locator(".a2-inline-yes")).toHaveText("Envoyer");
   await expect(todo.locator(".a2-inline-yes")).toHaveAttribute("title", "Envoyer la réponse · « Devis terrasse » · Sam");
   await expect(lease.locator(".a2-inline-yes")).toHaveCount(0);
   await expect(pg.locator(".pg-foot")).toHaveCount(0); // the card is on its row, not at the foot
@@ -57,7 +57,7 @@ test("a page as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect(read.locator(".a2-read-title")).toHaveText("Devis terrasse");
   await expect(read.locator(".a2-read-text")).toContainText("Peux-tu me dire avant vendredi");
   const onYes = read.locator(".a2-onyes");
-  await expect(onYes.locator(".a2-onyes-kicker")).toHaveText("Sur Oui");
+  await expect(onYes.locator(".a2-onyes-kicker")).toHaveText("Si tu acceptes");
   await expect(onYes.locator("figcaption")).toHaveText("Texte");
   await expect(onYes.locator(".a2-onyes-text")).toContainText("tu peux lancer la commande");
   await expect(read.locator("summary")).toHaveText(["détails"]);

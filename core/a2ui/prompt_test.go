@@ -41,15 +41,24 @@ func TestPromptCoversTheCatalog(t *testing.T) {
 	comps, _ := c.doc["components"].(map[string]any)
 	for _, name := range c.component {
 		line := lineOf(p, "- **"+name+"**")
+		def, _ := comps[name].(map[string]any)
+		if Legacy(def) {
+			// Kept for the nodes written with it, never offered.
+			if line != "" {
+				t.Errorf("legacy %s is in the prompt", name)
+			}
+			continue
+		}
 		if line == "" {
 			t.Errorf("no line for %s", name)
 			continue
 		}
-		def, _ := comps[name].(map[string]any)
 		props, _ := def["properties"].(map[string]any)
 		keys := make([]string, 0, len(props))
-		for k := range props {
-			keys = append(keys, k)
+		for k, v := range props {
+			if !Legacy(v) {
+				keys = append(keys, k)
+			}
 		}
 		sort.Strings(keys)
 		block := p[strings.Index(p, line):]

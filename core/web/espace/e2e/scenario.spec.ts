@@ -201,7 +201,7 @@ test("the steps of the scenario", async ({ page, request }) => {
 
   // 9. The user approves the send; Style finishes, and code starts Plan
   // with no turn of the brain.
-  await card.getByRole("button", { name: "Oui" }).click();
+  await card.getByRole("button", { name: "Autoriser" }).click();
   await expect.poll(async () => (await (await request.get("/e2e/tools")).json()).sent).toEqual(["sam@example.org: Je regarde dans l'heure."]);
   await request.post("/e2e/finish/style");
   await expect(page.locator(".gr-node.done .gr-core[aria-label^='Style des articles']")).toBeVisible();
@@ -348,7 +348,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await shot(page, "skill-card-details", true);
   // On a laptop's screen, where two pages side by side do not fit.
   await page.setViewportSize({ width: 1180, height: 720 });
-  await skillCard.getByRole("button", { name: "Oui" }).click();
+  await skillCard.getByRole("button", { name: "Approuver" }).click();
   // Its yes makes the skill and its monitor: the page is maintained.
   await expect(page.locator(".gr-node.maintained", { has: page.locator('.gr-core[aria-label^="Mes mails"]') })).toHaveCount(1);
   await expect(pageOf("Mes mails")).toBeVisible();
@@ -362,7 +362,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   // Answered, the card is decided: it leaves the document (the page's ⋯
   // menu lists it).
   await expect(skillCard).toHaveCount(0);
-  await expect(watch.getByRole("button", { name: "Oui" })).toHaveCount(0);
+  await expect(watch.getByRole("button", { name: "Approuver" })).toHaveCount(0);
   // Its pages closed, the page's bubble, made on the subject, sits beside
   // it. Dropped right on it, nothing is pinned: the two are set apart and
   // the graph settles again, no bubble on another.

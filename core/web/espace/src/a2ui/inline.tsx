@@ -58,7 +58,7 @@ export function InlineYes({ refText, where, say, left, marked }: { refText: stri
   };
   if (p.state !== "pending") return <InlineState p={p} />;
   const going = chosen(p, left).only.length;
-  const yesWord = p.acts?.[0] && (p.choices?.length ?? 0) > 1 ? p.acts[Math.max(1, Math.min(going, p.acts.length)) - 1] : t("espace.a2.yes");
+  const yesWord = p.acts?.[0] && (p.choices?.length ?? 0) > 1 ? p.acts[Math.max(1, Math.min(going, p.acts.length)) - 1] : p.verb;
   const shared = row?.card === refText && (row.shared ?? 0) > 1 ? row.shared! : 0;
   const title = inlineTitle(p);
   return (

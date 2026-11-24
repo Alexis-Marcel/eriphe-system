@@ -415,10 +415,11 @@ func (b *Block) Validate() error {
 	for _, e := range errs {
 		fail("%s: %s", e.Path, e.Message)
 	}
+	problems = append(problems, b.namedSources()...)
 	if len(problems) > 0 {
 		return blockErr(b.Name, problems...)
 	}
-	for _, bound := range a2ui.Eriphe().BoundPaths(b.Components) {
+	for _, bound := range a2ui.Eriphe().BoundPaths(b.Bound()) {
 		at := tokens(bound.Path)
 		if len(at) == 0 {
 			continue

@@ -1384,6 +1384,198 @@
      }
     }
    }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-blocks",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "figs",
+       "secs",
+       "recipes",
+       "tiles",
+       "steps",
+       "asks"
+      ]
+     },
+     {
+      "id": "figs",
+      "component": "Figures",
+      "title": "Cette semaine",
+      "items": [
+       {
+        "label": "Portefeuille",
+        "value": 18385,
+        "unit": "€",
+        "delta": 1.8,
+        "deltaLabel": "cette semaine",
+        "trend": [
+         17900,
+         18010,
+         18120,
+         18060,
+         18385
+        ]
+       },
+       {
+        "label": "Mails à traiter",
+        "value": 4
+       },
+       {
+        "label": "Prochain rendez-vous",
+        "value": "Jeudi 10 h"
+       }
+      ]
+     },
+     {
+      "id": "secs",
+      "component": "Sections",
+      "title": "Courrier",
+      "items": {
+       "@path": "/mails"
+      }
+     },
+     {
+      "id": "recipes",
+      "component": "Table",
+      "title": "Recettes",
+      "rows": {
+       "@path": "/recipes"
+      },
+      "units": {
+       "note": "★",
+       "temps": "min",
+       "cost": "€"
+      }
+     },
+     {
+      "id": "tiles",
+      "component": "Gallery",
+      "title": "Garde-robe",
+      "items": {
+       "@path": "/pieces"
+      },
+      "by": "kind",
+      "units": {
+       "worn": "fois"
+      }
+     },
+     {
+      "id": "steps",
+      "component": "Timeline",
+      "title": "Déménagement",
+      "items": [
+       {
+        "label": "Devis",
+        "state": "done"
+       },
+       {
+        "label": "Acompte",
+        "state": "current",
+        "detail": "À verser avant vendredi"
+       },
+       {
+        "label": "Cartons",
+        "state": "pending"
+       },
+       {
+        "label": "Jour J",
+        "state": "pending",
+        "date": "2026-12-12"
+       }
+      ]
+     },
+     {
+      "id": "asks",
+      "component": "Asks",
+      "items": [
+       "Fais comme tu proposes",
+       "Écris-le pour des managers"
+      ]
+     }
+    ],
+    "dataModel": {
+     "mails": [
+      {
+       "id": "m1",
+       "subject": "Facture d'électricité",
+       "from": "Sam <sam@example.org>",
+       "date": "2026-11-23T09:12:00Z",
+       "_note": "À payer avant le 30",
+       "_state": "act",
+       "_group": "À faire"
+      },
+      {
+       "id": "m2",
+       "subject": "Réunion de quartier",
+       "from": "Alex <alex@example.org>",
+       "date": "2026-11-22T18:40:00Z",
+       "_note": "Répondre si tu viens",
+       "_state": "look",
+       "_group": "À faire"
+      },
+      {
+       "id": "m3",
+       "subject": "Promo de la semaine",
+       "from": "shop@example.org",
+       "_group": "Lettres d'info"
+      },
+      {
+       "id": "m4",
+       "subject": "Nouveautés",
+       "from": "news@example.org",
+       "_group": "Lettres d'info"
+      }
+     ],
+     "recipes": [
+      {
+       "title": "Soupe de potiron",
+       "note": 4,
+       "temps": 35,
+       "cost": 6.5
+      },
+      {
+       "title": "Gratin dauphinois",
+       "note": 5,
+       "temps": 70,
+       "cost": 8
+      },
+      {
+       "title": "Salade de lentilles",
+       "note": 3,
+       "temps": 20,
+       "cost": 4.2
+      }
+     ],
+     "pieces": [
+      {
+       "title": "Veste en laine",
+       "kind": "Hauts",
+       "worn": 12
+      },
+      {
+       "title": "Chemise oxford",
+       "kind": "Hauts",
+       "worn": 30
+      },
+      {
+       "title": "Pantalon droit",
+       "kind": "Bas",
+       "worn": 21
+      },
+      {
+       "title": "Bottines",
+       "kind": "Chaussures",
+       "worn": 8
+      }
+     ]
+    }
+   }
   }
  ],
  "en": [
@@ -2769,6 +2961,198 @@
      "lea": {
       "name": "Léa"
      }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-blocks",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "figs",
+       "secs",
+       "recipes",
+       "tiles",
+       "steps",
+       "asks"
+      ]
+     },
+     {
+      "id": "figs",
+      "component": "Figures",
+      "title": "This week",
+      "items": [
+       {
+        "label": "Portfolio",
+        "value": 18385,
+        "unit": "€",
+        "delta": 1.8,
+        "deltaLabel": "this week",
+        "trend": [
+         17900,
+         18010,
+         18120,
+         18060,
+         18385
+        ]
+       },
+       {
+        "label": "Mails to handle",
+        "value": 4
+       },
+       {
+        "label": "Next meeting",
+        "value": "Thursday 10 am"
+       }
+      ]
+     },
+     {
+      "id": "secs",
+      "component": "Sections",
+      "title": "Mail",
+      "items": {
+       "@path": "/mails"
+      }
+     },
+     {
+      "id": "recipes",
+      "component": "Table",
+      "title": "Recipes",
+      "rows": {
+       "@path": "/recipes"
+      },
+      "units": {
+       "note": "★",
+       "temps": "min",
+       "cost": "€"
+      }
+     },
+     {
+      "id": "tiles",
+      "component": "Gallery",
+      "title": "Wardrobe",
+      "items": {
+       "@path": "/pieces"
+      },
+      "by": "kind",
+      "units": {
+       "worn": "times"
+      }
+     },
+     {
+      "id": "steps",
+      "component": "Timeline",
+      "title": "Moving house",
+      "items": [
+       {
+        "label": "Quotes",
+        "state": "done"
+       },
+       {
+        "label": "Deposit",
+        "state": "current",
+        "detail": "Due before Friday"
+       },
+       {
+        "label": "Boxes",
+        "state": "pending"
+       },
+       {
+        "label": "Moving day",
+        "state": "pending",
+        "date": "2026-12-12"
+       }
+      ]
+     },
+     {
+      "id": "asks",
+      "component": "Asks",
+      "items": [
+       "Do as you suggest",
+       "Write it for managers"
+      ]
+     }
+    ],
+    "dataModel": {
+     "mails": [
+      {
+       "id": "m1",
+       "subject": "Electricity bill",
+       "from": "Sam <sam@example.org>",
+       "date": "2026-11-23T09:12:00Z",
+       "_note": "To pay before the 30th",
+       "_state": "act",
+       "_group": "To do"
+      },
+      {
+       "id": "m2",
+       "subject": "Neighbourhood meeting",
+       "from": "Alex <alex@example.org>",
+       "date": "2026-11-22T18:40:00Z",
+       "_note": "Say whether you come",
+       "_state": "look",
+       "_group": "To do"
+      },
+      {
+       "id": "m3",
+       "subject": "This week's deals",
+       "from": "shop@example.org",
+       "_group": "Newsletters"
+      },
+      {
+       "id": "m4",
+       "subject": "What's new",
+       "from": "news@example.org",
+       "_group": "Newsletters"
+      }
+     ],
+     "recipes": [
+      {
+       "title": "Pumpkin soup",
+       "note": 4,
+       "temps": 35,
+       "cost": 6.5
+      },
+      {
+       "title": "Potato gratin",
+       "note": 5,
+       "temps": 70,
+       "cost": 8
+      },
+      {
+       "title": "Lentil salad",
+       "note": 3,
+       "temps": 20,
+       "cost": 4.2
+      }
+     ],
+     "pieces": [
+      {
+       "title": "Wool jacket",
+       "kind": "Tops",
+       "worn": 12
+      },
+      {
+       "title": "Oxford shirt",
+       "kind": "Tops",
+       "worn": 30
+      },
+      {
+       "title": "Straight trousers",
+       "kind": "Bottoms",
+       "worn": 21
+      },
+      {
+       "title": "Ankle boots",
+       "kind": "Shoes",
+       "worn": 8
+      }
+     ]
     }
    }
   }

@@ -158,7 +158,7 @@ for (const lang of ["fr", "en"] as const) {
       expect(text(".a2-agenda-hours .a2-agenda-name")).toBe(fr ? "Aujourd'hui" : "Today");
       expect(text(".a2-agenda-hours .a2-agenda-date")).toBe(fr ? "jeudi 12 novembre" : "Thursday 12 November");
       expect($$(".a2-metric-value").map((n) => n.textContent)).toEqual(fr ? ["37 %", "1,2 To", "74,5 kWh"] : ["37 %", "1.2 TB", "74.5 kWh"]);
-      expect($$(".a2-table tbody tr:first-child td").map((n) => n.textContent)).toEqual(
+      expect([...$(".a2-table").querySelectorAll("tbody tr:first-child td")].map((n) => n.textContent)).toEqual(
         fr ? ["Formulaire de contact", "4", "14 nov.", "+2,5 %"] : ["Contact form", "4", "14 Nov", "+2.5 %"],
       );
       // The functions: formatString, formatDate, formatRelative.
@@ -461,8 +461,8 @@ describe("the catalog's components", () => {
     expect(ghost.parentElement?.className).toMatch(/^a2-clash a2-clash-2 a2-r-10 /);
     expect(ghost.className).toMatch(/a2-r-1 a2-span-2 a2-lane-1/);
     expect(ghost.querySelector(".sr-only")?.textContent).toBe("chevauche « Dentiste »");
-    // It carries its card's Oui.
-    expect(ghost.querySelector(".a2-inline-yes")?.textContent).toBe("Oui");
+    // It carries its card's yes, which says its verb.
+    expect(ghost.querySelector(".a2-inline-yes")?.textContent).toBe("Faire");
     // An event is never a ghost; the hours reach the ghost's end.
     expect($$("[data-proposal]")).toHaveLength(1);
     expect($$(".a2-hour").map((h) => h.textContent).at(-1)).toBe("15 h");
@@ -488,7 +488,7 @@ describe("the catalog's components", () => {
   });
 
   it("say a ghost drawn from external content is one, all day above", async () => {
-    const view = { ref: "intention:5", card: 5, state: "pending", text: "Pay the supplier", tainted: true, when: [{ start: "2026-11-12", allDay: true }] };
+    const view = { ref: "intention:5", card: 5, verb: "Faire", state: "pending", text: "Pay the supplier", tainted: true, when: [{ start: "2026-11-12", allDay: true }] };
     await mount("en", one([{ id: "root", component: "Agenda", date: "2026-11-12", events: [] }]), {
       read: async () => view,
       answer: async () => false,

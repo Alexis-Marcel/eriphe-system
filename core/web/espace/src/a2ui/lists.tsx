@@ -27,6 +27,10 @@ export type Lists = {
   // source's rows); openNode opens its page beside this one.
   node?: (id: string) => GraphNode | undefined;
   openNode?: (id: string) => void;
+  // ask sends an ask of an Asks (its component and place, « root#1 »):
+  // only on the last version, while the node takes asks; eriphe-core reads
+  // its words again in the stored block (web_gestures.go).
+  ask?: (surface: string, component: string) => void;
 };
 
 export const ListsContext = createContext<Lists | null>(null);

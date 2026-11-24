@@ -47,20 +47,24 @@ const agendaBlock: Authored = {
 const workBlock: Authored = {
   name: "en_cours",
   components: [
-    { id: "root", component: "Column", children: ["h", "article", "terrasse"] },
-    { id: "h", component: "Text", variant: "subtitle", text: "En cours" },
-    { id: "article", component: "Progress", label: "Article « Le bureau en graphe »", value: 3, current: 1, total: 5, step: "Relecture par Léa" },
-    { id: "terrasse", component: "Progress", label: "Terrasse", value: 1, total: 4, step: "Attente du bon signé de Sam" },
+    {
+      id: "root",
+      component: "Timeline",
+      title: "Article « Le bureau en graphe »",
+      items: [
+        { label: "Plan", state: "done" },
+        { label: "Premier jet", state: "done" },
+        { label: "Schémas", state: "done" },
+        { label: "Relecture par Léa", state: "current", detail: "Elle a les deux premières parties" },
+        { label: "Mise en ligne", state: "pending" },
+      ],
+    },
   ],
 };
 
 const nightBlock: Authored = {
   name: "cette_nuit",
-  components: [
-    { id: "root", component: "Column", children: ["h", "steps"] },
-    { id: "h", component: "Text", variant: "subtitle", text: "Pendant la nuit" },
-    { id: "steps", component: "Timeline", items: { "@path": "/night" } },
-  ],
+  components: [{ id: "root", component: "Timeline", title: "Pendant la nuit", items: { "@path": "/night" } }],
   data: {
     night: [
       { label: "Sauvegarde du NAS faite", state: "done", date: at(0, "02:10"), detail: "412 Go, 18 min" },
@@ -136,44 +140,34 @@ const peaSeries = pea.map((y, i) => ({ x: dayOf(i - pea.length + 1), y }));
 const investFigures: Authored = {
   name: "chiffres",
   components: [
-    { id: "root", component: "Row", children: ["total", "pea", "av", "livret"] },
-    { id: "total", component: "Metric", label: "Patrimoine placé", value: 82170, unit: "€", delta: 968, deltaLabel: "cette semaine", trend: pea.map((v) => v + 33940) },
-    { id: "pea", component: "Metric", label: "PEA", value: 48230, unit: "€", delta: 852, deltaLabel: "cette semaine", trend: pea },
-    { id: "av", component: "Metric", label: "Assurance-vie", value: 21940, unit: "€", delta: 88, deltaLabel: "cette semaine", trend: [21700, 21720, 21760, 21750, 21800, 21830, 21810, 21860, 21900, 21940] },
-    { id: "livret", component: "Metric", label: "Livret A", value: 12000, unit: "€", delta: 0, deltaLabel: "3 % par an" },
+    {
+      id: "root",
+      component: "Figures",
+      items: [
+        { label: "Patrimoine placé", value: 82170, unit: "€", delta: 968, deltaLabel: "cette semaine", trend: pea.map((v) => v + 33940) },
+        { label: "PEA", value: 48230, unit: "€", delta: 852, deltaLabel: "cette semaine", trend: pea },
+        { label: "Assurance-vie", value: 21940, unit: "€", delta: 88, deltaLabel: "cette semaine", trend: [21700, 21720, 21760, 21750, 21800, 21830, 21810, 21860, 21900, 21940] },
+        { label: "Livret A", value: 12000, unit: "€", delta: 0, deltaLabel: "3 % par an" },
+      ],
+    },
   ],
 };
 
 const investChart: Authored = {
   name: "courbe",
-  components: [
-    { id: "root", component: "Column", children: ["h", "chart"] },
-    { id: "h", component: "Text", variant: "subtitle", text: "Le PEA sur 30 jours" },
-    { id: "chart", component: "Chart", kind: "line", unit: "€", series: [{ name: "PEA", points: peaSeries }] },
-  ],
+  components: [{ id: "root", component: "Chart", kind: "line", title: "Le PEA sur 30 jours", unit: "€", series: [{ name: "PEA", points: peaSeries }] }],
 };
 
 const investTable: Authored = {
   name: "lignes",
   components: [
-    { id: "root", component: "Column", children: ["h", "table", "alloc"] },
-    { id: "h", component: "Text", variant: "subtitle", text: "Les lignes du PEA" },
-    {
-      id: "table",
-      component: "Table",
-      columns: [
-        { key: "nom", label: "Ligne" },
-        { key: "valeur", label: "Valeur (€)", kind: "number" },
-        { key: "semaine", label: "Semaine", kind: "change" },
-        { key: "an", label: "Depuis janvier", kind: "change" },
-        { key: "part", label: "Part (%)", kind: "number" },
-      ],
-      rows: { "@path": "/lignes" },
-    },
+    { id: "root", component: "Column", children: ["table", "alloc"] },
+    { id: "table", component: "Table", title: "Les lignes du PEA", rows: { "@path": "/lignes" }, units: { valeur: "€", semaine: "±%", an: "±%", part: "%" } },
     {
       id: "alloc",
       component: "Chart",
       kind: "stack",
+      title: "Répartition et cible",
       unit: "%",
       series: [
         { name: "Actions", points: [{ x: "Aujourd'hui", y: 64 }, { x: "Cible", y: 60 }] },
@@ -274,7 +268,7 @@ export const gallerySections: GallerySection[] = [
     {
       name: "qui",
       components: [
-        { id: "root", component: "Grid", size: "large", children: ["sam", "lea"] },
+        { id: "root", component: "Row", children: ["sam", "lea"] },
         {
           id: "sam",
           component: "Person",
@@ -305,8 +299,69 @@ export const gallerySections: GallerySection[] = [
     ],
   }),
   section("g-night", "Ce qui s'est passé", "Timeline : quand toutes les étapes ont une date, la date passe en marge. Le point dit l'état ; le texte reste à l'encre.", nightBlock),
-  section("g-work", "Avancée d'un travail", "Progress : le mot, « 3 sur 5 », le nom de l'étape en cours, et la barre de ses étapes.", workBlock),
-  section("g-table", "Tableau avec écarts", "Table : une colonne change écrit l'écart signé (+ −), à l'encre, aligné à droite.", investTable),
+  section("g-work", "Avancée d'un travail", "Timeline : tant qu'il reste des étapes, elle dit où en est le travail (« 3 sur 5 · Relecture par Léa ») et la barre de ses étapes.", workBlock),
+  section("g-table", "Tableau avec unités", "Table : sans colonnes écrites, celles de ses lignes ; units dit l'unité de chaque colonne (€, %, ±% signé, ★, un mot), les nombres à droite.", investTable),
+  section(
+    "g-sections",
+    "Sections",
+    "Les éléments d'une source rangés d'après les notes d'Eriphe : d'abord ce qu'il y a à faire, une ligne chacun, sa note d'abord ; un lot qui partage une carte, replié, son oui sur sa ligne (décocher ce qu'on garde) ; le reste replié.",
+    { name: "courrier", sources: { courrier: { tool: "mail/search", items: { path: "messages", id: "id", title: "subject", detail: "from" } } }, components: [{ id: "root", component: "Sections", title: "Courrier", items: "courrier" }] },
+    {
+      values: {
+        courrier: {
+          messages: [
+            { id: "c1", subject: "Devis terrasse", from: "Sam <sam@example.org>", date: at(0, "08:12") },
+            { id: "c2", subject: "Pique-nique de midi", from: "Léa <lea@example.org>", date: at(-1, "19:40") },
+            { id: "c3", subject: "-40 % ce week-end", from: "La Boutique <news@boutique.example.org>", date: at(-1, "10:00") },
+            { id: "c4", subject: "La lettre de la semaine", from: "Le Journal <news@journal.example.org>", date: at(-2, "07:00") },
+            { id: "c5", subject: "Votre code promo", from: "Mode & Co <news@mode.example.org>", date: at(-2, "12:30") },
+            { id: "c6", subject: "Votre facture de novembre", from: "Énergie <factures@energie.example.org>", date: at(-3, "09:00") },
+          ],
+        },
+      },
+      notes: {
+        c1: { group: "À traiter", note: "Répondre à Sam avant vendredi, brouillon prêt", state: "act" },
+        c2: { group: "À traiter", note: "Dire à Léa si tu viens", state: "look" },
+        c3: { group: "À jeter", note: "Publicité" },
+        c4: { group: "À jeter", note: "Jamais ouverte" },
+        c5: { group: "À jeter", note: "Publicité" },
+        c6: { group: "Pour info", note: "62 €, prélevés le 5" },
+      },
+      cards: [
+        { ref: "calls:91", card: 91, kind: "calls", state: "pending", node: "g-sections", items: ["c1"], text: "Envoyer la réponse à Sam", verb: "Envoyer" },
+        { ref: "calls:92", card: 92, kind: "calls", state: "pending", node: "g-sections", items: ["c3", "c4", "c5"], text: "Mettre 3 mails à la corbeille", verb: "Jeter les 3" },
+      ],
+    },
+  ),
+  section(
+    "g-gallery",
+    "Galerie",
+    "Gallery : des vignettes, leur titre dessous ; by ajoute un filtre par la valeur d'un champ, units les faits sous le titre. Huit d'abord, puis « Voir les n autres ». Une image ne vient que par eriphe-core.",
+    {
+      name: "garde_robe",
+      components: [{ id: "root", component: "Gallery", title: "Garde-robe", items: { "@path": "/pieces" }, by: "type", units: { portee: "fois" } }],
+      data: {
+        pieces: [
+          ["Veste en laine", "Hauts", 12],
+          ["Chemise oxford", "Hauts", 30],
+          ["Pull col roulé", "Hauts", 18],
+          ["Pantalon droit", "Bas", 21],
+          ["Jean brut", "Bas", 40],
+          ["Bottines", "Chaussures", 8],
+          ["Baskets blanches", "Chaussures", 52],
+          ["Manteau long", "Hauts", 6],
+          ["Écharpe", "Accessoires", 15],
+          ["Ceinture", "Accessoires", 33],
+        ].map(([title, type, portee], i) => ({ id: `p${i}`, title, type, portee })),
+      },
+    },
+  ),
+  section(
+    "g-asks",
+    "Réponses probables",
+    "Asks : les réponses probables, en boutons ; un clic envoie ses mots à Eriphe, comme un message, et n'agit sur rien. Chacune dit ce qu'elle demande, jamais un « Oui » seul.",
+    { name: "reponses", components: [{ id: "root", component: "Asks", items: ["Fais comme tu proposes", "Écris-le pour des managers", "Passe ce thème"] }] },
+  ),
 ];
 
 export const sampleDays: SampleView[] = [dayView, investView, ...gallerySections.map((s) => s.view)];

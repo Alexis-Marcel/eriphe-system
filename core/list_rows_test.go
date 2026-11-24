@@ -141,3 +141,36 @@ func TestBlockRowsOfAgenda(t *testing.T) {
 		t.Fatalf("the card is nowhere: %+v", page.Cards)
 	}
 }
+
+// A Sections names its source; the page always knows its rows (it groups
+// them by their notes and puts each card on its row): each row its place,
+// id, title, detail and card, the source's items as code reads them, the
+// file keeping the name its author wrote.
+func TestBlockRowsOfSections(t *testing.T) {
+	tw, _, _, id := rowsWeb(t)
+	c := tw.c
+	_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error {
+		return n.AuthorBody("Les mails.\n\n```eriphe:block inbox\n" + `{"components": {"component": "Sections", "items": "received"},
+ "sources": {"received": {"resource": "monitor", "uri": "monitor://received", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.readNode(context.Background(), id, nil, time.Now())
+	d, _ := c.nodes.Read(id, 0)
+	if raw := string(d.Raw); !strings.Contains(raw, `"items": "received"`) && !strings.Contains(raw, `"items":"received"`) {
+		t.Errorf("the file lost the source's name:\n%s", d.Raw)
+	}
+	page, _ := tw.w.nodePageOf(id, 0, "fr")
+	b := page.Parts[1].Block
+	if b.Error != "" || len(b.Components) != 1 || string(b.Components[0].Props["items"]) != `{"@path":"/received/messages"}` {
+		t.Fatalf("the block as the page gets it: %+v", b)
+	}
+	l := b.Lists
+	if len(l) != 1 || l[0].Component != "root" || len(l[0].Items) != 3 {
+		t.Fatalf("its rows: %+v", l)
+	}
+	if it := l[0].Items[1]; it.N != 1 || it.ID != "m2" || it.Title != "Relance" || it.Detail != "Lou" || it.Card != "" {
+		t.Fatalf("row: %+v", it)
+	}
+}

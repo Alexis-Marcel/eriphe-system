@@ -8,7 +8,8 @@ import "github.com/modelcontextprotocol/go-sdk/mcp"
 // when eriphe-core knows them, else counted by items: one, then many with
 // {n}), {name} an argument's value, by its words in values when given (""
 // for an argument left out); a part in [ ] is said only when its arguments
-// are. done says what calls did once they ran. A tool with none is said by
+// are. done says what calls did once they ran; verb, what its yes button
+// says, when not the sentence's first word. A tool with none is said by
 // its title.
 var says = map[string]map[string]any{
 	"move": {
@@ -22,6 +23,7 @@ var says = map[string]map[string]any{
 	},
 	"trash": {
 		"text":  map[string]string{"fr": "Mettre {item} {junk}", "en": "Move {item} {junk}"},
+		"verb":  map[string]string{"fr": "Jeter", "en": "Trash"},
 		"items": map[string][]string{"fr": {"1 mail", "{n} mails"}, "en": {"1 email", "{n} emails"}},
 		"done":  map[string][]string{"fr": {"1 retiré", "{n} retirés"}, "en": {"1 removed", "{n} removed"}},
 		"values": map[string]any{"junk": map[string]any{

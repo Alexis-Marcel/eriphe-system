@@ -262,7 +262,7 @@ function OnYes({ p, card, where, onAnswered }: { p: ProposalView; card: string; 
           <Icon name="close" />
         </button>
         <button type="button" className={`btn a2-button a2-button-primary a2-inline-yes${busy ? " is-busy" : ""}`} disabled={busy} aria-busy={busy} onClick={() => answer(true)}>
-          {t("espace.a2.yes")}
+          {p.verb}
         </button>
       </div>
     </section>

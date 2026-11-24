@@ -137,6 +137,7 @@ func (c *core) callsProposal(p proposal) proposal {
 	}
 	p.Fields = append(shown, details...)
 	p.origin = func(lang string) cardOrigin { return c.callsOrigin(first, items, lang) }
+	p.verb = func(lang string) string { return c.callVerb(first, itemCount(first), lang) }
 	if len(asks) > 1 {
 		return c.chosenCalls(p, asks)
 	}
@@ -187,8 +188,10 @@ func (c *core) chosenCalls(p proposal, asks []accessQuestion) proposal {
 			text, _ := c.callsWords(asks, lang)
 			return text
 		}
+		p.verb = func(lang string) string { return fmt.Sprintf(tr(lang, "card.verb.all"), len(asks)) }
 		return p
 	}
+	p.verb = func(lang string) string { return c.callVerb(asks[0], total, lang) }
 	p.text = func(lang string) string {
 		if p.Pending {
 			return c.kindSentence(asks[0], total, lang)

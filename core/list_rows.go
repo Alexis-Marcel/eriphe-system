@@ -164,7 +164,7 @@ func namedLists(comps []map[string]any) map[string]bool {
 // on them). With only, those of these sources alone.
 func (c *core) blockLists(b *nodefile.Block, data map[string]any, only ...string) []pageList {
 	var comps []map[string]any
-	json.Unmarshal(b.Components, &comps)
+	json.Unmarshal(b.Bound(), &comps)
 	named := namedLists(comps)
 	var out []pageList
 	for _, comp := range comps {
@@ -221,10 +221,15 @@ func (c *core) rowsOf(b *nodefile.Block, comp map[string]any, data map[string]an
 			continue
 		}
 		rows := sourceRows(name, src, data[name], nil)
-		if !slices.ContainsFunc(rows, func(r listItem) bool { return r.Card != "" }) {
+		// Sections draws its rows from what code tells (their cards,
+		// whether they open): always told. Another, only when a card
+		// waits on a row.
+		sections := kind == "Sections"
+		if !sections && !slices.ContainsFunc(rows, func(r listItem) bool { return r.Card != "" }) {
 			return pageList{}, false
 		}
-		return pageList{Component: id, Source: name, Items: rows}, true
+		open := sections && src.Items != nil && src.Items.Open != nil
+		return pageList{Component: id, Source: name, Open: open, Items: rows}, true
 	}
 	return pageList{}, false
 }
