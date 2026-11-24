@@ -105,7 +105,11 @@ func TestNodeFindExternalProps(t *testing.T) {
 	c.turn.start(0, 0, 0)
 	out := mustBrainNodes(t, c, "node_find", map[string]any{"tags": []any{"etude"}, "sort": "pages", "columns": []any{"pages", "auteur"}})
 	raw := fmtJSON(out)
-	if foundIDs(out) != mine+" "+ext || strings.Contains(raw, "IGNORE") || strings.Contains(raw, "99") || !strings.Contains(raw, `"withheld":true`) {
+	// The external node's properties are left out: its row has no column
+	// (read as fields: its id, made at random, may hold any digits).
+	extRow := out["nodes"].([]any)[1].(map[string]any)
+	_, pages := extRow["pages"]
+	if foundIDs(out) != mine+" "+ext || strings.Contains(raw, "IGNORE") || pages || extRow["withheld"] != true {
 		t.Fatalf("find: %s", raw)
 	}
 	if _, _, _, tainted := c.turn.snapshot(); len(tainted) != 0 {
