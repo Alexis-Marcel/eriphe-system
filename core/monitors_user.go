@@ -118,7 +118,7 @@ func (c *core) tryLook(ctx context.Context, s monitorSpec) (tried, error) {
 	if s.Way != wayPoll {
 		return t, errors.New("only a monitor that polls is tried")
 	}
-	if why := c.sourceWhy(s); why != "" {
+	if why := c.monitorWhy(s); why != "" {
 		return t, errors.New(why)
 	}
 	got, err := c.callMonitor(ctx, s)
@@ -163,7 +163,12 @@ func (c *core) tryMonitorSaid(ctx context.Context, name string, s monitorSpec) (
 		}
 		s = m.Spec
 	}
-	if s.Way == wayPoll && c.sourceWhy(s) == "" && !c.trustsServer(s.Server) {
+	if s.Way == wayPoll && (m == nil || m.State == monitorProposed) && c.pollWhy(s, false) == "" && c.sourceWhy(s) != "" && len(c.turnTaint()) > 0 {
+		// A draft reads the open web with arguments no one approved, on a
+		// tainted turn: only the user's yes on its card calls it.
+		return map[string]any{"works": false, "error": fmt.Sprintf("%s.%s reads the open web and this turn read outside content: it is not tried, propose it with write_monitor, the user's yes on its card turns it on", s.Server, s.Tool)}, nil
+	}
+	if s.Way == wayPoll && c.monitorWhy(s) == "" && !c.trustsServer(s.Server) {
 		c.turn.taint(s.source())
 	}
 	t, err := c.tryLook(ctx, s)
@@ -243,7 +248,7 @@ func (c *core) skillsFollowing(name string) []string {
 func (c *core) monitorSources() []string {
 	var out []string
 	for _, t := range c.lentTools() {
-		if c.sourceWhy(monitorSpec{Server: t.server, Tool: t.tool}) == "" {
+		if c.monitorWhy(monitorSpec{Way: wayPoll, Server: t.server, Tool: t.tool}) == "" {
 			out = append(out, t.server+"."+t.tool)
 		}
 	}

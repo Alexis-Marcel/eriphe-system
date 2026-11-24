@@ -284,18 +284,27 @@ func (s *monitorSpec) check() error {
 	return nil
 }
 
-// monitorWhy is why a monitor cannot look now, "" if it can.
+// monitorWhy is why a monitor cannot look now, "" if it can. A monitor
+// looks only once the user said yes to it (its card, or their own form),
+// its arguments shown: a free read of the open web is theirs to approve
+// there, so it is not held back as a block's source is (sourceWhy).
 func (c *core) monitorWhy(s monitorSpec) string {
 	if s.Way == wayListen {
 		return ""
 	}
-	return c.sourceWhy(s)
+	return c.pollWhy(s, false)
 }
 
-// sourceWhy is why eriphe-core may not look at a monitor's source by
-// itself, "" if it may: a free read of the brain's, or a resource the
-// server lists. A live block's source is held to the same (source_reads.go).
-func (c *core) sourceWhy(s monitorSpec) string {
+// sourceWhy is why eriphe-core may not read a source by itself, with no
+// one's yes on it, "" if it may: a free read of the brain's that does not
+// reach the open web, or a resource the server lists. A live block's source
+// is held to it (source_reads.go); a monitor, approved, to monitorWhy.
+func (c *core) sourceWhy(s monitorSpec) string { return c.pollWhy(s, true) }
+
+// pollWhy is why eriphe-core may not call s itself, "" if it may: a free
+// read of the brain's, or a resource the server lists; and, ahead, not a
+// read of the open web.
+func (c *core) pollWhy(s monitorSpec, ahead bool) string {
 	u := c.pool.get(s.Server)
 	if !slices.Contains(c.catalogNames(), s.Server) || u == nil {
 		return fmt.Sprintf("%s is not a server of the catalog", s.Server)
@@ -316,10 +325,11 @@ func (c *core) sourceWhy(s monitorSpec) string {
 	if !c.freeCall(name, s.Args) {
 		return fmt.Sprintf("%s.%s is not a free read in the user's grid: a monitor calls free reads only", s.Server, s.Tool)
 	}
-	if !c.freeAhead(name, s.Args) {
-		// Its arguments may come from a tainted turn: what reads the open
-		// web asks the user, through the brain's own call (policy.go).
-		return fmt.Sprintf("%s.%s reads the open web (openWorldHint not false): eriphe-core does not call it by itself", s.Server, s.Tool)
+	if ahead && !c.freeAhead(name, s.Args) {
+		// Its arguments may come from a tainted turn and no one approved
+		// them: what reads the open web asks the user (policy.go), or is a
+		// monitor, approved on its card.
+		return fmt.Sprintf("%s.%s reads the open web (openWorldHint not false): eriphe-core does not call it by itself, unless as a monitor the user approves (write_monitor)", s.Server, s.Tool)
 	}
 	return ""
 }
@@ -363,7 +373,7 @@ func (c *core) lookMonitor(ctx context.Context, m *monitor, now time.Time) {
 		c.store.db.Exec(`UPDATE monitors SET look = ?, next_at = ? WHERE id = ?`, string(raw), next.Unix(), m.ID)
 		c.monitorLooked(m.Name) // the blocks that read it (node_live.go)
 	}()
-	if why := c.sourceWhy(m.Spec); why != "" {
+	if why := c.monitorWhy(m.Spec); why != "" {
 		st.Waiting = why // its access changed: it waits, nothing is called
 		return
 	}
@@ -854,8 +864,13 @@ func (c *core) monitorProposal(p proposal) proposal {
 		return fmt.Sprintf(tr(lang, "card.monitor.update"), m.Name)
 	}
 	p.fields = func(lang string) []cardField {
-		return []cardField{{Name: tr(lang, "card.monitor.what"), Value: s.Text(lang)},
-			{Name: tr(lang, "card.monitor.events"), Value: fmt.Sprintf(tr(lang, "card.monitor.key"), m.Name)}}
+		f := []cardField{{Name: tr(lang, "card.monitor.what"), Value: s.Text(lang)}}
+		if len(s.Args) > 0 {
+			// What the yes lets eriphe-core send, in full, at every look.
+			raw, _ := json.Marshal(s.Args)
+			f = append(f, cardField{Name: tr(lang, "card.monitor.args"), Value: string(raw)})
+		}
+		return append(f, cardField{Name: tr(lang, "card.monitor.events"), Value: fmt.Sprintf(tr(lang, "card.monitor.key"), m.Name)})
 	}
 	p.Fields = p.fields("fr")
 	return p

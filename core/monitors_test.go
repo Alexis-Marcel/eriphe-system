@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -552,5 +553,62 @@ func TestMonitorChangeCardAgain(t *testing.T) {
 	c.syncCards()
 	if _, seq, _, state := card(); state != cardPending || seq != 0 {
 		t.Fatalf("the sync left it decided: seq %d %s", seq, state)
+	}
+}
+
+// A monitor of an open-web read, proposed on a tainted turn: its card says
+// so and shows what it sends; the user's yes turns it on and it looks.
+// try_monitor does not try such a draft on a tainted turn: only the card
+// calls it. On a clean turn it does.
+func TestMonitorOpenWorld(t *testing.T) {
+	c, _, now := pollCore(t)
+	if out, _ := callBrainTool(t, c, "try_monitor", map[string]any{"server": "monitor", "tool": "page", "path": "text"}); out["works"] != true {
+		t.Fatalf("a clean try: %v", out)
+	}
+	c.turn.taint("web.fetch")
+	out, _ := callBrainTool(t, c, "try_monitor", map[string]any{"server": "monitor", "tool": "page", "path": "text"})
+	if out["works"] != false || !strings.Contains(fmt.Sprint(out["error"]), "write_monitor") {
+		t.Fatalf("a tainted try: %v", out)
+	}
+	if _, err := c.writeMonitor("page", monitorSpec{Server: "monitor", Tool: "page", Every: 5, Path: "text"}, c.turnTaint()); err != nil {
+		t.Fatal(err)
+	}
+	m, _ := c.monitorNamed("page")
+	if p := c.proposalOf(cardMonitor, m.ID); !p.Pending || p.Tainted == "" {
+		t.Fatalf("card %+v", p)
+	}
+	lookAt(c, *now)
+	if m, _ = c.monitorNamed("page"); m.Look.Checked != 0 {
+		t.Fatal("a proposed monitor looked")
+	}
+	if err := c.decideMonitor(m.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	lookAt(c, *now)
+	if m, _ = c.monitorNamed("page"); m.Look.Checked == 0 || m.Look.Waiting != "" || m.Look.Error != "" {
+		t.Fatalf("approved, it did not look: %+v", m.Look)
+	}
+	if out, _ := callBrainTool(t, c, "try_monitor", map[string]any{"name": "page"}); out["works"] != true {
+		t.Fatalf("an approved monitor's try: %v", out)
+	}
+}
+
+// A monitor's card shows its arguments in full: what the yes lets
+// eriphe-core send at every look.
+func TestMonitorCardArgs(t *testing.T) {
+	c, _, _ := pollCore(t)
+	spec := monitorSpec{Server: "monitor", Tool: "status", Args: map[string]any{"service": "web"}, Every: 5}
+	if _, err := c.writeMonitor("etat", spec, nil); err != nil {
+		t.Fatal(err)
+	}
+	m, _ := c.monitorNamed("etat")
+	var args string
+	for _, f := range c.proposalOf(cardMonitor, m.ID).fields("fr") {
+		if f.Name == tr("fr", "card.monitor.args") {
+			args = f.Value
+		}
+	}
+	if args != `{"service":"web"}` {
+		t.Fatalf("args %q", args)
 	}
 }

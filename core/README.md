@@ -1578,6 +1578,7 @@ search) of a server the user does not trust counts as above Read here, as `WebFe
 tainted turn it waits for the user. A trusted server's reads stay free, the web's too.
 Only the brain's Free reads of closed sources are allowed in advance and called without a ticket;
 its writes and its reads of the open web go through the policy, so the turn's taint is always seen.
+A [monitor](#monitors) of such a read looks once the user approved it on its card.
 
 **Tool definitions are pinned.** The first listing of a catalog server pins each tool's definition
 (its name, title, description, schemas and annotations): adding the server is the user's yes. A
@@ -2202,17 +2203,21 @@ item, so a skill follows the mail with `when: monitor.new key=mails`. The calend
 - **Free reads only**: the tool must be read-only by its own annotation, one of the brain's, and
   Free in the user's grid (`freeCall`, with its arguments); a resource must be listed by its
   server. Checked when it is written and before every look: otherwise it waits, with why, and
-  nothing is called.
+  nothing is called. A read of the open web (`openWorldHint` not `false`: Sentry's, a fetch) is one
+  too: a monitor looks only after the user's yes, which sees its arguments (`monitorWhy`). A
+  live block's source, which no one approves, may not read the open web (`sourceWhy`).
 - **The user approves it.** The brain proposes one with `write_monitor` (name, server, tool or
   resource, args, every, cond, path, id, above, below): a card (kind `monitor`) says it in words; the yes turns it on from a new
-  baseline, the no drops it. A change of an approved one waits the same way, the old one looking
-  meanwhile. Written on a tainted turn, the card says so. A triggered task has no such tool.
+  baseline, the no drops it. The card shows the arguments in full, what each look sends. A change
+  of an approved one waits the same way, the old one looking meanwhile. Written on a tainted turn,
+  the card says so. A triggered task has no such tool.
   `monitors` (free) lists them: state, what each does, its last look, why it waits, its last error.
   `try_monitor` (free) tries one once, with nothing kept or written: a draft before proposing it,
   or one of the user's by name. It says what the path extracts or why it cannot, and for a monitor
   that has looked, whether a look now would find a change (`changed_since_last_look`, the number of
   new items, or whether the limit holds). A server not trusted taints the turn, as a call of its
-  tool would.
+  tool would. On a tainted turn a draft that reads the open web is not tried: its arguments are
+  no one's yet, so the brain proposes it and the user's yes on its card is what calls it.
 - **Its page**, Settings → Surveillance (`web_monitors.go`, `monitors_user.go`): each monitor's
   state (on, paused, waiting with why, failing with its error), what it does in words, its last
   look, its events over 30 days and the skills whose `when` names it; its last 20 events; pause and

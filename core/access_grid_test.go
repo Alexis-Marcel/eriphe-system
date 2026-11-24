@@ -210,8 +210,9 @@ func TestBrainOpenWorldReadFollowsTheTurn(t *testing.T) {
 	}
 }
 
-// Eriphe-core never reads the open web by itself, for a monitor or a
-// block's source: their arguments may come from a tainted turn.
+// Eriphe-core never reads the open web by itself for a block's source,
+// whose arguments may come from a tainted turn and no one approved; a
+// monitor, approved on its card, may.
 func TestOpenWorldIsNoSource(t *testing.T) {
 	c, _, _ := pollCore(t)
 	if why := c.sourceWhy(monitorSpec{Server: "monitor", Tool: "status"}); why != "" {
@@ -219,6 +220,9 @@ func TestOpenWorldIsNoSource(t *testing.T) {
 	}
 	if why := c.sourceWhy(monitorSpec{Server: "monitor", Tool: "page"}); !strings.Contains(why, "open web") {
 		t.Errorf("an open-web read: %q", why)
+	}
+	if why := c.monitorWhy(monitorSpec{Server: "monitor", Tool: "page"}); why != "" {
+		t.Errorf("a monitor of an open-web read: %q", why)
 	}
 }
 
