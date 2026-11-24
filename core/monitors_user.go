@@ -163,11 +163,16 @@ func (c *core) tryMonitorSaid(ctx context.Context, name string, s monitorSpec) (
 		}
 		s = m.Spec
 	}
-	if s.Way == wayPoll && (m == nil || m.State == monitorProposed) && c.pollWhy(s, false) == "" && c.sourceWhy(s) != "" &&
-		(len(c.turnTaint()) > 0 || (m != nil && m.Tainted != "")) {
-		// A draft reads the open web with arguments no one approved, written
-		// or tried on a tainted turn: only the user's yes on its card calls it.
-		return map[string]any{"works": false, "error": fmt.Sprintf("%s.%s reads the open web and this turn read outside content: it is not tried, propose it with write_monitor, the user's yes on its card turns it on", s.Server, s.Tool)}, nil
+	if s.Way == wayPoll && s.Tool != "" && (m == nil || m.State == monitorProposed) && c.monitorWhy(s) == "" {
+		// A try is a call before any yes. A read on approval waits for the
+		// user's on its card; a draft that reads the open web with arguments
+		// no one approved, written or tried on a tainted turn, too.
+		if !c.freeCall(claudeToolName(s.Server, s.Tool), s.Args) {
+			return map[string]any{"works": false, "error": fmt.Sprintf("%s.%s is a read on approval: it is not tried before the user's yes, propose it with write_monitor, the user's yes on its card turns it on", s.Server, s.Tool)}, nil
+		}
+		if c.sourceWhy(s) != "" && (len(c.turnTaint()) > 0 || (m != nil && m.Tainted != "")) {
+			return map[string]any{"works": false, "error": fmt.Sprintf("%s.%s reads the open web and this turn read outside content: it is not tried, propose it with write_monitor, the user's yes on its card turns it on", s.Server, s.Tool)}, nil
+		}
 	}
 	if s.Way == wayPoll && c.monitorWhy(s) == "" && !c.trustsServer(s.Server) {
 		c.turn.taint(s.source())

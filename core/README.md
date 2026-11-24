@@ -2202,12 +2202,16 @@ item, so a skill follows the mail with `when: monitor.new key=mails`. The calend
 
 - **Keyed by its name**, so a skill follows it with `when: monitor.changed key=getout-prod`. Its
   events are external unless its server is trusted, so the run they start is tainted.
-- **Free reads only**: the tool must be read-only by its own annotation, one of the brain's, and
-  Free in the user's grid (`freeCall`, with its arguments); a resource must be listed by its
-  server. Checked when it is written and before every look: otherwise it waits, with why, and
-  nothing is called. A read of the open web (`openWorldHint` not `false`: Sentry's, a fetch) is one
-  too: a monitor looks only after the user's yes, which sees its arguments (`monitorWhy`). A
-  live block's source, which no one approves, may not read the open web (`sourceWhy`).
+- **Reads only, approved by its yes**: the tool must be read-only by its own annotation, in the
+  Read row, one of the brain's, and not Never in the user's grid (with its arguments, and naming its
+  account where the accounts differ); a resource must be listed by its server. Free or on approval:
+  a monitor looks only after the user's yes (its card, or their own form), which shows its
+  arguments, and that yes is the approval, for those arguments at every look (`monitorWhy`). A read
+  of the open web (`openWorldHint` not `false`: Sentry's, a fetch) is one too. A Never is never
+  lifted, and a tool that changes, deletes or sends is never a monitor's. Checked when it is written
+  and before every look: otherwise it waits, with why (the tool set to Never since, say), and
+  nothing is called. A live block's source, which no one approves, must be a free read that does not
+  reach the open web (`sourceWhy`).
 - **The user approves it.** The brain proposes one with `write_monitor` (name, server, tool or
   resource, args, every, cond, path, id, above, below): a card (kind `monitor`) says it in words; the yes turns it on from a new
   baseline, the no drops it. The card shows the arguments in full, what each look sends. A change
@@ -2220,15 +2224,16 @@ item, so a skill follows the mail with `when: monitor.new key=mails`. The calend
   or one of the user's by name. It says what the path extracts or why it cannot, and for a monitor
   that has looked, whether a look now would find a change (`changed_since_last_look`, the number of
   new items, or whether the limit holds). A server not trusted taints the turn, as a call of its
-  tool would. On a tainted turn a draft that reads the open web is not tried: its arguments are
-  no one's yet, so the brain proposes it and the user's yes on its card is what calls it.
+  tool would. A try is a call before any yes: a read on approval is never tried before it, and on
+  a tainted turn a draft that reads the open web is not tried either (its arguments are no one's
+  yet); the brain proposes it, and the user's yes on its card is what calls it.
 - **Its page**, Settings → Surveillance (`web_monitors.go`, `monitors_user.go`): each monitor's
   state (on, paused, waiting with why, failing with its error), what it does in words, its last
   look, its events over 30 days and the skills whose `when` names it; its last 20 events; pause and
   resume (from a new baseline, so what changed meanwhile is not told late), delete (its events
   stay in the journal), and the brain's proposals answered there as on their card. The user adds
   or edits one there: it is theirs, so it looks at once, with no card, and a change the brain
-  proposed on it is dropped. The picker offers the free reads, then the servers' resources;
+  proposed on it is dropped. The picker offers the reads not Never, then the servers' resources;
   **Try** calls the tool (or reads the resource) once and shows what the path extracts (ids for `new`, the number for `cross`), nothing kept.
 - **Listening: an incoming address** (`incoming_hooks.go`, way `listen`), for a system that can
   tell and reach Eriphe: `POST https://<workspace>/hooks/in/<token>`. Each call writes

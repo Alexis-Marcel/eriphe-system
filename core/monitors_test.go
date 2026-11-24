@@ -664,3 +664,74 @@ func TestMonitorChangeGoneNotApproved(t *testing.T) {
 		})
 	}
 }
+
+// statusCalls is how many times the fake's status was called.
+func statusCalls(mon *fakeMonitor) int {
+	mon.mu.Lock()
+	defer mon.mu.Unlock()
+	return mon.calls
+}
+
+// A monitor may read a tool on approval in the user's grid: its card's yes
+// is that approval, for its arguments, at every look. Before it, nothing
+// calls the tool, a try neither. A Never is never lifted: the monitor
+// waits, and none is proposed; a tool that acts is never a monitor's.
+func TestMonitorOnApprovalRead(t *testing.T) {
+	c, mon, now := pollCore(t)
+	c.pool.sync(setServer(c, "monitor", func(s *Server) { s.Exceptions = map[string]string{"status": gridApproval} }))
+	waitStatus(t, c.pool.get("monitor"), statusReady)
+	spec := monitorSpec{Server: "monitor", Tool: "status", Args: map[string]any{"service": "web"}, Every: 5, Path: "data.state"}
+	if why := c.sourceWhy(spec); !strings.Contains(why, "on approval") {
+		t.Fatalf("a block's source on approval: %q", why)
+	}
+	if why := c.monitorWhy(spec); why != "" {
+		t.Fatalf("a monitor on approval: %q", why)
+	}
+	if !slices.Contains(c.monitorSources(), "monitor.status") {
+		t.Fatalf("sources %v", c.monitorSources())
+	}
+	out, _ := callBrainTool(t, c, "try_monitor", map[string]any{"server": "monitor", "tool": "status", "args": map[string]any{"service": "web"}})
+	if out["works"] != false || !strings.Contains(fmt.Sprint(out["error"]), "write_monitor") {
+		t.Fatalf("a try before the yes: %v", out)
+	}
+	if _, err := c.writeMonitor("etat", spec, nil); err != nil {
+		t.Fatal(err)
+	}
+	if out, _ := callBrainTool(t, c, "try_monitor", map[string]any{"name": "etat"}); out["works"] != false {
+		t.Fatalf("a proposal tried: %v", out)
+	}
+	lookAt(c, *now)
+	if n := statusCalls(mon); n != 0 {
+		t.Fatalf("%d calls before the yes", n)
+	}
+	m, _ := c.monitorNamed("etat")
+	if err := c.decideMonitor(m.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	lookAt(c, *now)
+	if m, _ = c.monitorNamed("etat"); m.Look.Checked == 0 || m.Look.Waiting != "" || m.Look.Error != "" {
+		t.Fatalf("approved, it did not look: %+v", m.Look)
+	}
+	if out, _ := callBrainTool(t, c, "try_monitor", map[string]any{"name": "etat"}); out["works"] != true {
+		t.Fatalf("an approved monitor's try: %v", out)
+	}
+
+	// Never: it waits, nothing is called, and none is proposed.
+	c.pool.sync(setServer(c, "monitor", func(s *Server) { s.Exceptions = map[string]string{"status": gridNever} }))
+	waitStatus(t, c.pool.get("monitor"), statusReady)
+	calls := statusCalls(mon)
+	lookAt(c, now.Add(10*time.Minute))
+	if m, _ = c.monitorNamed("etat"); !strings.Contains(m.Look.Waiting, "Never") || statusCalls(mon) != calls {
+		t.Fatalf("a Never looked: %+v", m.Look)
+	}
+	if _, err := c.writeMonitor("etat-2", spec, nil); err == nil {
+		t.Fatal("a Never proposed")
+	}
+
+	// A tool that acts, even Free: never a monitor's.
+	c.pool.sync(setServer(c, "monitor", func(s *Server) { s.Exceptions = map[string]string{"rollback": gridFree} }))
+	waitStatus(t, c.pool.get("monitor"), statusReady)
+	if _, err := c.writeMonitor("retour", monitorSpec{Server: "monitor", Tool: "rollback", Every: 5}, nil); err == nil {
+		t.Fatal("a tool that acts was proposed as a monitor")
+	}
+}

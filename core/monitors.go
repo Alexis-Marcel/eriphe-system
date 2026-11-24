@@ -44,10 +44,13 @@ import (
 // monitor.failed, the next good one monitor.recovered. Its events are
 // keyed by its name, and external unless the server is trusted.
 //
-// The tool must stay a free read of the brain's (read-only by its own
-// annotation, lent to the brain, named by no rule of the policy): checked
-// when the monitor is written and before every look; otherwise it waits,
-// with why, and nothing is called. A resource is only read, and needs no
+// The tool must stay a read of the brain's (read-only by its own
+// annotation, in the Read row, lent to the brain), not Never in the user's
+// grid: Free or on approval, the user's yes on the monitor (its card, or
+// their own form) being that approval, for the arguments it shows, at
+// every look. Checked when the monitor is written and before every look;
+// otherwise it waits, with why, and nothing is called. A monitor never
+// calls a tool that changes, deletes or sends. A resource is only read, and needs no
 // policy: the server must be in the catalog and list it. The user approves
 // a monitor: the brain only proposes one (write_monitor), on a card.
 
@@ -286,8 +289,9 @@ func (s *monitorSpec) check() error {
 
 // monitorWhy is why a monitor cannot look now, "" if it can. A monitor
 // looks only once the user said yes to it (its card, or their own form),
-// its arguments shown: a free read of the open web is theirs to approve
-// there, so it is not held back as a block's source is (sourceWhy).
+// its arguments shown: that yes is the approval of a read on approval, and
+// of a read of the open web, for those arguments at every look, so neither
+// is held back as a block's source is (sourceWhy). A Never is never lifted.
 func (c *core) monitorWhy(s monitorSpec) string {
 	if s.Way == wayListen {
 		return ""
@@ -301,9 +305,10 @@ func (c *core) monitorWhy(s monitorSpec) string {
 // is held to it (source_reads.go); a monitor, approved, to monitorWhy.
 func (c *core) sourceWhy(s monitorSpec) string { return c.pollWhy(s, true) }
 
-// pollWhy is why eriphe-core may not call s itself, "" if it may: a free
-// read of the brain's, or a resource the server lists; and, ahead, not a
-// read of the open web.
+// pollWhy is why eriphe-core may not call s itself, "" if it may: a read
+// of the brain's not Never in the user's grid, or a resource the server
+// lists; and, ahead (no one approved it), a free read that does not reach
+// the open web.
 func (c *core) pollWhy(s monitorSpec, ahead bool) string {
 	u := c.pool.get(s.Server)
 	if !slices.Contains(c.catalogNames(), s.Server) || u == nil {
@@ -322,8 +327,16 @@ func (c *core) pollWhy(s monitorSpec, ahead bool) string {
 	if !c.pool.readOnly(name) {
 		return fmt.Sprintf("%s.%s is not read-only (by its own annotation): a monitor only reads", s.Server, s.Tool)
 	}
-	if !c.freeCall(name, s.Args) {
-		return fmt.Sprintf("%s.%s is not a free read in the user's grid: a monitor calls free reads only", s.Server, s.Tool)
+	f := c.pool.facts(name, s.Args)
+	switch {
+	case !f.read:
+		return fmt.Sprintf("%s.%s is not in the Read row of the user's grid: a monitor only reads", s.Server, s.Tool)
+	case f.value != gridFree && f.value != gridApproval:
+		return fmt.Sprintf("%s.%s is Never in the user's grid: nothing calls it", s.Server, s.Tool)
+	case f.noAccount:
+		return fmt.Sprintf("%s.%s: %s", s.Server, s.Tool, noAccountReason)
+	case ahead && !f.free():
+		return fmt.Sprintf("%s.%s is a read on approval in the user's grid: eriphe-core does not call it by itself, unless as a monitor the user approves (write_monitor)", s.Server, s.Tool)
 	}
 	if ahead && !c.freeAhead(name, s.Args) {
 		// Its arguments may come from a tainted turn and no one approved
@@ -968,7 +981,7 @@ func (in writeMonitorIn) spec() (monitorSpec, error) {
 type writeMonitorIn struct {
 	Name     string         `json:"name" jsonschema:"lowercase letters, digits and dashes: the key of its events"`
 	Server   string         `json:"server" jsonschema:"the catalog server (list_tools)"`
-	Tool     string         `json:"tool,omitempty" jsonschema:"one of its read-only tools, a free read of yours; or resource"`
+	Tool     string         `json:"tool,omitempty" jsonschema:"one of its read-only tools, a read of yours not Never in the user's grid (one on approval is approved by the yes on the monitor's card); or resource"`
 	Resource string         `json:"resource,omitempty" jsonschema:"one of its resources, by URI"`
 	Args     map[string]any `json:"args,omitempty" jsonschema:"the tool's fixed arguments"`
 	Every    string         `json:"every,omitempty" jsonschema:"1m to 1d; 5m if empty"`
@@ -997,7 +1010,7 @@ type tryMonitorIn struct {
 }
 
 func registerMonitorTools(s *mcp.Server, c *core) {
-	tool(s, "write_monitor", "Propose a monitor, or a change of one: eriphe-core calls one read-only tool (or reads a resource) at an interval, without a model, and writes an event keyed by its name: monitor.changed, monitor.new (a new item of a list), monitor.crossed (a number past a limit, and back), monitor.failed then monitor.recovered. It only detects: a skill reacts (write_skill's when). For a tool that does not tell by itself, never a timed skill that calls it. Mail received: resource mail://received, cond new, path messages, id id; invitations: calendar://invitations, path invitations. Nothing looks before the user's yes on its card.",
+	tool(s, "write_monitor", "Propose a monitor, or a change of one: eriphe-core calls one read-only tool (or reads a resource) at an interval, without a model, and writes an event keyed by its name: monitor.changed, monitor.new (a new item of a list), monitor.crossed (a number past a limit, and back), monitor.failed then monitor.recovered. It only detects: a skill reacts (write_skill's when). For a tool that does not tell by itself, never a timed skill that calls it. Mail received: resource mail://received, cond new, path messages, id id; invitations: calendar://invitations, path invitations. Nothing looks before the user's yes on its card, which also approves a read on approval for its arguments, at every look.",
 		func(ctx context.Context, in writeMonitorIn) (map[string]any, error) {
 			spec, err := in.spec()
 			if err != nil {
@@ -1005,7 +1018,7 @@ func registerMonitorTools(s *mcp.Server, c *core) {
 			}
 			return c.writeMonitor(in.Name, spec, c.turnTaint())
 		})
-	tool(s, "try_monitor", "Try a monitor once, writing nothing: one of the user's by name, or a draft as write_monitor's. It says what its path extracts, or why not; for changed, moves_by_itself says the value moves on its own (a time in the path).",
+	tool(s, "try_monitor", "Try a monitor once, writing nothing: one of the user's by name, or a draft as write_monitor's. It says what its path extracts, or why not; a read on approval is not tried before the user's yes (propose it); for changed, moves_by_itself says the value moves on its own (a time in the path).",
 		func(ctx context.Context, in tryMonitorIn) (map[string]any, error) {
 			return c.tryMonitorSaid(ctx, strings.TrimSpace(in.Name), monitorSpec{Way: wayPoll, Server: in.Server, Tool: in.Tool, Resource: in.Resource, Args: in.Args,
 				Cond: strings.TrimSpace(in.Cond), Path: in.Path, ID: in.ID, Above: in.Above, Below: in.Below})
