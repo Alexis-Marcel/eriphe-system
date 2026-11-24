@@ -58,8 +58,8 @@ var (
 
 func init() {
 	registerBot(botSpec{ID: sgChannel, Label: viaSignal, Icon: "chat",
-		TextMax: 2000, // longer is sent as a file by Signal
-		DataMax: 100,  // the data stays here: any length would do
+		TextMax: 0,   // none: signal-cli sends a long text as Signal's long-text attachment, shown whole
+		DataMax: 100, // the data stays here: any length would do
 		// One of Eriphe's own images; signal-cli's native build is x86_64.
 		Service:  &RunSpec{Image: sgImage, Transport: transportStdio, Volume: true, Arch: "amd64", Own: true},
 		Handle:   func(number string) string { return number },

@@ -182,27 +182,33 @@ func (c *core) channelCards() {
 }
 
 // cardText is a card in plain text, for a channel that shows it with Oui
-// and Non buttons.
+// and Non buttons: whole, as the workspace shows it (« laisse Eriphe
+// parler »); a channel that takes less sends it in parts (botChannel.send).
+// A value of several lines keeps them, under its name.
 func cardText(x convoCard, p proposal, lang string) string {
-	text := tr(lang, "card.kind."+x.Kind) + "\n" + truncate(p.Text(lang), 600)
+	text := tr(lang, "card.kind."+x.Kind) + "\n" + p.Text(lang)
 	if ctx := p.ContextIn(lang); ctx != "" {
 		text += " · " + ctx
 	}
 	for _, s := range p.SummaryIn(lang) {
-		text += "\n- " + truncate(s, 300)
+		text += "\n- " + s
 	}
 	for _, f := range p.FieldsIn(lang) {
-		text += "\n" + f.Name + " : " + truncate(oneLine(f.Value), 200)
+		if v := strings.TrimSpace(f.Value); strings.Contains(v, "\n") {
+			text += "\n" + f.Name + " :\n" + v
+		} else {
+			text += "\n" + f.Name + " : " + v
+		}
 	}
 	if p.Why != "" {
-		text += "\n" + truncate(p.Why, 300)
+		text += "\n" + p.Why
 	}
 	o := p.Origin(lang)
 	if o.From != "" {
-		text += "\n" + truncate(o.From, 300)
+		text += "\n" + o.From
 	}
 	if o.Yes != "" {
-		text += "\n" + truncate(o.Yes, 300)
+		text += "\n" + o.Yes
 	}
 	if p.Tainted != "" {
 		text += "\n(" + tr(lang, "notif.tainted") + ")"

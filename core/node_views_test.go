@@ -745,7 +745,7 @@ func TestSkillMonitorAllOrNothing(t *testing.T) {
 }
 
 // A skill's card that brings its monitor reads alone in both languages:
-// its question, the monitor first, when it runs, the node it maintains,
+// its question, the monitor first (what it sends included), when it runs, the node it maintains,
 // the repositories its steps borrow.
 func TestSkillMonitorCardWords(t *testing.T) {
 	c, _, _ := viewCore(t)
@@ -760,8 +760,8 @@ func TestSkillMonitorCardWords(t *testing.T) {
 	id := cardsOf(c, cardSkill)[0].ID
 	x, p := c.liveCard(cardOf(t, c, cardSkill, id))
 	for lang, want := range map[string][]string{
-		"fr": {"Nouveau skill « prod »", "Moniteur cpu", "Entretient", "La prod", "Dépôts", "example/infra"},
-		"en": {"prod", "Monitor cpu", "Maintains", "La prod", "example/infra"},
+		"fr": {"Nouveau skill « prod »", "Moniteur cpu", "Ce qu'il envoie", `{\"service\":\"web\"}`, "Entretient", "La prod", "Dépôts", "example/infra"},
+		"en": {"prod", "Monitor cpu", "What it sends", "Maintains", "La prod", "example/infra"},
 	} {
 		v := w.proposalView(x, p, lang)
 		raw, _ := json.Marshal(v)

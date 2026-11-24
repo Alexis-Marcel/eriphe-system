@@ -144,9 +144,10 @@ func (c *core) freeCall(claudeName string, input map[string]any) bool {
 }
 
 // freeAhead tells whether a free call may skip the policy, allowed in
-// advance to the brain or made by eriphe-core itself (a monitor, a
-// block's source): not a read of the open web, which must see the
-// turn's taint as WebFetch does. A write always goes through the policy.
+// advance to the brain or made by eriphe-core itself with no one's yes (a
+// block's source; a monitor is approved: monitorWhy): not a read of the
+// open web, which must see the turn's taint as WebFetch does. A write
+// always goes through the policy.
 func (c *core) freeAhead(claudeName string, input map[string]any) bool {
 	f := c.pool.facts(claudeName, input)
 	return f.read && f.free() && !f.noAccount && !f.openWorld

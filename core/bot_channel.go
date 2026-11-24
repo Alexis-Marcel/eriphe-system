@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
+	"unicode/utf8"
 )
 
 // A bot channel: a messaging service where the user links their own
@@ -63,8 +65,9 @@ type botSpec struct {
 	ID    string // the channel's id, its line's, its routes' and its keys' prefix
 	Label string // its name: what the user writes there is marked with it
 	Icon  string // its mark in Settings → Access: "send" or "chat"
-	// TextMax is the longest message the service takes; DataMax the
-	// longest data a button carries.
+	// TextMax is the longest message the service takes, in UTF-16 code
+	// units, 0 for no limit: a longer one is sent in parts (splitText),
+	// never cut. DataMax is the longest data a button carries.
 	TextMax, DataMax int
 	Token            *regexp.Regexp // what a bot's token looks like
 	Placeholder      string         // the token field's example
@@ -565,9 +568,119 @@ func (b *botChannel) say(ctx context.Context, token, chat, text string) {
 	}
 }
 
+// send sends a message whole: longer than the service takes, it goes in
+// parts, in order, each with its own time; the buttons on the last, after
+// everything they answer, which keeps room for what a tap adds to it
+// (botDoneRoom). A part that fails stops the rest, and says so.
 func (b *botChannel) send(ctx context.Context, token, chat string, m botMessage) error {
-	m.Text = truncate(m.Text, b.spec.TextMax)
-	return scrub(b.tr.send(ctx, token, chat, m), token)
+	room := 0
+	if len(m.Buttons) > 0 {
+		room = botDoneRoom
+	}
+	parts := splitText(m.Text, b.spec.TextMax, room)
+	for i, text := range parts {
+		part := botMessage{Text: text}
+		if i == len(parts)-1 {
+			part.Buttons = m.Buttons
+		}
+		if err := b.sendPart(ctx, token, chat, part); err != nil {
+			if len(parts) > 1 {
+				err = fmt.Errorf("%w (part %d of %d; the rest is not sent)", err, i+1, len(parts))
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// sendPart sends one message, within botSendTime. A service that says to
+// wait (a rate limit, likelier in a burst of parts) is waited for and
+// tried again, botSendTries times at most, so a long message's end is not
+// lost to it.
+func (b *botChannel) sendPart(ctx context.Context, token, chat string, m botMessage) error {
+	for try := 1; ; try++ {
+		pctx, cancel := context.WithTimeout(ctx, botSendTime)
+		err := b.tr.send(pctx, token, chat, m)
+		cancel()
+		var ra retryAfter
+		if err == nil || try == botSendTries || !errors.As(err, &ra) || ra.retryAfter() <= 0 || ra.retryAfter() > botSendTime {
+			return scrub(err, token)
+		}
+		select {
+		case <-ctx.Done():
+			return scrub(err, token)
+		case <-time.After(ra.retryAfter()):
+		}
+	}
+}
+
+const (
+	// botSendTime is as long as one message may take to send, and the
+	// longest wait a service may ask for before it is tried again.
+	botSendTime  = 30 * time.Second
+	botSendTries = 3
+	// botDoneRoom is what the part with buttons keeps free for what a tap
+	// writes under it (« → Fait »): the edit then fits the service.
+	botDoneRoom = 200
+)
+
+// splitText is s in parts of at most max UTF-16 code units (what Telegram
+// and Discord count; never fewer than characters), the last keeping room
+// free; s whole when max is 0. A part ends at a blank line, else a line's
+// end, else a space, in the second half of what fits; else anywhere
+// between two characters. Nothing is dropped but the spaces and line
+// breaks a cut falls on.
+func splitText(s string, max, room int) []string {
+	if max <= 0 {
+		return []string{s}
+	}
+	room = min(room, max/2)
+	var out []string
+	for {
+		if utf16Len(s) <= max-room {
+			return append(out, s)
+		}
+		end := utf16Prefix(s, max)
+		if end == len(s) {
+			// It fits whole, but not with the room: its end goes on.
+			end = utf16Prefix(s, max-room)
+		}
+		if end == 0 { // one character wider than max: alone
+			_, end = utf8.DecodeRuneInString(s)
+		}
+		cut, next := end, end
+		for _, sep := range []string{"\n\n", "\n", " "} {
+			if i := strings.LastIndex(s[:end], sep); i > 0 && i >= end/2 {
+				cut, next = i, i+len(sep)
+				break
+			}
+		}
+		out = append(out, strings.TrimRight(s[:cut], " \n"))
+		if s = strings.TrimLeft(s[next:], " \n"); s == "" {
+			return out
+		}
+	}
+}
+
+// utf16Len is s's length in UTF-16 code units.
+func utf16Len(s string) int {
+	n := 0
+	for _, r := range s {
+		n += utf16.RuneLen(r)
+	}
+	return n
+}
+
+// utf16Prefix is the length in bytes of s's longest prefix of at most max
+// UTF-16 code units, whole characters only.
+func utf16Prefix(s string, max int) int {
+	n := 0
+	for i, r := range s {
+		if n += utf16.RuneLen(r); n > max {
+			return i
+		}
+	}
+	return len(s)
 }
 
 // botOut is a message waiting to be sent.
@@ -604,11 +717,9 @@ func (b *botChannel) drain() {
 		m := b.queue[0]
 		b.queue = b.queue[1:]
 		b.qmu.Unlock()
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := b.send(ctx, m.token, m.chat, m.m); err != nil {
+		if err := b.send(context.Background(), m.token, m.chat, m.m); err != nil {
 			log.Printf("%v", err)
 		}
-		cancel()
 		b.pending.Done()
 	}
 }
@@ -635,7 +746,7 @@ func (b *botChannel) compose(n pushNote) botMessage {
 	if n.Why != "" {
 		body += "\n" + tr(lang, "notif.why") + " " + n.Why
 	}
-	m := botMessage{Text: joinLines(truncate(body, b.spec.TextMax-300), link)}
+	m := botMessage{Text: joinLines(body, link)} // whole: send splits it
 	if n.Perm != nil && len(permData(*n.Perm, true)) <= b.spec.DataMax {
 		m.Buttons = [][]botButton{{
 			{Text: "✓ " + tr(lang, "perm.allow"), Data: permData(*n.Perm, true)},

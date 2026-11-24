@@ -1572,6 +1572,7 @@ search) of a server the user does not trust counts as above Read here, as `WebFe
 tainted turn it waits for the user. A trusted server's reads stay free, the web's too.
 Only the brain's Free reads of closed sources are allowed in advance and called without a ticket;
 its writes and its reads of the open web go through the policy, so the turn's taint is always seen.
+A [monitor](#monitors) of such a read looks once the user approved it on its card.
 
 **Tool definitions are pinned.** The first listing of a catalog server pins each tool's definition
 (its name, title, description, schemas and annotations): adding the server is the user's yes. A
@@ -2201,28 +2202,38 @@ item, so a skill follows the mail with `when: monitor.new key=mails`. The calend
 
 - **Keyed by its name**, so a skill follows it with `when: monitor.changed key=getout-prod`. Its
   events are external unless its server is trusted, so the run they start is tainted.
-- **Free reads only**: the tool must be read-only by its own annotation, one of the brain's, and
-  Free in the user's grid (`freeCall`, with its arguments); a resource must be listed by its
-  server. Checked when it is written and before every look: otherwise it waits, with why, and
-  nothing is called.
+- **Reads only, approved by its yes**: the tool must be read-only by its own annotation, in the
+  Read row, one of the brain's, and not Never in the user's grid (with its arguments, and naming its
+  account where the accounts differ); a resource must be listed by its server. Free or on approval:
+  a monitor looks only after the user's yes (its card, or their own form), which shows its
+  arguments, and that yes is the approval, for those arguments at every look (`monitorWhy`). A read
+  of the open web (`openWorldHint` not `false`: Sentry's, a fetch) is one too. A Never is never
+  lifted, and a tool that changes, deletes or sends is never a monitor's. Checked when it is written
+  and before every look: otherwise it waits, with why (the tool set to Never since, say), and
+  nothing is called. A live block's source, which no one approves, must be a free read that does not
+  reach the open web (`sourceWhy`).
 - **The user approves it.** The brain proposes one with `write_monitor` (name, server, tool or
   resource, args, every, cond, path, id, above, below): a card (kind `monitor`) says it in words; the yes turns it on from a new
-  baseline, the no drops it. A change of an approved one waits the same way, the old one looking
-  meanwhile. A proposal that stops waiting other than by its card (the user saves their own
-  version on the Monitors page) leaves its card `gone`, never approved. Written on a tainted turn, the card says so. A triggered task has no such tool.
+  baseline, the no drops it. The card shows the arguments in full, what each look sends. A change
+  of an approved one waits the same way, the old one looking meanwhile. A proposal that stops
+  waiting other than by its card (the user saves their own version on the Monitors page) leaves its
+  card `gone`, never approved. Written on a tainted turn, the card says so. A triggered task has no
+  such tool.
   `monitors` (free) lists them: state, what each does, its last look, why it waits, its last error.
   `try_monitor` (free) tries one once, with nothing kept or written: a draft before proposing it,
   or one of the user's by name. It says what the path extracts or why it cannot, and for a monitor
   that has looked, whether a look now would find a change (`changed_since_last_look`, the number of
   new items, or whether the limit holds). A server not trusted taints the turn, as a call of its
-  tool would.
+  tool would. A try is a call before any yes: a read on approval is never tried before it, and on
+  a tainted turn a draft that reads the open web is not tried either (its arguments are no one's
+  yet); the brain proposes it, and the user's yes on its card is what calls it.
 - **Its page**, Settings → Surveillance (`web_monitors.go`, `monitors_user.go`): each monitor's
   state (on, paused, waiting with why, failing with its error), what it does in words, its last
   look, its events over 30 days and the skills whose `when` names it; its last 20 events; pause and
   resume (from a new baseline, so what changed meanwhile is not told late), delete (its events
   stay in the journal), and the brain's proposals answered there as on their card. The user adds
   or edits one there: it is theirs, so it looks at once, with no card, and a change the brain
-  proposed on it is dropped. The picker offers the free reads, then the servers' resources;
+  proposed on it is dropped. The picker offers the reads not Never, then the servers' resources;
   **Try** calls the tool (or reads the resource) once and shows what the path extracts (ids for `new`, the number for `cross`), nothing kept.
 - **Listening: an incoming address** (`incoming_hooks.go`, way `listen`), for a system that can
   tell and reach Eriphe: `POST https://<workspace>/hooks/in/<token>`. Each call writes
@@ -4501,7 +4512,19 @@ for every service; a service writes only its **transport** (`botTransport`: chec
 one round, send a message with buttons, answer a button), its words (`acc.kind.<id>`,
 `acc.kind.<id>.desc`, `<id>.how`, `<id>.privacy`) and its `registerBot` (`botSpec`: id, label,
 icon, longest text, longest button data, the token's form, a link that opens the bot with the
-code). Its routes (`/settings/access/<id>`, `/channels/<id>/…`), page, row, store keys
+code).
+
+**Eriphe's words in full.** What goes to a bot channel (a reply, a notification, a card) is never cut
+at a length of Eriphe's own: a card has its text, its summary, every field and its arguments whole,
+a value of several lines under its name, as the workspace shows it. Only the service's own limit
+applies (`botSpec.TextMax`, counted in UTF-16 code units, never fewer than characters: Telegram
+4,096, Discord 2,000, Signal none). A longer message goes in parts (`splitText`), in order, each
+cut at a blank line, else a line's end, else a space, else between two characters: nothing is
+dropped but the spaces a cut falls on. Its buttons go on the last part, after everything they
+answer, which keeps 200 units free for what a tap writes under it (« → Fait »); should that still
+not fit, the message only loses its buttons and what was done follows it. A part the service asks
+to wait for (a rate limit, `retry_after` up to 30 s) is sent again after that wait, three tries at
+most; a part that still fails stops the rest, logged with its number. Its routes (`/settings/access/<id>`, `/channels/<id>/…`), page, row, store keys
 (`<id>_user`, `<id>_chat`, …) and vault secret (`<id>-bot`) follow from its id.
 
 - **Setup.** The user creates a bot and pastes its token in Settings → Access: checked by the
@@ -4531,8 +4554,9 @@ code). Its routes (`/settings/access/<id>`, `/channels/<id>/…`), page, row, st
 
 **Telegram** (`telegram.go`), the first transport: the user creates a bot with BotFather; the
 token is checked with `getMe`; `getUpdates` long polling (50 s, Telegram's `retry_after`
-followed); `sendMessage` with an inline keyboard (4,000 characters, 64 bytes of button data);
-`answerCallbackQuery`, then `editMessageText` once decided; the code also comes as
+followed); `sendMessage` with an inline keyboard (4,096 characters a part, 64 bytes of button
+data); `answerCallbackQuery`, then `editMessageText` once decided (`editMessageReplyMarkup` and a
+new message when the two would not fit); the code also comes as
 `/start <code>`, from `t.me/<bot>?start=<code>`. The Bot API puts the token in the URL: its
 errors name neither. Telegram bots are not end-to-end encrypted (a bot chat is never a secret
 chat), and Settings says so.
@@ -4550,7 +4574,8 @@ that forbids resuming; 4004 (the token) and 4014 (the intents) are failures Sett
 `MESSAGE_CREATE` in a DM is the user writing (the bot's own messages are dropped; a server's
 are not the user's DM: ignored); `INTERACTION_CREATE` is a tap (Discord sends buttons over the
 Gateway while the application has no interactions endpoint URL). Out: `POST
-/channels/<dm>/messages` (2,000 characters, link previews off, mentions never ping), buttons as
+/channels/<dm>/messages` (plain content, never embeds: 2,000 characters a part, link previews off,
+mentions never ping), buttons as
 components (100-character `custom_id`); a tap is answered by its interaction's callback, which
 needs no bot token: the message updated without its buttons once decided, else an ephemeral note.
 A 429's `retry_after` is followed. Direct messages with a bot are not end-to-end encrypted, and
@@ -4579,7 +4604,8 @@ setup (`botSpec.Setup`) takes its place:
 Then the linking is the bot channels' own; the page links to `signal.me/#p/<number>`.
 
 Listening is one `receive` per round, a long poll of up to 50 s from the last `seq` seen; a message
-in a group is not the user's chat. Out: `send` (2,000 characters).
+in a group is not the user's chat. Out: `send`, whole: signal-cli sends a text over 2,000
+characters as Signal's long-text attachment, which the app shows in full.
 
 Signal has no buttons. A message with buttons ends with a legend that gives each an emoji by
 position (`👍 Oui · 👎 Non`, `⏳` third). A reaction with that emoji to that message is the tap
