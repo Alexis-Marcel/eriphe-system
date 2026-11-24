@@ -4507,7 +4507,18 @@ for every service; a service writes only its **transport** (`botTransport`: chec
 one round, send a message with buttons, answer a button), its words (`acc.kind.<id>`,
 `acc.kind.<id>.desc`, `<id>.how`, `<id>.privacy`) and its `registerBot` (`botSpec`: id, label,
 icon, longest text, longest button data, the token's form, a link that opens the bot with the
-code). Its routes (`/settings/access/<id>`, `/channels/<id>/…`), page, row, store keys
+code).
+
+**Eriphe's words in full.** What goes to a bot channel (a reply, a notification, a card) is never cut
+at a length of Eriphe's own: a card has its text, its summary, every field and its arguments whole,
+a value of several lines under its name, as the workspace shows it. Only the service's own limit
+applies (`botSpec.TextMax`, counted in UTF-16 code units, never fewer than characters: Telegram
+4,096, Discord 2,000, Signal none). A longer message goes in parts (`splitText`), in order, each
+cut at a blank line, else a line's end, else a space, else between two characters: nothing is
+dropped but the spaces a cut falls on. Its buttons go on the last part, after everything they
+answer, which keeps 200 units free for what a tap writes under it (« → Fait »); should that still
+not fit, the message only loses its buttons and what was done follows it. A part that fails stops
+the rest, logged with its number. Its routes (`/settings/access/<id>`, `/channels/<id>/…`), page, row, store keys
 (`<id>_user`, `<id>_chat`, …) and vault secret (`<id>-bot`) follow from its id.
 
 - **Setup.** The user creates a bot and pastes its token in Settings → Access: checked by the
@@ -4537,8 +4548,9 @@ code). Its routes (`/settings/access/<id>`, `/channels/<id>/…`), page, row, st
 
 **Telegram** (`telegram.go`), the first transport: the user creates a bot with BotFather; the
 token is checked with `getMe`; `getUpdates` long polling (50 s, Telegram's `retry_after`
-followed); `sendMessage` with an inline keyboard (4,000 characters, 64 bytes of button data);
-`answerCallbackQuery`, then `editMessageText` once decided; the code also comes as
+followed); `sendMessage` with an inline keyboard (4,096 characters a part, 64 bytes of button
+data); `answerCallbackQuery`, then `editMessageText` once decided (`editMessageReplyMarkup` and a
+new message when the two would not fit); the code also comes as
 `/start <code>`, from `t.me/<bot>?start=<code>`. The Bot API puts the token in the URL: its
 errors name neither. Telegram bots are not end-to-end encrypted (a bot chat is never a secret
 chat), and Settings says so.
@@ -4556,7 +4568,8 @@ that forbids resuming; 4004 (the token) and 4014 (the intents) are failures Sett
 `MESSAGE_CREATE` in a DM is the user writing (the bot's own messages are dropped; a server's
 are not the user's DM: ignored); `INTERACTION_CREATE` is a tap (Discord sends buttons over the
 Gateway while the application has no interactions endpoint URL). Out: `POST
-/channels/<dm>/messages` (2,000 characters, link previews off, mentions never ping), buttons as
+/channels/<dm>/messages` (plain content, never embeds: 2,000 characters a part, link previews off,
+mentions never ping), buttons as
 components (100-character `custom_id`); a tap is answered by its interaction's callback, which
 needs no bot token: the message updated without its buttons once decided, else an ephemeral note.
 A 429's `retry_after` is followed. Direct messages with a bot are not end-to-end encrypted, and
@@ -4585,7 +4598,8 @@ setup (`botSpec.Setup`) takes its place:
 Then the linking is the bot channels' own; the page links to `signal.me/#p/<number>`.
 
 Listening is one `receive` per round, a long poll of up to 50 s from the last `seq` seen; a message
-in a group is not the user's chat. Out: `send` (2,000 characters).
+in a group is not the user's chat. Out: `send`, whole: signal-cli sends a text over 2,000
+characters as Signal's long-text attachment, which the app shows in full.
 
 Signal has no buttons. A message with buttons ends with a legend that gives each an emoji by
 position (`👍 Oui · 👎 Non`, `⏳` third). A reaction with that emoji to that message is the tap

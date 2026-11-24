@@ -58,8 +58,8 @@ var (
 
 func init() {
 	registerBot(botSpec{ID: dcChannel, Label: viaDiscord, Icon: "chat",
-		TextMax: 2000, // Discord takes 2000 characters
-		DataMax: 100,  // and a 100-character custom_id
+		TextMax: dcTextMax, // longer goes in parts (botChannel.send)
+		DataMax: 100,       // a 100-character custom_id
 		Token:   regexp.MustCompile(`^[A-Za-z0-9_-]{18,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{20,}$`), Placeholder: "MTIz….Gx….abc…",
 		Invite: func(id string) string {
 			return "https://discord.com/oauth2/authorize?client_id=" + url.QueryEscape(id) + "&scope=bot&permissions=0"
@@ -439,22 +439,35 @@ func dcComponents(rows [][]botButton) []any {
 	return out
 }
 
+// dcTextMax is the longest message Discord takes: 2000 characters, counted
+// here in UTF-16 code units (never fewer). Messages go as plain content,
+// never as embeds.
+const dcTextMax = 2000
+
 // answer answers a tap: the message, without its buttons, says what was
 // done; else a note only the user sees; else just that it was received.
-func (d *discord) answer(ctx context.Context, _ string, ev botEvent, toast, done string) error {
+// Should the message and what was done not fit one (the part with buttons
+// keeps room for it: botDoneRoom), the message only loses its buttons and
+// what was done follows it: nothing of it is cut.
+func (d *discord) answer(ctx context.Context, token string, ev botEvent, toast, done string) error {
 	x, _ := ev.Ref.(*dcInteraction)
 	if x == nil {
 		return errors.New("discord: not a button")
 	}
 	var in map[string]any
+	after := ""
 	switch {
 	case done != "":
 		text := "→ " + done
 		if x.Message != nil {
 			text = strings.TrimSpace(x.Message.Content) + "\n\n" + text
 		}
-		in = map[string]any{"type": 7, "data": map[string]any{"content": truncate(text, 2000), "components": []any{},
-			"allowed_mentions": map[string]any{"parse": []string{}}}}
+		data := map[string]any{"content": text, "components": []any{}, "allowed_mentions": map[string]any{"parse": []string{}}}
+		if utf16Len(text) > dcTextMax {
+			delete(data, "content") // kept as it is
+			after = "→ " + done
+		}
+		in = map[string]any{"type": 7, "data": data}
 	case toast != "":
 		in = map[string]any{"type": 4, "data": map[string]any{"content": toast, "flags": 1 << 6}} // EPHEMERAL
 	default:
@@ -462,5 +475,9 @@ func (d *discord) answer(ctx context.Context, _ string, ev botEvent, toast, done
 	}
 	// The interaction's token is in the path: it lives 15 minutes and is
 	// not the bot's.
-	return d.call(ctx, "", http.MethodPost, "/interactions/"+url.PathEscape(x.ID)+"/"+url.PathEscape(x.Token)+"/callback", in, nil)
+	err := d.call(ctx, "", http.MethodPost, "/interactions/"+url.PathEscape(x.ID)+"/"+url.PathEscape(x.Token)+"/callback", in, nil)
+	if after != "" && x.ChannelID != "" {
+		err = errors.Join(err, d.send(ctx, token, x.ChannelID, botMessage{Text: after}))
+	}
+	return err
 }

@@ -85,7 +85,8 @@ func (f *fakeTelegram) serve(rw http.ResponseWriter, r *http.Request) {
 	case "answerCallbackQuery":
 		f.answered = append(f.answered, in)
 		ok(true)
-	case "editMessageText":
+	case "editMessageText", "editMessageReplyMarkup":
+		in["method"] = method
 		f.edited = append(f.edited, in)
 		ok(true)
 	default:

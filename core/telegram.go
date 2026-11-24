@@ -35,14 +35,18 @@ var (
 
 func init() {
 	registerBot(botSpec{ID: tgChannel, Label: viaTelegram, Icon: "send",
-		TextMax: 4000, // Telegram takes 4096 characters
-		DataMax: 64,   // and 64 bytes of a button's data
+		TextMax: tgTextMax, // longer goes in parts (botChannel.send)
+		DataMax: 64,        // 64 bytes of a button's data
 		Token:   regexp.MustCompile(`^[0-9]{3,20}:[A-Za-z0-9_-]{20,80}$`), Placeholder: "123456:ABC…",
 		OpenLink: func(bot, code string) string { return "https://t.me/" + bot + "?start=" + code },
 		New: func(b *botChannel) botTransport {
 			return &telegram{b: b, api: telegramAPI, client: &http.Client{}}
 		}})
 }
+
+// tgTextMax is the longest message Telegram takes: 4096 characters,
+// counted here in UTF-16 code units (never fewer).
+const tgTextMax = 4096
 
 type telegram struct {
 	b      *botChannel // its offset, in the channel's state
@@ -219,7 +223,9 @@ func (t *telegram) send(ctx context.Context, token, chat string, m botMessage) e
 }
 
 // answer answers the callback, and once done, adds it under the message,
-// which loses its buttons.
+// which loses its buttons. Should the two not fit one message (the part
+// with buttons keeps room for it: botDoneRoom), the message only loses its
+// buttons and what was done follows it: nothing of it is cut.
 func (t *telegram) answer(ctx context.Context, token string, ev botEvent, toast, done string) error {
 	q, _ := ev.Ref.(*tgCallback)
 	if q == nil {
@@ -227,9 +233,14 @@ func (t *telegram) answer(ctx context.Context, token string, ev botEvent, toast,
 	}
 	err := t.call(ctx, token, "answerCallbackQuery", map[string]any{"callback_query_id": q.ID, "text": toast}, nil)
 	if q.Message != nil && q.Message.MessageID != 0 && done != "" {
-		text := strings.TrimSpace(q.Message.Text) + "\n\n→ " + done
-		err = errors.Join(err, t.call(ctx, token, "editMessageText", map[string]any{"chat_id": q.Message.Chat.ID,
-			"message_id": q.Message.MessageID, "text": truncate(text, t.b.spec.TextMax)}, nil))
+		at := map[string]any{"chat_id": q.Message.Chat.ID, "message_id": q.Message.MessageID}
+		if text := strings.TrimSpace(q.Message.Text) + "\n\n→ " + done; utf16Len(text) <= tgTextMax {
+			at["text"] = text
+			return errors.Join(err, t.call(ctx, token, "editMessageText", at, nil))
+		}
+		at["reply_markup"] = &tgKeyboard{}
+		err = errors.Join(err, t.call(ctx, token, "editMessageReplyMarkup", at, nil))
+		err = errors.Join(err, t.send(ctx, token, strconv.FormatInt(q.Message.Chat.ID, 10), botMessage{Text: "→ " + done}))
 	}
 	return err
 }
