@@ -3,6 +3,7 @@ package nodestore
 import (
 	"database/sql"
 	"errors"
+	"slices"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
@@ -57,43 +58,30 @@ func indexRefs(tx querier, n *nodefile.Node) error {
 
 // resolveRefs resolves the links that wait to the node of their name, if
 // one has it now. It gives the nodes whose links it resolved.
+// All in one statement, each link to the node byTitleKey would give: a
+// rebuild resolves thousands at once.
 func resolveRefs(tx querier) ([]string, error) {
-	type ref struct{ id, key string }
-	var waiting []ref
-	rows, err := tx.Query(`SELECT r.id, r.key FROM node_refs r
-		WHERE r.target = '' AND EXISTS (SELECT 1 FROM nodes n WHERE n.title_key = r.key AND n.id != r.id) ORDER BY r.id, r.key`)
+	rows, err := tx.Query(`UPDATE node_refs AS r SET target = (SELECT n.id FROM nodes n WHERE n.title_key = r.key AND n.id != r.id
+		  ORDER BY n.archived != 0, n.created, n.id LIMIT 1)
+		WHERE r.target = '' AND EXISTS (SELECT 1 FROM nodes n WHERE n.title_key = r.key AND n.id != r.id)
+		RETURNING id`)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
+	var changed []string
 	for rows.Next() {
-		var r ref
-		if err := rows.Scan(&r.id, &r.key); err != nil {
-			rows.Close()
+		var id string
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		waiting = append(waiting, r)
+		changed = append(changed, id)
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	var changed []string
-	for _, r := range waiting {
-		t, err := byTitleKey(tx, r.key, r.id)
-		if err != nil {
-			return changed, err
-		}
-		if t == "" {
-			continue
-		}
-		if _, err := tx.Exec(`UPDATE node_refs SET target = ? WHERE id = ? AND key = ?`, t, r.id, r.key); err != nil {
-			return changed, err
-		}
-		if len(changed) == 0 || changed[len(changed)-1] != r.id {
-			changed = append(changed, r.id)
-		}
-	}
-	return changed, nil
+	slices.Sort(changed)
+	return slices.Compact(changed), nil
 }
 
 // byTitleKey is the node whose title has key, but not: one not archived

@@ -159,11 +159,14 @@ func (s *Store) changed(what string, ids ...string) {
 
 // Report is what a start found.
 type Report struct {
-	Rebuilt bool     // the index was made again from the files
-	Behind  bool     // the index was behind the repository: its versions were read again from the log
-	Changed []string // nodes whose file was changed outside Eriphe
-	Gone    []string // nodes whose file was removed outside Eriphe
-	Broken  []string // files that do not read as a node: "<file>: <why>"
+	Rebuilt bool // the index was made again from the files
+	// OldSchema is the older schema the index was at, made again at
+	// today's (Rebuilt); 0 when it was not.
+	OldSchema int
+	Behind    bool     // the index was behind the repository: its versions were read again from the log
+	Changed   []string // nodes whose file was changed outside Eriphe
+	Gone      []string // nodes whose file was removed outside Eriphe
+	Broken    []string // files that do not read as a node: "<file>: <why>"
 	// Converted are the nodes whose file was of an older format,
 	// converted to today's in a version of their own (author Convert).
 	Converted []string
@@ -246,12 +249,13 @@ func Open(dir, index string, opts Options) (*Store, Report, error) {
 			return nil, Report{}, err
 		}
 	}
-	db, fresh, err := openIndex(index)
+	db, fresh, old, err := openIndex(index)
 	if err != nil {
 		return nil, Report{}, fmt.Errorf("index: %w", err)
 	}
 	s := &Store{dir: dir, traces: traces, db: db, repo: repo, opts: opts}
 	rep, err := s.reconcile(fresh)
+	rep.OldSchema = old
 	if err != nil {
 		db.Close()
 		return nil, rep, err
@@ -597,7 +601,7 @@ func (s *Store) indexVersions(now time.Time, xs []indexed) error {
 	if len(xs) == 0 {
 		return nil
 	}
-	tx, err := s.db.Begin()
+	tx, err := begin(s.db)
 	if err != nil {
 		return err
 	}

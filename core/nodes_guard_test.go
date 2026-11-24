@@ -30,6 +30,7 @@ var nodeRemovals = map[string]string{
 	"nodestore/backup.go writeTraces os.Rename(tmp, path)":               "the traces' tar takes its name once whole",
 	"nodestore/backup.go writeBundle os.Remove(tmp)":                     "the bundle written aside, when it failed",
 	"nodestore/backup.go writeBundle os.Rename(tmp, path)":               "the bundle takes its name once checked",
+	"nodestore/index.go openIndex os.Remove(f)":                          "the index (nodes.db, its -wal and -shm) at an older schema, made again from the files and the log",
 	"nodestore/git.go commit wt.Remove(c.path)":                          "commits the removal of a file already removed by hand (reconcile's change without data): the history keeps it",
 	"nodestore/git.go writeFile os.Rename(tmp, path)":                    "writes a node's file whole, its new bytes over the old ones, which the history keeps",
 	"nodestore/trace.go appendTrace os.Rename(path, s.tracePath(id, 1))": "a trace past MaxTraceFile becomes its older part, the one before dropped (docs/node-format.md)",

@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
@@ -84,10 +87,52 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 	}
 	rows.Close()
 
+	lasts, err := s.lastVersions()
+	if err != nil {
+		return rep, err
+	}
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		return rep, err
 	}
+	var names []string
+	for _, e := range entries {
+		if e.Type().IsRegular() && strings.HasSuffix(e.Name(), ".md") {
+			names = append(names, e.Name())
+		}
+	}
+	byFile := make(map[string]string, len(inIndex)) // file: the id the index holds it for
+	for id, r := range inIndex {
+		byFile[r.file] = id
+	}
+	// The files read, and parsed but those the index holds as they are,
+	// on every core; what is found is then dealt with in their order.
+	scans := make([]scanned, len(names))
+	parallel(len(names), func(i int) {
+		name := names[i]
+		sc := &scans[i]
+		if sc.raw, sc.err = os.ReadFile(filepath.Join(s.dir, name)); sc.err != nil {
+			return
+		}
+		sc.blob = blobHash(sc.raw)
+		sc.conv = sc.raw
+		sc.format, sc.formatErr = nodefile.FormatOf(sc.raw)
+		if sc.formatErr == nil && sc.format != s.format() {
+			if sc.conv, sc.convErr = s.upgrade(sc.raw); sc.convErr != nil {
+				return
+			}
+		}
+		// Committed, indexed as it is, at its last version and in
+		// today's format: nothing to read in it but its id.
+		if id, ok := byFile[name]; ok && sc.formatErr == nil && sc.format == s.format() && head[name].String() == sc.blob {
+			if r, lv := inIndex[id], lasts[id]; r.blob == sc.blob && lv.n != 0 && r.version == lv.n {
+				sc.id = id
+				sc.raw, sc.conv = nil, nil // not kept: nothing is done with them
+				return
+			}
+		}
+		sc.node, sc.parseErr = nodefile.Parse(sc.conv)
+	})
 	now := s.opts.Now()
 	var changes, convChanges []change
 	var stamps, convStamps []stamp
@@ -95,38 +140,33 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 	onDisk := map[string]bool{}
 	broken := map[string]bool{} // files on disk that do not read as a node
 	seen := map[string]string{} // id: its file
-	for _, e := range entries {
-		name := e.Name()
-		if !e.Type().IsRegular() || !strings.HasSuffix(name, ".md") {
-			continue
+	for i, name := range names {
+		sc := scans[i]
+		if sc.err != nil {
+			return rep, sc.err
 		}
-		raw, err := os.ReadFile(filepath.Join(s.dir, name))
-		if err != nil {
-			return rep, err
-		}
+		raw := sc.raw
 		onDisk[name] = true
-		committed := head[name].String() == blobHash(raw)
+		committed := head[name].String() == sc.blob
 		// A file of another format than today's: an older one is
 		// converted, a newer one stops the store before anything is
 		// written. One whose conversion does not give a node is
 		// reported and left alone, as any file that does not read.
-		conv := raw
-		if f, err := nodefile.FormatOf(raw); err == nil && f != s.format() {
-			if conv, err = s.upgrade(raw); errors.Is(err, nodefile.ErrNewerFormat) {
-				return rep, fmt.Errorf("%s: %w; the file is left as it is: update Eriphe", name, err)
-			} else if err != nil {
-				rep.Broken = append(rep.Broken, fmt.Sprintf("%s: format %d, not converted: %v", name, f, err))
-				broken[name] = true
-				continue
-			}
-		}
-		n, err := nodefile.Parse(conv)
-		if err != nil {
-			rep.Broken = append(rep.Broken, name+": "+err.Error())
+		if errors.Is(sc.convErr, nodefile.ErrNewerFormat) {
+			return rep, fmt.Errorf("%s: %w; the file is left as it is: update Eriphe", name, sc.convErr)
+		} else if sc.convErr != nil {
+			rep.Broken = append(rep.Broken, fmt.Sprintf("%s: format %d, not converted: %v", name, sc.format, sc.convErr))
 			broken[name] = true
 			continue
 		}
-		id := n.Meta.ID
+		conv, n, id := sc.conv, sc.node, sc.id
+		if n != nil {
+			id = n.Meta.ID
+		} else if id == "" {
+			rep.Broken = append(rep.Broken, name+": "+sc.parseErr.Error())
+			broken[name] = true
+			continue
+		}
 		if !strings.HasSuffix(name, "-"+id+".md") {
 			rep.Broken = append(rep.Broken, fmt.Sprintf("%s: its id is %s, its name does not end with -%s.md", name, id, id))
 			continue
@@ -136,13 +176,11 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 			continue
 		}
 		seen[id] = name
-		last, lastAt, err := s.lastVersion(id)
-		if err != nil {
-			return rep, err
-		}
+		lv := lasts[id]
+		last, lastAt := lv.n, time.Unix(lv.at, 0)
 		converting := !bytes.Equal(conv, raw)
 		if !committed || last == 0 {
-			changes = append(changes, change{path: name, data: raw})
+			changes = append(changes, change{path: name, data: raw, onDisk: true})
 			stamps = append(stamps, stamp{id, last + 1})
 			outside = append(outside, indexed{n, name, raw, Version{N: last + 1, Author: Outside, At: now}})
 			if !committed {
@@ -160,7 +198,7 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 			rep.Converted = append(rep.Converted, id)
 			continue
 		}
-		if r, ok := inIndex[id]; !ok || r.file != name || r.blob != blobHash(raw) || r.version != last {
+		if r, ok := inIndex[id]; !ok || r.file != name || r.blob != sc.blob || r.version != last {
 			known = append(known, indexed{n, name, raw, Version{N: last, At: lastAt}})
 		}
 	}
@@ -211,7 +249,7 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 		}
 	}
 	if len(known) > 0 {
-		tx, err := s.db.Begin()
+		tx, err := begin(s.db)
 		if err != nil {
 			return rep, err
 		}
@@ -238,11 +276,62 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 	return rep, setIndexed(s.db, repoHead)
 }
 
-// lastVersion is a node's last version in the index: its n (0 if none)
-// and when it was made.
-func (s *Store) lastVersion(id string) (int, time.Time, error) {
-	var n int
-	var at int64
-	err := s.db.QueryRow(`SELECT COALESCE(MAX(n), 0), COALESCE(MAX(at), 0) FROM node_versions WHERE id = ?`, id).Scan(&n, &at)
-	return n, time.Unix(at, 0), err
+// scanned is what reconcile read of a file: its bytes and their hash,
+// the format it says, its bytes in today's format, and the node they
+// hold, or the id the index holds the file for when it was not parsed.
+type scanned struct {
+	raw, conv []byte
+	blob      string
+	format    int
+	node      *nodefile.Node
+	id        string
+	err       error // reading the file
+	formatErr error
+	convErr   error
+	parseErr  error
+}
+
+// parallel runs fn(0) to fn(n-1) on every core, and returns once all are
+// done.
+func parallel(n int, fn func(i int)) {
+	workers := min(runtime.GOMAXPROCS(0), n)
+	var next atomic.Int64
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := int(next.Add(1)) - 1; i < n; i = int(next.Add(1)) - 1 {
+				fn(i)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// lastVersion is a node's last version in the index: its n and when it
+// was made (its versions' last time).
+type lastVersion struct {
+	n  int
+	at int64
+}
+
+// lastVersions are each node's last version in the index, read at once;
+// a node without one is not there.
+func (s *Store) lastVersions() (map[string]lastVersion, error) {
+	rows, err := s.db.Query(`SELECT id, MAX(n), MAX(at) FROM node_versions GROUP BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]lastVersion{}
+	for rows.Next() {
+		var id string
+		var v lastVersion
+		if err := rows.Scan(&id, &v.n, &v.at); err != nil {
+			return nil, err
+		}
+		out[id] = v
+	}
+	return out, rows.Err()
 }

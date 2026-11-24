@@ -1146,9 +1146,12 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   creation: a new title changes the front matter, never the file's name.
 - **Index:** `nodes.db` next to it, outside the repository: a pure index, made again from the files
   and the log when it is deleted, nothing lost: a node's status is not kept, it is computed
-  (`node_status.go`). SQLite, its schema version in `meta` (4); a file at another version is
-  refused, never migrated: delete it. Tables: `nodes` (file, title, parent, lifetime,
-  times, external, last version, the file's git hash, the title's link key), `node_links` (the front
+  (`node_status.go`). SQLite, its schema version in `meta` (5); a file at an older version is
+  never migrated: at start it is deleted (`nodes.db`, its `-wal` and `-shm`, nothing else) and
+  made again from the files and the log, and the log says so (`nodes: index at schema 4, an older
+  one: made again from the files`); a file at a newer version is refused, left as it is. Tables: `nodes` (file, title, parent, lifetime,
+  times, external, last version, the file's git hash, the title's link key, its words' row in
+  `node_fts`, so a write replaces them without a scan), `node_links` (the front
   matter's), `node_refs` (each `[[name]]` of a node's text and the node it was resolved to, kept
   across renames; `''` while no node has it), `node_versions` (n → commit
   hash, author, time), `node_sources` (each block's live sources), `node_props` (each value of a node's properties and tags, one row per value of a list, typed: a number's `num`, a date's ISO text, a lowercase `fold`; indexed on (key, fold) and (key, num): `nodestore.Select`, `Props`) and `node_fts` (FTS5 over the title,
@@ -1199,6 +1202,11 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   each blob present): a repository that lacks one does not open, and the log names the ref and the
   missing object (`nodes: repository …: the repository is broken: refs/heads/main reaches blob …`);
   the graph stays off until the repository is put back from a bundle.
+  The start is made for thousands of nodes: the files are read and hashed on every core, and a
+  file the index holds as it is (its git hash, the last commit's and the index's, at its last
+  version, in today's format) is not parsed; a commit of many files stages them in one read and
+  one write of git's index; an index is filled in one transaction, each statement prepared once.
+  `TestIndexBench` measures it (`ERIPHE_BENCH_NODES=10000`).
 - **Never lost:** nodes are the user's notes. No code removes the repository, a node's file or
   its trace, nor drops history (no gc, prune, repack, reset, clean or force; go-git only in
   `nodestore`, git never run as a program); a node is only archived, by the user. The guard test
