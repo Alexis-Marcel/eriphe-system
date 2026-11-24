@@ -224,7 +224,7 @@ function SecLine({ r, rich }: { r: SecRow; rich: boolean }) {
 
 type Told = { surface: string; list: SourceList; lists: Lists } | undefined;
 
-function SecRows({ rows, rich, told, ticks }: { rows: SecRow[]; rich: boolean; told: Told; ticks?: { left: ReadonlySet<string>; toggle: (id: string) => void } }) {
+function SecRows({ rows, rich, told, quiet, ticks }: { rows: SecRow[]; rich: boolean; told: Told; quiet?: boolean; ticks?: { left: ReadonlySet<string>; toggle: (id: string) => void } }) {
   const { t } = useWords();
   const [all, setAll] = useState(false);
   const shownRows = all ? rows : rows.slice(0, ROWS_SHOWN);
@@ -232,7 +232,7 @@ function SecRows({ rows, rich, told, ticks }: { rows: SecRow[]; rich: boolean; t
     <ul className="a2-sec-rows">
       {shownRows.map((r) => {
         const line = <SecLine r={r} rich={rich} />;
-        const node = told ? openable(told.surface, told.list, told.lists, line, r.told, !!ticks) : line;
+        const node = told ? openable(told.surface, told.list, told.lists, line, r.told, quiet || !!ticks) : line;
         if (!ticks) return <li key={r.id}>{node}</li>;
         const on = !ticks.left.has(r.id);
         return (
@@ -301,7 +301,7 @@ function SecFold({ g, told }: { g: Group; told: Told }) {
       </div>
       {open && (
         <div id={id} className="a2-sec-fold-body">
-          <SecRows rows={g.rows} rich={false} told={told} ticks={batch && several ? { left, toggle } : undefined} />
+          <SecRows rows={g.rows} rich={false} told={told} quiet={!!batch} ticks={batch && several ? { left, toggle } : undefined} />
         </div>
       )}
     </div>

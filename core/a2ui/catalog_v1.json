@@ -369,7 +369,7 @@
     },
     "Figures": {
       "type": "object",
-      "description": "Quelques chiffres côte à côte, en bandeau ; le premier bloc d'une page les montre en grand.",
+      "description": "Quelques chiffres côte à côte, en bandeau.",
       "properties": {
         "component": {"const": "Figures"},
         "items": {

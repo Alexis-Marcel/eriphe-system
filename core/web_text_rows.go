@@ -37,9 +37,9 @@ var rowStrings = map[string]map[string]string{
 		"espace.open.group":   "Classé « %s »",
 		"espace.open.note":    "Note",
 		"espace.open.error":   "Impossible de joindre {{name}}.",
-		"espace.open.onyes":   "Sur Oui",
+		"espace.open.onyes":   "Si tu acceptes",
 		"espace.open.more":    "détails",
-		"espace.open.call":    "Ce que Oui lance",
+		"espace.open.call":    "Ce qui sera lancé",
 		"espace.open.raw":     "L'élément, tel que lu",
 
 		"espace.batch.keep": "Décocher « %s » : le garder",
@@ -83,9 +83,9 @@ var rowStrings = map[string]map[string]string{
 		"espace.open.group":   "Filed under “%s”",
 		"espace.open.note":    "Note",
 		"espace.open.error":   "Cannot reach {{name}}.",
-		"espace.open.onyes":   "On Yes",
+		"espace.open.onyes":   "If you accept",
 		"espace.open.more":    "details",
-		"espace.open.call":    "What Yes runs",
+		"espace.open.call":    "What it runs",
 		"espace.open.raw":     "The item, as read",
 
 		"espace.batch.keep": "Untick “%s”: keep it",

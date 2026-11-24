@@ -56,7 +56,7 @@ test("a page as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect(read.locator(".a2-read-title")).toHaveText("Devis terrasse");
   await expect(read.locator(".a2-read-text")).toContainText("Peux-tu me dire avant vendredi");
   const onYes = read.locator(".a2-onyes");
-  await expect(onYes.locator(".a2-onyes-kicker")).toHaveText("Sur Oui");
+  await expect(onYes.locator(".a2-onyes-kicker")).toHaveText("Si tu acceptes");
   await expect(onYes.locator("figcaption")).toHaveText("Texte");
   await expect(onYes.locator(".a2-onyes-text")).toContainText("tu peux lancer la commande");
   await expect(read.locator("summary")).toHaveText(["détails"]);

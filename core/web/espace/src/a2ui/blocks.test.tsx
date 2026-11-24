@@ -153,6 +153,8 @@ describe("Sections", () => {
     await act(async () => $<HTMLButtonElement>(".a2-sec-fold.batch .a2-sec-fold-head")!.click());
     expect($$(".a2-sec-fold.batch .a2-sec-row")).toHaveLength(3);
     expect($$(".a2-sec-fold.batch input.a2-tick")).toHaveLength(0);
+    // One yes, on the fold's line: its rows do not repeat it.
+    expect($$(".a2-sec-fold.batch .a2-inline-yes")).toHaveLength(1);
     expect($(".a2-sec-fold.batch .a2-inline-yes")?.textContent).toBe("Archiver");
   });
 
@@ -283,6 +285,10 @@ describe("Table and Timeline", () => {
     expect($$(".a2-tl-prog .a2-bar > span").map((s) => s.className)).toEqual(["a2-seg-done", "a2-seg-now", "a2-seg"]);
     act(() => root.unmount());
     await mount("en", [{ id: "root", component: "Timeline", items: items.map((it) => ({ ...it, state: "done" })) }]);
+    expect($(".a2-tl-prog")).toBeNull();
+    act(() => root.unmount());
+    // A log (the night's steps, one failed) tells no progress.
+    await mount("fr", [{ id: "root", component: "Timeline", items: [{ label: "Sauvegarde", state: "done" }, { label: "Tri", state: "failed" }] }]);
     expect($(".a2-tl-prog")).toBeNull();
   });
 });

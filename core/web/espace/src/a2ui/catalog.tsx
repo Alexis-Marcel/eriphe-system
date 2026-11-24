@@ -865,10 +865,11 @@ const Timeline = createComponentImplementation(
     // alone when it is today's).
     const dated = items.length > 1 && items.every((it) => wall(it.date));
     // It says where the work stands (« 2 sur 6 · Acompte »), with a bar of
-    // its steps, while some are left: no Progress beside it.
+    // its steps, while some are still to do: no Progress beside it. A log
+    // (every step done or failed) says nothing of the kind.
     const done = items.filter((it) => it.state === "done").length;
     const current = items.find((it) => it.state === "current");
-    const left = items.length > 1 && done < items.length;
+    const left = items.length > 1 && items.some((it) => it.state === "current" || it.state === "pending" || !STATES.includes(it.state));
     return (
       <>
       <BlockTitle text={str(props.title)} />

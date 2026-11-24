@@ -47,7 +47,7 @@ Un bloc est une partie de la page d'un nœud, entre le texte. Le plus souvent, u
 - **Sections** : Les éléments d'une source, rangés par le code d'après tes notes (item_note) : d'abord les groupes où il y a à faire, une ligne par élément avec ta note et sa carte ; un groupe dont les éléments partagent une carte, un lot replié qui porte son oui ; les autres groupes repliés. Vide, en lecture, en erreur : le code le dit.
   items* texte fixe ou liaison (La source du bloc qui liste ses éléments (items)) · title texte
   Exemple : `{"id": "mails", "component": "Sections", "items": "mails"}`
-- **Figures** : Quelques chiffres côte à côte, en bandeau ; le premier bloc d'une page les montre en grand.
+- **Figures** : Quelques chiffres côte à côte, en bandeau.
   items* [{label* texte · delta nombre (L'écart signé, à l'encre avec ▲ ou ▼) · deltaLabel texte (Depuis quand (« depuis hier »)) · trend [nombre fixe, …] ou liaison (Ses dernières valeurs : une petite courbe) · unit texte · value texte ou nombre}, …] ou liaison · title texte
   Exemple : `{"id": "chiffres", "component": "Figures", "items": [{"delta": 1.8, "deltaLabel": "cette semaine", "label": "PEA", "unit": "€", "value": 18385}, {"label": "Lignes", "value": 6}]}`
 - **Gallery** : Des images en vignettes, leur titre dessous ; by ajoute un filtre par la valeur d'un champ.

@@ -117,6 +117,8 @@
 .a2-tl-prog .a2-bar > span { height: 5px; border-radius: 3px; background: var(--fill-strong); }
 .a2-tl-prog .a2-bar > .a2-seg-done { background: var(--fg); }
 .a2-tl-prog .a2-bar > .a2-seg-now { background: color-mix(in oklab, var(--fg) 40%, var(--fill-strong)); }
+/* An old page that put a Progress beside its Timeline keeps one count. */
+.a2-block:has(.a2-progress) .a2-tl-prog { display: none; }
 
 /* --- Asks ----------------------------------------------------------------- */
 .a2-asks { display: flex; flex-wrap: wrap; gap: 8px; }
