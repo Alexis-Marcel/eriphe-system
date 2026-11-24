@@ -448,8 +448,8 @@ func (c *core) callMonitor(ctx context.Context, s monitorSpec) (any, error) {
 // readSource is a read of eriphe-core's own, outside any task: the spec's
 // tool called with its arguments, or its resource read, within timeout.
 // Its result is data (resultValue, resourceValue), never understood.
-// Monitors and the live blocks (source_reads.go) read through it,
-// once sourceWhy let them.
+// Monitors and the live blocks (source_reads.go) read through it, once
+// monitorWhy (a monitor, approved) or sourceWhy (a block) let them.
 func (c *core) readSource(ctx context.Context, s monitorSpec, timeout time.Duration) (any, error) {
 	u := c.pool.get(s.Server)
 	if u == nil {

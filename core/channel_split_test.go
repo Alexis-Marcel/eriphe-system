@@ -77,6 +77,9 @@ func TestTelegramSendsInParts(t *testing.T) {
 	linked(c)
 	tg := tgOf(c)
 	s := longText(10000)
+	f.mu.Lock()
+	f.limited = 1 // a rate limit in the burst: waited for, nothing lost
+	f.mu.Unlock()
 	buttons := [][]botButton{{{Text: "✓ Oui", Data: "pc:1:y"}, {Text: "✕ Non", Data: "pc:1:n"}}}
 	tg.post(botMessage{Text: s, Buttons: buttons})
 	tg.pending.Wait()
@@ -128,6 +131,9 @@ func TestDiscordSendsInParts(t *testing.T) {
 	linkDiscord(t, c, b)
 	before := len(f.sentNow())
 	s := longText(7000) + strings.Repeat("🙂", 1500)
+	f.mu.Lock()
+	f.limited = 2 // rate limits in the burst: waited for, nothing lost
+	f.mu.Unlock()
 	b.post(botMessage{Text: s, Buttons: [][]botButton{{{Text: "✓ Oui", Data: "pc:1:y"}}}})
 	b.pending.Wait()
 	sent := f.sentNow()[before:]

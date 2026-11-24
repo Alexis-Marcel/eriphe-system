@@ -4522,8 +4522,9 @@ applies (`botSpec.TextMax`, counted in UTF-16 code units, never fewer than chara
 cut at a blank line, else a line's end, else a space, else between two characters: nothing is
 dropped but the spaces a cut falls on. Its buttons go on the last part, after everything they
 answer, which keeps 200 units free for what a tap writes under it (« → Fait »); should that still
-not fit, the message only loses its buttons and what was done follows it. A part that fails stops
-the rest, logged with its number. Its routes (`/settings/access/<id>`, `/channels/<id>/…`), page, row, store keys
+not fit, the message only loses its buttons and what was done follows it. A part the service asks
+to wait for (a rate limit, `retry_after` up to 30 s) is sent again after that wait, three tries at
+most; a part that still fails stops the rest, logged with its number. Its routes (`/settings/access/<id>`, `/channels/<id>/…`), page, row, store keys
 (`<id>_user`, `<id>_chat`, …) and vault secret (`<id>-bot`) follow from its id.
 
 - **Setup.** The user creates a bot and pastes its token in Settings → Access: checked by the

@@ -583,10 +583,7 @@ func (b *botChannel) send(ctx context.Context, token, chat string, m botMessage)
 		if i == len(parts)-1 {
 			part.Buttons = m.Buttons
 		}
-		pctx, cancel := context.WithTimeout(ctx, botSendTime)
-		err := scrub(b.tr.send(pctx, token, chat, part), token)
-		cancel()
-		if err != nil {
+		if err := b.sendPart(ctx, token, chat, part); err != nil {
 			if len(parts) > 1 {
 				err = fmt.Errorf("%w (part %d of %d; the rest is not sent)", err, i+1, len(parts))
 			}
@@ -596,9 +593,32 @@ func (b *botChannel) send(ctx context.Context, token, chat string, m botMessage)
 	return nil
 }
 
+// sendPart sends one message, within botSendTime. A service that says to
+// wait (a rate limit, likelier in a burst of parts) is waited for and
+// tried again, botSendTries times at most, so a long message's end is not
+// lost to it.
+func (b *botChannel) sendPart(ctx context.Context, token, chat string, m botMessage) error {
+	for try := 1; ; try++ {
+		pctx, cancel := context.WithTimeout(ctx, botSendTime)
+		err := b.tr.send(pctx, token, chat, m)
+		cancel()
+		var ra retryAfter
+		if err == nil || try == botSendTries || !errors.As(err, &ra) || ra.retryAfter() <= 0 || ra.retryAfter() > botSendTime {
+			return scrub(err, token)
+		}
+		select {
+		case <-ctx.Done():
+			return scrub(err, token)
+		case <-time.After(ra.retryAfter()):
+		}
+	}
+}
+
 const (
-	// botSendTime is as long as one message may take to send.
-	botSendTime = 30 * time.Second
+	// botSendTime is as long as one message may take to send, and the
+	// longest wait a service may ask for before it is tried again.
+	botSendTime  = 30 * time.Second
+	botSendTries = 3
 	// botDoneRoom is what the part with buttons keeps free for what a tap
 	// writes under it (« → Fait »): the edit then fits the service.
 	botDoneRoom = 200

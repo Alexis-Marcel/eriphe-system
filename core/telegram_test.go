@@ -31,6 +31,7 @@ type fakeTelegram struct {
 	edited   []map[string]any // editMessageText
 	polls    int
 	fail     int // getUpdates that fail before it works again
+	limited  int // sendMessage answered 429 before one goes through
 }
 
 func newFakeTelegram(t *testing.T) *fakeTelegram {
@@ -80,6 +81,11 @@ func (f *fakeTelegram) serve(rw http.ResponseWriter, r *http.Request) {
 		}
 		ok(out)
 	case "sendMessage":
+		if f.limited > 0 {
+			f.limited--
+			reply(429, map[string]any{"ok": false, "error_code": 429, "description": "Too Many Requests", "parameters": map[string]any{"retry_after": 1}})
+			return
+		}
 		f.sent = append(f.sent, in)
 		ok(map[string]any{"message_id": len(f.sent)})
 	case "answerCallbackQuery":
