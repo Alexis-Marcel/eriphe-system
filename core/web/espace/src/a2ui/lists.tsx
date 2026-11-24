@@ -1,14 +1,15 @@
 import { createContext, useContext, type ReactNode } from "react";
 import type { GraphNode, ListRow, Opened, SourceList } from "../data/api";
 import { useWords } from "../i18n";
-import { InlineYes, RowItem } from "./inline";
+import { InlineNo, InlineYes, RowItem } from "./inline";
 import { Opener, type OpenState } from "./opener";
 
 // The Lists of a source's items eriphe-core tells the page of (list_rows.go,
 // list_sections.go): a List that filters the source's items (a section:
 // « À supprimer ») shows only the rows code kept, in the source's order;
-// a row a card waits on carries that card's Oui, drawn by the page from
-// what eriphe-core told of the row, never from the block's data; a row
+// a row a card waits on carries that card's Oui (rows that all share one:
+// once, at their head), drawn by the page from what eriphe-core told of
+// the row, never from the block's data; a row
 // whose source opens its items opens in place (opener.tsx). Nothing in a
 // block acts: no box, no action bar, no mark. A yes is a card's.
 
@@ -16,7 +17,7 @@ import { Opener, type OpenState } from "./opener";
 // surface is, if eriphe-core told of it, and how to read an item in full
 // (none on an older version), what the page read, by surface, List and
 // item, and whether a surface is a block marked as someone else's words
-// (its edge says it): an item opened in it says nothing more.
+// (the page's head says it): an item opened in it says nothing more.
 export type Lists = {
   list(surface: string, component: string): SourceList | undefined;
   open?: (surface: string, list: SourceList, item: string) => Promise<Opened>;
@@ -88,17 +89,51 @@ export { RowItem };
 export type Row = { n: number; node: ReactNode };
 
 // SourceRows draws a List's rows: a batch's with their boxes (BatchRows),
-// any other with each row's card.
+// those that all share one card with its Oui once at their head
+// (HeadRows), any other with each row's card.
 export function SourceRows({ surface, list, lists, rows, direction }: { surface: string; list: SourceList; lists: Lists; rows: Row[]; direction: string }) {
   const batch = useContext(BatchContext);
   const byN = new Map(list.items.map((it) => [it.n, it]));
   if (batch && batch.list === list.component) return <BatchRows surface={surface} list={list} lists={lists} rows={rows} direction={direction} batch={batch} />;
+  const card = rows.length > 1 && !batch ? sharedCard(list.items) : undefined;
+  if (card) return <HeadRows surface={surface} list={list} lists={lists} rows={rows} direction={direction} card={card} />;
   return (
     <ul className={`a2-list a2-list-${direction}`}>
       {rows.map((r) => (
         <li key={r.n}>{openable(surface, list, lists, r.node, byN.get(r.n))}</li>
       ))}
     </ul>
+  );
+}
+
+// HeadRows are the rows of a List that all share one card (calls folded
+// into one, call_fold.go): its Oui once, at the List's head, saying what
+// it does to them all (« Accepter les 6 »), and on each row only a ✕ that
+// refuses that row's own call, the card waiting on with the others. One
+// Oui, never the same one repeated on each row.
+function HeadRows({ surface, list, lists, rows, direction, card }: { surface: string; list: SourceList; lists: Lists; rows: Row[]; direction: string; card: string }) {
+  const byN = new Map(list.items.map((it) => [it.n, it]));
+  const where = { surfaceId: surface, componentId: list.component };
+  return (
+    <div className="a2-headrows">
+      <div className="a2-listhead">
+        <InlineYes refText={card} say where={where} />
+      </div>
+      <ul className={`a2-list a2-list-${direction}`}>
+        {rows.map((r) => {
+          const it = byN.get(r.n);
+          const row = it ? (
+            <div className="a2-row a2-align-start a2-rowcard">
+              {r.node}
+              <InlineNo refText={card} item={it.id} where={where} />
+            </div>
+          ) : (
+            r.node
+          );
+          return <li key={r.n}>{openable(surface, list, lists, row, it, true)}</li>;
+        })}
+      </ul>
+    </div>
   );
 }
 

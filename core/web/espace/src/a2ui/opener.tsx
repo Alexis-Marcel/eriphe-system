@@ -20,7 +20,7 @@ import { answerOne, useMoved, useProposals, type ProposalView } from "./proposal
 // code's list, never the block's data) comes next: what its Oui does,
 // the very words or event it makes, and its Oui there. One « détails »
 // at the foot holds the exact call and the item as read. Someone else's
-// words are marked once, by the page's head and the block's edge: nothing
+// words are marked once, by the page's head (its ⚠): nothing
 // here repeats it. A click on a box, a button (its card's Oui) or a link
 // of the row does not open it.
 
@@ -143,7 +143,7 @@ function OpenedView({ st, said, marked, card, where }: { st: OpenState; said: st
   const who = r.from ? sender(r.from) : null;
   const when = r.date ? stamp(lang, r.date) || r.date : "";
   const exact = (p?.fields ?? []).filter((f) => f.detail);
-  // Someone else's words in a block not marked as such (its edge says it
+  // Someone else's words in a block not marked as such (the page's head says it
   // otherwise): a small amber sign, its sentence on hover.
   const taint = (r.external || note?.external) && !marked && (
     <span className="a2-taint" role="img" title={t("espace.external.why")} aria-label={t("espace.external.why")}>

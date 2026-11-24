@@ -162,7 +162,7 @@ archived with it.
 In a block, a button Eriphe wrote sends its words to Eriphe about that page, as if you had typed
 them (that is how you answer its questions: « Do as you propose » takes every default it wrote); it
 does nothing else, and does not work on an older version. A button in a block marked as from
-outside (its quiet edge) works too, but its words may echo what Eriphe read: Eriphe takes them as
+outside (the ⚠ beside the page's title) works too, but its words may echo what Eriphe read: Eriphe takes them as
 coming from outside, not as yours, so they unlock nothing your own words would. No
 button, box or mark in a page acts: what acts waits for your yes on a card.
 
@@ -277,15 +277,19 @@ forget one. There is no rule to maintain: the workspace's only settings are how 
   one more click away (« Appel exact »). When you ask Eriphe to act on items
   a page shows ("delete these 2"), its Yes sits on those items' own lines: one card for all of
   them, a small mark saying how many share it, the others lighting up when you point at one; a Yes
-  on any line does it once, for all. Nothing waits at the foot of the page for them. The same
+  on any line does it once, for all. When one card covers every line of a list, its Yes sits once
+  at the list's head and each line has only a ✕, which leaves that line out while the others
+  still wait. Nothing waits at the foot of the page for them. The same
   thing proposed on many items (« throw away these 38 mails ») is one card too: its batch line
   carries the Yes, and unfolded you untick what you keep.
 - **Opening an item is never a yes.** A line opens as a letter when its server reads it freely;
   a read that asks your yes is not opened: ask Eriphe, who proposes it on a card.
-- **Tools to review.** When a server's tools change, « Outils à revoir » lists each change with its
-  own card: Yes accepts it, ✕ refuses it.
+- **Tools to review.** When a server's tools change, « Outils à revoir » lists each change on one
+  line, by server: what changed (« description modifiée », « lecture → modification », a new
+  tool…), what gives a tool more power first and marked « plus de pouvoir ». Open a line to see
+  only what changed. One « Accepter les N » at the top accepts them all; ✕ on a line refuses it.
 - **Content from outside cannot act.** A page that may carry someone else's words says it
-  once, by a small ⚠ beside its title (its tooltip says why), and its block has a quiet edge: a proposal shown inside it has no Yes / No and
+  once, by a small ⚠ beside its title (its tooltip says why); nothing else marks its block: a proposal shown inside it has no Yes / No and
   its card waits at the foot of the page, but for the Yes on an item's own line, which answers only
   the card Eriphe's code says waits on that very item. A mail that says "click here to approve"
   cannot make anything happen.

@@ -46,6 +46,7 @@ var rowStrings = map[string]map[string]string{
 		"espace.batch.kept": "%d gardé(s)",
 
 		"espace.row.no":       "Non, pas ça",
+		"espace.row.drop":     "Non, pas celui-ci : les autres attendent toujours",
 		"espace.row.done":     "Fait",
 		"espace.row.running":  "En cours…",
 		"espace.row.shared":   "Une seule carte pour ces %d lignes : un Oui sur l'une les fait toutes",
@@ -92,6 +93,7 @@ var rowStrings = map[string]map[string]string{
 		"espace.batch.kept": "%d kept",
 
 		"espace.row.no":       "No, not that",
+		"espace.row.drop":     "No, not this one: the others still wait",
 		"espace.row.done":     "Done",
 		"espace.row.running":  "Running…",
 		"espace.row.shared":   "One card for these %d rows: a Yes on one does them all",

@@ -5,7 +5,7 @@ import { rest } from "./rest";
 // A page as a bilan (docs/node-format.md), against the test core of
 // TestEspaceScenario: the bilan on top, drawn larger; one block that reads
 // the mails of two accounts (mail/bilan) once, written after an external
-// read (one sign in the page's head, a quiet edge on the block); « À
+// read (one sign in the page's head, nothing on the block); « À
 // traiter » whose rows say what Eriphe proposes, Sam's with its one Oui
 // (a reply its skill drafted, a card on the mail); « À jeter » as a batch
 // whose rows share one card (a trash per mail, folded); « Pour info »
@@ -33,9 +33,10 @@ test("a page as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect(lead).toHaveText("1 réponse attendue : Sam, avant vendredi. 1 hameçonnage dans le lot à jeter.");
   const size = (n: number) => pg.locator(".pg-doc > .a2-markdown:first-child > p").nth(n).evaluate((p) => parseFloat(getComputedStyle(p).fontSize));
   expect(await size(0)).toBeGreaterThan(await size(1));
-  // Someone else's words: one sign in the head (its ⚠, no word), the block's quiet edge.
+  // Someone else's words: one sign in the head (its ⚠, no word), nothing on the block.
   await expect(pg.locator(".pg-title .ext-mark")).toHaveCount(1);
-  await expect(pg.locator(".a2-block.ext .a2-block-mark")).toHaveCount(1);
+  await expect(pg.locator(".a2-block.ext")).toHaveCount(1);
+  await expect(pg.locator(".a2-block-mark")).toHaveCount(0); // no edge, no dot: the head says it
   await expect(pg.getByText("extérieur", { exact: true })).toHaveCount(0);
 
   // « À traiter »: each row what Eriphe proposes; Sam's with its one yes, its verb.
@@ -60,7 +61,7 @@ test("a page as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect(onYes.locator("figcaption")).toHaveText("Texte");
   await expect(onYes.locator(".a2-onyes-text")).toContainText("tu peux lancer la commande");
   await expect(read.locator("summary")).toHaveText(["détails"]);
-  await expect(read.locator(".a2-taint")).toHaveCount(0); // its block's edge says it
+  await expect(read.locator(".a2-taint")).toHaveCount(0); // the page's head says it
   await shots(page, "2-mail-opened");
   await todo.locator(".a2-openclose").click();
 

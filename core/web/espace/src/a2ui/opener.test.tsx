@@ -198,7 +198,7 @@ describe("an item opened in place", () => {
   it("signs someone else's words quietly only when its block is not marked", async () => {
     await mount();
     await click(disclosures()[0]);
-    expect(el.querySelector(".a2-read .a2-taint")).toBeNull(); // the block's edge says it
+    expect(el.querySelector(".a2-read .a2-taint")).toBeNull(); // the page's head says it
     act(() => root.unmount());
     adapter.dispose();
     await mount([], false);

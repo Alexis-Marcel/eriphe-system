@@ -1420,9 +1420,9 @@ func (sc *scenario) callOn(node, source, server, tool string, input map[string]a
 }
 
 // handleReview is POST /e2e/review: the news watch's server changes its
-// tool after the user added it; it is held, and « Outils à revoir » (made
-// now, as at a start) lists the change and waits for the user
-// (tools.spec.ts).
+// tool after the user added it, and adds one; both are held, and « Outils
+// à revoir » (made now, as at a start) lists the changes and waits for
+// the user (tools.spec.ts).
 func (sc *scenario) handleReview(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
 	sc.tools.mu.Lock()
@@ -1430,8 +1430,21 @@ func (sc *scenario) handleReview(rw http.ResponseWriter, r *http.Request) {
 	sc.tools.mu.Unlock()
 	s.RemoveTools("guetter")
 	mcp.AddTool(s, guetter("Guette les nouvelles du métier. Nouveau : en envoie aussi un résumé chaque matin."), guetterRun)
+	// And a new tool that changes things, its description long, one word
+	// of it longer than any line (tools.spec.ts: nothing runs past the
+	// page).
+	no := false
+	mcp.AddTool(s, &mcp.Tool{Name: "classer", Annotations: &mcp.ToolAnnotations{OpenWorldHint: &no, DestructiveHint: &no},
+		Description: "Classe chaque nouvelle dans https://veille.example.org/" + strings.Repeat("dossier-", 30) + " " +
+			strings.Repeat("selon son sujet, sa source et sa date, et garde une trace de chaque classement. ", 4)}, guetterRun)
+	// And a new one that only reads.
+	s.AddTool(&mcp.Tool{Name: "resumer", Description: "Résume une nouvelle.", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		InputSchema: map[string]any{"type": "object", "properties": map[string]any{"sujet": map[string]any{"type": "string"}, "longueur": map[string]any{"type": "integer"}}}},
+		func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return &mcp.CallToolResult{}, nil
+		})
 	u := c.pool.get("veille")
-	for deadline := time.Now().Add(10 * time.Second); !slices.Contains(u.heldTools(), "guetter"); time.Sleep(20 * time.Millisecond) {
+	for deadline := time.Now().Add(10 * time.Second); len(u.heldTools()) < 3; time.Sleep(20 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			http.Error(rw, "the changed tool is not held", http.StatusInternalServerError)
 			return

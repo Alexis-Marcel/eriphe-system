@@ -128,6 +128,26 @@ describe("a card on its rows", () => {
     expect(el.querySelector("input[type=checkbox], [role=toolbar]")).toBeNull();
   });
 
+  it("one card on all the rows, a call each: its Oui once at their head, a ✕ on each row that refuses that row alone", async () => {
+    await mount(plainList, [told("root", ["calls:9", "calls:9", "calls:9"])], { mails: { messages: mails } });
+    const yes = [...el.querySelectorAll<HTMLButtonElement>(".a2-inline-yes")];
+    expect(yes).toHaveLength(1);
+    expect(yes[0].closest(".a2-listhead")).not.toBeNull();
+    expect(yes[0].textContent).toBe("Mettre 3 mails à la corbeille");
+    const rows = [...el.querySelectorAll<HTMLLIElement>(".a2-list > li")];
+    expect(rows).toHaveLength(3);
+    for (const r of rows) {
+      expect(r.querySelector(".a2-inline-yes")).toBeNull();
+      expect(r.querySelectorAll(".a2-inline-drop .a2-inline-no")).toHaveLength(1);
+    }
+    expect(el.querySelectorAll(".a2-inline-shared")).toHaveLength(0);
+    await act(async () => rows[1].querySelector<HTMLButtonElement>(".a2-inline-no")!.click());
+    expect(answered).toEqual([{ surfaceId: surface, componentId: "root", ref: "calls:9", yes: false, left: [92] }]);
+    // The head's Oui: all of them.
+    await act(async () => yes[0].click());
+    expect(answered[1]).toMatchObject({ ref: "calls:9", yes: true, only: [91, 92, 94], left: [] });
+  });
+
   it("one card on two rows: its Oui on each, says they share it, lights its siblings, and a Oui answers it once", async () => {
     await mount(plainList, [told("root", [undefined, "access:7", "access:7"])], { mails: { messages: mails } });
     const rows = [...el.querySelectorAll<HTMLLIElement>(".a2-list > li")];
