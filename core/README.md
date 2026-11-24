@@ -1504,18 +1504,9 @@ of it, so that a prompt injection (a mail, a web page) cannot talk the brain int
    notifications show the user only the requests that are theirs (any while the brain is off or
    stopped by an error); a task's own page shows them all.
 
-For an MCP tool (`mcp__<server>__<tool>`), `match` applies to the JSON of its input (keys sorted).
-Common safe reads, allowed without asking anyone:
-
-```json
-"policy": {"rules": [
-  {"tool": "mcp__github__get_*|mcp__github__list_*|mcp__github__search_*", "decision": "allow"},
-  {"tool": "mcp__home__GetLiveContext", "decision": "allow"},
-  {"tool": "mcp__notion__notion-search|mcp__notion__notion-fetch", "decision": "allow"},
-  {"tool": "mcp__github__create_pull_request", "match": "\"draft\":true", "decision": "allow"},
-  {"tool": "mcp__home__*", "decision": "ask", "reason": "agit sur la maison"}
-]}
-```
+The file has no permission rules: `policy.rules` is gone (#239), and a configuration that still
+has them does not start (`config.go`), since starting without them could allow what they denied.
+Each tool's access is set in Réglages → Outils.
 
 Every decision (by the policy or the user) is kept in the `decisions` table.
 
@@ -1614,7 +1605,8 @@ whenever what a server lists changes, after each card, and every 5 minutes; a no
 older Eriphe gets its text and block written again at start (`refreshToolReview`). The block reads
 a server not trusted: it is external. No message tells the brain.
 
-`eriphe-catalog` is a server Eriphe provides in the pool, lent to no agent (no grant may name it):
+`eriphe-catalog` is a server Eriphe provides in the pool, lent to no agent (no grant may name it,
+and no catalog server take its name: `providedServers`, `reserved`):
 `catalog_changes` is a free read that only code calls (a block's source); `catalog_accept` is
 `never` to every agent, the brain, a task or a skill, whatever was allowed before, and runs only
 on the user's yes on the card code made (`catalogCall`: a gesture tool runs on a card's yes, logged
@@ -1622,8 +1614,8 @@ in the journal as the user's). There is no refuse tool: a no is the card's ✕. 
 (`POST /settings/tools/{name}/approve`): it accepts all the server's held tools at once, refused
 ones included. A server cannot reword a description or turn a send into a read behind the user's
 back. Removing the server forgets its pins and its refusals. Eriphe's own servers are not pinned:
-those it provides (folders) and those shipped with it (run from its images: mail, calendar, files,
-Signal), whose tools change with Eriphe's updates, which the user already chooses (`tool_pins.go`).
+those it provides (folders) and those shipped with it (run from its images: mail, calendar and
+files, the tool cards marked `OwnVersion`), whose tools change with Eriphe's updates, which the user already chooses (`tool_pins.go`).
 
 ### The approval card
 
@@ -1748,7 +1740,7 @@ kept apart from **how** its credential is scoped.
 
 A read is what the server itself marks `readOnlyHint`. `ask` asks for everything, reads included.
 `reads` is the default of the presets; "Other…" (a server whose annotations nobody vouches for)
-starts on `ask`, as does an entry without `access`. Whatever the level, the built-in denials come first, then the file's rules.
+starts on `ask`, as does an entry without `access`. Whatever the level, the built-in denials come first.
 
 **Per account.** The mail and the calendar are one server each for every account (`mail`,
 `agenda`: [one server per service](#mail-and-calendar-one-server-per-service)), and each account
@@ -1858,8 +1850,7 @@ Skills** (`web_skills.go`):
 - **A new version** (the same name, uploaded again) waits for approval with its diff against the
   approved one, file by file. Tasks keep the approved version until the user approves the new one
   (the hash they read is checked) or keeps the old one.
-- **On or off**, and **delete**. A skill the code turned off says why on its page and in the
-  list (`skills.off_why`); approving a new version turns it back on. A version that no longer
+- **On or off**, and **delete**; only the user turns a skill off. A version that no longer
   reads (its front matter refused) is shown still, with the reason. Bundles no skill points at any more are deleted, but for the last five versions a skill replaced or had when deleted (`skill_kept`), which the [learning journal](#what-eriphe-learned) needs to undo a change; they are never given to a task.
 
 **In tasks.** Every worker task gets the skills that are approved and on when it starts, as its

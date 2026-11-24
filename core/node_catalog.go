@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"slices"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -18,12 +17,6 @@ import (
 // every worker task with a node beside its node's tools (eriphe-nodes,
 // task_nodes.go), never lent: whoever writes a node has the grammar it
 // is written in.
-
-// providedServers are the servers Eriphe provides itself, lent as the
-// catalog's are, by name or name.tool.
-var providedServers = []string{foldersServer}
-
-func providedServer(name string) bool { return slices.Contains(providedServers, name) }
 
 // registerCatalogTools adds the catalog's tools to an MCP server.
 func (c *core) registerCatalogTools(s *mcp.Server) {

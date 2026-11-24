@@ -108,8 +108,27 @@ type providedUpstream struct {
 	codeReads bool
 }
 
+// providedServers are the servers Eriphe provides itself, in this process
+// (provide), and whether each is lent as the catalog's are, by name or
+// name.tool: eriphe-folders is; eriphe-catalog is lent to no agent
+// (tool_review.go). No catalog server may take their names (reserved).
+var providedServers = map[string]bool{foldersServer: true, reviewServer: false}
+
+// providedServer tells a server Eriphe provides that a grant may name.
+func providedServer(name string) bool { return providedServers[name] }
+
+// providedCall tells a call (mcp__<server>__<tool>) of a server Eriphe
+// provides that a grant may name.
+func providedCall(name string) bool {
+	server, _, ok := splitToolName(name)
+	return ok && providedServer(server)
+}
+
 // provide adds a server Eriphe provides, which the catalog never removes.
 func (p *pool) provide(name string, srv Server, pu *providedUpstream) {
+	if _, ok := providedServers[name]; !ok {
+		panic("pool: " + name + " is not one of providedServers")
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if old := p.ups[name]; old != nil {

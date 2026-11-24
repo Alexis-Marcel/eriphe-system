@@ -8,6 +8,34 @@ import (
 	"time"
 )
 
+// A skills table made with the off_why column, never written, loses it at
+// open, its skills kept; opening again changes nothing.
+func TestOpenStoreDropsSkillOffWhy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "core.db")
+	s, err := openStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`ALTER TABLE skills ADD COLUMN off_why TEXT NOT NULL DEFAULT '';
+INSERT INTO skills (name, enabled, updated) VALUES ('brief', 0, 1);`); err != nil {
+		t.Fatal(err)
+	}
+	s.db.Close()
+	for range 2 {
+		s, err := openStore(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var n int
+		s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('skills') WHERE name = 'off_why'`).Scan(&n)
+		ks, err := s.skills()
+		if n != 0 || err != nil || len(ks) != 1 || ks[0].Name != "brief" || ks[0].Enabled {
+			t.Fatalf("off_why %d, skills %+v, %v", n, ks, err)
+		}
+		s.db.Close()
+	}
+}
+
 // A monitors table made before the hook column gets it at open, and
 // opening again changes nothing.
 func TestOpenStoreAddsMonitorHook(t *testing.T) {

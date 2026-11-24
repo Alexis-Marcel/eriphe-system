@@ -42,10 +42,9 @@ const skillKept = 5
 
 func init() {
 	extraSchema = append(extraSchema, skillSchema)
-	// off_why: why the code turned a skill off (a text key), "" when the
-	// user did or it is on; a skills table made before has it not.
+	// off_why: never written; a skills table made before has it.
 	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
-		return addColumn(db, "skills", "off_why", "TEXT NOT NULL DEFAULT ''")
+		return dropColumn(db, "skills", "off_why")
 	})
 }
 
@@ -321,9 +320,8 @@ type Skill struct {
 	Approved    string      `json:"sha256,omitempty"`  // the version tasks get, if approved
 	Pending     string      `json:"pending,omitempty"` // a version waiting for approval
 	Enabled     bool        `json:"enabled"`
-	OffWhy      string      `json:"off_why,omitempty"` // why the code turned it off: a text key; approving a new version turns it on
-	Broken      *skillError `json:"-"`                 // its version shown does not read: why
-	Source      string      `json:"source,omitempty"`  // upload, or github:owner/repo/path@commit
+	Broken      *skillError `json:"-"`                // its version shown does not read: why
+	Source      string      `json:"source,omitempty"` // upload, or github:owner/repo/path@commit
 	ApprovedAt  time.Time   `json:"approved_at,omitzero"`
 	Updated     time.Time   `json:"updated"`
 	Files       int         `json:"files"`
@@ -383,7 +381,7 @@ func (s *Store) skillVersion(sha string) (*skillVersion, error) {
 var errNoSkill = errors.New("no such skill")
 
 func (s *Store) skills() ([]Skill, error) {
-	rows, err := s.db.Query(`SELECT name, approved, pending, enabled, off_why, source, approved_at, updated FROM skills ORDER BY name`)
+	rows, err := s.db.Query(`SELECT name, approved, pending, enabled, source, approved_at, updated FROM skills ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +389,7 @@ func (s *Store) skills() ([]Skill, error) {
 	for rows.Next() {
 		var k Skill
 		var at, up int64
-		if err := rows.Scan(&k.Name, &k.Approved, &k.Pending, &k.Enabled, &k.OffWhy, &k.Source, &at, &up); err != nil {
+		if err := rows.Scan(&k.Name, &k.Approved, &k.Pending, &k.Enabled, &k.Source, &at, &up); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -502,9 +500,7 @@ func (s *Store) approveSkillVersion(name, sha string) (prev string, err error) {
 		return "", errNoSkill
 	}
 	now := time.Now().Unix()
-	// A skill the code turned off is on again with the version approved.
-	if _, err := tx.Exec(`UPDATE skills SET approved = pending, pending = '', approved_at = ?, updated = ?,
-		enabled = enabled OR off_why != '', off_why = '' WHERE name = ?`, now, now, name); err != nil {
+	if _, err := tx.Exec(`UPDATE skills SET approved = pending, pending = '', approved_at = ?, updated = ? WHERE name = ?`, now, now, name); err != nil {
 		return "", err
 	}
 	if err := keepSkillVersion(tx, name, prev); err != nil {
@@ -584,7 +580,7 @@ func (s *Store) rejectSkill(name string) error {
 }
 
 func (s *Store) enableSkill(name string, on bool) error {
-	res, err := s.db.Exec(`UPDATE skills SET enabled = ?, off_why = '', updated = ? WHERE name = ?`, on, time.Now().Unix(), name)
+	res, err := s.db.Exec(`UPDATE skills SET enabled = ?, updated = ? WHERE name = ?`, on, time.Now().Unix(), name)
 	if err != nil {
 		return err
 	}

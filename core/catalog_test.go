@@ -176,6 +176,7 @@ func TestCatalogServers(t *testing.T) {
 	wantKey(t, c.putServer(putUpdate, "nope", home, nil), "catalog.notfound")
 	wantKey(t, c.putServer(putCreate, "Bad_Name", home, nil), "catalog.badname")
 	wantKey(t, c.putServer(putCreate, "eriphe-core", home, nil), "catalog.badname")
+	wantKey(t, c.putServer(putCreate, reviewServer, home, nil), "catalog.badname") // provided: eriphe-catalog
 	bad := []Server{
 		{URL: "http://x/mcp", Auth: &ServerAuth{None: true}},                          // no use
 		{URL: "ftp://x", Auth: &ServerAuth{None: true}, Use: "x"},                     // bad url
