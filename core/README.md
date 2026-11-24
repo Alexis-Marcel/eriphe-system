@@ -1450,8 +1450,9 @@ a page: the brain composes each one from the catalog.
   needs work as things arrive, it proposes the skill that maintains it (`write_skill` with `node`
   and a `when` keyed on a monitor). A monitor that does not exist yet comes on the same card
   (write_skill's `monitor`, write_monitor's fields, checked by `checkSkillMonitor`: a new name its
-  `when` keys on): kept beside the pending version (kv `skill_monitor:<name>:<sha>`), shown first
-  on the skill's card (« Moniteur <name> »), and made on by the same yes, on the card
+  `when` keys on): kept beside the pending version (kv `skill_monitor:<name>:<sha>`, said again by
+  each write: written again without it, the version brings none), shown first on the skill's card
+  (« Moniteur <name> »; the card waits on its home node, `skillHomeOf`), and made on by the same yes, on the card
   (`decideSkill`) or in Settings (`approveSkill`), through `skillMonitorMade`; an approval that then
   fails takes the monitor back, and the card waits still. No makes neither. Until the monitor is
   on, a block reads its tool or resource itself: `nodeSourceOK` accepts only a monitor the user

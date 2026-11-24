@@ -130,3 +130,25 @@ func TestFormat1DropsLifetime(t *testing.T) {
 		t.Fatal("format 1's full.md converted is not today's full.md")
 	}
 }
+
+// Only the front matter's own lifetime line goes: the same words in the
+// body, or indented under another key, stay; a format line already there
+// is said again in place; a CRLF file keeps its line endings.
+func TestFormat1LifetimeLineOnly(t *testing.T) {
+	for _, c := range []struct{ name, in, want string }{
+		{"format said",
+			"---\nformat: 1\nid: a1b2c3d4e5\ntitle: Plan\nlifetime: work\ncreated: 2026-11-01T09:00:00Z\nupdated: 2026-11-01T09:00:00Z\n---\nLe plan.\n",
+			"---\nformat: 2\nid: a1b2c3d4e5\ntitle: Plan\ncreated: 2026-11-01T09:00:00Z\nupdated: 2026-11-01T09:00:00Z\n---\nLe plan.\n"},
+		{"body and nested kept",
+			"---\nid: a1b2c3d4e5\ntitle: Plan\nlifetime: standing\nprops:\n  lifetime: longue\ncreated: 2026-11-01T09:00:00Z\nupdated: 2026-11-01T09:00:00Z\n---\nlifetime: standing\n",
+			"---\nformat: 2\nid: a1b2c3d4e5\ntitle: Plan\nprops:\n  lifetime: longue\ncreated: 2026-11-01T09:00:00Z\nupdated: 2026-11-01T09:00:00Z\n---\nlifetime: standing\n"},
+		{"crlf",
+			"---\r\nid: a1b2c3d4e5\r\ntitle: Plan\r\nlifetime: standing\r\ncreated: 2026-11-01T09:00:00Z\r\nupdated: 2026-11-01T09:00:00Z\r\n---\r\nLe plan.\r\n",
+			"---\r\nformat: 2\r\nid: a1b2c3d4e5\r\ntitle: Plan\r\ncreated: 2026-11-01T09:00:00Z\r\nupdated: 2026-11-01T09:00:00Z\r\n---\r\nLe plan.\r\n"},
+	} {
+		out, err := Upgrade([]byte(c.in), Conversions())
+		if err != nil || string(out) != c.want {
+			t.Errorf("%s: %v\n%q\nwant\n%q", c.name, err, out, c.want)
+		}
+	}
+}

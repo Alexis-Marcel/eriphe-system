@@ -144,9 +144,8 @@ func TestBrainNodeTools(t *testing.T) {
 	if _, msg := brainNodes(t, c, "node_open", map[string]any{"title": "Enfant", "parent": "nothere"}); msg == "" {
 		t.Error("a child of a missing node")
 	}
-	// node_open opens a piece of work only: it has no lifetime to ask for
-	// (a view is made only by propose_view, on the user's yes); nothing is
-	// made.
+	// node_open has no lifetime to ask for (a node is maintained by a
+	// skill homed on it, never by a kind of its own); nothing is made.
 	n := len(mustGraph(t, c))
 	if _, msg := brainNodes(t, c, "node_open", map[string]any{"title": "Ma journée", "lifetime": "standing"}); msg == "" {
 		t.Error("a node_open with a lifetime")

@@ -691,6 +691,27 @@ func TestSkillMonitorAllOrNothing(t *testing.T) {
 		t.Fatalf("no kept the skill %+v", k)
 	}
 
+	// Written again, the same skill without its monitor: the last write
+	// says it, its yes makes the skill alone.
+	again := maps.Clone(skill)
+	again["name"], again["when"] = "prod3", "monitor.crossed key=cpu3"
+	again["monitor"] = maps.Clone(skill["monitor"].(map[string]any))
+	again["monitor"].(map[string]any)["name"] = "cpu3"
+	if out, isErr := callBrainTool(t, c, "write_skill", again); isErr {
+		t.Fatal(out)
+	}
+	delete(again, "monitor")
+	if out, isErr := callBrainTool(t, c, "write_skill", again); isErr {
+		t.Fatal(out)
+	}
+	card = cardsOf(c, cardSkill)[0]
+	if err := c.decideProposal(context.Background(), cardSkill, card.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.monitorNamed("cpu3"); err == nil {
+		t.Fatal("a monitor the last write left out was made")
+	}
+
 	srv := connectServer(t, newMCPServer(c))
 	for _, tc := range []struct{ tool, want string }{
 		// A monitor the skill does not key on, one that exists, a home gone.

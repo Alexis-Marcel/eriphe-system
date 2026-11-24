@@ -144,10 +144,12 @@ func (c *core) writeSkill(in writeSkillIn, tainted []string) (map[string]any, er
 	if len(tainted) > 0 {
 		c.store.set(skillTaintKey(k.Name, k.Pending), strings.Join(tainted, ", "))
 	}
+	kept := "" // the last write says it: written again without one, the version brings none
 	if mon != nil {
 		raw, _ := json.Marshal(mon)
-		c.store.set(skillMonitorKey(k.Name, k.Pending), string(raw))
+		kept = string(raw)
 	}
+	c.store.set(skillMonitorKey(k.Name, k.Pending), kept)
 	card := c.cardProposed(cardSkill, id)
 	out := map[string]any{"result": "written; it waits for the user's approval on its card, then runs as it says",
 		"skill": k.Name, "card": card, "see": "/settings/skills/" + k.Name}
