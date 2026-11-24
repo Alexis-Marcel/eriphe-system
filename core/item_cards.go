@@ -134,12 +134,13 @@ func (c *core) callsProposal(p proposal) proposal {
 	}
 	p.Fields = append(shown, details...)
 	p.origin = func(lang string) cardOrigin { return c.callsOrigin(first, items, lang) }
-	// Where they act, quietly beside the words, when it is one place.
+	// The account or folder they act in, quietly beside the words, when
+	// it is one; on items, its server alone says nothing their rows do not.
 	p.context = func(lang string) string {
 		out := ""
 		for i, a := range asks {
 			w := c.callAccountWords(a, lang)
-			if i > 0 && w != out {
+			if len(items) > 0 && w == c.serverWords(a) || i > 0 && w != out {
 				return ""
 			}
 			out = w

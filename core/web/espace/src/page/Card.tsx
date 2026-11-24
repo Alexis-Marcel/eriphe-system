@@ -107,7 +107,7 @@ export function Card({ refText, surface }: { refText: string; surface: string })
   const home = Boolean(homeNode && p.node === homeNode);
   // A call's origin (the skill that kept it) is a quiet line, never its
   // subtitle: beside where it comes from, under Détails on its own page.
-  const aside = p.kind === "calls" || p.kind === "runcalls" ? p.why : undefined;
+  const aside = p.kind === "calls" ? p.why : undefined;
   const why = aside ? undefined : p.why;
   // Its origin quotes words that may be someone else's (fromExternal):
   // shown as eriphe-core marked them, in the external amber.

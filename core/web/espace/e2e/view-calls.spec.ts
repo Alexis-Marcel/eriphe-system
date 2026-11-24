@@ -67,7 +67,7 @@ test("a call to approve says what it does to which items, on their rows", async 
   // their titles, the account apart; its exact call under its one
   // « détails »; no line of what Oui does.
   const ref = await colis.locator(".a2-inline").getAttribute("data-row-card");
-  expect(ref).toMatch(/^access:\d+$/);
+  expect(ref).toMatch(/^calls:\d+$/);
   const card = await (await page.request.get(`/api/proposals/${ref}`)).json();
   expect(card.text).toBe("Mettre 2 mails à la corbeille");
   expect(card.context).toBe("compte perso");

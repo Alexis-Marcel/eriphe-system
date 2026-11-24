@@ -135,11 +135,11 @@ describe("a card", () => {
   });
 
   it("names its exact call one click further than its Détails, and a skill's origin as a quiet line", async () => {
-    await draw("fr", "runcalls:2", {
+    await draw("fr", "calls:2", {
       read: async () => ({
-        ref: "runcalls:2",
+        ref: "calls:2",
         card: 2,
-        kind: "runcalls",
+        kind: "calls",
         state: "pending",
         text: "Accepter « Picnic » · Sam",
         why: "Skill « ma-journee »",

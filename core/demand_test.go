@@ -209,7 +209,9 @@ func TestDemandOnNoItemIsABlock(t *testing.T) {
 	}
 	pg, _ := (&web{c: c}).nodePageOf(node, 0, "fr")
 	for _, want := range []string{ref, other} {
-		if !slices.ContainsFunc(pg.Parts, func(p pagePart) bool { return p.Block != nil && p.Block.Proposal != nil && p.Block.Proposal.Ref == want }) {
+		if !slices.ContainsFunc(pg.Parts, func(p pagePart) bool {
+			return p.Block != nil && p.Block.Proposal != nil && p.Block.Proposal.Ref == want
+		}) {
 			t.Errorf("%s is not drawn in the page", want)
 		}
 		if slices.ContainsFunc(pg.Cards, func(v proposalView) bool { return v.Ref == want }) {

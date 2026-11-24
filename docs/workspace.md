@@ -280,8 +280,12 @@ forget one. There is no rule to maintain: the workspace's only settings are how 
   on any line does it once, for all. When one card covers every line of a list, its Yes sits once
   at the list's head and each line has only a ✕, which leaves that line out while the others
   still wait. Nothing waits at the foot of the page for them. The same
-  thing proposed on many items (« throw away these 38 mails ») is one card too: its batch line
-  carries the Yes, and unfolded you untick what you keep.
+  thing proposed on many items (« throw away these 38 mails ») is one card too, whoever proposed
+  it (Eriphe in the conversation, or each pass of the skill that keeps the page), each item once:
+  its batch line carries the Yes, and unfolded you untick what you keep. An item that leaves the
+  page's list (you deleted that mail elsewhere) leaves the card; a card left with nothing is
+  withdrawn. A proposal on no item of the page (roll back a release, create an event) is a card in
+  the page where Eriphe wrote it, under the plan it asks you to validate, else at the page's end.
 - **Opening an item is never a yes.** A line opens as a letter when its server reads it freely;
   a read that asks your yes is not opened: ask Eriphe, who proposes it on a card.
 - **Tools to review.** When a server's tools change, « Outils à revoir » lists each change on one

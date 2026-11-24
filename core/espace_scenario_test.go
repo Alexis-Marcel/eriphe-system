@@ -1340,9 +1340,8 @@ func (sc *scenario) handleProposals(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 		c.store.db.Exec(`UPDATE access_asks SET batch = ? WHERE id = ?`, id, id)
-		c.cardNow(cardCalls, id, "", refNode+":"+node)
 	}
-	c.foldCalls() // as a run's end does (skill_runs.go)
+	sc.showCalls(node)
 	c.syncCards()
 	c.bump()
 	rw.WriteHeader(http.StatusNoContent)
@@ -1375,12 +1374,23 @@ func (sc *scenario) handleRows(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	c.foldCalls() // as a run's end does (skill_runs.go)
+	sc.showCalls(id)
 	c.syncCards()
 	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)
 	c.bump()
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
+}
+
+// showCalls folds the calls kept on a node, then shows a card for each,
+// as a run's end does (skill_runs.go): no card shown only to be folded.
+func (sc *scenario) showCalls(node string) {
+	c := sc.c
+	c.foldCalls()
+	for _, b := range c.store.ids(`SELECT DISTINCT batch FROM access_asks WHERE node = ? AND state = ? AND batch != 0
+		AND NOT EXISTS (SELECT 1 FROM convo_cards WHERE ref = 'calls:' || access_asks.batch)`, node, startProposed) {
+		c.cardNow(cardCalls, b, "", refNode+":"+node)
+	}
 }
 
 // callOn keeps a call of the brain's on items of a node's source, waiting
@@ -1399,7 +1409,6 @@ func (sc *scenario) callOn(node, source, server, tool string, input map[string]a
 	if _, err := c.store.db.Exec(`UPDATE access_asks SET batch = ? WHERE id = ?`, ask, ask); err != nil {
 		return err
 	}
-	c.cardNow(cardCalls, ask, "", refNode+":"+node)
 	return nil
 }
 
@@ -1481,7 +1490,7 @@ func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	c.foldCalls() // as a run's end does (skill_runs.go)
+	sc.showCalls(id)
 	c.syncCards()
 	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)
@@ -1573,7 +1582,7 @@ func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	c.foldCalls() // as a run's end does (skill_runs.go)
+	sc.showCalls(id)
 	c.syncCards()
 	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)

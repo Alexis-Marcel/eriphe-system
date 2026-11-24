@@ -70,7 +70,6 @@ func (c *core) keepCall(ctx context.Context, k keeper, tool string, input map[st
 		if a.Node != "" {
 			inherit, source = func() string { return c.sourceAbout(nodeRef(a.Node)) }, nodeRef(a.Node)
 		}
-		c.turn.wrote()
 		c.cardProposedBy(cardCalls, a.Batch, inherit, source)
 	}
 	return a
