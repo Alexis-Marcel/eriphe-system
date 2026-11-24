@@ -12,7 +12,7 @@ import (
 // the file named by TOOL_CONFIG_FILE (or -config).
 type Config struct {
 	Accounts []AccountConfig `json:"accounts"`
-	// MaxResults caps search_messages results (default 50).
+	// MaxResults caps search_messages results (default 200).
 	MaxResults int `json:"max_results,omitempty"`
 	// MaxBodyChars caps the text returned by read_message (default 20000).
 	MaxBodyChars int `json:"max_body_chars,omitempty"`
@@ -132,7 +132,7 @@ func LoadConfig(text, file string) (*Config, error) {
 
 func (cfg *Config) normalize() error {
 	if cfg.MaxResults <= 0 {
-		cfg.MaxResults = 50
+		cfg.MaxResults = 200
 	}
 	if cfg.MaxBodyChars <= 0 {
 		cfg.MaxBodyChars = 20000

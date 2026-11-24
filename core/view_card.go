@@ -169,9 +169,6 @@ func (c *core) proposeView(in proposeViewIn, tainted []string) (map[string]any, 
 			return nil, err
 		}
 	}
-	if len(n.Blocks()) > 0 {
-		c.readNodeLater(context.Background(), v.Node, nil) // its page shows real data at once (node_live.go)
-	}
 	card := c.cardProposed(cardViewKind, v.ID)
 	if was.ID != 0 { // the same card, saying the new proposal
 		p := c.proposalOf(cardViewKind, v.ID)
@@ -179,8 +176,12 @@ func (c *core) proposeView(in proposeViewIn, tainted []string) (map[string]any, 
 		c.proposalMoved(card)
 	}
 	c.showDraft(v.Node)
-	return map[string]any{"result": "its draft is open, showing the page, and its card waits on it: the user's yes makes it standing, with its monitor and its skill",
-		"node": v.Node, "card": card, "note": "Nothing to place: talk about it in the subject; to change it, call propose_view again with node."}, nil
+	out := map[string]any{"result": "its draft is open, showing the page, and its card waits on it: the user's yes makes it standing, with its monitor and its skill",
+		"node": v.Node, "card": card, "note": "Nothing to place: talk about it in the subject; to change it, call propose_view again with node."}
+	if page := c.pageReport(v.Node, true); page != nil {
+		out["page"] = page // its sources read at once: what it shows (page_report.go)
+	}
+	return out, nil
 }
 
 // showDraft puts a view's draft in front of the user, in a turn that

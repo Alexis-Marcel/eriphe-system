@@ -283,6 +283,17 @@ per section whose template's path filters the source's items by a field:
   `emptyText`.
 - A `Fold` with `list` names a `List` of the block bound to a source's items: its line counts that
   List's rows and carries the Oui of the card they share, if any.
+- A `Metric` with `list` (in place of `value`) names such a `List` too: its figure is the number of
+  rows code keeps, its filters applied, and follows each read of the source. A page that lasts says
+  its facts so, or with a `Metric` bound to a source's field, never in frozen text.
+
+### Setup buttons
+
+A `Button` that sets something up says what with `until`, one of `{"tool": "<server>"}` (a tool in
+the catalog that waits for no authorization), `{"monitor": "<name>"}` (a monitor that runs) or
+`{"skill": "<name>"}` (a skill approved and on). Code hides it from the page once that holds (and a
+`Row` or `Column` it leaves empty, a `Card` or `Fold` whose child it was), reading its own records
+each time the page is drawn: its author need not take it away.
 
 A skill's run whose call acts on an item without naming it (an event made from a mail) puts it on
 that item with `item_note`'s `call` (the reference the run was told when the call was kept): its

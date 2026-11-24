@@ -442,6 +442,9 @@ const Button = createComponentImplementation(
       icon: IconName.optional(),
       variant: z.enum(["primary", "default", "quiet"]).optional(),
       action: CommonSchemas.Action,
+      // What it sets up: eriphe-core hides it once that holds
+      // (core/setup_buttons.go); the page never sees one that did.
+      until: z.object({ tool: z.string(), monitor: z.string(), skill: z.string() }).partial().optional(),
     }),
   },
   ({ props }) => (
@@ -578,18 +581,22 @@ const Metric = createComponentImplementation(
     name: "Metric",
     schema: z.object({
       label: CommonSchemas.DynamicString,
-      value: TextOrNumber,
+      value: TextOrNumber.optional(),
+      list: z.string().optional(),
       unit: CommonSchemas.DynamicString.optional(),
       delta: CommonSchemas.DynamicNumber.optional(),
       deltaLabel: CommonSchemas.DynamicString.optional(),
       trend: listOr(z.number()).optional(),
     }),
   },
-  ({ props }) => {
+  ({ props, context }) => {
     const { t, lang } = useWords();
     const trend = cleanTrend(props.trend);
-    const n = typeof props.value === "number" ? props.value : undefined;
-    const value = n !== undefined ? number(lang, n) : str(props.value);
+    // A figure that counts a List's rows, as eriphe-core told of them: its
+    // filters applied, and again at each read of its source (lists.tsx).
+    const told = useList(context.dataContext.surface?.id, props.list ?? "");
+    const n = props.list ? (told ? told.list.items.length : undefined) : typeof props.value === "number" ? props.value : undefined;
+    const value = n !== undefined ? number(lang, n) : props.list ? "—" : str(props.value);
     const unit = str(props.unit);
     // Its change in ink, and one sign of which way: ▲ up, ▼ down, none
     // when it did not move. Colour says a state, never a change.

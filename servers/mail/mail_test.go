@@ -279,6 +279,14 @@ func TestSearchAcrossAccounts(t *testing.T) {
 	if len(limit.Messages) != 1 {
 		t.Errorf("limit: %d", len(limit.Messages))
 	}
+	// A list cut at the limit says so, and how many matched: never silently.
+	all := call[searchOut](t, cs, "search_messages", map[string]any{})
+	if all.More || all.Matched == nil || *all.Matched != len(all.Messages) || len(all.Messages) < 2 {
+		t.Errorf("whole list: more %v, matched %v, %d messages", all.More, all.Matched, len(all.Messages))
+	}
+	if !limit.More || limit.Matched == nil || *limit.Matched != len(all.Messages) {
+		t.Errorf("cut list: more %v, matched %v, want %d", limit.More, limit.Matched, len(all.Messages))
+	}
 	if msg := callErr(t, cs, "search_messages", map[string]any{"account": "nope"}); !strings.Contains(msg, "no account") {
 		t.Errorf("unknown account: %s", msg)
 	}

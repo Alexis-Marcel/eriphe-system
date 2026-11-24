@@ -408,11 +408,15 @@ func (q Query) criteria() *imap.SearchCriteria {
 	return c
 }
 
-func (a *Account) Search(ctx context.Context, q Query) ([]Summary, error) {
-	if out, ok := a.cache.search(q); ok {
-		return out, nil
+// Search gives the newest messages that match, at most q.Limit, and how
+// many matched in all: -1 when that is not known (the cache answered with
+// a full page but does not hold the whole folder).
+func (a *Account) Search(ctx context.Context, q Query) ([]Summary, int, error) {
+	if out, matched, ok := a.cache.search(q); ok {
+		return out, matched, nil
 	}
 	var out []Summary
+	matched := 0
 	err := a.session(ctx, func(c *imapclient.Client) error {
 		folder, err := a.resolveFolder(c, q.Folder)
 		if err != nil {
@@ -430,6 +434,7 @@ func (a *Account) Search(ctx context.Context, q Query) ([]Summary, error) {
 			return fmt.Errorf("%s: search: %w", a.Name, err)
 		}
 		uids := data.AllUIDs()
+		matched = len(uids)
 		slices.Sort(uids)
 		if len(uids) > q.Limit {
 			uids = uids[len(uids)-q.Limit:]
@@ -444,7 +449,7 @@ func (a *Account) Search(ctx context.Context, q Query) ([]Summary, error) {
 		sortNewest(out)
 		return err
 	})
-	return out, err
+	return out, matched, err
 }
 
 func sortNewest(s []Summary) {

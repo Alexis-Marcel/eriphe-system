@@ -23,7 +23,7 @@ eriphe-core opens in place.
 | `list_accounts` | configured accounts | read-only |
 | `test_account` | setup only (`_meta: {"eriphe/setup": true}`, never given to a task or the brain): sign one account in over IMAP as the server will, and say whether it works, or why not, never the secret | read-only |
 | `list_folders` | folders with their role (inbox, drafts, sent, trash, archive, junk, all) and counts | read-only |
-| `search_messages` | search one or all accounts (text, from, to, subject, since, before, unread, flagged, folder, limit), newest first, with snippets; from the cache when it can | read-only |
+| `search_messages` | search one or all accounts (text, from, to, subject, since, before, unread, flagged, folder, limit), newest first, with snippets; from the cache when it can; a list cut at the limit says so (`more`); `matched` says how many matched, when known | read-only |
 | `read_message` | headers, text body (HTML converted), attachments listed, not downloaded; body fenced as untrusted; from the cache when it can | read-only |
 | `create_draft` | plain text draft appended to Drafts; `reply_to` sets In-Reply-To/References, recipients and subject | not destructive |
 | `send_message` | send a draft (`draft_id`) or a new message; a separate tool so the policy can leave it to the user | destructive, open world |
@@ -140,7 +140,7 @@ or guessed from the address), an account needs only `address` and `auth`:
   plaintext mode; certificates are verified (`ca_file` adds roots for a self-hosted server).
 - `username` defaults to the address; `save_sent` (copy sent mail to Sent) defaults to false for
   Gmail, Outlook, Office 365 and Fastmail, which file SMTP submissions themselves.
-- Limits: `max_results` (50), `max_body_chars` (20000), `timeout_seconds` (60); 100 recipients,
+- Limits: `max_results` (200), `max_body_chars` (20000), `timeout_seconds` (60); 100 recipients,
   500 ids per call, 4 MB read per body part, 25 MB per draft sent.
 
 ## Running

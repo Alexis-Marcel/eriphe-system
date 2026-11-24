@@ -217,8 +217,8 @@ func unfilterLists(comps []map[string]any) {
 }
 
 // listsOK checks a block's Lists that filter: each filter reads
-// (listBinding), on a List; a Fold's list is a List of the block bound to
-// a source's items.
+// (listBinding), on a List; a Fold's or a Metric's list is a List of the
+// block bound to a source's items.
 func listsOK(b *nodefile.Block) []string {
 	var comps []map[string]any
 	json.Unmarshal(b.Components, &comps)
@@ -245,8 +245,8 @@ func listsOK(b *nodefile.Block) []string {
 		}
 	}
 	for _, comp := range comps {
-		if l, _ := comp["list"].(string); comp["component"] == "Fold" && l != "" && lists[l] == "" {
-			out = append(out, fmt.Sprintf("component %v: list %s is not a List of the block bound to a source's items: a batch folds such a List", comp["id"], l))
+		if l := namesList(comp); l != "" && lists[l] == "" {
+			out = append(out, fmt.Sprintf("component %v: list %s is not a List of the block bound to a source's items: a batch folds such a List, a Metric counts its rows", comp["id"], l))
 		}
 	}
 	return out

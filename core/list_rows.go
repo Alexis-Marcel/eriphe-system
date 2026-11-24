@@ -134,12 +134,21 @@ func sourceRows(name string, src nodefile.Source, value any, f itemFilters) []li
 	return out
 }
 
-// foldedLists are the Lists a block's Folds name (Fold's list: a batch,
-// its line says how many rows it has).
-func foldedLists(comps []map[string]any) map[string]bool {
+// namesList is the List of its block a component names (its list): a
+// Fold's, a batch whose line says how many rows it has; a Metric's, whose
+// figure is that number. "" for none.
+func namesList(comp map[string]any) string {
+	if l, _ := comp["list"].(string); comp["component"] == "Fold" || comp["component"] == "Metric" {
+		return l
+	}
+	return ""
+}
+
+// namedLists are the Lists a block's components name (namesList).
+func namedLists(comps []map[string]any) map[string]bool {
 	out := map[string]bool{}
 	for _, comp := range comps {
-		if l, _ := comp["list"].(string); comp["component"] == "Fold" && l != "" {
+		if l := namesList(comp); l != "" {
 			out[l] = true
 		}
 	}
@@ -148,14 +157,15 @@ func foldedLists(comps []map[string]any) map[string]bool {
 
 // blockLists are the Lists of a block bound as a whole to a source's
 // items that the page must know: those that filter them (it shows only
-// their rows), those that open their rows, those a Fold names (a batch),
+// their rows), those that open their rows, those a Fold (a batch) or a
+// Metric (their count) names,
 // and those a card waits on one of whose rows, each with its rows (from
 // data, the block's data as the page gets it, the items' notes and cards
 // on them). With only, those of these sources alone.
 func (c *core) blockLists(b *nodefile.Block, data map[string]any, only ...string) []pageList {
 	var comps []map[string]any
 	json.Unmarshal(b.Components, &comps)
-	folded := foldedLists(comps)
+	named := namedLists(comps)
 	var out []pageList
 	for _, comp := range comps {
 		if l, ok := c.rowsOf(b, comp, data, only); ok {
@@ -185,7 +195,7 @@ func (c *core) blockLists(b *nodefile.Block, data map[string]any, only ...string
 		rows := sourceRows(name, src, data[name], f)
 		open := src.Items != nil && src.Items.Open != nil
 		carded := slices.ContainsFunc(rows, func(r listItem) bool { return r.Card != "" })
-		if f != nil || open || folded[id] || carded {
+		if f != nil || open || named[id] || carded {
 			out = append(out, pageList{Component: id, Source: name, Filtered: f != nil, Open: open, Items: rows})
 		}
 	}

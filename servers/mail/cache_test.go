@@ -254,10 +254,17 @@ func TestCacheWindowAndCap(t *testing.T) {
 	if len(s.Messages) != 2 || ce.logins() != n {
 		t.Fatalf("limit within the window: %+v", s.Messages)
 	}
+	// Cut, and the cache cannot know how many older ones match.
+	if !s.More || s.Matched != nil {
+		t.Errorf("cut from the cache: more %v, matched %v", s.More, s.Matched)
+	}
 	// Three asked: the third is older than the window.
 	s = call[searchOut](t, ce.cs, "search_messages", map[string]any{"account": "perso", "limit": 3})
 	if len(s.Messages) != 3 || ce.logins() == n {
 		t.Fatalf("limit beyond the window: %+v", s.Messages)
+	}
+	if s.More {
+		t.Errorf("all three listed, yet more")
 	}
 	// A folder not cached.
 	n = ce.logins()

@@ -71,6 +71,9 @@ func TestCatalogDescribesItsComponents(t *testing.T) {
 				comp += `,"` + req + `":` + sampleFor(p.comp, req)
 			}
 		}
+		if p.comp == "Metric" && p.prop != "value" {
+			comp += `,"value":1` // a value, or a list: one of them
+		}
 		comp += `,"` + p.prop + `":{"@path":"/x"}}`
 		if errs := ValidateSurface(surfaceOf(comp)); len(errs) > 0 {
 			t.Errorf("%s.%s does not take a binding: %v", p.comp, p.prop, errs)
