@@ -591,6 +591,19 @@ func TestMonitorOpenWorld(t *testing.T) {
 	if out, _ := callBrainTool(t, c, "try_monitor", map[string]any{"name": "page"}); out["works"] != true {
 		t.Fatalf("an approved monitor's try: %v", out)
 	}
+
+	// Proposed on a tainted turn, it is not tried by name on a clean one:
+	// its arguments are still no one's.
+	c.turn.start(0, 0, 0)
+	if _, err := c.writeMonitor("page-2", monitorSpec{Server: "monitor", Tool: "page", Every: 5, Path: "text"}, []string{"web.fetch"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.turnTaint()) != 0 {
+		t.Fatalf("not a clean turn: %v", c.turnTaint())
+	}
+	if out, _ := callBrainTool(t, c, "try_monitor", map[string]any{"name": "page-2"}); out["works"] != false {
+		t.Fatalf("a tainted proposal tried: %v", out)
+	}
 }
 
 // A monitor's card shows its arguments in full: what the yes lets

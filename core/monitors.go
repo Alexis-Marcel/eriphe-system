@@ -768,6 +768,16 @@ func (s monitorSpec) Text(lang string) string {
 	return fmt.Sprintf(tr(lang, "monitor.text.changed"), every, call, cmpOr(s.Path, tr(lang, "monitor.text.whole")))
 }
 
+// argsFields are a poll's arguments as its card shows them, in full: what
+// the user's yes lets eriphe-core send at every look. None without any.
+func (s monitorSpec) argsFields(lang string) []cardField {
+	if len(s.Args) == 0 {
+		return nil
+	}
+	raw, _ := json.Marshal(s.Args)
+	return []cardField{{Name: tr(lang, "card.monitor.args"), Value: string(raw)}}
+}
+
 // source is what a poll looks at: server.tool, or server and the
 // resource's URI.
 func (s monitorSpec) source() string {
@@ -864,12 +874,7 @@ func (c *core) monitorProposal(p proposal) proposal {
 		return fmt.Sprintf(tr(lang, "card.monitor.update"), m.Name)
 	}
 	p.fields = func(lang string) []cardField {
-		f := []cardField{{Name: tr(lang, "card.monitor.what"), Value: s.Text(lang)}}
-		if len(s.Args) > 0 {
-			// What the yes lets eriphe-core send, in full, at every look.
-			raw, _ := json.Marshal(s.Args)
-			f = append(f, cardField{Name: tr(lang, "card.monitor.args"), Value: string(raw)})
-		}
+		f := append([]cardField{{Name: tr(lang, "card.monitor.what"), Value: s.Text(lang)}}, s.argsFields(lang)...)
 		return append(f, cardField{Name: tr(lang, "card.monitor.events"), Value: fmt.Sprintf(tr(lang, "card.monitor.key"), m.Name)})
 	}
 	p.Fields = p.fields("fr")

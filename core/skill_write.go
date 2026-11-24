@@ -287,7 +287,8 @@ func (c *core) skillProposal(p proposal) proposal {
 	p.fields = func(lang string) []cardField {
 		fs := c.skillFields(m, lang)
 		if mon != nil { // made by the same yes
-			fs = slices.Insert(fs, 0, cardField{Name: fmt.Sprintf(tr(lang, "card.skill.monitor"), mon.Name), Value: mon.Spec.Text(lang)})
+			mf := append([]cardField{{Name: fmt.Sprintf(tr(lang, "card.skill.monitor"), mon.Name), Value: mon.Spec.Text(lang)}}, mon.Spec.argsFields(lang)...)
+			fs = slices.Insert(fs, 0, mf...)
 		}
 		return fs
 	}
