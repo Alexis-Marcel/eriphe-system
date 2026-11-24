@@ -7,39 +7,23 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"time"
 )
 
 // What a triggered skill's run does besides telling (skill_runs.go):
 //
 //   - Its calls the user must approve never hold it: as the brain's, each is
-//     kept with its exact input (access_asks, run = the run), the task is
-//     told it did not run and goes on. When the run ends, they show on one
-//     card (kind runcalls), with its message: each action and its
-//     parameters; the yes runs them all as kept, the no none. The run's
-//     note keeps their results; once all ran, the brain is told how the yes
-//     went, the orb's words (card_outcome.go).
+//     kept with its exact input (keepCall, demand.go: run = the run), the
+//     task is told it did not run and goes on. When the run ends, they
+//     wait on their cards (kind calls): on the rows of the items they act
+//     on, else a block of its node. The run's note keeps their results;
+//     once all ran, the brain is told how the yes went, the orb's words
+//     (card_outcome.go).
 //   - With urgent: <fixed text>, a run that weighs something 5 in its
 //     attention list sends that fixed text over the quiet hours and the
 //     daily cap, once per run, as an urgent rule does: nothing the run read
 //     enters it. Its own message goes as any weight 5's, under the rules.
 
-const (
-	cardRunCalls   = "runcalls"
-	runCallsWait   = "Pas exécutée maintenant : eriphe-core la garde, telle quelle, pour une carte que l'utilisateur verra à la fin de ton tour ; s'il dit oui, elle sera exécutée. N'insiste pas et continue ; dis-le dans ton message final."
-	urgentSkillWhy = "Ton skill « %s » est urgent : tu as approuvé ce message pour être prévenu à toute heure."
-	runCallsRef    = " Sa référence : %d. Si elle porte sur un élément de ton nœud qu'elle ne nomme pas (un événement à créer pour un mail), passe-la à item_note (call) sur cet élément : sa carte attendra sur sa ligne."
-)
-
-// bindItemBatch puts a run's kept call on an item's card: the one its
-// other calls on that item are on, else its own.
-func (c *core) bindItemBatch(run, id int64, node, source, item string) {
-	batch := c.runItemBatch(run, node, source, item)
-	if batch == 0 {
-		batch = id
-	}
-	c.store.db.Exec(`UPDATE access_asks SET node = ?, source = ?, item = ?, batch = ? WHERE id = ?`, node, source, item, batch, id)
-}
+const urgentSkillWhy = "Ton skill « %s » est urgent : tu as approuvé ce message pour être prévenu à toute heure."
 
 // itemCall puts a call a run kept (call, the id its answer gave) on an
 // item of its node (item_note's call): it acts on that item without
@@ -80,79 +64,32 @@ func (c *core) itemCall(task, node, source, item string, call int64) error {
 	if label == nil {
 		return fmt.Errorf("call: %s is not an item the source %s of your node lists", item, source)
 	}
+	label.Source = source
 	raw, _ := json.Marshal([]itemLabel{*label})
-	c.store.db.Exec(`UPDATE access_asks SET labels = ? WHERE id = ?`, string(raw), call)
-	c.bindItemBatch(r.ID, call, node, source, item)
+	// On the card its other calls on that item are on, else its own.
+	batch := a.Batch
+	if b := c.runItemBatch(r.ID, node, source, item); b != 0 && b != a.Batch {
+		batch = b
+	}
+	c.store.db.Exec(`UPDATE access_asks SET node = ?, source = ?, item = ?, labels = ?, batch = ? WHERE id = ?`, node, source, item, string(raw), batch, call)
+	if batch != a.Batch && len(c.batchAsks(a.Batch)) == 0 {
+		c.store.db.Exec(`DELETE FROM node_cards WHERE ref = ?`, proposalRef(cardCalls, a.Batch))
+	}
+	c.cardRaisedFor("", proposalRef(cardCalls, batch))
 	return nil
 }
 
-// askRunCall keeps a run's call for its card and answers the task: not run.
+// askRunCall keeps a run's call for its card (keepCall) and answers the
+// task: not run.
 func (c *core) askRunCall(t *TaskRow, r *skillRun, pid, tool string, input map[string]any) {
 	if c.store.answered(t.ID, pid) {
 		return
 	}
-	raw, _ := json.Marshal(input)
-	// Its node: the item's when it acts on one of its node's items, else
-	// its run's node (item_cards.go).
-	node := c.taskNode(t.ID)
-	source, item, onItem := c.callItem(node, tool, input)
-	var id int64
-	switch {
-	case onItem && c.itemAskWaiting(node, source, item, tool, string(raw)) != 0:
-		// The same call on the same item waits already: its card.
-	case !onItem && c.store.db.QueryRow(`SELECT id FROM access_asks WHERE run = ? AND batch = 0 AND call LIKE ? AND input = ? AND state = ?`,
-		r.ID, tool+" %", string(raw), startProposed).Scan(&id) == nil:
-	default:
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		fields, _ := json.Marshal(cardFields(c.callContext(ctx, tool, input), input))
-		cancel()
-		n := c.callNeed(tool, input, c.pool.facts(tool, input))
-		labels := ""
-		if ls := c.callItemLabels(node, tool, input); len(ls) > 0 {
-			b, _ := json.Marshal(ls)
-			labels = string(b)
-		}
-		res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, permission_id, server, category, account, call, input, tainted, created, run, node, source, item, labels)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, pid, n.Server, n.Category, n.Account, tool+" "+string(fields), string(raw),
-			c.store.get(taskTaintKey(t.ID)), time.Now().Unix(), r.ID, node, source, item, labels)
-		id, _ = rowsID(res, err)
-		if onItem && id > 0 {
-			c.bindItemBatch(r.ID, id, node, source, item)
-		}
-	}
-	wait := runCallsWait
-	if !onItem && id > 0 {
-		// A call that names no item of its node: the run may put it on
-		// the item it is about (item_note's call).
-		wait += fmt.Sprintf(runCallsRef, id)
-	}
-	c.store.addInbox(t.ID, "permission", map[string]any{"id": pid, "allow": false, "message": wait, "by": byPolicy})
-	c.store.recordDecision(t.ID, pid, tool, input, decideDeny, byPolicy, "kept for the run's card")
+	k := keeper{task: t.ID, pid: pid, run: r.ID, node: c.taskNode(t.ID), taint: c.store.get(taskTaintKey(t.ID))}
+	a := c.keepCall(context.Background(), k, tool, input)
+	c.store.addInbox(t.ID, "permission", map[string]any{"id": pid, "allow": false, "message": c.keptSay(k, a), "by": byPolicy})
+	c.store.recordDecision(t.ID, pid, tool, input, decideDeny, byPolicy, "kept for its card")
 	c.bump()
-}
-
-// runAsks are a run's kept calls on no item: those on one are its item's
-// card (item_cards.go).
-func (c *core) runAsks(run int64) []accessQuestion {
-	rows, err := c.store.db.Query(`SELECT id FROM access_asks WHERE run = ? AND batch = 0 ORDER BY id`, run)
-	if err != nil {
-		return nil
-	}
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if rows.Scan(&id) == nil {
-			ids = append(ids, id)
-		}
-	}
-	rows.Close()
-	var out []accessQuestion
-	for _, id := range ids {
-		if a, err := c.accessAskOf(id); err == nil {
-			out = append(out, a)
-		}
-	}
-	return out
 }
 
 func (c *core) runByID(id int64) *skillRun {
@@ -161,87 +98,6 @@ func (c *core) runByID(id int64) *skillRun {
 		return nil
 	}
 	return r
-}
-
-// runCallsProposal is a run's card: pending while one of its calls waits,
-// once the run is over.
-func (c *core) runCallsProposal(p proposal) proposal {
-	r := c.runByID(p.ID)
-	if r == nil {
-		return p
-	}
-	asks := c.runAsks(r.ID)
-	approved := false
-	for _, a := range asks {
-		switch a.State {
-		case startProposed:
-			p.Pending = r.State != skillRunOpen
-		case startApproved:
-			approved = true
-		}
-	}
-	p.Outcome = cardRejected
-	if approved {
-		p.Outcome = cardApproved
-	}
-	if r.External {
-		p.Tainted = c.store.get(taskTaintKey(r.Task))
-	}
-	p.Why = "Skill « " + r.Skill + " »"
-	n := len(asks)
-	// Its words read plainly (call_words.go): one call is its sentence,
-	// several the skill's; the exact calls under Détails.
-	p.text = func(lang string) string {
-		if n == 1 {
-			text, _ := c.callsWords(asks, lang)
-			return text
-		}
-		return fmt.Sprintf(tr(lang, "card.runcalls"), r.Skill, n)
-	}
-	p.summary = func(lang string) []string {
-		_, lines := c.callsWords(asks, lang)
-		return lines
-	}
-	var fs []cardField
-	for _, a := range asks {
-		fs = append(fs, callDetail(a, nil))
-	}
-	if n == 1 {
-		fs = c.callDetails(asks[0], nil, c.userLang()) // its parameters by meaning, then its exact call
-	}
-	p.Fields = fs
-	return p
-}
-
-// runsWithCalls are the runs over whose kept calls still wait.
-func (c *core) runsWithCalls() []int64 {
-	rows, err := c.store.db.Query(`SELECT DISTINCT a.run FROM access_asks a JOIN skill_runs r ON r.id = a.run
-		WHERE a.run != 0 AND a.batch = 0 AND a.state = ? AND r.state != ? ORDER BY a.run`, startProposed, skillRunOpen)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	var out []int64
-	for rows.Next() {
-		var id int64
-		if rows.Scan(&id) == nil {
-			out = append(out, id)
-		}
-	}
-	return out
-}
-
-// decideRunCalls answers every call of the run still waiting.
-func (c *core) decideRunCalls(ctx context.Context, run int64, approve bool) error {
-	for _, a := range c.runAsks(run) {
-		if a.State != startProposed {
-			continue
-		}
-		if err := c.decideAccess(ctx, a.ID, approve); err != nil && err != errCardDecided {
-			return err
-		}
-	}
-	return nil
 }
 
 // runCallDone keeps in the run's note how a call went, once decided.

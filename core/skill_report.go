@@ -107,7 +107,7 @@ func (c *core) runViewOf(r *skillRun, full bool) runView {
 	if r.Task != "" {
 		v.Node = c.taskNode(r.Task)
 	}
-	for _, a := range c.runAsks(r.ID) {
+	for _, a := range c.asksWhere(`run = ? ORDER BY id`, r.ID) {
 		v.Calls++
 		if full {
 			var lines []string

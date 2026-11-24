@@ -40,7 +40,7 @@ type proposalKind struct {
 }
 
 // proposalKinds names the kinds in the order what waits is listed.
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardSetting, cardTaskStart, cardUnlearn, cardAccess, cardSkill, cardRunCalls, cardCalls, cardMonitor}
+var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardSetting, cardTaskStart, cardUnlearn, cardAccess, cardSkill, cardCalls, cardMonitor}
 
 // kindsOf is the table, by kind; filled in init, since its rows call the
 // functions that read it.
@@ -114,19 +114,6 @@ func init() {
 		cardSkill: {read: (*core).skillProposal, waiting: (*core).proposedSkills, outcome: told("le skill est en place", "cette version est écartée"), // skill_write.go
 			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideSkill(id, yes) },
 			node:    (*core).skillHomeOf}, // its card waits on the node it will maintain
-		cardRunCalls: {read: (*core).runCallsProposal, waiting: (*core).runsWithCalls, decides: (*core).decideRunCalls, outcome: callsTold, // skill_cards.go
-			withdraw: func(c *core, ctx context.Context, id int64) error {
-				for _, a := range c.runAsks(id) {
-					c.withdrawAsk(ctx, a)
-				}
-				return nil
-			},
-			node: func(c *core, id int64) string {
-				if r := c.runByID(id); r != nil {
-					return c.taskNode(r.Task) // the node its run works in
-				}
-				return ""
-			}},
 		cardCalls: {read: (*core).callsProposal, waiting: (*core).proposedBatches, decides: (*core).decideCalls, outcome: callsTold, // item_cards.go
 			withdraw: func(c *core, ctx context.Context, id int64) error {
 				for _, a := range c.batchAsks(id) {

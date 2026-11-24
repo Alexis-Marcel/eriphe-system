@@ -291,7 +291,7 @@ func (w *web) handleRunCall(rw http.ResponseWriter, r *http.Request, s *session)
 		return
 	}
 	approve := r.PathValue("action") == "approve"
-	if err := w.c.answerProposal(r.Context(), cardAccess, id, approve); err != nil && err != errCardDecided {
+	if err := w.c.answerCall(r.Context(), id, approve, "page"); err != nil && err != errCardDecided {
 		w.toast(rw, w.formError(r, err), false)
 		return
 	}

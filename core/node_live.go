@@ -344,10 +344,14 @@ func (c *core) readNodeOnce(ctx context.Context, node string, only []string, for
 			  error = excluded.error, waiting = excluded.waiting, next_at = excluded.next_at`,
 			node, r.Block, r.Name, r.spec, value, r.Read, r.Error, r.Waiting, r.NextAt)
 	}
-	// The pages that show it get the new values at once (graph_feed.go).
+	// The pages that show it get the new values at once (graph_feed.go);
+	// the items it no longer lists leave the demands on them (demand.go).
 	for i, r := range reads {
 		if r.Value != nil && valueHash(r.Value) != was[i] {
 			c.graphSaid(graphEvent{Kind: graphEvSource, Node: node, Block: r.Block, Name: r.Name})
+		}
+		if res, ok := got[r.Block+"/"+r.Name]; ok && res.err == "" && res.why == "" {
+			c.staleDemands(ctx, node, r)
 		}
 	}
 	c.noteGlance(node, reads, now) // node_glance.go

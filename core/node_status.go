@@ -246,7 +246,7 @@ func (c *core) taskNodeMoved(task, state string) {
 // taskCardKinds are the kinds of proposals a task's state decides: its
 // held start and its access stop waiting with it, a run's calls with its
 // run.
-var taskCardKinds = []string{cardTaskStart, cardAccess, cardRunCalls, cardCalls}
+var taskCardKinds = []string{cardTaskStart, cardAccess, cardCalls}
 
 // warmNodeCaches fills what the graph's rows read of each node and keeps
 // in memory (its glance) for those not read yet, in a constant number of

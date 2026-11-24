@@ -117,7 +117,7 @@ func (c *core) proposalAbout(kind string, id int64) string {
 				return x.About
 			}
 		}
-	case cardCalls, cardRunCalls:
+	case cardCalls:
 		// A run's calls are about the node they act in (its item's, its
 		// run's), else what its task is about.
 		if node := c.proposalNode(kind, id); node != "" {

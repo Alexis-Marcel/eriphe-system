@@ -14,15 +14,19 @@ import (
 // Same-kind proposals wait as one card, and the user unticks what stays.
 //
 // A skill woken once per item (a monitor's new mail) proposes the same
-// action on each: a calls card each (item_cards.go), a pile of identical
-// cards. Calls cards that wait in the same node, untouched, and whose
-// calls do the same thing to other items fold into one: the oldest.
+// action on each, and the brain asks it too: calls cards that wait in the
+// same node, untouched, and whose calls do the same thing to other items
+// fold into one: the oldest, whoever kept them (a run, the brain).
 //
 //   - The same thing: the same server and tool, the same arguments but
-//     one, a list whose values are ids of items its node's sources list
-//     (kept with the call: its labels). Nothing of a tool's own: the
-//     source's items descriptor says what an id is. A different account
-//     or destination is another argument: another card.
+//     the one that names items its node's sources list (kept with the
+//     call: its labels), a list of their ids or one id. Nothing of a
+//     tool's own: the source's items descriptor says what an id is. A
+//     different account or destination is another argument: another
+//     card. A call on no item folds with nothing: the same call waiting
+//     in the node is the same demand (keepCall, demand.go).
+//   - Each item once: a call folded in loses the items the card already
+//     acts on (narrowCall), and one left with none is withdrawn.
 //   - The card keeps each call as it was kept, its own row: Oui runs each
 //     exactly as shown, each in the decisions, never a call made up of
 //     their union. A card decided, or one of whose calls runs or waits
@@ -33,24 +37,21 @@ import (
 //     first and refuses the others. A call folded in after the page drew
 //     the card is in neither: it waits on, its card comes again. Non
 //     refuses every call.
-//   - Folded when a run ends, before its cards are shown, and when the
-//     cards are synced: cards made before this fold at the next sync.
+//   - Folded when a call is kept in the brain's turn, when a run ends,
+//     before its cards are shown, and once at start (migrateDemands).
 
 // errNotOnCard is a choice naming a call the card does not keep waiting.
 var errNotOnCard = errors.New("a chosen call is not one this card keeps waiting")
 
 // foldKey is what a kept call does, but for the items it acts on: its
-// tool and its other arguments, and the name of its list of items; ""
-// when it has no such list, or more than one. Its items are those kept
-// with it (its labels) and the item it is on (a call kept before labels
-// were has only that).
-func foldKey(a accessQuestion) (key, list string) {
+// tool and its other arguments, and the name of the argument that names
+// its items (a list of their ids, or one id); "" when it names none, or
+// in more than one argument. Its items are those kept with it (its labels)
+// and the item it is on (a call kept before labels were has only that).
+func foldKey(a accessQuestion) (key, arg string) {
 	ids := map[string]bool{}
-	for _, l := range a.Labels {
-		ids[l.ID] = true
-	}
-	if a.Item != "" {
-		ids[a.Item] = true
+	for _, id := range choiceItems(a) {
+		ids[id] = true
 	}
 	if len(ids) == 0 {
 		return "", ""
@@ -61,22 +62,30 @@ func foldKey(a accessQuestion) (key, list string) {
 		return "", ""
 	}
 	for k, v := range input {
-		values, ok := v.([]any)
-		if !ok || len(values) == 0 || !allItems(values, ids) {
+		switch x := v.(type) {
+		case []any:
+			if len(x) == 0 || !allItems(x, ids) {
+				continue
+			}
+		case string:
+			if !ids[x] {
+				continue
+			}
+		default:
 			continue
 		}
-		if list != "" {
-			return "", "" // two lists of items: which one says "other items" is not clear
+		if arg != "" {
+			return "", "" // two arguments of items: which one says "other items" is not clear
 		}
-		list = k
+		arg = k
 	}
-	if list == "" {
+	if arg == "" {
 		return "", ""
 	}
 	rest := maps.Clone(input)
-	delete(rest, list)
+	delete(rest, arg)
 	raw, _ := json.Marshal(rest) // its keys sorted
-	return name + " " + list + " " + string(raw), list
+	return name + " " + arg + " " + string(raw), arg
 }
 
 // allItems tells whether every value is one of the items' ids.
@@ -91,15 +100,15 @@ func allItems(values []any, ids map[string]bool) bool {
 }
 
 // itemCount is how many items a call acts on: its list's length, 1 when
-// it has none.
+// it names one or none.
 func itemCount(a accessQuestion) int {
-	_, list := foldKey(a)
-	if list == "" {
+	_, arg := foldKey(a)
+	if arg == "" {
 		return 1
 	}
 	var input map[string]any
 	json.Unmarshal([]byte(a.Input), &input)
-	values, _ := input[list].([]any)
+	values, _ := input[arg].([]any)
 	return max(1, len(values))
 }
 
@@ -163,10 +172,37 @@ func (c *core) untouched(asks []accessQuestion) bool {
 	return waits
 }
 
-// foldInto moves a card's calls to another: its own card goes, unlinked
-// from its node and out of the attention queue.
+// foldInto moves a card's calls that wait to another, each losing the
+// items the other acts on already (one left with none is withdrawn): its
+// own card goes, unlinked from its node and out of the attention queue.
 func (c *core) foldInto(batch, target int64) {
-	c.store.db.Exec(`UPDATE access_asks SET batch = ? WHERE batch = ?`, target, batch)
+	covered := map[string]bool{}
+	for _, a := range c.batchAsks(target) {
+		if a.State == startProposed {
+			for _, id := range choiceItems(a) {
+				covered[id] = true
+			}
+		}
+	}
+	for _, a := range c.batchAsks(batch) {
+		if a.State != startProposed {
+			continue
+		}
+		drop := map[string]bool{}
+		for _, id := range choiceItems(a) {
+			if covered[id] {
+				drop[id] = true
+			}
+		}
+		if len(drop) > 0 && (len(drop) == len(choiceItems(a)) || c.narrowCall(a, drop)) {
+			c.withdrawAsk(context.Background(), a) // all it does, the card does already
+			continue
+		}
+		for _, id := range choiceItems(a) {
+			covered[id] = true
+		}
+		c.store.db.Exec(`UPDATE access_asks SET batch = ? WHERE id = ?`, target, a.ID)
+	}
 	ref := proposalRef(cardCalls, batch)
 	if xs, err := c.cardsWhere(`ref = ?`, ref); err == nil {
 		for _, x := range xs {

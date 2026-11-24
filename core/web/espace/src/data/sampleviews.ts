@@ -211,13 +211,13 @@ const mailCards: SampleView["cards"] = [
   // them all, its Oui on the batch's line (call_fold.go)
   junkCard(),
   // already decided: the menu's « Déjà décidé », never the page's foot
-  { ref: "runcalls:30", card: 30, kind: "runcalls", state: "approved", exec: "done", node: "mails", text: "Archiver 12 mails" },
+  { ref: "calls:30", card: 30, kind: "calls", state: "approved", exec: "done", node: "mails", text: "Archiver 12 mails" },
   { ref: "calls:31", card: 31, kind: "calls", state: "approved", exec: "done", node: "mails", text: "Mettre 5 mails à la corbeille" },
   { ref: "calls:33", card: 33, kind: "calls", state: "rejected", node: "mails", text: "Marquer 1 mail comme lu" },
   {
-    ref: "runcalls:34",
+    ref: "calls:34",
     card: 34,
-    kind: "runcalls",
+    kind: "calls",
     state: "approved",
     exec: "failed",
     execWhy: "error",

@@ -13,7 +13,7 @@ import (
 // accessCard is the one card waiting whose text says what.
 func accessCard(t *testing.T, c *core, what string) convoCard {
 	t.Helper()
-	xs, err := c.cardsWhere(`kind = ? AND state = ? ORDER BY id`, cardAccess, cardPending)
+	xs, err := c.cardsWhere(`kind IN (?, ?) AND state = ? ORDER BY id`, cardAccess, cardCalls, cardPending) // a task's access, the brain's call
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func accessCard(t *testing.T, c *core, what string) convoCard {
 
 func accessCards(t *testing.T, c *core) int {
 	t.Helper()
-	xs, err := c.cardsWhere(`kind = ? AND state = ?`, cardAccess, cardPending)
+	xs, err := c.cardsWhere(`kind IN (?, ?) AND state = ?`, cardAccess, cardCalls, cardPending)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +430,7 @@ func TestBrainCardNo(t *testing.T) {
 	if _, err := c.decideCard(context.Background(), accessCard(t, c, "move").ID, false, "web"); err != nil {
 		t.Fatal(err)
 	}
-	waitEvent(t, c, "a refusé sur la carte")
+	waitEvent(t, c, "aucun de ses appels")
 	msgs, _ := c.store.messagesAfter(0, 50)
 	for _, m := range msgs {
 		if strings.Contains(m.Text, "est exécutée") {

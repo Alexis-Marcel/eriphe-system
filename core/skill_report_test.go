@@ -27,10 +27,10 @@ func TestSkillRunsPage(t *testing.T) {
 	endTurn(t, c, r.Task, "GetOut renvoie des 5xx : je propose de remettre la 2.0.0.")
 	_, body, _ = tw.do("GET", "/settings/skills/prod/runs", nil, nil)
 	hasAll(t, "its fragment", body, "fait", "je propose de remettre la 2.0.0", "1 action(s) proposée(s)", "en attente de ta réponse",
-		"t&#39;a prévenu", "cartes : 0 acceptée(s), 0 refusée(s), 1 en attente", "contenu extérieur")
+		"cartes : 0 acceptée(s), 0 refusée(s), 1 en attente", "contenu extérieur")
 	hasNone(t, "its fragment", body, `hx-trigger="every 5s"`, "<html")
 	// Its action, answered on its own: yes runs it as kept.
-	ask := c.runAsks(r.ID)[0]
+	ask := c.asksWhere(`run = ? ORDER BY id`, r.ID)[0]
 	if code, _, _ := tw.post("/settings/skills/other/calls/"+idText(ask.ID)+"/approve", nil, csrf); code != 404 {
 		t.Fatalf("another skill's page answered it: %d", code)
 	}

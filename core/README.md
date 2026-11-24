@@ -972,7 +972,10 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   `gone`), only for the node's own card and a block not external; anything else is sent without
   it and the page says « Carte introuvable », with no Oui or Non. A placed card leaves the page's
   foot (`cards`); an unplaced one waits there. The propose tools return the card's ref (`card`:
-  `cardProposed`), and say how to place it (`cardPlaceNote`).
+  `cardProposed`), and say how to place it (`cardPlaceNote`). A demand (below) never waits at the
+  foot: on items it is on their rows; on none, its keeper is told its ref and where to place it,
+  and code appends `{"card": ref}` at the end of the document when it did not (`placeDemands`, at
+  the end of the brain's turn and of a run).
 - **The page's foot only asks.** `nodePageOf` sends at the foot (`cards`) only the cards that still
   ask something (`pendingAsks`: pending, or approved with its call running) and that no
   row answers (any card told on a List's row, `placed`); the decided ones (done, failed, declined,
@@ -980,11 +983,11 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   under « Déjà décidé » with each outcome, a failed one with why (`execWhy`, and `execError`: the
   tool's own words, `execErrorExternal` when its server is not trusted, shown marked). A placed
   card decided is not drawn in the body either (the page skips it), and a row's card leaves its
-  row once its call is done or failed (`callsAsk`, `accessAsks`).
+  row once its call is done or failed (`callsAsk`).
 - **What came of a yes** (`card_outcome.go`). The orb says it: the yes is the user talking, so how
   it went reaches the brain as the user's act (`nodeEvent`), whose line is the orb's. A call of
-  the conversation tells it at once (`callToBrain`); the calls of a run's or an item's card
-  (`runcalls`, `calls`) once the last approved one ran, in one event (`callsCardRan`, told once
+  the brain's call tells it at once, with its result (`callToBrain`); a card's other calls (a run's,
+  code's) once the last approved one ran, in one event (`callsCardRan`, told once
   per card: `card_told:<ref>`), what was done and what failed with why. A failed call keeps the
   tool's words (`call_error:<id>`, 500 characters at most) and writes « Échec : <sentence> — <why> »
   in its node's trace (`traceFailedCall`); its item is not noted done. The brain is told to say
@@ -1638,8 +1641,7 @@ request) adds what is behind it (its title, the start of its description), read 
 is made, with the read its tool declares (`card_context.go`, `_meta` `eriphe/reads`: the reads to
 try, the call's arguments they take, the fields shown and their names in fr and en).
 
-**A call in plain words** (`call_words.go`), the brain's (`access`) as a skill run's (`calls`,
-`runcalls`): a sentence of code's says what happens to what, never a question and never a model's
+**A call in plain words** (`call_words.go`), every kept call (`calls`): a sentence of code's says what happens to what, never a question and never a model's
 words: « Mettre 2 mails à la corbeille ». Core has no word of its own for a tool (#727): the
 sentence is the one the tool declares (below), else its title (`Title` or `annotations.title`; our
 servers give every tool one) with its items counted (« Ranger · 2 éléments »), else « Utiliser
@@ -1692,8 +1694,23 @@ tool declares itself wins. GitHub's preset says its pull requests (« Fusionner 
 a logic file of core names a tool, one of its tools or their arguments, outside the data files it
 lists with their reason, and when a text table keeps a word for a tool's name (`act.verb.trash`).
 
-**On its rows.** A brain's call whose ids are those of rows a node's source shows (the node the
-turn is about first, else any live node that read them: `node_reads`) is kept on that node and
+**One demand** (`demand.go`). What Eriphe asks the user's yes for, a call it may not make alone,
+is kept one way (`keepCall`), the brain's in its turn (`askBrainAccess`) as a skill run's
+(`askRunCall`): what differs is only who keeps it (`keeper`: where its answer goes, its node, its
+taint, its run). Every kept call is on a card of kind `calls` (`access_asks.batch`), in a node:
+the one whose sources list the items it names, else its keeper's (the turn's, the run's). The same
+call waiting in the same node is the same card. Its keeper is told it did not run, the card's ref,
+and where it waits (`keptSay`): on its items' rows, or a block to place where it reads best (a
+run may instead bind it to an item, `item_note`'s `call`). A read of a node's source takes out of
+its demands the items it no longer lists (`staleDemands`: a list of ids narrowed, its card's
+words and exact call with it; a call left with none withdrawn; a card left with none withdrawn by
+code, not a no). At start, the demands an older Eriphe kept (the brain's `access` cards of calls,
+a run's `runcalls` card) become `calls` cards, fold, lose what is gone, and are placed
+(`migrateDemands`); nothing runs. A page read or a search the brain asks stays an `access` card (its
+yes lets it read), and so does what a task in a container asks for itself (a grant, a release).
+
+**On its rows.** A kept call whose ids are those of rows a node's source shows (the node the
+turn or run is about first, else any live node that read them: `node_reads`) is kept on that node and
 those items (`access_asks.node`, `source`, `labels`): `itemCards` gives each row the card's ref,
 so the page draws its Oui on every row it names (one card on several rows: a Oui on any answers
 it, a mark says how many share it, and hovering lights the others; one card on every row of a
@@ -1701,11 +1718,11 @@ List, two or more: its Oui once at the List's head, and on each row only a ✕ t
 row's own calls, `refuseCalls`, the card waiting on with the others), on a folded batch's line, and
 never in the page's foot (`placed`: any told row's card). A calls card is on every item its
 calls act on (one call on several items, or several calls folded: `call_fold.go`), an item two
-cards act on showing the newest. A call on no row keeps its foot card,
-in the same words. Decided, its rows settle; once run, its items are noted `done`
+cards act on showing the newest. A call on no row is a block of its node (above), in the same
+words. Decided, its rows settle; once run, its items are noted `done`
 (`itemDoneByCode`: an item is done only by its note) and its sources are read again
 (`readNodeLater`, `sourcesChanged`); the brain is
-told, as for any access card. Such a card, like a task's access, start or memory card, is linked to
+told. Such a card, like a task's access, start or memory card, is linked to
 the node its run or task works in (`cardNodeOf`, `node_cards`) and is about it: it waits on that
 node's page, which stays waiting while it does, never above the bar.
 
@@ -2080,19 +2097,13 @@ version, read with its diff.
 - **Time triggers** run at their times, in the user's zone; a trigger seen for the first time (or
   approved again) waits for its next time; times missed while eriphe-core was down make one run.
 - **Its calls the user must approve never hold it** (`skill_cards.go`): as the brain's, each is
-  kept with its exact input (`access_asks.run`), and the task is told it did not run and goes on.
-  When the run ends, they show on one card (kind `runcalls`), attached to its message (sent now
-  even without an attention entry; « the skill proposes N actions » when it wrote none, or when
-  its message is held or not sent, held by the attention queue for its breakpoint): each action with its parameters. The yes runs
-  them all, exactly as kept, the no none; their results go to the run's note, not to the brain.
-- **Its calls on an item are that item's card** (#575, #631, `item_cards.go`): a kept call whose
-  input names exactly one item a source of its node lists, of the call's own server (a value of its
-  input equal to the item's id; code matches it, the run never says it), carries the item
-  (`access_asks.node`, `source`, `item`) and is on that item's card (kind `calls`, `batch` = its
-  first call's id), not on the run's: when the run ends, each item gets its card, with its taint.
-  The same call on the same item still waiting, from any run, is the card already there. Its words
-  are code's: the action by its tool, its origin the node (unless it is external), Oui running each
-  call once as kept; its results go to the run's note and to the node's trace, never to the brain.
+  a demand (`keepCall`, [One demand](#the-approval-card): `access_asks.run`), and the task is told
+  it did not run, its card's ref and where it waits, and goes on. They wait until the run ends;
+  then they fold with what does the same in the node and show, each on its card (kind `calls`),
+  with its taint: on the rows of the items they name (a value of its input equal to an item's id,
+  of the call's own server; code matches it, the run never says it), else a block of its node.
+  A run's calls on one item are one card. No message of the run's says them. Their words are
+  code's; Oui runs each call once as kept; their results go to the run's note, never to the brain.
 - **Its about**: its runs are about their events' key when it names a thing (a monitor's,
   `topic:<name>`, or `kind:slug`; about.go). Their tasks, notifications, cards and signals carry
   it. A run works in its node.

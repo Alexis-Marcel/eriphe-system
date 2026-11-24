@@ -72,7 +72,7 @@ func TestAttentionMergeByRef(t *testing.T) {
 // node waits on, 4; what the user asked to be done, 3; a reminder, 2;
 // the small things, 1. Decided, it leaves.
 func TestAttentionWeightByKind(t *testing.T) {
-	for kind, want := range map[string]int{cardTaskStart: 4, cardAccess: 4, cardSkill: 3, cardMonitor: 3, cardRunCalls: 3,
+	for kind, want := range map[string]int{cardTaskStart: 4, cardAccess: 4, cardSkill: 3, cardMonitor: 3, cardCalls: 3,
 		cardIntention: 2, cardRule: 1, cardMemory: 1, cardSetting: 1, cardUnlearn: 1} {
 		if got := cardWeight(kind); got != want {
 			t.Errorf("%s: weight %d, want %d", kind, got, want)
