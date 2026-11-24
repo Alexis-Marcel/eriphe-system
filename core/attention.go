@@ -192,7 +192,11 @@ func (c *core) attendCardHeld(x convoCard, p proposal, say, source string) bool 
 	if text == "" {
 		text = x.Text
 	}
-	c.attendHeld(attentionItem{Ref: cardItemRef(x.ID), Weight: cardWeight(x.Kind), Why: tr(c.userLang(), "card.kind."+x.Kind) + " : " + text,
+	weight := cardWeight(x.Kind)
+	if x.Kind == cardCalls && slices.ContainsFunc(c.batchAsks(p.ID), c.brainKept) {
+		weight = weightBlocksATask // asked by the brain in its turn: what the user is talking about, as an access was
+	}
+	c.attendHeld(attentionItem{Ref: cardItemRef(x.ID), Weight: weight, Why: tr(c.userLang(), "card.kind."+x.Kind) + " : " + text,
 		Say: say, Source: source, About: x.About, Delivered: x.Seq > 0, tainted: p.Tainted != ""})
 	return true
 }

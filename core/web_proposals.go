@@ -68,8 +68,6 @@ func (w *web) proposalView(x convoCard, p proposal, lang string) proposalView {
 			}
 		case cardCalls:
 			asks = w.c.batchAsks(p.ID)
-		case cardRunCalls:
-			asks = w.c.runAsks(p.ID)
 		}
 		v.Exec, v.ExecWhy, v.ExecError, v.ExecErrorExt = w.c.asksExec(asks)
 	}

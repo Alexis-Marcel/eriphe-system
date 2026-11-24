@@ -237,12 +237,12 @@ func TestItemNoteBindsACall(t *testing.T) {
 	c, _, node, r := mailViewOf(t)
 	keep(c, r.Task, "p1", "mcp__monitor__rollback", map[string]any{"version": "1.0"})
 	var call int64
-	c.store.db.QueryRow(`SELECT id FROM access_asks WHERE run = ? AND batch = 0`, r.ID).Scan(&call)
+	c.store.db.QueryRow(`SELECT id FROM access_asks WHERE run = ? AND batch = id`, r.ID).Scan(&call)
 	if call == 0 {
 		t.Fatal("no call kept")
 	}
 	items, _ := c.store.inbox(r.Task)
-	if len(items) == 0 || !strings.Contains(fmt.Sprint(items[len(items)-1].Data), fmt.Sprintf("Sa référence : %d", call)) {
+	if len(items) == 0 || !strings.Contains(fmt.Sprint(items[len(items)-1].Data), fmt.Sprintf("sa référence %d", call)) {
 		t.Errorf("the run is not told its call's reference: %+v", items)
 	}
 	if _, msg := callNodes(t, c, r.Task, "item_note", map[string]any{"source": "mails", "item": "m9", "note": "x", "call": call}); !strings.Contains(msg, "not an item") {
@@ -260,8 +260,8 @@ func TestItemNoteBindsACall(t *testing.T) {
 	if p := c.proposalOf(cardCalls, call); !strings.Contains(p.Text("fr"), "« Votre lettre de la semaine »") {
 		t.Errorf("its words: %q", p.Text("fr"))
 	}
-	if _, ok := runCard(c, cardRunCalls); ok {
-		t.Error("the call stayed on the run's card")
+	if pg, _ := (&web{c: c}).nodePageOf(node, 0, "fr"); slices.ContainsFunc(pg.Parts, func(p pagePart) bool { return p.Block != nil && p.Block.Card == ref }) {
+		t.Error("a call on an item was placed as a block of its own")
 	}
 }
 

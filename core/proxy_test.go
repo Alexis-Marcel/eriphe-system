@@ -342,12 +342,12 @@ func TestBrainCatalogPermission(t *testing.T) {
 	// No message of its own asks it again (#750): it goes with the
 	// brain's message of the turn.
 	msgs, _ := c.store.messagesAfter(before, 10)
-	if cards, _ := c.cardsWhere(`kind = ? AND turn = 1`, cardAccess); len(msgs) != 0 || len(cards) != 1 {
+	if cards, _ := c.cardsWhere(`kind = ? AND turn = 1`, cardCalls); len(msgs) != 0 || len(cards) != 1 {
 		t.Fatalf("the card does not wait for the turn's message: %+v, %+v", msgs, cards)
 	}
 	seq, _ := c.store.addMessage(roleBrain, "Je crée l'issue dès que tu dis oui.", true)
 	c.attachTurnCards(int(seq))
-	if cards, _ := c.cardsWhere(`kind = ? AND seq > 0`, cardAccess); len(cards) != 1 || cards[0].Seq != int(seq) {
+	if cards, _ := c.cardsWhere(`kind = ? AND seq > 0`, cardCalls); len(cards) != 1 || cards[0].Seq != int(seq) {
 		t.Fatalf("the user is not told: %+v", cards)
 	}
 	if tasks, _ := c.store.tasks(true, 10); len(tasks) != 2 {

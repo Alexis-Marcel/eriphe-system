@@ -65,7 +65,7 @@ func TestBrainCallCardOfASilentTurn(t *testing.T) {
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	brainCalls(t, c, "p-1", "mcp__mail__publish_page", map[string]any{"repo": "portfolio"})
 	c.cardsTurnEnded()
-	if xs, _ := c.cardsWhere(`kind = ? AND seq > 0`, cardAccess); len(xs) != 1 {
+	if xs, _ := c.cardsWhere(`kind = ? AND seq > 0`, cardCalls); len(xs) != 1 {
 		t.Fatalf("the card is under no message: %+v", xs)
 	}
 }
@@ -97,11 +97,11 @@ func TestBrainWithdrawsHisCall(t *testing.T) {
 	c := newMailCore(t, "")
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	brainCalls(t, c, "p-1", "mcp__mail__publish_page", map[string]any{"repo": "portfolio"})
-	ps := cardsOf(c, cardAccess)
+	ps := cardsOf(c, cardCalls)
 	if len(ps) != 1 {
 		t.Fatalf("cards %+v", ps)
 	}
-	ref := proposalRef(cardAccess, ps[0].ID)
+	ref := proposalRef(cardCalls, ps[0].ID)
 	out, err := c.brainWithdrawCard(context.Background(), ref)
 	if err != nil || !strings.Contains(out["note"].(string), "nothing of it runs") {
 		t.Fatalf("%v %v", out, err)

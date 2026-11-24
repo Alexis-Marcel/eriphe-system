@@ -61,11 +61,8 @@ func (c *core) proposalSpans(kind string, id int64, loc *time.Location) []propos
 		if s, ok := c.callSpan(a, loc); ok {
 			return []proposalSpan{s}
 		}
-	case cardRunCalls, cardCalls:
-		asks := c.runAsks(id)
-		if kind == cardCalls {
-			asks = c.batchAsks(id)
-		}
+	case cardCalls:
+		asks := c.batchAsks(id)
 		var out []proposalSpan
 		for _, a := range asks {
 			if a.State != startProposed {

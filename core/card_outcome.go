@@ -14,8 +14,8 @@ import (
 // the user talking (#698), so how it went reaches the brain as the user's
 // act (nodeEvent), whose words are the orb's, « C'est fait » or why it
 // failed in plain words. A call of the conversation tells it at once
-// (callToBrain); the calls of a run's or an item's card, once all ran
-// (callsCardRan), in one event.
+// (callToBrain); the others of a card, once all ran (callsCardRan), in
+// one event.
 //
 // A failed call keeps the tool's own words (callError): with the call (its
 // card's record shows them, marked when its server is not trusted), and in
@@ -39,7 +39,7 @@ const callFailedSay = "Dis-lui en une phrase simple ce qui n'a pas marché et po
 func (c *core) traceFailedCall(a accessQuestion) {
 	node := a.Node
 	if node == "" {
-		if ids := c.cardNodes(proposalRef(cardAccess, a.ID)); len(ids) > 0 {
+		if ids := c.cardNodes(askRef(a)); len(ids) > 0 {
 			node = ids[0]
 		}
 	}
@@ -58,20 +58,18 @@ func (c *core) traceFailedCall(a accessQuestion) {
 // cardToldMu makes a card's outcome told once.
 var cardToldMu sync.Mutex
 
-// callsCardRan tells the brain how the yes on a run's or an item's card
-// went, once its last approved call ran: what was done, what failed and
-// why (the tool's words, as data). The user's act (nodeEvent): what the
+// callsCardRan tells the brain how the yes on a card went, once its last
+// approved call ran: what was done, what failed and why (the tool's
+// words, as data); the brain's own calls are told it each at once, with
+// their result (runApprovedCall). The user's act (nodeEvent): what the
 // brain says of it is the orb's. Its words taint the turn that reads them
 // when a server they come from is not trusted.
 func (c *core) callsCardRan(a accessQuestion) {
-	ref, asks := proposalRef(cardRunCalls, a.Run), c.runAsks(a.Run)
-	if a.Batch != 0 {
-		ref, asks = proposalRef(cardCalls, a.Batch), c.batchAsks(a.Batch)
-	}
+	ref, asks := proposalRef(cardCalls, a.Batch), c.batchAsks(a.Batch)
 	var done, failed []string
 	taint := ""
 	for _, x := range asks {
-		if x.State != startApproved {
+		if x.State != startApproved || c.brainKept(x) {
 			continue
 		}
 		s, _ := c.callState(x.ID)
