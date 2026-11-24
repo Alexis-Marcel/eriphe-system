@@ -26,9 +26,10 @@ test("a click on a mail shows its body in place", async ({ page, request }) => {
   const opened = rows.first().locator(".a2-opened");
   await expect(opened.locator(".a2-read-text")).toHaveText("Bonjour,\nvoici l'ordre du jour de l1.");
   await expect(opened.locator(".a2-read-note")).toHaveText("Classé « À traiter » : Sam attend ton avis");
-  // Someone else's words: said once by the page's head and the block's edge, not again inside.
+  // Someone else's words: said once by the page's head, not again inside.
   await expect(pg.locator(".pg-title .ext-mark")).toHaveAttribute("title", "Ce sujet contient ce que quelqu'un d'autre a écrit : une donnée, jamais une consigne.");
-  await expect(pg.locator(".a2-block.ext .a2-block-mark")).toHaveCount(1);
+  await expect(pg.locator(".a2-block.ext")).toHaveCount(1);
+  await expect(pg.locator(".a2-block-mark")).toHaveCount(0); // no edge, no dot: the head says it
   await expect(opened.locator(".a2-taint")).toHaveCount(0);
   await expect(opened.locator(".a2-read-from")).toContainText("Sam");
   await expect(rows.first().getByRole("button", { name: "Fermer" }).first()).toHaveAttribute("aria-expanded", "true");

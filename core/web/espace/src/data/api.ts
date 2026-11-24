@@ -460,8 +460,10 @@ export function retryBrain(): Promise<boolean> {
 }
 
 // answerCard says yes or no to a card; a yes with a choice, to the
-// calls ticked (only), the others (left) refused.
+// calls ticked (only), the others (left) refused; a no naming some of its
+// calls (left, a row's ✕), to those alone: the card waits on.
 export function answerCard(card: number, yes: boolean, only?: number[], left?: number[]): Promise<boolean> {
+  if (!yes && left?.length) return post(`/cards/${card}/no`, new URLSearchParams({ left: left.join(",") }));
   if (!yes || !only) return post(`/cards/${card}/${yes ? "yes" : "no"}`);
   return post(`/cards/${card}/yes`, new URLSearchParams({ only: only.join(","), left: (left ?? []).join(",") }));
 }

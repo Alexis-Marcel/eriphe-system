@@ -103,8 +103,8 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen, big, 
               line, the one ⚠ of a node someone else's words reached (its
               title among them, or its content: its words say which), and
               the sign of a node the user did not ask for. That ⚠ is the
-              page's one sign for it: inside, a block only has its quiet
-              edge (Doc.tsx). */}
+              page's one sign for it: a block inside looks like any other
+              (Doc.tsx). */}
           <h2>
             <span className="pg-title-tx" title={node?.title || external}>
               <NodeTitle x={node} fallback={external} mark={false} />
