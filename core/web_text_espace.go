@@ -117,6 +117,12 @@ var espaceStrings = map[string]map[string]string{
 		"espace.bar.withdraw":     "Retirer ce message",
 		"espace.bar.taken":        "Trop tard : {{name}} l'avait déjà lu.",
 		"espace.bar.cards":        "Ce qui attend ta réponse",
+		// Les fichiers joints au message (orb/Bar.tsx, attachments.go).
+		"espace.bar.attach":      "Joindre un fichier",
+		"espace.bar.attached":    "Pièces jointes",
+		"espace.bar.file.remove": "Retirer %s",
+		"espace.bar.file.toobig": "« %s » dépasse %d Mo.",
+		"espace.bar.file.many":   "%d pièces jointes au plus par message.",
 		// L'orbe : {{name}} dans l'espace, à côté du sujet dont il parle
 		// (orb/), et les notifications de l'onglet (hud/).
 		"espace.orb.words":      "Ce que dit {{name}}",
@@ -298,6 +304,12 @@ var espaceStrings = map[string]map[string]string{
 		"espace.bar.withdraw":     "Withdraw this message",
 		"espace.bar.taken":        "Too late: {{name}} had already read it.",
 		"espace.bar.cards":        "Waiting for your answer",
+		// The files attached to the message (orb/Bar.tsx, attachments.go).
+		"espace.bar.attach":      "Attach a file",
+		"espace.bar.attached":    "Attachments",
+		"espace.bar.file.remove": "Remove %s",
+		"espace.bar.file.toobig": "“%s” is over %d MB.",
+		"espace.bar.file.many":   "%d attachments at most per message.",
 		// The orb: {{name}} in the space, beside the subject it talks
 		// about (orb/), and the tab's notifications (hud/).
 		"espace.orb.words":      "What {{name}} says",

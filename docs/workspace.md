@@ -26,8 +26,14 @@ circle and halo. A bubble whose title could be someone else's words (a mail's su
 named **Outside content**: its own words are never shown as a title.
 
 At the bottom, the **bar**: the one field to write to Eriphe. The bar is only a bar: no history,
-no buttons. The conversation is the subject's page: what Eriphe has to say at length, its questions
-and the buttons that answer them are written there.
+no buttons but its paperclip. The conversation is the subject's page: what Eriphe has to say at
+length, its questions and the buttons that answer them are written there.
+
+**Attach files** to a message with the paperclip (on a phone it offers the camera and the photo
+library), by dropping them on the bar, or by pasting an image (a screenshot) into it: images (PNG,
+JPEG, GIF, WebP), PDFs and texts (`.txt`, `.md`, `.csv`), five at most, 20 MB each. They show as
+chips above the bar, a ✕ each, until you send; files alone are a message too. While the message
+waits for Eriphe, the bar shows their names with it. Eriphe reads them when it reads the message.
 
 ## Eriphe's orb
 
@@ -246,7 +252,7 @@ forget one. There is no rule to maintain: the workspace's only settings are how 
 - **A proposal runs only after your yes.** When Eriphe proposes something (an event to add, a reply
   to send, a new skill), it shows as a card with **Yes** and ✕, in its page. A card that
   belongs to no page shows above the bar, wherever you are, until you answer it: no card waits
-  out of sight (the only buttons the bar ever has). A proposed appointment shows in the agenda of its day as a ghost marked **Proposed**, with its
+  out of sight (with the paperclip, the only buttons the bar ever has). A proposed appointment shows in the agenda of its day as a ghost marked **Proposed**, with its
   **Yes**, wherever that agenda is; on its page the agenda is then its place, not the page's foot.
   An invitation someone sent you carries the small amber sign of what comes from outside.
   Answering in one place answers everywhere. After your yes, a proposal that runs a call shows

@@ -1020,7 +1020,21 @@ a.notice-text:hover { text-decoration: underline; }
 .cs-cards { width: min(560px, 100%); max-height: 40vh; overflow: auto; pointer-events: auto; text-align: left; }
 .cs-note { margin: 0; font-size: 12px; color: var(--fg3); }
 .cs-note a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
-.cs-bar { width: 100%; display: flex; align-items: center; gap: 6px; padding: 5px 5px 5px 16px; border-radius: 999px; border: 1px solid var(--glass-line); background: var(--glass);
+/* A message's files: in a line that waits, and as chips before it goes,
+   a thumbnail for an image, a ✕ each. */
+.cs-wait-files { display: inline-flex; align-items: center; gap: 3px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-wait-files .cs-clip { flex: none; width: 12px; height: 12px; opacity: 0.8; }
+.cs-files { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 100%; }
+.cs-file { display: flex; align-items: center; gap: 6px; max-width: 220px; padding: 3px 3px 3px 3px; border-radius: 999px; font-size: 12.5px; color: var(--fg2);
+  background: color-mix(in oklab, var(--card) 80%, transparent); border: 1px solid var(--line); animation: cs-ack-in 0.25s ease; }
+.cs-file img, .cs-file-icon { flex: none; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
+.cs-file-icon { padding: 4px; color: var(--fg3); }
+.cs-file-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (prefers-reduced-motion: reduce) { .cs-file { animation: none; } }
+.cs-attach { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; color: var(--fg3); cursor: pointer; }
+.cs-attach:hover, .cs-attach:focus-visible { color: var(--fg); background: var(--fill); }
+.cs-bar.dropping { border-color: var(--link-on); border-style: dashed; }
+.cs-bar { width: 100%; display: flex; align-items: center; gap: 6px; padding: 5px 5px 5px 6px; border-radius: 999px; border: 1px solid var(--glass-line); background: var(--glass);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--lift); transition: border-color 0.2s, box-shadow 0.2s; }
 .cs-bar:focus-within { border-color: var(--link-on); }
 .cs-bar input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--fg); padding: 8px 4px; }

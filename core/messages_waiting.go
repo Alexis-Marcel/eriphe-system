@@ -35,13 +35,14 @@ var (
 const waitingFresh = 2 * time.Second
 
 // waitingLine is a message of the user's that waits for Eriphe, as the
-// bar shows it: its seq, its text, and the node it was said to, with that
-// node's title.
+// bar shows it: its seq, its text, the names of its attachments, and the
+// node it was said to, with that node's title.
 type waitingLine struct {
-	Seq   int    `json:"seq"`
-	Text  string `json:"text"`
-	Node  string `json:"node,omitempty"`
-	Title string `json:"title,omitempty"`
+	Seq   int      `json:"seq"`
+	Text  string   `json:"text"`
+	Files []string `json:"files,omitempty"`
+	Node  string   `json:"node,omitempty"`
+	Title string   `json:"title,omitempty"`
 }
 
 // waitingMessages are the user's messages not yet delivered to the brain,
@@ -64,8 +65,8 @@ func (c *core) waiting(thinking bool) []waitingLine {
 			continue
 		}
 		l := waitingLine{Seq: m.Seq, Text: truncate(m.Text, askedMax), Node: m.Node}
-		if l.Text == "" && len(m.Attachments) > 0 {
-			l.Text = m.Attachments[0].Name
+		for _, a := range m.Attachments {
+			l.Files = append(l.Files, a.Name)
 		}
 		if m.Node != "" {
 			l.Title = c.shownNodeTitle(m.Node)

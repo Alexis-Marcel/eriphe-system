@@ -70,13 +70,22 @@ type espaceBoot struct {
 	// configuration; "" once it can. The bar says it, and the way to
 	// the wizard.
 	Setup string `json:"setup,omitempty"`
+	// Attach is what the bar may attach to one message (attachments.go):
+	// how many files, and how large each, in bytes.
+	Attach espaceAttach `json:"attach"`
+}
+
+// espaceAttach is the bar's limits on attachments.
+type espaceAttach struct {
+	Many int `json:"many"`
+	Size int `json:"size"`
 }
 
 func (w *web) handleEspaceBoot(rw http.ResponseWriter, r *http.Request, s *session) {
 	lang := w.lang(r)
 	w.c.noteUserLang(lang) // Eriphe's lines follow it
 	b := espaceBoot{Lang: lang, Name: assistantName(), CSRF: s.CSRF, Strings: espaceWords(lang, assistantName()),
-		View: w.c.view(), Setup: w.setupState()}
+		View: w.c.view(), Setup: w.setupState(), Attach: espaceAttach{Many: maxAttachments, Size: maxAttachmentSize}}
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(rw).Encode(b)

@@ -116,6 +116,47 @@ func TestWaitingMessagesWithdrawn(t *testing.T) {
 	}
 }
 
+// The bar's message with files (orb/Bar.tsx): said to a node, it is the
+// node's; while it waits, the bar shows its files' names, a message of
+// files alone too; delivered, the brain's turn tells it of each file, to
+// read it with read_attachment.
+func TestWaitingMessageWithFiles(t *testing.T) {
+	c, tw, csrf := waitingCore(t)
+	node := siteNode(t, c)
+	fields := map[string]string{"text": "Regarde ça.", "node": node, "from": "workspace"}
+	if code, body := tw.sendForm(csrf, fields, upload{"capture.png", pngBytes(t)}, upload{"notes.txt", []byte("une ligne")}); code != http.StatusNoContent {
+		t.Fatalf("send: %d %s", code, body)
+	}
+	if code, body := tw.sendForm(csrf, map[string]string{"text": "", "from": "workspace"}, upload{"seul.md", []byte("# seul")}); code != http.StatusNoContent {
+		t.Fatalf("files alone: %d %s", code, body)
+	}
+	msgs, _ := c.store.waitingMessages()
+	if len(msgs) != 2 || msgs[0].Node != node || len(msgs[0].Attachments) != 2 || msgs[1].Node != "" {
+		t.Fatalf("waiting: %+v", msgs)
+	}
+
+	x, err := tw.w.orbFor("", true)
+	if err != nil || len(x.Waiting) != 2 {
+		t.Fatalf("orb: %v %+v", err, x)
+	}
+	if w := x.Waiting[0]; w.Text != "Regarde ça." || !slices.Equal(w.Files, []string{"capture.png", "notes.txt"}) || w.Node != node {
+		t.Errorf("the message with files: %+v", w)
+	}
+	if w := x.Waiting[1]; w.Text != "" || !slices.Equal(w.Files, []string{"seul.md"}) {
+		t.Errorf("files alone: %+v", w)
+	}
+
+	turn := deliverNow(t, c)
+	for _, a := range msgs[0].Attachments {
+		if !strings.Contains(turn, "[pièce jointe "+a.ID) || !strings.Contains(turn, a.Name) {
+			t.Errorf("the brain is not told of %s:\n%s", a.Name, turn)
+		}
+	}
+	if !strings.Contains(turn, "Regarde ça.") || !strings.Contains(turn, "seul.md") {
+		t.Errorf("the turn given to the brain:\n%s", turn)
+	}
+}
+
 // A plain yes or no that decided a card has acted: it cannot be withdrawn.
 func TestWaitingMessageThatDecidedACard(t *testing.T) {
 	c, _, _ := waitingCore(t)
