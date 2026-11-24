@@ -39,7 +39,9 @@ type proposalView struct {
 	// what Oui says for 1, 2… items chosen (call_fold.go).
 	Choices []proposalChoice `json:"choices,omitempty"`
 	Acts    []string         `json:"acts,omitempty"`
-	Created time.Time        `json:"created"`
+	// Verb: what its yes button says, always a verb (card_verb.go).
+	Verb    string    `json:"verb"`
+	Created time.Time `json:"created"`
 }
 
 // view is a card and its proposal as the workspace shows them, in lang.
@@ -59,6 +61,7 @@ func (w *web) proposalView(x convoCard, p proposal, lang string) proposalView {
 	if p.acts != nil && x.State == cardPending {
 		v.Acts = p.acts(lang)
 	}
+	v.Verb = p.VerbIn(lang)
 	if x.State == cardApproved {
 		var asks []accessQuestion
 		switch p.Kind {

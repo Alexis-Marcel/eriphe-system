@@ -15,7 +15,7 @@ import { Cards } from "./Cards";
 // was left. On its own node's page, where it comes from is under Détails.
 const pending: ProposalView = {
   ref: "calls:4",
-  card: 9,
+  card: 9, verb: "Faire",
   kind: "calls",
   state: "pending",
   text: "Archiver 3 mails",
@@ -117,11 +117,11 @@ describe("a card of several calls", () => {
     expect(left?.textContent).toBe("« La lettre » · news@example.orglaissé");
   });
 
-  it("one call: no box, but Oui names it", async () => {
-    shown = { ...pending, text: "Archiver 1 mail", choices: [pending.choices![0]], acts: undefined };
+  it("one call: no box, its yes says its verb", async () => {
+    shown = { ...pending, text: "Archiver 1 mail", verb: "Archiver", choices: [pending.choices![0]], acts: undefined };
     await draw("n1");
     expect(boxes()).toHaveLength(0);
-    expect(yes().textContent).toBe("Oui");
+    expect(yes().textContent).toBe("Archiver");
     await act(async () => yes().click());
     expect(answers[0]).toMatchObject({ yes: true, only: [4], left: [] });
   });

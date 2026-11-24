@@ -27,15 +27,22 @@ func TestNodeGrammarExample(t *testing.T) {
 	if b == nil || len(b.Sources) != 1 || b.Sources["mails"].Items == nil || b.Sources["mails"].Items.Open == nil {
 		t.Fatalf("block %+v", b)
 	}
-	if bad := listsOK(b); len(bad) > 0 {
-		t.Fatalf("its sections: %v", bad)
+	if !strings.Contains(string(b.Bound()), `"items":{"@path":"/mails/messages"}`) {
+		t.Fatalf("its Sections does not read the source's items: %s", b.Bound())
 	}
 	c := graphCore(t)
 	out := mustBrainNodes(t, c, "catalog_read", map[string]any{})
 	catalog, _ := out["catalog"].(string)
-	for _, want := range []string{"## Composants", "# Un bloc d'Eriphe", "`glance`", "`\"open\"", "[_group=", "`_card`", "{\"card\": \"<ref>\"}", nodeGrammarExample} {
+	for _, want := range []string{"## Composants", "# Un bloc d'Eriphe", "`glance`", "`\"open\"", "**Sections**", "`_card`", "{\"card\": \"<ref>\"}", nodeGrammarExample} {
 		if !strings.Contains(catalog, want) {
 			t.Errorf("catalog_read lacks %q", want)
+		}
+	}
+	// The components another one replaced are never offered: a node that
+	// has them still reads (TestLegacyBlocksStillRender).
+	for _, gone := range []string{"**List**", "**Fold**", "**Item**", "**Grid**", "**Card**", "**Button**", "**Metric**", "**Progress**", "[_group="} {
+		if strings.Contains(catalog, gone) {
+			t.Errorf("catalog_read offers %s", gone)
 		}
 	}
 }

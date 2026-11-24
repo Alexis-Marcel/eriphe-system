@@ -473,7 +473,7 @@ func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlo
 	c.noteSources(id, b, v.Data)
 
 	var list []map[string]any
-	json.Unmarshal(b.Components, &list)
+	json.Unmarshal(b.Bound(), &list)
 	authorOK := !b.External
 	for _, comp := range list {
 		kind, _ := comp["component"].(string)
@@ -487,15 +487,16 @@ func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlo
 		}
 	}
 	if done := c.setUpButtons(list); len(done) > 0 {
-		list = withoutComponents(list, done) // what they set up is (setup_buttons.go)
+		list = withoutComponents(withoutAsks(list, done), done) // what they set up is (setup_buttons.go)
 	}
+	c.galleryMedia(id, b, list, v.Data, authorOK)
 	unfilterLists(list) // code filters, the page shows the rows it gets (list_sections.go)
 	raw, _ := json.Marshal(list)
 	json.Unmarshal(raw, &v.Components)
 	if v.Components == nil {
 		v.Components = []a2ui.Component{}
 	}
-	for _, bound := range a2ui.Eriphe().BoundPaths(b.Components) {
+	for _, bound := range a2ui.Eriphe().BoundPaths(b.Bound()) {
 		at := tokens(bound.Path)
 		if _, ok := b.Sources[at0(at)]; ok {
 			at = unfiltered(at) // under a List that filters: each item of the source's

@@ -39,6 +39,13 @@ func CheckActions(surfaceID string, components json.RawMessage) []ValidationErro
 		fail := func(path, msg string) {
 			errs = append(errs, ValidationError{Code: CodeValidationFailed, SurfaceID: surfaceID, Path: path, Message: msg})
 		}
+		if comp["component"] == "Asks" {
+			for n, ask := range AskItems(comp) {
+				if ask.Text != "" && BareYes(ask.Text) { // "": hidden by code (setup_buttons.go)
+					fail("/components/"+strconv.Itoa(i)+"/items/"+strconv.Itoa(n), strconv.Quote(ask.Text)+" asks nothing: an ask says what it asks, its verb first (« Envoie la réponse », « Jette les 102 »); a yes is a card's")
+				}
+			}
+		}
 		a, ok := comp["action"].(map[string]any)
 		if !ok {
 			continue
@@ -73,16 +80,68 @@ func CheckActions(surfaceID string, components json.RawMessage) []ValidationErro
 	return errs
 }
 
+// Ask is one ask of an Asks: its words, and what it sets up (its until:
+// code hides it once that holds), if anything.
+type Ask struct {
+	Text  string
+	Until map[string]any
+}
+
+// AskItems are the asks of an Asks component, in its order: an item
+// written as text, or as {text, until}; an item that is neither keeps
+// its place with no text.
+func AskItems(comp map[string]any) []Ask {
+	items, _ := comp["items"].([]any)
+	out := make([]Ask, 0, len(items))
+	for _, it := range items {
+		var a Ask
+		switch x := it.(type) {
+		case string:
+			a.Text = x
+		case map[string]any:
+			a.Text, _ = x["text"].(string)
+			a.Until, _ = x["until"].(map[string]any)
+		}
+		a.Text = strings.TrimSpace(a.Text)
+		out = append(out, a)
+	}
+	return out
+}
+
+// bareYes are the words that answer without saying what: a button that
+// says only one of them asks nothing (an ask says its verb).
+var bareYes = map[string]bool{"oui": true, "non": true, "ok": true, "okay": true, "d'accord": true, "ouais": true, "vas-y": true, "go": true, "yes": true, "no": true, "sure": true}
+
+// BareYes tells whether a button's words are only a yes or a no.
+func BareYes(text string) bool {
+	t := strings.ToLower(strings.Trim(strings.TrimSpace(text), " .!?…✓"))
+	return t == "" || bareYes[strings.ReplaceAll(t, "’", "'")]
+}
+
 // AskText is the text of the ask written on a component of the list, as
-// its author wrote it; ok false when the component has none.
+// its author wrote it; ok false when the component has none. An ask of
+// an Asks is named by the component's id and its place, "<id>#<n>"
+// (from 0).
 func AskText(components json.RawMessage, id string) (string, bool) {
 	var list []map[string]any
 	if json.Unmarshal(components, &list) != nil {
 		return "", false
 	}
+	id, at, many := strings.Cut(id, "#")
 	for _, comp := range list {
 		if cid, _ := comp["id"].(string); cid != id {
 			continue
+		}
+		if comp["component"] == "Asks" {
+			n, err := strconv.Atoi(at)
+			asks := AskItems(comp)
+			if !many || err != nil || n < 0 || n >= len(asks) || asks[n].Text == "" {
+				return "", false
+			}
+			return asks[n].Text, true
+		}
+		if many {
+			return "", false
 		}
 		a, _ := comp["action"].(map[string]any)
 		ev, _ := a["event"].(map[string]any)

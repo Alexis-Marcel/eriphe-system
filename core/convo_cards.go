@@ -163,6 +163,7 @@ type proposal struct {
 	origin    func(lang string) cardOrigin       // where it comes from and what its Oui does (card_origin.go)
 	choices   func(lang string) []proposalChoice // a calls card's calls the user may leave out (call_fold.go)
 	acts      func(lang string) []string         // what its Oui says for 1, 2… items chosen
+	verb      func(lang string) string           // what its yes button says, if not its kind's (card_verb.go)
 }
 
 // Origin is where it comes from and what its Oui does, with the words of

@@ -15,6 +15,8 @@ import { NodeTitle } from "../graph/Title";
 import { InlineYes } from "./inline";
 import { cleanTrend, Spark } from "./spark";
 import { useMoved, useProposals, type ProposalView } from "./proposals";
+import { viaCore } from "./media";
+import { blocks, BlockTitle, shown } from "./blocks";
 
 // The workspace's A2UI catalog, as the page renders it: shapes, never tools.
 // eriphe-core owns the catalog (its JSON Schema, which validates what a
@@ -336,17 +338,7 @@ const Markdown = createComponentImplementation(
   },
 );
 
-// An image is loaded only through eriphe-core (/espace/media, which fetches
-// and checks it): a model's URL is never fetched by the page, so it cannot
-// carry data out. Any other address shows what the image is, in words.
-export function viaCore(url: string): boolean {
-  try {
-    const u = new URL(url, location.origin);
-    return u.origin === location.origin && u.pathname === "/espace/media" && url.startsWith("/espace/media?");
-  } catch {
-    return false;
-  }
-}
+export { viaCore };
 
 const Image = createComponentImplementation(
   {
@@ -685,6 +677,7 @@ const Chart = createComponentImplementation(
       kind: z.enum(["line", "bar", "stack"]),
       series: listOr(Series),
       unit: CommonSchemas.DynamicString.optional(),
+      title: CommonSchemas.DynamicString.optional(),
     }),
   },
   ({ props }) => {
@@ -692,8 +685,20 @@ const Chart = createComponentImplementation(
     const series = cleanSeries(props.series);
     const names = series.map((s) => s.name).filter(Boolean).join(", ");
     const label = t(`espace.a2.chart.${props.kind}`, names || "—");
-    if (!series.some((s) => s.points.length)) return <p className="a2-empty">{t("espace.a2.chart.empty")}</p>;
-    return <ChartView kind={props.kind} series={series} unit={str(props.unit) || undefined} lang={lang} label={label} />;
+    const title = <BlockTitle text={str(props.title)} />;
+    if (!series.some((s) => s.points.length))
+      return (
+        <>
+          {title}
+          <p className="a2-empty">{t("espace.a2.chart.empty")}</p>
+        </>
+      );
+    return (
+      <>
+        {title}
+        <ChartView kind={props.kind} series={series} unit={str(props.unit) || undefined} lang={lang} label={label} />
+      </>
+    );
   },
 );
 
@@ -750,12 +755,31 @@ function mediaCell(v: unknown, alt: string, file: string): ReactNode | undefined
   );
 }
 
+// The fields of a row a Table shows by itself when its columns are not
+// written: not these, which say what a row is to code (a node_find row's
+// id, status, when it changed; an image; code's fields, _note…).
+const UNSHOWN = new Set(["id", "status", "changed", "photo", "image"]);
+
+// columnsOf are a Table's columns when its author wrote none: the fields
+// of its first row, in their order, the key as their header (none for a
+// title), numbers to the right.
+export function columnsOf(rows: Record<string, unknown>[]): z.infer<typeof TableColumn>[] {
+  const keys = Object.keys(rows[0] ?? {}).filter((k) => !UNSHOWN.has(k) && !k.startsWith("_"));
+  return keys.map((key) => ({
+    key,
+    label: key === "title" ? "" : key.charAt(0).toUpperCase() + key.slice(1),
+    kind: rows.every((r) => r[key] === undefined || r[key] === null || typeof r[key] === "number") ? "number" : "text",
+  }));
+}
+
 const Table = createComponentImplementation(
   {
     name: "Table",
     schema: z.object({
-      columns: z.array(TableColumn).min(1),
-      rows: listOr(z.record(z.string(), z.unknown())),
+      columns: z.array(TableColumn).min(1).optional(),
+      rows: z.union([z.string(), z.array(z.record(z.string(), z.unknown())), CommonSchemas.DataBinding]),
+      title: CommonSchemas.DynamicString.optional(),
+      units: z.record(z.string(), z.string()).optional(),
       emptyText: CommonSchemas.DynamicString.optional(),
     }),
   },
@@ -763,9 +787,20 @@ const Table = createComponentImplementation(
     const { t, lang } = useWords();
     const lists = useContext(ListsContext);
     const rows = (Array.isArray(props.rows) ? props.rows : []).filter((r): r is Record<string, unknown> => !!r && typeof r === "object");
-    const cols = props.columns ?? [];
-    if (!rows.length) return <p className="a2-empty">{str(props.emptyText) || t("espace.a2.table.empty")}</p>;
+    const cols = props.columns ?? columnsOf(rows);
+    const units: Record<string, string> = props.units ?? {};
+    const stars = (n: string) => t("espace.blocks.stars", n);
+    const title = str(props.title);
+    if (!rows.length)
+      return (
+        <>
+          <BlockTitle text={title} />
+          <p className="a2-empty">{str(props.emptyText) || t("espace.a2.table.empty")}</p>
+        </>
+      );
     return (
+      <>
+      <BlockTitle text={title} aside={title ? <span className="a2-count">{rows.length}</span> : undefined} />
       <div className="a2-table-wrap">
         <table className="a2-table">
           <thead>
@@ -784,7 +819,7 @@ const Table = createComponentImplementation(
               return (
                 <tr key={i}>
                   {cols.map((c, j) => {
-                    let v: ReactNode = mediaCell(r[c.key], c.label, t("espace.props.file")) ?? cell(lang, c.kind, r[c.key]);
+                    let v: ReactNode = mediaCell(r[c.key], c.label, t("espace.props.file")) ?? (units[c.key] ? shown(lang, r[c.key], units[c.key], stars) : cell(lang, c.kind, r[c.key]));
                     if (n && c.key === "title") v = <NodeTitle x={n} fallback={str(r.title)} />;
                     if (n && j === 0 && lists?.openNode) {
                       const open = lists.openNode;
@@ -806,6 +841,7 @@ const Table = createComponentImplementation(
           </tbody>
         </table>
       </div>
+      </>
     );
   },
 );
@@ -819,7 +855,7 @@ const TimelineItem = z.object({
 const STATES = ["done", "current", "pending", "failed"];
 
 const Timeline = createComponentImplementation(
-  { name: "Timeline", schema: z.object({ items: listOr(TimelineItem) }) },
+  { name: "Timeline", schema: z.object({ items: listOr(TimelineItem), title: CommonSchemas.DynamicString.optional() }) },
   ({ props }) => {
     const { t, lang } = useWords();
     const items = (Array.isArray(props.items) ? props.items : []).filter(
@@ -828,7 +864,27 @@ const Timeline = createComponentImplementation(
     // Every step dated: what happened, its date in the margin (its time
     // alone when it is today's).
     const dated = items.length > 1 && items.every((it) => wall(it.date));
+    // It says where the work stands (« 2 sur 6 · Acompte »), with a bar of
+    // its steps, while some are left: no Progress beside it.
+    const done = items.filter((it) => it.state === "done").length;
+    const current = items.find((it) => it.state === "current");
+    const left = items.length > 1 && done < items.length;
     return (
+      <>
+      <BlockTitle text={str(props.title)} />
+      {left && (
+        <div className="a2-tl-prog">
+          <p className="a2-tl-prog-words">
+            <b>{t("espace.a2.progress.of", done, items.length)}</b>
+            {current && <span> · {current.label}</span>}
+          </p>
+          <span className="a2-bar" role="img" aria-label={t("espace.a2.progress", done, items.length)}>
+            {items.map((it, i) => (
+              <span key={i} className={it.state === "done" ? "a2-seg-done" : it.state === "current" ? "a2-seg-now" : "a2-seg"} />
+            ))}
+          </span>
+        </div>
+      )}
       <ol className={`a2-timeline${dated ? " a2-timeline-dated" : ""}`}>
         {items.map((it, i) => {
           const state = STATES.includes(it.state) ? it.state : "pending";
@@ -853,6 +909,7 @@ const Timeline = createComponentImplementation(
           );
         })}
       </ol>
+      </>
     );
   },
 );
@@ -1197,6 +1254,7 @@ export const components: ReactComponentImplementation[] = [
   Icon,
   Link,
   Code,
+  ...blocks,
   box("row"),
   box("column"),
   List,

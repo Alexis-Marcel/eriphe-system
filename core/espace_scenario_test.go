@@ -60,6 +60,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/rows", sc.handleRows)
 	mux.HandleFunc("POST /e2e/review", sc.handleReview)
 	mux.HandleFunc("POST /e2e/sections", sc.handleSections)
+	mux.HandleFunc("POST /e2e/blocks", sc.handleBlocks)
 	mux.HandleFunc("POST /e2e/open", sc.handleOpen)
 	mux.HandleFunc("POST /e2e/bilan", sc.handleBilan)
 	mux.HandleFunc("POST /e2e/purge", sc.handlePurge)
@@ -266,6 +267,7 @@ type scenarioTools struct {
 	sent    []string
 	moved   [][]string       // move: the ids of each call (view-rows.spec.ts)
 	deleted [][]string       // supprimer: the ids of each call (sections.spec.ts)
+	thrown  [][]string       // jeter: the ids of each call (blocks.spec.ts)
 	read    []string         // lire: the id of each call (sources-open.spec.ts)
 	trashed []string         // trash: "<account>:<ids>" of each call (view-bilan.spec.ts)
 	trashNo string           // trash: answers with this error, trashing nothing (view-failed.spec.ts)
@@ -435,6 +437,34 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 					}
 				}
 				return nil, map[string]any{"messages": msgs}, nil
+			})
+		// du_jour is tri's mailbox again, jeter what leaves it (blocks.spec.ts).
+		mcp.AddTool(s, &mcp.Tool{Name: "du_jour", Description: "Le courrier du jour", Annotations: read},
+			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				gone := map[string]bool{}
+				for _, ids := range f.thrown {
+					for _, id := range ids {
+						gone[id] = true
+					}
+				}
+				msgs := []any{}
+				for _, m := range tri {
+					if !gone[m["id"].(string)] {
+						msgs = append(msgs, m)
+					}
+				}
+				return nil, map[string]any{"messages": msgs}, nil
+			})
+		mcp.AddTool(s, &mcp.Tool{Name: "jeter", Description: "Jette des mails", Meta: mailSays("Jeter {item}", "Throw away {item}", "jeté", "jetés", "thrown away")},
+			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+				IDs []string `json:"ids"`
+			}) (*mcp.CallToolResult, map[string]any, error) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				f.thrown = append(f.thrown, slices.Clone(in.IDs))
+				return nil, map[string]any{"thrown": len(in.IDs)}, nil
 			})
 		// lus lists two mails, lire reads one in full (sources-open.spec.ts).
 		mcp.AddTool(s, &mcp.Tool{Name: "lus", Description: "Les mails à lire", Annotations: read},
@@ -1140,24 +1170,10 @@ func articleDoc(decided, research, next string, linked ...string) string {
 	return strings.Join(out, "\n")
 }
 
-// askBlock is a block of buttons that answer a question: each asks
-// Eriphe its own words, as the user's message in the node.
+// askBlock is an Asks that answers a question: each ask sends Eriphe its
+// own words, as the user's message in the node.
 func askBlock(name string, answers ...string) string {
-	comps := []any{map[string]any{"id": "root", "component": "Row", "children": func() []string {
-		var ids []string
-		for i := range answers {
-			ids = append(ids, fmt.Sprintf("r%d", i))
-		}
-		return ids
-	}()}}
-	for i, a := range answers {
-		c := map[string]any{"id": fmt.Sprintf("r%d", i), "component": "Button", "label": a, "action": map[string]any{"event": map[string]any{"name": "ask", "context": map[string]any{"text": a}}}}
-		if i == 0 {
-			c["variant"] = "primary"
-		}
-		comps = append(comps, c)
-	}
-	raw, _ := json.Marshal(map[string]any{"components": comps})
+	raw, _ := json.Marshal(map[string]any{"components": map[string]any{"component": "Asks", "items": answers}})
 	return "```eriphe:block " + name + "\n" + string(raw) + "\n```\n"
 }
 
@@ -1234,7 +1250,7 @@ func (sc *scenario) handleTools(rw http.ResponseWriter, r *http.Request) {
 	f := sc.tools
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	writeJSON(rw, http.StatusOK, map[string]any{"lit": jsonList(f.lit), "sent": jsonList(f.sent), "moved": jsonList(f.moved), "deleted": jsonList(f.deleted), "read": jsonList(f.read), "trashed": jsonList(f.trashed), "replied": jsonList(f.replied), "purged": jsonList(f.purged)})
+	writeJSON(rw, http.StatusOK, map[string]any{"lit": jsonList(f.lit), "sent": jsonList(f.sent), "moved": jsonList(f.moved), "deleted": jsonList(f.deleted), "thrown": jsonList(f.thrown), "read": jsonList(f.read), "trashed": jsonList(f.trashed), "replied": jsonList(f.replied), "purged": jsonList(f.purged)})
 }
 
 // jsonList is a copy of s, empty rather than nil: a spec reads [] before the
@@ -1469,6 +1485,54 @@ func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.foldCalls() // as a run's end does (skill_runs.go)
+	c.syncCards()
+	c.readNode(sc.ctx, id, nil, time.Now())
+	c.showNode(id, byBrain, false)
+	c.bump()
+	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
+}
+
+// handleBlocks is POST /e2e/blocks: the same mails in one Sections that
+// names its source (blocks.spec.ts), noted as a skill would: s2 to act
+// on, s1, s3 and s4 to delete (the brain's one call on them, a batch),
+// s5 for information; and a band of Figures. Written by the brain as any
+// author, read once, and shown.
+func (sc *scenario) handleBlocks(rw http.ResponseWriter, r *http.Request) {
+	c := sc.c
+	d, err := c.nodes.Create(nodestore.New{Title: "Courrier du jour", Author: byBrain, Body: "Le courrier.\n"})
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	id := d.Node.Meta.ID
+	body := "Le courrier.\n\n```eriphe:block chiffres\n" + `{"components": {"component": "Figures", "items": [{"label": "Reçus", "value": 5}, {"label": "À jeter", "value": 3}]}}` + "\n```\n\n" +
+		"```eriphe:block courrier\n" + `{"components": {"component": "Sections", "title": "Courrier", "items": "courrier"},
+ "sources": {"courrier": {"tool": "mail/du_jour", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for item, note := range map[string]itemNote{
+		"s1": {Group: "À supprimer"}, "s3": {Group: "À supprimer"}, "s4": {Group: "À supprimer"},
+		"s2": {Group: "À traiter", Note: "Le comité attend ton avis", State: "act"},
+		"s5": {Group: "Pour info"},
+	} {
+		note.Source, note.Item, note.Author = "courrier", item, byBrain
+		if err := c.noteItem(id, note); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	c.readNode(sc.ctx, id, nil, time.Now())
+	// A call on each, folded into one card (a run's end does so): the
+	// batch may leave one out.
+	for _, l := range []itemLabel{{ID: "s1", Title: "Soldes d'hiver"}, {ID: "s3", Title: "Votre colis est en route"}, {ID: "s4", Title: "Lettre du dimanche"}} {
+		if err := sc.callOn(id, "courrier", "mail", "jeter", map[string]any{"ids": []string{l.ID}}, l); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	c.foldCalls()
 	c.syncCards()
 	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)

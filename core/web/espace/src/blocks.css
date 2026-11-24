@@ -1,0 +1,144 @@
+/* The blocks a model writes as one component (a2ui/blocks.tsx): Sections,
+   Figures, Gallery, Asks, and the head a block's title makes. Tokens are
+   espace.css's. The page's width decides the layout (container queries on
+   .pg-doc), never the block. Motion only where the user allows it, and
+   only from CSS: nothing waits on it. */
+
+/* a block's head: its title, a count at the end */
+.a2-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.a2-head-title { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: -0.005em; color: var(--fg); }
+.a2-count { display: inline-flex; min-width: 20px; justify-content: center; padding: 0 6px; border-radius: 999px; background: var(--fill); color: var(--fg2); font-size: 11.5px; font-weight: 500; line-height: 19px; font-variant-numeric: tabular-nums; }
+
+/* --- Figures: a band with hairlines ------------------------------------- */
+.a2-figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.a2-fig { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 14px 16px 12px; background: var(--card); }
+.a2-fig-label { font-size: var(--fs-small); color: var(--fg3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.a2-fig-value { font-size: var(--fs-figure); font-weight: 600; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; line-height: 1.2; border-radius: 6px; overflow-wrap: anywhere; }
+.a2-fig-value small { font-size: 0.62em; font-weight: 500; color: var(--fg3); letter-spacing: 0; }
+.a2-fig-delta { font-size: var(--fs-small); color: var(--fg3); font-variant-numeric: tabular-nums; }
+/* a change is written in ink, signed: colour says a state, never a change */
+.a2-fig-delta b { font-weight: 600; color: var(--fg2); }
+@container (max-width: 420px) {
+  .a2-figs { grid-template-columns: 1fr 1fr; }
+  .a2-figs.n3 .a2-fig:first-child, .a2-figs.n1 .a2-fig { grid-column: 1 / -1; }
+  .a2-fig-value { font-size: 20px; }
+}
+
+/* --- Sections ------------------------------------------------------------ */
+.a2-secs { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.a2-secs > .a2-head { margin-bottom: -4px; }
+.a2-secs-clear { margin: 0; color: var(--ok-text); font-size: var(--fs-body); font-weight: 500; }
+.a2-sec-head { display: flex; align-items: center; gap: 8px; margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--fg); }
+.a2-sec-rows { list-style: none; margin: 0; padding: 0; }
+.a2-sec-rows > li + li { border-top: 1px solid var(--line); }
+.a2-sec-row { flex: 1; display: flex; align-items: center; gap: 12px; padding: 10px 2px; min-width: 0; }
+.a2-sec-row:not(.rich) { padding: 8px 2px; }
+.a2-sec-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.a2-sec-title { font-size: var(--fs-body); font-weight: 500; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.a2-sec-row:not(.rich) .a2-sec-title { font-weight: 400; color: var(--fg2); font-size: 13.5px; }
+.a2-sec-sub { font-size: var(--fs-small); color: var(--fg3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.a2-sec-sub b { font-weight: 500; color: var(--fg2); }
+.a2-sec-when { flex: none; font-size: 12px; color: var(--fg3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* a narrow page: the row's words first (two lines), its time goes */
+@container (max-width: 480px) {
+  .a2-sec-row.rich .a2-sec-when { display: none; }
+  .a2-sec-row.rich .a2-sec-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+}
+.a2-sec-av { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; letter-spacing: 0.01em; }
+.a2-sec-av.h0 { background: color-mix(in oklab, var(--s0) 16%, var(--card)); color: var(--s0); }
+.a2-sec-av.h1 { background: color-mix(in oklab, var(--s1) 16%, var(--card)); color: var(--s1); }
+.a2-sec-av.h2 { background: color-mix(in oklab, var(--s2) 16%, var(--card)); color: var(--s2); }
+.a2-sec-av.h3 { background: color-mix(in oklab, var(--s3) 16%, var(--card)); color: var(--s3); }
+.a2-sec-av.h4 { background: var(--fill-strong); color: var(--fg2); }
+/* a row's card: its yes keeps its size, the row's words give way */
+.a2-sec-rows .a2-rowcard > .a2-inline { flex: none; max-width: 60%; }
+.a2-sec-tick { display: flex; align-items: center; gap: 10px; }
+.a2-sec-tick > :last-child { flex: 1; min-width: 0; }
+.a2-sec-tick.left .a2-sec-row { opacity: 0.5; }
+.a2-sec-more-li { border-top: 0 !important; }
+.a2-sec-more { align-self: flex-start; margin: 4px 0 0; padding: 4px 0; font-size: var(--fs-small); color: var(--fg3); }
+.a2-sec-more:hover { color: var(--fg); }
+
+/* a folded group, or a batch with its yes on its line */
+.a2-sec-fold { border-radius: 12px; background: var(--fill); }
+.a2-sec-fold + .a2-sec-fold { margin-top: -6px; }
+.a2-sec-fold-line { display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 4px; }
+.a2-sec-fold-head { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 4px 6px; border: 0; background: none; color: var(--fg); cursor: pointer; text-align: left; font: inherit; }
+.a2-sec-fold-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.a2-sec-fold-head .a2-count { background: var(--card); }
+.a2-sec-chev { flex: none; width: 7px; height: 7px; border-right: 1.5px solid var(--fg3); border-bottom: 1.5px solid var(--fg3); rotate: -45deg; margin: 0 4px 0 6px; }
+[aria-expanded="true"] > .a2-sec-chev { rotate: 45deg; }
+.a2-sec-fold-card { flex: none; }
+.a2-sec-fold-body { padding: 0 14px 6px; }
+
+/* --- states: never written by a model ------------------------------------ */
+.a2-sk { display: grid; gap: 10px; }
+.a2-sk span { display: block; border-radius: 10px; background: var(--fill); }
+.a2-sk-rows span { height: 38px; }
+.a2-sk-rows span:nth-child(2n) { width: 82%; }
+.a2-sk-tiles { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+.a2-sk-tiles span { aspect-ratio: 4 / 5; }
+.a2-none { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 28px 16px; border-radius: 14px; border: 1px dashed var(--line-strong); text-align: center; }
+.a2-none p { margin: 0; color: var(--fg2); font-size: var(--fs-body); }
+.a2-none-ring { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line-strong); }
+
+/* --- Gallery -------------------------------------------------------------- */
+.a2-gal-block { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.a2-gal-block > .a2-head { margin-bottom: 0; }
+.a2-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.a2-chip { flex: none; display: inline-flex; gap: 6px; align-items: baseline; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--fg2); font: inherit; font-size: var(--fs-small); cursor: pointer; }
+.a2-chip small { color: var(--fg3); font-variant-numeric: tabular-nums; }
+.a2-chip.on { background: var(--fg); border-color: var(--fg); color: var(--card); }
+.a2-chip.on small { color: color-mix(in oklab, var(--card) 70%, transparent); }
+.a2-gal { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 16px 12px; }
+.a2-gal.few { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+@container (min-width: 620px) { .a2-gal.few { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@container (max-width: 420px) { .a2-gal { grid-template-columns: 1fr 1fr; } }
+.a2-tile { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.a2-tile-open { display: block; width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.a2-tile-img { display: block; aspect-ratio: 4 / 5; border-radius: 12px; overflow: hidden; background: var(--fill); }
+.a2-gal-block:has(.a2-tile-facts) .a2-tile-img { aspect-ratio: 1; }
+.a2-tile-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.a2-tile figcaption { display: flex; flex-direction: column; gap: 2px; padding: 0 2px; }
+.a2-tile-title { font-size: 13px; font-weight: 500; line-height: 1.3; }
+.a2-tile-facts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; color: var(--fg3); font-variant-numeric: tabular-nums; }
+.a2-stars { display: inline-flex; gap: 2px; vertical-align: middle; }
+.a2-stars i { width: 8px; height: 8px; border-radius: 2px; rotate: 45deg; scale: 0.8; background: var(--line-strong); }
+.a2-stars i.on { background: var(--warn); }
+
+/* --- Table: a number and its unit stay on one line ------------------------- */
+.a2-table td.a2-col-number, .a2-table td.a2-col-change { white-space: nowrap; }
+
+/* --- Timeline: where the work stands, above its steps ---------------------- */
+.a2-tl-prog { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.a2-tl-prog-words { margin: 0; font-size: var(--fs-body); color: var(--fg2); }
+.a2-tl-prog-words b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.a2-tl-prog .a2-bar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; }
+.a2-tl-prog .a2-bar > span { height: 5px; border-radius: 3px; background: var(--fill-strong); }
+.a2-tl-prog .a2-bar > .a2-seg-done { background: var(--fg); }
+.a2-tl-prog .a2-bar > .a2-seg-now { background: color-mix(in oklab, var(--fg) 40%, var(--fill-strong)); }
+
+/* --- Asks ----------------------------------------------------------------- */
+.a2-asks { display: flex; flex-wrap: wrap; gap: 8px; }
+.a2-ask { border-radius: 999px; }
+.a2-ask.sent { opacity: 0.6; }
+@container (max-width: 420px) {
+  .a2-asks { flex-direction: column; align-items: stretch; }
+  .a2-ask { justify-content: flex-start; text-align: left; border-radius: 12px; }
+}
+
+/* --- motion: soft, short, and only where the user allows it -------------- */
+@media (prefers-reduced-motion: no-preference) {
+  .a2-figs-block, .a2-secs, .a2-gal-block, .a2-asks { animation: a2-in 0.18s cubic-bezier(0.2, 0, 0, 1) both; }
+  .a2-fig-value { animation: a2-flash 0.6s ease-out; }
+  .a2-sk span { background: linear-gradient(90deg, var(--fill) 0%, var(--fill-strong) 40%, var(--fill) 80%); background-size: 300% 100%; animation: a2-shimmer 1.4s linear infinite; }
+  .a2-sec-chev { transition: rotate 0.18s cubic-bezier(0.2, 0, 0, 1); }
+  .a2-sec-fold.open .a2-sec-fold-body { animation: a2-in 0.16s cubic-bezier(0.2, 0, 0, 1) both; }
+  .a2-tile-img img { transition: scale 0.25s cubic-bezier(0.2, 0, 0, 1); }
+  .a2-tile-open:hover .a2-tile-img img { scale: 1.03; }
+  .a2-chip, .a2-ask { transition: background-color 0.15s, color 0.15s, opacity 0.2s; }
+  .a2-tl-prog .a2-bar > span { transition: background-color 0.24s; }
+}
+@keyframes a2-in { from { opacity: 0; translate: 0 6px; } }
+@keyframes a2-flash { from { background: color-mix(in oklab, var(--fg) 8%, transparent); } }
+@keyframes a2-shimmer { from { background-position: 100% 0; } to { background-position: -50% 0; } }

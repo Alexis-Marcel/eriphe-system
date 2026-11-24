@@ -7,6 +7,7 @@ import { FailSafe } from "./Fallback";
 import { WordsContext, makeT } from "./i18n";
 import "./fonts.css";
 import "./espace.css";
+import "./blocks.css";
 
 // The shell (web/templates/espace.html) names where the boot is; the dev
 // server's page names none, and the app runs on its made-up workspace

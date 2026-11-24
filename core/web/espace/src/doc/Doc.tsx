@@ -102,8 +102,15 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
       marked: (surface) => page.parts.some((p) => !!p.block?.external && surfaceOf(page.node.id, p.block.name) === surface),
       node: (id) => nodes[id],
       openNode: onOpen,
+      ask:
+        latest && live
+          ? (surface, component) => {
+              const g = toGesture({ name: "ask", surfaceId: surface, sourceComponentId: component } as Parameters<typeof toGesture>[0], page.node.id, (name) => blockOf(page, name));
+              if (g) void ask(page.node.id, g.block, g.component).catch(() => undefined);
+            }
+          : undefined,
     };
-  }, [latest, page, rows, opened, nodes, onOpen]);
+  }, [latest, live, page, rows, opened, nodes, onOpen]);
 
   const surfaces = useSyncExternalStore(adapter.subscribe, adapter.surfaces);
   if (ps.length === 0)

@@ -12,7 +12,7 @@ import { outcomeOf, Settled } from "./Page";
 // What is already decided, in the page's ⋯ menu: each card with how it
 // went, done, failed (why: the tool's own words, marked when someone
 // else's, else our reason), declined or withdrawn.
-const card = (x: Partial<ProposalView>): ProposalView => ({ ref: "calls:1", card: 1, state: "approved", text: "Accepter « Picnic »", ...x });
+const card = (x: Partial<ProposalView>): ProposalView => ({ ref: "calls:1", card: 1, state: "approved", text: "Accepter « Picnic »", verb: "Accepter", ...x });
 
 describe("the cards already decided", () => {
   let el: HTMLDivElement;

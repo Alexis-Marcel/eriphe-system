@@ -23,7 +23,7 @@ const surface = "n1--mails";
 const views: ProposalView[] = [
   {
     ref: "calls:1",
-    card: 1,
+    card: 1, verb: "Faire",
     state: "pending",
     text: "Envoyer la réponse à Sam",
     fields: [
@@ -32,10 +32,10 @@ const views: ProposalView[] = [
       { name: "mail/send_message", value: "account : perso\nreply_to : m1", detail: true },
     ],
   },
-  { ref: "calls:2", card: 2, state: "pending", text: "Autre chose" },
+  { ref: "calls:2", card: 2, verb: "Faire", state: "pending", text: "Autre chose" },
   {
     ref: "calls:3",
-    card: 3,
+    card: 3, verb: "Faire",
     state: "pending",
     text: "Mettre 3 mails à la corbeille",
     choices: ["t1", "t2", "t3"].map((id, i) => ({ id: 30 + i, text: id, n: 1, state: "proposed", items: [id] })),

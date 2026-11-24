@@ -19,6 +19,7 @@ const cards = ["e2e-scroll-1", "e2e-scroll-2"].map((ref, i) => ({
   card: 9001 + i,
   state: "pending",
   text: `Envoyer la réponse ${i + 1} ?`,
+  verb: "Envoyer",
   why: "Un brouillon attend dans la page.",
 }));
 
@@ -147,9 +148,9 @@ test.describe("a long page with its cards", () => {
     await page.keyboard.press("PageDown");
     await expect.poll(() => body.evaluate((e) => e.scrollTop)).toBeGreaterThan(0);
 
-    // The last card's Oui, scrolled to, answers it.
+    // The last card's yes, scrolled to, answers it.
     const last = pg.locator(".pg-foot .a2-proposal").last();
-    const yes = last.getByRole("button", { name: "Oui" });
+    const yes = last.getByRole("button", { name: "Envoyer", exact: true });
     await yes.scrollIntoViewIfNeeded();
     const y = (await yes.boundingBox())!;
     expect(y.y + y.height).toBeLessThanOrEqual(680);
@@ -174,7 +175,7 @@ test("a long page with its cards, on a phone", async ({ page }) => {
   await expect(pg.locator(".pg-foot .a2-proposal")).toHaveCount(2);
   // The list scrolls the whole page: its body has no scroll of its own.
   expect(await pg.locator(".pg-body").evaluate((b) => b.scrollHeight <= b.clientHeight + 1)).toBe(true);
-  const yes = pg.locator(".pg-foot .a2-proposal").last().getByRole("button", { name: "Oui" });
+  const yes = pg.locator(".pg-foot .a2-proposal").last().getByRole("button", { name: "Envoyer", exact: true });
   await yes.scrollIntoViewIfNeeded();
   await yes.click();
   await expect.poll(() => answered).toEqual([9002]);

@@ -125,7 +125,8 @@ func authorBody(d *nodestore.Doc) string {
 
 // A block's gestures.
 
-// nodeAskIn names the button clicked: its block and its component.
+// nodeAskIn names the button clicked: its block and its component, or
+// for an ask of an Asks, the component and the ask's place ("root#1").
 type nodeAskIn struct {
 	Block     string `json:"block"`
 	Component string `json:"component"`

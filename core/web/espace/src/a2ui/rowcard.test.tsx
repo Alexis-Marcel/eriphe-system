@@ -25,7 +25,7 @@ import { Surfaces } from "./Surfaces";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const surface = "n1--courrier";
-const card = (ref: string, text: string, extra: Partial<ProposalView> = {}): ProposalView => ({ ref, card: Number(ref.split(":")[1]), kind: "calls", state: "pending", text, ...extra });
+const card = (ref: string, text: string, extra: Partial<ProposalView> = {}): ProposalView => ({ ref, card: Number(ref.split(":")[1]), kind: "calls", state: "pending", text, verb: text.split(" ")[0], ...extra });
 const cards: Record<string, ProposalView> = {
   "access:7": card("access:7", "Mettre 2 mails à la corbeille", {
     kind: "access",
@@ -207,7 +207,7 @@ describe("a card read in full", () => {
     expect(details[0].textContent).toContain('ids : ["c2","c4"]');
     expect(el.querySelector(".a2-proposal-yes")).toBeNull();
     const acts = el.querySelector(".a2-proposal-actions")!;
-    expect(acts.querySelector(".a2-button-primary")?.textContent).toBe("Oui");
+    expect(acts.querySelector(".a2-button-primary")?.textContent).toBe("Mettre");
     const no = acts.querySelector<HTMLButtonElement>(".a2-proposal-no")!;
     expect(no.textContent).toBe("");
     await act(async () => no.click());

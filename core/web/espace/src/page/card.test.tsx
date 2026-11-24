@@ -54,7 +54,7 @@ describe("a card", () => {
     const sent: Answer[] = [];
     let state = "pending";
     await draw("fr", "rule:7", {
-      read: async () => ({ ref: "rule:7", card: 7, state, text: "Ne plus te prévenir des factures avant le brief ?", why: "Tu n'as ouvert aucune des cinq dernières." }),
+      read: async () => ({ ref: "rule:7", card: 7, verb: "Appliquer", state, text: "Ne plus te prévenir des factures avant le brief ?", why: "Tu n'as ouvert aucune des cinq dernières." }),
       answer: async (a) => {
         sent.push(a);
         state = "approved";
@@ -63,7 +63,8 @@ describe("a card", () => {
     });
     expect(text(".a2-proposal-text")).toBe("Ne plus te prévenir des factures avant le brief ?");
     expect(text(".a2-proposal-why")).toBe("Tu n'as ouvert aucune des cinq dernières.");
-    expect(yes().textContent).toBe("Oui");
+    // Its yes says its verb, as eriphe-core gives it: never a bare « Oui ».
+    expect(yes().textContent).toBe("Appliquer");
     expect(no().getAttribute("aria-label")).toBe("Non");
     await click(yes());
     expect(sent).toMatchObject([{ ref: "rule:7", yes: true }]);
@@ -74,7 +75,7 @@ describe("a card", () => {
   it("leads a view's card with what its yes makes, its technical words one click away", async () => {
     const view = {
       ref: "view:1",
-      card: 4,
+      card: 4, verb: "Faire",
       kind: "view",
       state: "pending",
       text: "Créer la vue « Mes mails » ?",
@@ -104,7 +105,7 @@ describe("a card", () => {
     const followers = new Set<(m: Moved) => void>();
     const move = (m: Moved) => act(async () => followers.forEach((f) => f(m)));
     await draw("fr", "rule:9", {
-      read: async () => (reads++, { ref: "rule:9", card: 9, state, text: "Ranger les mails ?" }),
+      read: async () => (reads++, { ref: "rule:9", card: 9, verb: "Faire", state, text: "Ranger les mails ?" }),
       follow: (on) => (followers.add(on), () => followers.delete(on)),
     });
     const before = reads;
@@ -119,7 +120,7 @@ describe("a card", () => {
 
   it("follows an approved call while it runs, then leaves, done or failed", async () => {
     for (const end of [{ exec: "done" }, { exec: "failed", execWhy: "error", execError: "403 Forbidden" }]) {
-      let view: Record<string, unknown> = { ref: "access:4", card: 4, state: "approved", exec: "running", text: "Fusionner ?" };
+      let view: Record<string, unknown> = { ref: "access:4", card: 4, verb: "Faire", state: "approved", exec: "running", text: "Fusionner ?" };
       const followers = new Set<(m: Moved) => void>();
       const move = (m: Moved) => act(async () => followers.forEach((f) => f(m)));
       await draw("en", "access:4", { read: async () => view as never, follow: (on) => (followers.add(on), () => followers.delete(on)) });
@@ -138,7 +139,7 @@ describe("a card", () => {
     await draw("fr", "runcalls:2", {
       read: async () => ({
         ref: "runcalls:2",
-        card: 2,
+        card: 2, verb: "Faire",
         kind: "runcalls",
         state: "pending",
         text: "Accepter « Picnic » · Sam",
@@ -162,7 +163,7 @@ describe("a card", () => {
     await draw("fr", "rule:404", {});
     expect(text(".a2-empty")).toBe("Cette proposition n'existe plus.");
     act(() => root.unmount());
-    await draw("fr", "rule:9", { read: async () => ({ ref: "rule:9", card: 9, state: "pending", text: "Ranger les mails ?" }), answer: async () => false });
+    await draw("fr", "rule:9", { read: async () => ({ ref: "rule:9", card: 9, verb: "Faire", state: "pending", text: "Ranger les mails ?" }), answer: async () => false });
     await click(no());
     expect(text(".a2-proposal-failed")).toBe("La réponse n'est pas partie : réessaie.");
     expect($(".a2-proposal-actions")).not.toBeNull();
@@ -174,21 +175,21 @@ describe("a card", () => {
       for (const [kind, kicker, yesWord, noWord] of [
         ["memory", fr ? "Garder en mémoire ?" : "Keep in memory?", fr ? "Garder" : "Keep", fr ? "Oublier" : "Forget"],
         ["intention", fr ? "Garder ce rappel ?" : "Keep this reminder?", fr ? "Garder" : "Keep", fr ? "Oublier" : "Forget"],
-        ["access", fr ? "Proposition" : "Proposal", fr ? "Oui" : "Yes", fr ? "Non" : "No"],
+        ["access", fr ? "Proposition" : "Proposal", fr ? "Autoriser" : "Allow", fr ? "Non" : "No"],
       ]) {
-        await draw(lang, `${kind}:1`, { read: async (r) => ({ ref: r, card: 1, kind, state: "pending", text: "x" }) });
+        await draw(lang, `${kind}:1`, { read: async (r) => ({ ref: r, card: 1, verb: yesWord, kind, state: "pending", text: "x" }) });
         expect(text(".a2-proposal-kicker")).toBe(kicker);
         expect(yes().textContent).toBe(yesWord);
         expect(no().getAttribute("aria-label")).toBe(noWord);
         act(() => root.unmount());
       }
     }
-    await draw("fr", "memory:1", { read: async (r) => ({ ref: r, card: 1, kind: "memory", state: "approved", text: "x" }) });
+    await draw("fr", "memory:1", { read: async (r) => ({ ref: r, card: 1, verb: "Faire", kind: "memory", state: "approved", text: "x" }) });
     expect($(".a2-proposal")).toBeNull(); // kept: it leaves
   });
 
   it("marks a proposal drawn from external content with a small sign, no word", async () => {
-    await draw("fr", "rule:11", { read: async () => ({ ref: "rule:11", card: 11, state: "pending", text: "Classer la facture ?", tainted: true }) });
+    await draw("fr", "rule:11", { read: async () => ({ ref: "rule:11", card: 11, verb: "Faire", state: "pending", text: "Classer la facture ?", tainted: true }) });
     const sign = $(".a2-proposal-kicker .a2-taint");
     expect(sign.getAttribute("role")).toBe("img");
     expect(sign.getAttribute("aria-label")).toBe("Vient d'un contenu extérieur : vérifie ce qui va être fait.");
@@ -197,7 +198,7 @@ describe("a card", () => {
 
   it("says where a proposal comes from, linked to its node, and what its Oui does while it waits", async () => {
     const view = {
-      ref: "access:4", card: 4, kind: "access", state: "pending", text: "Autoriser ?",
+      ref: "access:4", card: 4, verb: "Faire", kind: "access", state: "pending", text: "Autoriser ?",
       node: "k3m9", from: "Bulle « PR alerting »", yes: "Sur Oui, la tâche peut modifier dans github jusqu'à sa fin.",
     };
     await draw("fr", "access:4", { read: async () => view });
@@ -207,7 +208,7 @@ describe("a card", () => {
 
   it("says at once that an answer is on its way", async () => {
     let done!: (ok: boolean) => void;
-    await draw("en", "rule:12", { read: async () => ({ ref: "rule:12", card: 12, state: "pending", text: "Ranger ?" }), answer: () => new Promise<boolean>((r) => (done = r)) });
+    await draw("en", "rule:12", { read: async () => ({ ref: "rule:12", card: 12, verb: "Faire", state: "pending", text: "Ranger ?" }), answer: () => new Promise<boolean>((r) => (done = r)) });
     const [y, n] = [yes(), no()];
     await act(async () => y.click());
     expect(y.classList.contains("is-busy")).toBe(true);
@@ -220,7 +221,7 @@ describe("a card", () => {
     await draw("fr", "calls:3", {
       read: async () => ({
         ref: "calls:3",
-        card: 3,
+        card: 3, verb: "Faire",
         kind: "calls",
         state: "pending",
         text: "Archiver 2 mails",

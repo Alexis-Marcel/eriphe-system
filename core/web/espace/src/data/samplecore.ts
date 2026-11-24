@@ -38,7 +38,14 @@ export type SampleView = {
   // the view's skill writing its bilan again, from what is left
   bilan?: (v: SampleView) => string;
 };
-export type SampleCard = ProposalView & { items?: string[]; settled?: boolean };
+export type SampleCard = Omit<ProposalView, "verb"> & { verb?: string; items?: string[]; settled?: boolean };
+
+// asView is a sample card as eriphe-core sends it: its yes says its verb,
+// the first word of its sentence as eriphe-core says it (card_verb.go).
+function asView(c: SampleCard): ProposalView {
+  const first = c.text.split(" ")[0] ?? "";
+  return { ...c, verb: c.verb ?? (/^\p{Lu}[\p{L}'-]*$/u.test(first) ? first : "Faire") };
+}
 
 const followers = new Set<(m: Moved) => void>();
 const bumpers = new Set<(id: string) => void>();
@@ -95,6 +102,24 @@ function block(v: SampleView, b: Authored): PageBlock {
     (holder as Record<string, unknown>)[src.items.path.split("/").at(-1)!] = items;
     data[name] = value;
     for (const c of comps) {
+      // A component that names the source (Sections, Gallery, Table: the
+      // catalog's x-source) reads its rows, as eriphe-core binds it
+      // (nodefile/rows.go); a Sections is always told its rows.
+      const prop = c.component === "Table" ? "rows" : "items";
+      if (["Sections", "Gallery", "Table"].includes(String(c.component)) && c[prop] === name) {
+        c[prop] = { "@path": `/${name}/${src.items.path}` };
+        if (c.component === "Sections") {
+          const rows: ListRow[] = items.map((it, n) => ({
+            n,
+            id: String(it[src.items.id]),
+            title: String(it[src.items.title] ?? ""),
+            detail: src.items.detail ? String(it[src.items.detail] ?? "") : undefined,
+            card: (it._card as string) || undefined,
+          }));
+          lists.push({ component: String(c.id ?? "root"), source: name, open: !!src.items.open, items: rows });
+        }
+        continue;
+      }
       // An Agenda bound to the source's items: its events' rows, each with
       // the card that waits on it (an invitation's), as for a List.
       const evs = c.events as { "@path"?: string } | undefined;
@@ -135,8 +160,8 @@ export function samplePage(id: string): { parts: PagePart[]; cards: ProposalView
   const own = v.cards.filter((c) => !c.items && !(agenda && c.when?.length && stillAsks(c)));
   return {
     parts: v.parts.map((p) => (typeof p === "string" ? { text: p } : { block: block(v, p) })),
-    cards: own.filter(stillAsks),
-    settled: own.filter((c) => !stillAsks(c)),
+    cards: own.filter(stillAsks).map(asView),
+    settled: own.filter((c) => !stillAsks(c)).map(asView),
   };
 }
 
@@ -179,7 +204,7 @@ export function sampleCards(): {
   return {
     read: (ref) => {
       const f = find(ref);
-      return f ? { ...f.c } : null;
+      return f ? asView(f.c) : null;
     },
     answer: (ref, yes, only) => {
       const f = find(ref);
@@ -201,7 +226,7 @@ export function sampleCards(): {
     // the cards dated on a day that still wait: an Agenda's ghosts
     day: (date) => {
       const dated = views.flatMap((v) => v.cards).filter((c) => c.state === "pending" && c.when?.some((w) => w.start.startsWith(date)));
-      return dated.filter((c, i) => dated.findIndex((d) => d.ref === c.ref) === i).map((c) => ({ ...c }));
+      return dated.filter((c, i) => dated.findIndex((d) => d.ref === c.ref) === i).map(asView);
     },
     follow: (on) => {
       followers.add(on);

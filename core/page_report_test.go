@@ -45,15 +45,17 @@ func TestPageReportAndSetupButtons(t *testing.T) {
 	mails := map[string]any{"resource": "monitor", "uri": "monitor://received", "items": map[string]any{"path": "messages", "id": "id", "title": "subject"}}
 	recus := pageFence("recus", map[string]any{
 		"components": []map[string]any{
-			{"id": "root", "component": "Column", "children": []string{"chiffres", "liste", "rien", "mettre"}},
+			{"id": "root", "component": "Column", "children": []string{"chiffres", "bande", "liste", "rien", "mettre", "reponses"}},
 			{"id": "chiffres", "component": "Row", "children": []string{"compte", "fige"}},
 			{"id": "compte", "component": "Metric", "label": "À lire", "list": "liste"},
 			{"id": "fige", "component": "Metric", "label": "Portefeuille", "value": 18385, "unit": "€"},
+			{"id": "bande", "component": "Figures", "items": []map[string]any{{"label": "Épargne", "value": 1200, "unit": "€"}, {"label": "Sujet", "value": map[string]any{"@path": "/mails/messages/0/subject"}}}},
 			{"id": "liste", "component": "List", "children": map[string]any{"path": "/mails/messages", "componentId": "ligne"}},
 			{"id": "ligne", "component": "Text", "text": map[string]any{"@path": "subject"}},
 			{"id": "rien", "component": "Text", "text": map[string]any{"@path": "/mails/total"}},
 			{"id": "mettre", "component": "Button", "label": "Surveiller mes mails", "until": map[string]any{"monitor": "mails"},
 				"action": map[string]any{"event": map[string]any{"name": "ask", "context": map[string]any{"text": "Surveille mes mails"}}}},
+			{"id": "reponses", "component": "Asks", "items": []any{"Montre les plus anciens", map[string]any{"text": "Surveille-les", "until": map[string]any{"monitor": "mails"}}}},
 		},
 		"sources": map[string]any{"mails": mails},
 	})
@@ -87,13 +89,13 @@ func TestPageReportAndSetupButtons(t *testing.T) {
 		t.Errorf("rows %v", r["rows"])
 	}
 	problems, _ := json.Marshal(r["problems"])
-	for _, want := range []string{"Text rien: nothing at /mails/total in what the source mails gave (there: messages)", "Metric fige"} {
+	for _, want := range []string{"Text rien: nothing at /mails/total in what the source mails gave (there: messages)", "Metric fige", "Figures bande, Épargne"} {
 		if !strings.Contains(string(problems), want) {
 			t.Errorf("the report lacks %q: %s", want, problems)
 		}
 	}
-	if strings.Contains(string(problems), "compte") {
-		t.Errorf("a Metric counting a List is no figure written by hand: %s", problems)
+	if strings.Contains(string(problems), "compte") || strings.Contains(string(problems), "Sujet") {
+		t.Errorf("a Metric counting a List, a figure bound, are no figures written by hand: %s", problems)
 	}
 	if r["state"] != pageError || r["sources"].(map[string]any)["mails"] != pageOK || r["hidden"] != nil {
 		t.Errorf("recus: %v", r)
@@ -135,6 +137,10 @@ func TestPageReportAndSetupButtons(t *testing.T) {
 		if comp.ID == "root" && strings.Contains(string(comp.Props["children"]), "mettre") {
 			t.Fatalf("root still names it: %s", comp.Props["children"])
 		}
+		// The ask that set it up leaves too; the other keeps its place.
+		if comp.ID == "reponses" && string(comp.Props["items"]) != `["Montre les plus anciens",""]` {
+			t.Errorf("asks %s", comp.Props["items"])
+		}
 	}
 	// Its author hears it at its next write.
 	c.turn.start(0, 0, 0)
@@ -142,7 +148,7 @@ func TestPageReportAndSetupButtons(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hidden, _ := json.Marshal(reportOf(t, w, "recus")["hidden"]); string(hidden) != `["mettre"]` {
+	if hidden, _ := json.Marshal(reportOf(t, w, "recus")["hidden"]); string(hidden) != `["mettre","reponses#1"]` {
 		t.Errorf("hidden %s", hidden)
 	}
 }

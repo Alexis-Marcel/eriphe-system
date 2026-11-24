@@ -14,7 +14,7 @@ import { Doc } from "./Doc";
 // A card block places one of the node's cards in its document: the card
 // itself, what it says and where it stands, is eriphe-core's (proposal);
 // one that is not the node's shows as not found, with no Oui or Non.
-const skill = (state: string): ProposalView => ({ ref: "skill:3", card: 7, kind: "skill", state, text: "Créer le skill « tri-mails »" });
+const skill = (state: string): ProposalView => ({ ref: "skill:3", card: 7, verb: "Faire", kind: "skill", state, text: "Créer le skill « tri-mails »" });
 
 const pageWith = (proposal: ProposalView | undefined): NodePage => ({
   node: { id: "n1", title: "Garder un œil sur mes mails", weight: 0.6, status: "waits", created: "", updated: "", version: 2 },
@@ -61,7 +61,7 @@ describe("a card block", () => {
     const card = el.querySelector(".pg-card");
     expect(card?.previousElementSibling?.textContent).toContain("Toutes les boîtes.");
     expect(card?.querySelector(".a2-proposal-text")?.textContent).toBe("Créer le skill « tri-mails »");
-    expect(card?.querySelector(".a2-proposal-actions .a2-button-primary")?.textContent).toBe("Oui");
+    expect(card?.querySelector(".a2-proposal-actions .a2-button-primary")?.textContent).toBe("Faire");
     expect(card?.querySelector(".a2-proposal-actions .a2-proposal-no")?.getAttribute("aria-label")).toBe("Non");
   });
 
