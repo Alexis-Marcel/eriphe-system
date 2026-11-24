@@ -204,8 +204,9 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(mailPage.locator(".pg-foot")).toHaveCount(0);
 
   // 9. The user approves the send; Style finishes, and code starts Plan
-  // with no turn of the brain.
-  await card.getByRole("button", { name: "Autoriser" }).click();
+  // with no turn of the brain. Its yes says the call (the fake tool says
+  // no verb of its own: « Utiliser »).
+  await card.getByRole("button", { name: "Utiliser" }).click();
   await expect.poll(async () => (await (await request.get("/e2e/tools")).json()).sent).toEqual(["sam@example.org: Je regarde dans l'heure."]);
   await request.post("/e2e/finish/style");
   await expect(page.locator(".gr-node.done .gr-core[aria-label^='Style des articles']")).toBeVisible();
