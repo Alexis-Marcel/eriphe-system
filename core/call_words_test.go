@@ -108,11 +108,11 @@ func TestBrainCallLandsOnItsRows(t *testing.T) {
 	if err != nil || a.Node != node || a.Source != "mails" || len(a.Labels) != 2 {
 		t.Fatalf("the call %+v, %v", a, err)
 	}
-	ref := proposalRef(cardAccess, id)
+	ref := proposalRef(cardCalls, id)
 	if !slices.Contains(c.cardNodes(ref), node) {
 		t.Errorf("the card is not the view's: %v", c.cardNodes(ref))
 	}
-	p := c.proposalOf(cardAccess, id)
+	p := c.proposalOf(cardCalls, id)
 	if got := p.Text("fr"); got != "Déplacer 2 mails vers les archives" {
 		t.Errorf("text %q", got)
 	}
@@ -147,19 +147,19 @@ func TestBrainCallLandsOnItsRows(t *testing.T) {
 		t.Errorf("the foot shows it: %+v", pg.Cards)
 	}
 
-	// A call naming no row: no node of its own, on no row.
+	// A call naming no row: its turn's node, on no row.
 	brainCallOn(t, c, "p-22", "mcp__monitor__move", map[string]any{"account": "sam@example.org", "ids": []any{"zz9"}, "to": "archive"})
 	var other int64
 	c.store.db.QueryRow(`SELECT id FROM access_asks WHERE permission_id = 'p-22'`).Scan(&other)
-	if o, _ := c.accessAskOf(other); o.Node != "" || len(o.Labels) != 0 {
+	if o, _ := c.accessAskOf(other); o.Node != node || len(o.Labels) != 0 || o.Batch != other {
 		t.Errorf("a call on no row: %+v", o)
 	}
-	if got := c.proposalOf(cardAccess, other).Text("fr"); got != "Déplacer 1 mail vers les archives" {
+	if got := c.proposalOf(cardCalls, other).Text("fr"); got != "Déplacer 1 mail vers les archives" {
 		t.Errorf("its words %q", got)
 	}
 
 	// Refused: off its rows.
-	x := cardOf(t, c, cardAccess, id)
+	x := cardOf(t, c, cardCalls, id)
 	if _, err := c.decideCard(context.Background(), x.ID, false, "web"); err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestBrainCallOnRowsYesMarksThemDone(t *testing.T) {
 	if cards := c.itemCards(node, "mails"); cards["m1"] == "" || cards["m1"] != cards["m2"] {
 		t.Fatalf("one card on both rows: %v", cards)
 	}
-	if _, err := c.decideCard(context.Background(), cardOf(t, c, cardAccess, id).ID, true, "web"); err != nil {
+	if _, err := c.decideCard(context.Background(), cardOf(t, c, cardCalls, id).ID, true, "web"); err != nil {
 		t.Fatal(err)
 	}
 	c.yeses.Wait() // the call ran

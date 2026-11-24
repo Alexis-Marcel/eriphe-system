@@ -28,7 +28,6 @@ var kindVerbs = map[string]string{
 	cardUnlearn:   "card.verb.undo",
 	cardAccess:    "card.verb.allow",
 	cardSkill:     "card.verb.approve",
-	cardRunCalls:  "card.verb.run",
 	cardCalls:     "card.verb.do",
 	cardMonitor:   "card.verb.turnon",
 }

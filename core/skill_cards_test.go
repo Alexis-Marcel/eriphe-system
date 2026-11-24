@@ -52,9 +52,9 @@ func runCard(c *core, kind string) (proposal, bool) {
 }
 
 // A run's call the user must approve is kept, exactly, and the task told it
-// did not run; when the run ends, its calls show on one card with its
-// message; the yes runs them as kept, and their results go to the run's
-// note, not to the brain.
+// did not run; when the run ends, it waits on its card (calls), which
+// makes no message of its own; the yes runs it as kept, and its result
+// goes to the run's note, not to the brain.
 func TestSkillRunCallsCard(t *testing.T) {
 	c, now := skillCore(t)
 	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: monitor.received\ntools: [monitor]\n---\nEnquête.\n")
@@ -69,7 +69,7 @@ func TestSkillRunCallsCard(t *testing.T) {
 	if len(items) != 1 || items[0].Data["allow"] != false || !strings.Contains(items[0].Data["message"].(string), "carte") {
 		t.Fatalf("inbox %+v", items)
 	}
-	if _, ok := runCard(c, cardRunCalls); ok {
+	if _, ok := runCard(c, cardCalls); ok {
 		t.Fatal("a card before the run's end")
 	}
 	if _, ok := runCard(c, cardAccess); ok {
@@ -79,19 +79,18 @@ func TestSkillRunCallsCard(t *testing.T) {
 	if r.State != skillRunDone {
 		t.Fatalf("run %+v", r)
 	}
-	p, ok := runCard(c, cardRunCalls)
+	p, ok := runCard(c, cardCalls)
 	if !ok || len(p.Fields) != 2 || p.Fields[0].Name != "version" || p.Fields[0].Value != "2.0.0" || rawCall(p.Fields) == nil || !strings.Contains(rawCall(p.Fields).Value, "2.0.0") ||
 		p.Tainted == "" || !strings.Contains(p.Text("fr"), "rollback") || !strings.Contains(p.Why, "prod") || !p.Fields[0].Detail {
 		t.Fatalf("card %+v", p)
 	}
-	ns, _ := c.notificationsWhere(`source = ?`, notifyFromSkill)
-	if len(ns) != 1 || !strings.Contains(ns[0].Text, "2.0.0") {
-		t.Fatalf("notifications %+v", ns)
+	if ns, _ := c.notificationsWhere(`source = ?`, notifyFromSkill); len(ns) != 0 {
+		t.Fatalf("a kept call made a message: %+v", ns)
 	}
-	if err := c.decideProposal(context.Background(), cardRunCalls, p.ID, true); err != nil {
+	if err := c.decideProposal(context.Background(), cardCalls, p.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := runCard(c, cardRunCalls); ok {
+	if _, ok := runCard(c, cardCalls); ok {
 		t.Fatal("still pending")
 	}
 	waitNote(t, c, r.ID, "rollback")
@@ -112,11 +111,11 @@ func TestSkillRunCallsSilent(t *testing.T) {
 	if r = endTurn(t, c, r.Task, "Rien d'autre."); r.State != skillRunDone {
 		t.Fatalf("run %+v", r)
 	}
-	p, ok := runCard(c, cardRunCalls)
+	p, ok := runCard(c, cardCalls)
 	if !ok {
 		t.Fatal("no card")
 	}
-	if err := c.decideProposal(context.Background(), cardRunCalls, p.ID, false); err != nil {
+	if err := c.decideProposal(context.Background(), cardCalls, p.ID, false); err != nil {
 		t.Fatal(err)
 	}
 	if r := c.runByID(r.ID); !strings.Contains(r.Note, "rollback") {
@@ -162,7 +161,7 @@ func TestSkillRunUrgent(t *testing.T) {
 }
 
 // A run whose message weighs 3 is held for the next breakpoint, its calls'
-// card with it: both come in one message there, the card under it.
+// card too: both come there.
 func TestSkillRunCallsCardHeldForBreakpoint(t *testing.T) {
 	c, now := skillCore(t)
 	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: monitor.received\ntools: [monitor]\n---\nEnquête.\n")
@@ -178,8 +177,8 @@ func TestSkillRunCallsCardHeldForBreakpoint(t *testing.T) {
 	if ns, _ := c.notificationsWhere(`source = ?`, notifyFromSkill); len(ns) != 1 || ns[0].Outcome != outcomeHeld {
 		t.Fatalf("notifications %+v", ns)
 	}
-	x := cardOf(t, c, cardRunCalls, r.ID)
-	if it := attentionOf(c, cardItemRef(x.ID)); x.Seq != 0 || it == nil || !it.Held || it.Weight != weightProposal || it.Source != "skill:prod" {
+	x := cardOf(t, c, cardCalls, runBatch(c, r.ID))
+	if it := attentionOf(c, cardItemRef(x.ID)); x.Seq != 0 || it == nil || !it.Held || it.Weight != weightProposal || it.Source != "task:"+r.Task {
 		t.Fatalf("card %+v, item %+v: not held", x, it)
 	}
 	ns, _ := c.notificationsWhere(`source = ?`, notifyFromSkill)
@@ -191,12 +190,12 @@ func TestSkillRunCallsCardHeldForBreakpoint(t *testing.T) {
 	// The brain's answer to a message of Sam's: both come.
 	ownerSays(c, "Quoi de neuf ?")
 	c.attentionAnswered(*now)
-	x = cardOf(t, c, cardRunCalls, r.ID)
+	x = cardOf(t, c, cardCalls, runBatch(c, r.ID))
 	if it := attentionOf(c, cardItemRef(x.ID)); x.Seq <= 0 || it == nil || it.Held {
 		t.Fatalf("card %+v, item %+v: not shown", x, it)
 	}
 	msgs, _ := c.store.messagesAfter(x.Seq-1, 1)
-	if msgs[0].Role != roleBrain || !strings.Contains(msgs[0].Text, "5xx") || !strings.Contains(msgs[0].Text, "prod") {
+	if msgs[0].Role != roleBrain || !strings.Contains(msgs[0].Text, "5xx") || !strings.Contains(msgs[0].Text, "rollback") {
 		t.Errorf("message %q", msgs[0].Text)
 	}
 	if n, _ := c.notificationByID(ns[0].ID); n.Held || n.Msg != x.Seq {
@@ -205,4 +204,11 @@ func TestSkillRunCallsCardHeldForBreakpoint(t *testing.T) {
 	if c.attentionBreak(breakReturn, *now) != 0 {
 		t.Fatal("told twice")
 	}
+}
+
+// runBatch is the card a run's first kept call is on.
+func runBatch(c *core, run int64) int64 {
+	var b int64
+	c.store.db.QueryRow(`SELECT batch FROM access_asks WHERE run = ? ORDER BY id LIMIT 1`, run).Scan(&b)
+	return b
 }

@@ -301,12 +301,7 @@ var (
 // document places it (nodefile's card block).
 func (c *core) cardProposed(kind string, id int64) string {
 	inherit, source := c.turnAbout, c.turnSource() // made in the brain's turn
-	switch kind {
-	case cardRunCalls:
-		inherit, source = nil, "" // a skill's run: its own (cardAbout)
-	default:
-		c.turn.wrote() // what the turn says is about its card: the net leaves it in the exchange (node_net.go)
-	}
+	c.turn.wrote()                                 // what the turn says is about its card: the net leaves it in the exchange (node_net.go)
 	c.cardProposedBy(kind, id, inherit, source)
 	return proposalRef(kind, id)
 }
@@ -399,6 +394,7 @@ func (c *core) cardQueued(kind string, id int64) {
 // apart; and what was queued waits in the attention queue again. Past
 // that, each proposal moves its card the moment it moves (settleCards).
 func (c *core) reconcileCards() {
+	c.migrateDemands(context.Background()) // the demands an older Eriphe kept (demand.go)
 	c.syncCards()
 	c.settleCards()
 	c.attendQueuedCards()

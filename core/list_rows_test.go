@@ -73,12 +73,13 @@ func TestBlockListsRows(t *testing.T) {
 	res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, server, category, call, input, created, node, source, labels)
 		VALUES ('t', 'monitor', 'change', 'mcp__monitor__move {}', '{"ids":["m2"]}', ?, ?, 'received', ?)`, time.Now().Unix(), id, string(labels))
 	ask, _ := rowsID(res, err)
+	c.store.db.Exec(`UPDATE access_asks SET batch = id WHERE id = ?`, ask) // its own card (demand.go)
 	view = c.blockView(id, b, c.nodeReads(id))
 	lists := c.blockLists(b, view.Data)
 	if len(lists) != 1 || lists[0].Component != "root" || lists[0].Source != "received" || len(lists[0].Items) != 3 {
 		t.Fatalf("lists: %+v", lists)
 	}
-	if it := lists[0].Items[1]; it.N != 1 || it.ID != "m2" || it.Title != "Relance" || it.Detail != "Lou" || it.Card != proposalRef(cardAccess, ask) {
+	if it := lists[0].Items[1]; it.N != 1 || it.ID != "m2" || it.Title != "Relance" || it.Detail != "Lou" || it.Card != proposalRef(cardCalls, ask) {
 		t.Fatalf("row: %+v", it)
 	}
 	if it := lists[0].Items[0]; it.Card != "" {
@@ -119,8 +120,9 @@ func TestBlockRowsOfAgenda(t *testing.T) {
 	res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, server, category, call, input, created, node, source, labels)
 		VALUES ('t', 'monitor', 'change', 'mcp__monitor__move {}', '{"ids":["m3"]}', ?, ?, 'received', ?)`, time.Now().Unix(), id, string(labels))
 	ask, _ := rowsID(res, err)
-	ref := proposalRef(cardAccess, ask)
-	c.cardProposed(cardAccess, ask)
+	c.store.db.Exec(`UPDATE access_asks SET batch = id WHERE id = ?`, ask) // its own card (demand.go)
+	ref := proposalRef(cardCalls, ask)
+	c.cardProposed(cardCalls, ask)
 	c.store.db.Exec(`INSERT INTO node_cards (node, ref, created) VALUES (?, ?, 1)`, id, ref)
 	page, _ = tw.w.nodePageOf(id, 0, "fr")
 	l := page.Parts[1].Block.Lists

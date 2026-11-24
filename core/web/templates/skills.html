@@ -41,9 +41,8 @@
 
 {{end}}
 
-{{/* Why a skill is off by the code, or its version shown does not read. */}}
+{{/* Why its version shown does not read. */}}
 {{define "skill-unread"}}
-{{with .OffWhy}}<p class="warn-note small">{{t .}}</p>{{end}}
 {{with .Broken}}<p class="warn-note small">{{if .Arg}}{{tf .Key .Arg}}{{else}}{{t .Key}}{{end}}</p>{{end}}
 {{end}}
 

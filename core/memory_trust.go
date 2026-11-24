@@ -7,7 +7,6 @@ import (
 	"maps"
 	"net/url"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -422,7 +421,7 @@ func (c *core) eventsTaint(id string, seq int, tainted []string, pending map[str
 		case strings.HasPrefix(name, "mcp__"+nodesServer+"__"):
 			// The task's own node: what it reads there taints by its own
 			// record (task_nodes.go).
-		case slices.ContainsFunc(providedServers, func(s string) bool { return strings.HasPrefix(name, "mcp__"+s+"__") }):
+		case providedCall(name):
 			// Eriphe's own (the folders): what it reads taints by its own
 			// record (folder_tools.go).
 		case strings.HasPrefix(name, "mcp__"):

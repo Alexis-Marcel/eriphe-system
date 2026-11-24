@@ -407,8 +407,8 @@ func (c *core) cardState(ref string) string {
 // node's. It is the user's act (nodeEvent): what the brain says of it
 // answers them.
 func (c *core) callToBrain(a accessQuestion, text, taint string) {
-	node := ""
-	if ids := c.cardNodes(proposalRef(cardAccess, a.ID)); len(ids) > 0 {
+	node := a.Node
+	if ids := c.cardNodes(askRef(a)); node == "" && len(ids) > 0 {
 		node = ids[0]
 	}
 	c.nodeEvent(node, text, true, taint)

@@ -84,7 +84,7 @@ var outcomeMakers = map[string]func(t *testing.T) (*core, string){
 		c.cardNow(cardSkill, id, "", nodeRef(node))
 		return c, proposalRef(cardSkill, id)
 	},
-	cardRunCalls: func(t *testing.T) (*core, string) {
+	"calls on no item": func(t *testing.T) (*core, string) {
 		c, now := skillCore(t)
 		addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: monitor.received\ntools: [monitor]\n---\nEnquête.\n")
 		r := startedRun(t, c, now, "prod")
@@ -93,11 +93,11 @@ var outcomeMakers = map[string]func(t *testing.T) (*core, string){
 		c.store.addEvents(r.Task, ev)
 		c.applyPolicy(r.Task, ev)
 		endTurn(t, c, r.Task, "Je propose de remettre la 2.0.0.")
-		p, ok := runCard(c, cardRunCalls)
+		p, ok := runCard(c, cardCalls)
 		if !ok {
 			t.Fatal("no run's card")
 		}
-		return c, proposalRef(cardRunCalls, p.ID)
+		return c, proposalRef(cardCalls, p.ID)
 	},
 	cardCalls: func(t *testing.T) (*core, string) {
 		c, _, _, r := mailViewOf(t)

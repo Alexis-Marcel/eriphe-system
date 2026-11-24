@@ -599,10 +599,10 @@ func (c *core) joinWaiting(ctx context.Context, r *skillRun) bool {
 	return true
 }
 
-// tellRun ends a run with its last message: its kept calls on one card, and what its receipt's attention list weighs
+// tellRun ends a run with its last message: its kept calls wait on
+// their cards (demand.go), and what its receipt's attention list weighs
 // (attention_signal.go). No entry tells nothing (the message stays in the
-// run's note), but kept calls: their card comes, now, with the message.
-// Else each entry with refs goes to the queue as it is; an entry without
+// run's note). Else each entry with refs goes to the queue as it is; an entry without
 // refs (or whose refs were all bad) is about the message, which becomes a
 // notification, now from weight 4 and for the brief below (runSignal).
 // Entries about objects alone tell the message only from weight 4. A
@@ -637,12 +637,6 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 			msg = cmpOr(s.Say, s.Why) // a receipt without a message: its words
 		}
 	}
-	calls := 0
-	for _, a := range c.runAsks(r.ID) {
-		if a.State == startProposed {
-			calls++
-		}
-	}
 	// Entries about objects alone, below 4, speak through the queue: the
 	// message would tell them twice at the brief. Entries that raise
 	// nodes speak through the graph, at any weight: the message is
@@ -652,25 +646,26 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 	if len(dropped) > 0 {
 		note += "\n· attention dropped: " + strings.Join(dropped, "; ")
 	}
-	if weight == 0 && text != "" && calls == 0 {
+	if weight == 0 && text != "" {
 		note += "\n· no attention entry: not told"
 	}
 	if s := c.runNodeWork(r); s != "" {
 		note += "\n· " + s
 	}
-	itemCards := c.runBatches(r.ID)
-	if len(itemCards) > 0 {
-		note += fmt.Sprintf("\n· %d card(s) on items of its node", len(itemCards))
+	cards := c.store.ids(`SELECT DISTINCT batch FROM access_asks WHERE run = ? AND batch != 0 AND state = ? ORDER BY batch`, r.ID, startProposed)
+	if len(cards) > 0 {
+		note += fmt.Sprintf("\n· %d card(s) kept for the user's yes", len(cards))
 	}
 	state := skillRunDone
-	if weight == 0 && calls == 0 && len(itemCards) == 0 {
+	if weight == 0 && len(cards) == 0 {
 		state = skillRunSilent
 	}
 	c.endRun(r.ID, state, note)
-	// Its calls on items: a card each, its item's (item_cards.go), or
-	// the card of its node that does the same to other items (call_fold.go).
+	// Its calls wait on their cards: on their items' rows, or the card of
+	// its node that does the same to other items (call_fold.go); on no
+	// item, a block of its node, placed by the run or else by code.
 	folded, shown := c.foldCalls(), map[int64]bool{}
-	for _, batch := range itemCards {
+	for _, batch := range cards {
 		if to, ok := folded[batch]; ok {
 			batch = to
 		}
@@ -679,50 +674,32 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 			c.cardNow(cardCalls, batch, "", "task:"+r.Task)
 		}
 	}
+	c.placeDemands()
 	source, tainted := "skill:"+r.Skill, c.taskResultTaint(r.Task) != ""
 	if weight == weightInterrupts {
 		c.runUrgent(r, st)
 	}
 	if !told {
 		c.attendSignals(signals, dropped, "task:"+r.Task, source, tainted) // they speak alone
-	}
-	if !told && calls == 0 {
 		return
 	}
 	level := tells // the heaviest entry's that tells
-	switch {
-	case !told && text != "":
-		msg, level = text, weightBlocksATask // its calls' card comes with what it said of them
-	case !told:
-		msg, level = fmt.Sprintf(tr(c.userLang(), "card.runcalls"), r.Skill, calls), weightBlocksATask
-	}
-	if calls > 0 {
-		c.cardProposed(cardRunCalls, r.ID) // with the message below (convo_cards.go)
-	}
 	var taint []string
 	if why := c.taskResultTaint(r.Task); why != "" {
 		taint = []string{why}
 	}
 	out, err := c.notifyAs(notifyIn{Text: truncate(oneLine(msg), notifyTextMax), Weight: level,
-		Why: "Skill « " + r.Skill + " »", Ref: "skill:" + r.Skill, About: c.taskAbout(r.Task)}, notifyFromSkill, taint, calls > 0)
+		Why: "Skill « " + r.Skill + " »", Ref: "skill:" + r.Skill, About: c.taskAbout(r.Task)}, notifyFromSkill, taint, false)
 	if err != nil {
 		c.endRun(r.ID, state, note+"\n· not told: "+err.Error())
-		if told {
-			c.attendSignals(signals, nil, "task:"+r.Task, source, tainted) // its objects still speak
-		}
+		c.attendSignals(signals, nil, "task:"+r.Task, source, tainted) // its objects still speak
 	}
-	if told && err == nil && out["outcome"] != outcomeNever {
+	if err == nil && out["outcome"] != outcomeNever {
 		for _, s := range own {
 			c.attend(runSignal(out["id"], s, msg, source, tainted))
 		}
 		// Its objects come with the message: no heavier, and delivered with it.
 		c.attendSignalsWith(signals, dropped, "task:"+r.Task, source, tainted, out["weight"].(int), out["outcome"] == outcomeNow)
-	}
-	if calls > 0 && (err != nil || out["outcome"] != outcomeNow) {
-		// Its message is held, or not sent: the card comes at its
-		// breakpoint (attention.go), with a message of its own that does
-		// not tell the notification; the notification's release does.
-		c.cardNow(cardRunCalls, r.ID, fmt.Sprintf(tr(c.userLang(), "card.runcalls"), r.Skill, calls), "skill:"+r.Skill)
 	}
 }
 

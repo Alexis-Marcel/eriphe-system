@@ -11,7 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// A kept call read plainly (the brain's access card, calls and runcalls
+// A kept call read plainly (a calls card: the brain's, a run's or code's
 // cards): what its yes does to which items, in code's words, never the
 // model's; its exact call (tool and every parameter, raw) under the
 // card's one Détails, and the yes runs that, as it is shown. Nothing here
@@ -363,6 +363,12 @@ func (c *core) callAccountWords(a accessQuestion, lang string) string {
 	case account != "":
 		return c.accountWords(a.Need.Server, account, lang)
 	}
+	return c.serverWords(a)
+}
+
+// serverWords name the server a kept call acts on, by its title: where it
+// acts when it names no account.
+func (c *core) serverWords(a accessQuestion) string {
 	return truncate(oneLine(cmpOr(c.conf().Servers[a.Need.Server].Title, a.Need.Server)), 60)
 }
 

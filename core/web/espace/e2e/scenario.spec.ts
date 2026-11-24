@@ -196,12 +196,17 @@ test("the steps of the scenario", async ({ page, request }) => {
   // A tall page, a table in it, beside the mail's.
   await expect(pageOf("Production").locator("table")).toBeVisible();
   await expect(page.locator(".gr-node.running .gr-core[aria-label^=\"Recherche sur l'erreur\"]")).toBeVisible();
-  const card = mailPage.locator(".pg-foot");
+  // The send names no item of the page: its card is a block of the page,
+  // put at its end by code since the brain did not place it.
+  const card = mailPage.locator(".pg-body .a2-proposal");
+  await expect(card).toHaveCount(1);
   await expect(card).toBeVisible();
+  await expect(mailPage.locator(".pg-foot")).toHaveCount(0);
 
   // 9. The user approves the send; Style finishes, and code starts Plan
-  // with no turn of the brain.
-  await card.getByRole("button", { name: "Autoriser" }).click();
+  // with no turn of the brain. Its yes says the call (the fake tool says
+  // no verb of its own: « Utiliser »).
+  await card.getByRole("button", { name: "Utiliser" }).click();
   await expect.poll(async () => (await (await request.get("/e2e/tools")).json()).sent).toEqual(["sam@example.org: Je regarde dans l'heure."]);
   await request.post("/e2e/finish/style");
   await expect(page.locator(".gr-node.done .gr-core[aria-label^='Style des articles']")).toBeVisible();

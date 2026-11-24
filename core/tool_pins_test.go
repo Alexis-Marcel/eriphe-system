@@ -184,6 +184,21 @@ func TestShippedServerIsNotPinned(t *testing.T) {
 	if !mail.srv.shipped() || other.srv.shipped() || (Server{URL: "https://eriphe.example/mcp"}).shipped() {
 		t.Fatal("shipped")
 	}
+	// One definition of Eriphe's own images: its tool cards' (ownImage).
+	for image, want := range map[string]bool{
+		"ghcr.io/alexis-marcel/eriphe-mail":                 true,
+		"ghcr.io/alexis-marcel/eriphe-calendar:0.200.0":     true,
+		"ghcr.io/alexis-marcel/eriphe-files@sha256:0123abc": true,
+		"GHCR.IO/Alexis-Marcel/eriphe-files:1":              true,
+		"ghcr.io/alexis-marcel/eriphe-signal":               false, // a channel's service, not a tool
+		"ghcr.io/alexis-marcel/eriphe-mailer":               false,
+		"ghcr.io/example/eriphe-mail":                       false,
+		"localhost:5000/eriphe-mail":                        false,
+	} {
+		if got := run(image).shipped(); got != want {
+			t.Errorf("%s shipped: %v", image, got)
+		}
+	}
 	v1 := []*mcp.Tool{{Name: "search", Description: "v1"}}
 	v2 := []*mcp.Tool{{Name: "search", Description: "v2"}, {Name: "new"}}
 	for _, u := range []*upstream{mail, other} {
