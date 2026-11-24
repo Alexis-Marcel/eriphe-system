@@ -12,25 +12,20 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
-// What keeps a permanent subject alive. Its page's ⋯ menu lists it, from
-// what code knows, never from a model's words: the sources its blocks
-// read (a tool, every N minutes), the monitors that watch for it (those
-// its blocks read and those its skills run on) and what each watches,
-// the skills that work in it and what starts them, and when it last
-// changed. Names are the identifiers the user approved (a view's card
-// showed them); what each does is said by code from its spec. A view's
-// choices come first (« Ce qu'on a décidé »): the goal its card showed
-// and the user approved, as it was approved (view_card.go), shown as
-// text, marked when someone else's words may have written it.
+// What keeps a node alive: the skills that maintain it (node_home.go)
+// and what starts them, the monitors that watch for it (those its skills
+// run on and those its blocks read) and what each watches, the sources
+// its blocks read (a tool, every N minutes), and when it last changed.
+// Its page's ⋯ menu lists it, from what code knows, never from a model's
+// words: names are the identifiers the user approved on their cards;
+// what each does is said by code from its spec.
 
-// pageAlive is what keeps a standing node alive, as its page says it.
+// pageAlive is what keeps a node alive, as its page says it.
 type pageAlive struct {
-	Decided         string      `json:"decided,omitempty"`
-	DecidedExternal bool        `json:"decidedExternal,omitempty"`
-	Sources         []aliveLine `json:"sources,omitempty"`
-	Monitors        []aliveLine `json:"monitors,omitempty"`
-	Skills          []aliveLine `json:"skills,omitempty"`
-	Updated         time.Time   `json:"updated"`
+	Sources  []aliveLine `json:"sources,omitempty"`
+	Monitors []aliveLine `json:"monitors,omitempty"`
+	Skills   []aliveLine `json:"skills,omitempty"`
+	Updated  time.Time   `json:"updated"`
 }
 
 // aliveLine is one of them: its name, and what it does in code's words.
@@ -40,16 +35,12 @@ type aliveLine struct {
 }
 
 // nodeAlive is what keeps node sum alive, read from its last version; nil
-// for a node that is not standing.
+// for a node no skill maintains (node_home.go).
 func (c *core) nodeAlive(sum nodestore.Summary, lang string) *pageAlive {
-	if c.nodes == nil || sum.Lifetime != nodefile.Standing {
+	if c.nodes == nil {
 		return nil
 	}
 	a := &pageAlive{Updated: sum.Updated}
-	var tainted string
-	if c.store.db.QueryRow(`SELECT goal, tainted FROM view_proposals WHERE node = ? AND state = ? ORDER BY id DESC LIMIT 1`, sum.ID, viewApproved).Scan(&a.Decided, &tainted) == nil {
-		a.DecidedExternal = tainted != ""
-	}
 	var watched []string
 	watch := func(name string) {
 		if name != "" && !slices.Contains(watched, name) {
@@ -81,13 +72,16 @@ func (c *core) nodeAlive(sum nodestore.Summary, lang string) *pageAlive {
 			a.Monitors = append(a.Monitors, aliveLine{Name: m.Name, What: m.Spec.Text(lang)})
 		}
 	}
+	if len(a.Skills) == 0 {
+		return nil
+	}
 	return a
 }
 
 // aliveSourceText says what a source reads and how often.
 func aliveSourceText(s nodefile.Source, lang string) string {
 	every := span(time.Duration(cmp.Or(s.Every, sourceEveryDef)) * time.Minute)
-	return fmt.Sprintf(tr(lang, "alive.source.every"), viewSourceText(s), every)
+	return fmt.Sprintf(tr(lang, "alive.source.every"), sourceText(s), every)
 }
 
 // skillMonitor is the monitor a skill's runs start on (its when keyed on

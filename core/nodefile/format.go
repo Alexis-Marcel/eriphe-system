@@ -1,6 +1,7 @@
 package nodefile
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 
@@ -20,8 +21,31 @@ import (
 type Conversion func(raw []byte) ([]byte, error)
 
 // conversions are the format's changes, the oldest first: conversions[i]
-// turns format i+1 into format i+2. None yet: format 1 is the only one.
-var conversions []Conversion
+// turns format i+1 into format i+2.
+var conversions = []Conversion{
+	dropLifetime, // 1 → 2: no more lifetime: only nodes, none standing
+}
+
+// dropLifetime turns format 1 into format 2: the front matter's lifetime
+// (work or standing) goes, every other byte kept. A node a skill
+// maintains is told by the skill, never by its file.
+func dropLifetime(raw []byte) ([]byte, error) {
+	front, _, body, err := splitFront(raw)
+	if err != nil {
+		return nil, err
+	}
+	var out bytes.Buffer
+	for rest := front; len(rest) > 0; {
+		line, next, _ := cutLine(rest)
+		rest = next
+		if bytes.HasPrefix(line, []byte("lifetime:")) {
+			continue // a scalar on its own line: work or standing
+		}
+		out.Write(line)
+	}
+	out.Write(body)
+	return out.Bytes(), nil
+}
 
 // Conversions are the format's changes, the oldest first; the format
 // written today is the one after the last (1 + their number).
@@ -77,10 +101,42 @@ func Upgrade(raw []byte, convs []Conversion) ([]byte, error) {
 			return nil, fmt.Errorf("conversion from format %d: %w", i+1, err)
 		}
 	}
-	n, err := Parse(out)
-	if err != nil {
+	if out, err = sayFormat(out, last); err != nil {
 		return nil, fmt.Errorf("converted from format %d: %w", from, err)
 	}
-	n.Meta.Format = last
-	return n.Bytes()
+	if n, err := Parse(out); err != nil {
+		return nil, fmt.Errorf("converted from format %d: %w", from, err)
+	} else if n.Meta.Format != last {
+		return nil, fmt.Errorf("converted from format %d: it says format %d", from, n.Meta.Format)
+	}
+	return out, nil
+}
+
+// sayFormat writes format in a file's front matter, every other byte
+// kept: its format line replaced, or one put first.
+func sayFormat(raw []byte, format int) ([]byte, error) {
+	front, _, body, err := splitFront(raw)
+	if err != nil {
+		return nil, err
+	}
+	first, rest, _ := cutLine(front)
+	eol := "\n"
+	if bytes.HasSuffix(first, []byte("\r\n")) {
+		eol = "\r\n" // the file's own line ends
+	}
+	said := fmt.Appendf(nil, "format: %d%s", format, eol)
+	out := append([]byte{}, first...)
+	if bytes.Contains(front, []byte("\nformat:")) {
+		for len(rest) > 0 {
+			var line []byte
+			line, rest, _ = cutLine(rest)
+			if bytes.HasPrefix(line, []byte("format:")) {
+				line = said
+			}
+			out = append(out, line...)
+		}
+	} else {
+		out = append(append(out, said...), rest...)
+	}
+	return append(out, body...), nil
 }

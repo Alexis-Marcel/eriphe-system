@@ -42,9 +42,6 @@ func (c *core) brainWithdrawCard(ctx context.Context, ref string) (map[string]an
 	if c.cardState(ref) != cardPending {
 		return nil, errCardDecided
 	}
-	if kind == cardViewKind {
-		return nil, errors.New("a view's card is changed, not withdrawn: call propose_view again with node, its draft; the card says the new proposal")
-	}
 	if !c.eriphesCard(kind, id) {
 		return nil, errNotEriphes
 	}

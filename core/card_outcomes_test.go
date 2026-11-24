@@ -119,10 +119,6 @@ var outcomeMakers = map[string]func(t *testing.T) (*core, string){
 		c.cardNow(cardMonitor, id, "", nodeRef(node))
 		return c, proposalRef(cardMonitor, id)
 	},
-	cardViewKind: func(t *testing.T) (*core, string) {
-		c, _, _, ref := daySubject(t)
-		return c, ref
-	},
 }
 
 // outcomeCore is a core with a graph, and a node its cards wait in.
@@ -167,37 +163,6 @@ func TestEveryCardKindTellsItsOutcome(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-// A view's yes is told in the subject it came from: what the subject
-// says of its draft is to be updated, and the view's node is named.
-func TestViewOutcomeToldInItsSubject(t *testing.T) {
-	c, subject, draft, ref := daySubject(t)
-	before := c.store.lastMessageSeq()
-	if _, err := c.decideCard(context.Background(), cardOfRef(t, c, ref).ID, true, "web"); err != nil {
-		t.Fatal(err)
-	}
-	told := toldSince(t, c, before)
-	if len(told) != 1 || told[0].Node != subject {
-		t.Fatalf("told %+v, want an event of the subject %s", told, subject)
-	}
-	for _, want := range []string{ref, "nœud " + draft, "plus un brouillon", "(" + subject + ")"} {
-		if !strings.Contains(told[0].Text, want) {
-			t.Errorf("the event lacks %q: %s", want, told[0].Text)
-		}
-	}
-	if strings.Contains(told[0].Text, "tourne") { // neither a monitor nor a skill was made
-		t.Errorf("the event says something runs: %s", told[0].Text)
-	}
-	// No: the draft is archived, told in the subject too.
-	c, subject, draft, ref = daySubject(t)
-	before = c.store.lastMessageSeq()
-	if _, err := c.decideCard(context.Background(), cardOfRef(t, c, ref).ID, false, "web"); err != nil {
-		t.Fatal(err)
-	}
-	if told := toldSince(t, c, before); len(told) != 1 || told[0].Node != subject || !strings.Contains(told[0].Text, draft+", est archivé") {
-		t.Fatalf("told %+v", told)
 	}
 }
 

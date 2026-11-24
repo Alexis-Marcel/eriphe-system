@@ -32,7 +32,7 @@ func mustBytes(t *testing.T, n *Node) []byte {
 
 // head is a front matter, then body.
 func head(body string) string {
-	return "---\nid: abc123\ntitle: Sam's node\nlifetime: work\ncreated: 2026-11-17T09:00:00Z\n---\n" + body
+	return "---\nid: abc123\ntitle: Sam's node\ncreated: 2026-11-17T09:00:00Z\n---\n" + body
 }
 
 // authorNew is a new node whose body an author wrote (AuthorBody).
@@ -69,7 +69,7 @@ func TestRoundTrip(t *testing.T) {
 // CRLF line ends are kept, in the front matter, the text and a block (a
 // string here: git would turn a fixture's into LF).
 func TestRoundTripCRLF(t *testing.T) {
-	raw := []byte("---\r\nid: abc123\r\ntitle: Windows\r\nlifetime: work\r\ncreated: 2026-11-17T09:00:00Z\r\n---\r\nText.\r\n\r\n" +
+	raw := []byte("---\r\nid: abc123\r\ntitle: Windows\r\ncreated: 2026-11-17T09:00:00Z\r\n---\r\nText.\r\n\r\n" +
 		"```eriphe:block note\r\n{\"components\": [{\"id\": \"root\", \"component\": \"Text\", \"text\": \"Hi\"}]}\r\n```\r\nAfter.\r\n")
 	n, err := Parse(raw)
 	if err != nil {
@@ -99,8 +99,6 @@ func TestFrontMatterFields(t *testing.T) {
 		t.Errorf("parent %q", m.Parent)
 	case !slices.Equal(m.Links, []string{"p8d2x4c1", "a1b2c3d4"}):
 		t.Errorf("links %v", m.Links)
-	case m.Lifetime != Work:
-		t.Errorf("lifetime %q", m.Lifetime)
 	case m.Goal != "Answer Sam within the hour.\nFind why the app fails.":
 		t.Errorf("goal %q", m.Goal)
 	case !m.Created.Equal(at("2026-11-17T10:02:00+01:00")):
@@ -135,11 +133,11 @@ func TestUnknownFieldsKeptOnChange(t *testing.T) {
 	n.Meta.Title = "Sam: done"
 	out := string(mustBytes(t, n))
 	front, _, _ := strings.Cut(strings.TrimPrefix(out, "---\n"), "\n---\n")
-	want := `id: m4ilx7q2
+	want := `format: 2
+id: m4ilx7q2
 title: 'Sam: done'
 parent: k3v9q2m7
 links: [p8d2x4c1, a1b2c3d4]
-lifetime: work
 goal: |-
   Answer Sam within the hour.
   Find why the app fails.
@@ -165,7 +163,7 @@ tags:
 
 func TestAwkwardScalars(t *testing.T) {
 	for _, title := range []string{"a: b", "# not a comment", `"quoted"`, "yes", "123", "- dash", "it's", "« Ma journée »"} {
-		m := Meta{ID: "abc", Title: title, Lifetime: Work, Created: time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC), Goal: "line one\nline: two"}
+		m := Meta{ID: "abc", Title: title, Created: time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC), Goal: "line one\nline: two"}
 		n, err := New(m, "Text.\n")
 		if err != nil {
 			t.Fatal(err)
@@ -185,7 +183,7 @@ func TestAwkwardScalars(t *testing.T) {
 }
 
 func TestWriterOutputParsesToSameBytes(t *testing.T) {
-	m := Meta{ID: "abc", Title: "Plan", Parent: "k3v9q2m7", Links: []string{"p8d2x4c1"}, Lifetime: Work, Goal: "A plan.",
+	m := Meta{ID: "abc", Title: "Plan", Parent: "k3v9q2m7", Links: []string{"p8d2x4c1"}, Goal: "A plan.",
 		Created: time.Date(2026, 11, 17, 9, 0, 0, 0, time.FixedZone("", 3600))}
 	n, err := New(m, "# Plan\n")
 	if err != nil {
@@ -199,7 +197,7 @@ func TestWriterOutputParsesToSameBytes(t *testing.T) {
 	}
 	n.Meta.External = true
 	out := mustBytes(t, n)
-	want := "---\nid: abc\ntitle: Plan\nparent: k3v9q2m7\nlinks: [p8d2x4c1]\nlifetime: work\ngoal: A plan.\ncreated: 2026-11-17T09:00:00+01:00\nexternal: true\n---\n# Plan\n\n" +
+	want := "---\nid: abc\ntitle: Plan\nparent: k3v9q2m7\nlinks: [p8d2x4c1]\ngoal: A plan.\ncreated: 2026-11-17T09:00:00+01:00\nexternal: true\n---\n# Plan\n\n" +
 		"```eriphe:block steps\n{\"components\": [\n  {\"component\":\"Text\",\"id\":\"root\",\"text\":{\"@path\":\"/t\"}}\n],\n \"data\": {\"t\":\"One\"},\n \"external\": true}\n```\n"
 	if string(out) != want {
 		t.Fatalf("written:\n%s\nwant:\n%s", out, want)
@@ -250,12 +248,11 @@ func TestErrors(t *testing.T) {
 		{"no id", strings.Replace(head(""), "id: abc123\n", "", 1), "id \"\"", ""},
 		{"bad id", strings.Replace(head(""), "abc123", "Abc-1", 1), "id \"Abc-1\"", ""},
 		{"no title", strings.Replace(head(""), "title: Sam's node\n", "", 1), "title is needed", ""},
-		{"bad lifetime", strings.Replace(head(""), "lifetime: work", "lifetime: forever", 1), "lifetime is work or standing", ""},
 		{"no created", strings.Replace(head(""), "created: 2026-11-17T09:00:00Z\n", "", 1), "created is needed", ""},
 		{"bad created", strings.Replace(head(""), "2026-11-17T09:00:00Z", "tomorrow", 1), "front matter: created", ""},
-		{"own parent", strings.Replace(head(""), "lifetime", "parent: abc123\nlifetime", 1), "its own parent", ""},
-		{"links twice", strings.Replace(head(""), "lifetime", "links: [abc, abc]\nlifetime", 1), "there twice", ""},
-		{"links itself", strings.Replace(head(""), "lifetime", "links: [abc123]\nlifetime", 1), "link to itself", ""},
+		{"own parent", strings.Replace(head(""), "created", "parent: abc123\ncreated", 1), "its own parent", ""},
+		{"links twice", strings.Replace(head(""), "created", "links: [abc, abc]\ncreated", 1), "there twice", ""},
+		{"links itself", strings.Replace(head(""), "created", "links: [abc123]\ncreated", 1), "link to itself", ""},
 		{"bad block json", block("plan", `{"components": [`), "not a block's JSON", "plan"},
 		{"two objects", block("plan", text+text), "one JSON object only", "plan"},
 		{"unknown block key", block("plan", `{"components": [], "layout": 1}`), "unknown field", "plan"},
@@ -572,7 +569,7 @@ func TestDocExamples(t *testing.T) {
 // still reads: a field this package does not know, written back as it
 // was.
 func TestOldAfterReads(t *testing.T) {
-	raw := strings.Replace(head("Text.\n"), "lifetime", "after: [s1]\nlifetime", 1)
+	raw := strings.Replace(head("Text.\n"), "created", "after: [s1]\ncreated", 1)
 	n, err := Parse([]byte(raw))
 	if err != nil {
 		t.Fatal(err)
@@ -584,7 +581,7 @@ func TestOldAfterReads(t *testing.T) {
 
 // A node's parts are its text and blocks, in order, blank text left out.
 func TestParts(t *testing.T) {
-	n, err := Parse([]byte("---\nid: a1\ntitle: Plan\nlifetime: work\ncreated: 2026-11-17T10:00:00Z\n---\n# Plan\n\nIntro.\n\n```eriphe:block status\n{\"components\": [{\"id\": \"root\", \"component\": \"Text\", \"text\": \"Ok.\"}]}\n```\n\nAfter.\n"))
+	n, err := Parse([]byte("---\nid: a1\ntitle: Plan\ncreated: 2026-11-17T10:00:00Z\n---\n# Plan\n\nIntro.\n\n```eriphe:block status\n{\"components\": [{\"id\": \"root\", \"component\": \"Text\", \"text\": \"Ok.\"}]}\n```\n\nAfter.\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -597,7 +594,7 @@ func TestParts(t *testing.T) {
 // opened_by is code's: it reads and writes back as it was, an author's
 // bytes leave it out, and an author's body keeps it.
 func TestOpenedByIsCodes(t *testing.T) {
-	meta := Meta{ID: "a1", Title: "Alerte", Lifetime: Work, Created: time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC),
+	meta := Meta{ID: "a1", Title: "Alerte", Created: time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC),
 		OpenedBy: &Origin{By: OpenedSkill, Skill: "tri", On: "monitor:mails", Task: "t3"}}
 	prev, err := New(meta, "Le disque.\n")
 	if err != nil {

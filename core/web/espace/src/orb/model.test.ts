@@ -7,7 +7,7 @@ const placeBeside = (...a: Parameters<typeof besideOrNone>) => besideOrNone(...a
 const placeHome = (...a: Parameters<typeof homeOrNone>) => homeOrNone(...a)!;
 
 const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
-  id, title: id.toUpperCase(), lifetime: "work", status: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
+  id, title: id.toUpperCase(), status: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
 });
 const nodes = { sub: node("sub"), mail: node("mail"), day: node("day") };
 const none: Closed = { answer: 0, seen: 0, failed: 0 };

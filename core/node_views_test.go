@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -12,9 +13,89 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
-// Views on nodes (#631), played on faked servers: the monitor server
+// Pages kept up by a skill, played on faked servers: the monitor server
 // stands for the mail and calendar servers (its resources list messages
 // and invitations, send and respond act on one of them).
+
+// mailsBlock is « Mes mails »' list: the faked server's mails, read live.
+var mailsBlock = map[string]any{"resource": "monitor", "uri": "monitor://received", "items": map[string]any{"path": "messages", "id": "id", "title": "subject", "detail": "from"}}
+
+// mailSkill is the skill that maintains « Mes mails », bringing its
+// monitor: write_skill's fields, its home node to add.
+func mailSkill(instructions string) map[string]any {
+	return map[string]any{"name": "tri-mails", "description": "Trie les mails reçus.", "when": "monitor.new key=mails", "tools": []string{"monitor"},
+		"instructions": instructions,
+		"monitor":      map[string]any{"name": "mails", "server": "monitor", "resource": "monitor://received", "cond": "new", "path": "messages", "id": "id", "every": "1m"}}
+}
+
+// mailPage writes « Mes mails » as the brain does: the page at once, its
+// list read live, then the skill that maintains it, its monitor on the
+// same card. It gives the node and the skill's card, waiting.
+func mailPage(t *testing.T, c *core, instructions string) (string, proposal) {
+	t.Helper()
+	out, isErr := callBrainTool(t, c, "node_open", map[string]any{"title": "Mes mails",
+		"goal": "Mes mails : tableau de bord des mails à traiter, tenu par le skill tri-mails ; on n'y écrit pas de réponses.",
+		"body": "Les mails reçus.\n\n" + listBlock("recus", "mails", mailsBlock)})
+	if isErr {
+		t.Fatalf("node_open: %v", out)
+	}
+	node := out["id"].(string)
+	sk := mailSkill(instructions)
+	sk["node"] = node
+	if out, isErr := callBrainTool(t, c, "write_skill", sk); isErr {
+		t.Fatalf("write_skill: %v", out)
+	}
+	cards := cardsOf(c, cardSkill)
+	if len(cards) != 1 || len(cardsOf(c, cardMonitor)) != 0 {
+		t.Fatalf("cards %+v", c.pendingProposals())
+	}
+	if !cardWaitsOn(c, node) { // its card waits on the node it will maintain
+		t.Fatal("the skill's card is not on its home")
+	}
+	return node, cards[0]
+}
+
+// mailView is « Mes mails » approved: a node listing the faked server's
+// mails, its monitor and the skill that maintains it; and the run that
+// two mails woke, the node's sources read. It gives the node and the run.
+func mailView(t *testing.T) (*core, string, *skillRun) {
+	t.Helper()
+	c, _, node, r := mailViewOf(t)
+	return c, node, r
+}
+
+// mailViewOf is mailView with its faked server.
+func mailViewOf(t *testing.T) (*core, *fakeMonitor, string, *skillRun) {
+	t.Helper()
+	c, fm, now := viewCore(t)
+	node, card := mailPage(t, c, "Note chaque mail ; propose d'archiver ce qui ne compte pas.")
+	if err := c.decideProposal(context.Background(), cardSkill, card.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	c.live.wg.Wait()
+	lookAt(c, *now) // the baseline
+	fm.mu.Lock()
+	fm.got = []map[string]any{
+		{"id": "m1", "subject": "STAGE – Data Engineer", "from": "Emplois Example"},
+		{"id": "m2", "subject": "Votre lettre de la semaine", "from": "news@example.org"},
+	}
+	fm.mu.Unlock()
+	lookAt(c, now.Add(time.Minute))
+	c.tickSkills(context.Background(), now.Add(time.Minute))
+	rs := runsOfSkill(t, c, "tri-mails")
+	if len(rs) != 1 || c.taskNode(rs[0].Task) != node {
+		t.Fatalf("runs %+v", rs)
+	}
+	c.readNode(context.Background(), node, []string{"mails"}, time.Now())
+	return c, fm, node, rs[0]
+}
+
+// keep has the run call a tool: kept for its card.
+func keep(c *core, task, pid, tool string, input map[string]any) {
+	ev := []EventRow{permission(pid, tool, input)}
+	c.store.addEvents(task, ev)
+	c.applyPolicy(task, ev)
+}
 
 // viewCore is pollCore with a graph, a device and the skills listening.
 func viewCore(t *testing.T) (*core, *fakeMonitor, *time.Time) {
@@ -100,82 +181,44 @@ func cardsOf(c *core, kind string) []proposal {
 	return out
 }
 
-// « Surveille mes mails »: its node opens at once as a draft showing the
-// page, and one card on it shows its monitor and its skill; neither exists
-// before the yes, and the yes makes them and the draft standing. A mail comes: the monitor wakes the skill, whose run works in the
-// standing node: it notes the mail, opens « Répondre à Sam » with a draft,
-// and its send is kept for a « Send? » card on the mail. Nothing is sent
-// before that yes.
+// « Surveille mes mails »: the brain writes the page at once, no card,
+// and proposes the skill that maintains it, its monitor on the same card;
+// neither runs before the yes, and the one yes makes both. The node is
+// maintained only once the skill is on: computed, never in its file. A
+// mail comes: the monitor wakes the skill, whose run works in its home
+// node: it notes the mail, opens « Répondre à Sam » with a draft, and its
+// send is kept for a « Send? » card on the mail. Nothing is sent before
+// that yes.
 func TestMailViewOneYes(t *testing.T) {
 	c, fm, now := viewCore(t)
-	mails := map[string]any{"resource": "monitor", "uri": "monitor://received", "items": map[string]any{"path": "messages", "id": "id", "title": "subject", "detail": "from"}}
-	out, isErr := callBrainTool(t, c, "propose_view", map[string]any{
-		"title": "Mes mails", "goal": "Sam voit ses mails et ce qui attend une réponse.",
-		"body":    "Les mails reçus.\n\n" + listBlock("recus", "mails", mails),
-		"monitor": map[string]any{"name": "mails", "server": "monitor", "resource": "monitor://received", "cond": "new", "path": "messages", "id": "id", "every": "1m"},
-		"skill": map[string]any{"name": "tri-mails", "description": "Trie les mails reçus.", "when": "monitor.new key=mails", "tools": []string{"monitor"},
-			"instructions": "Note chaque mail. Pour un mail qui attend une réponse, ouvre un node « Répondre à … » avec un brouillon, et appelle l'envoi : il attend le oui."},
-	})
-	if isErr {
-		t.Fatalf("propose_view: %v", out)
-	}
-	node, _ := out["node"].(string)
-	if !nodefile.IDOK(node) {
-		t.Fatalf("out %v", out)
-	}
-	if sum, err := c.nodes.Get(node); err != nil || sum.Lifetime != nodefile.Work {
-		t.Fatalf("the draft is not open before the yes: %+v %v", sum, err)
+	node, v := mailPage(t, c, "Note chaque mail. Pour un mail qui attend une réponse, ouvre un node « Répondre à … » avec un brouillon, et appelle l'envoi : il attend le oui.")
+	if sum, err := c.nodes.Get(node); err != nil || sum.Title != "Mes mails" {
+		t.Fatalf("the page is not written at once: %+v %v", sum, err)
 	}
 	if _, err := c.monitorNamed("mails"); err == nil {
 		t.Fatal("the monitor exists before the yes")
 	}
-	if k, _ := c.store.skill("tri-mails"); k != nil {
-		t.Fatal("the skill exists before the yes")
+	if k, _ := c.store.skill("tri-mails"); k == nil || k.Active() {
+		t.Fatalf("the skill runs before the yes: %+v", k)
 	}
-	views := cardsOf(c, cardViewKind)
-	if len(views) != 1 || len(cardsOf(c, cardMonitor)) != 0 || len(cardsOf(c, cardSkill)) != 0 {
-		t.Fatalf("cards %+v", c.pendingProposals())
+	if got := c.maintainers(node); len(got) != 0 {
+		t.Fatalf("maintained before the yes: %v", got)
 	}
-	v := views[0]
 	fields, _ := json.Marshal(v.FieldsIn("fr"))
-	for _, want := range []string{"recus (monitor monitor://received)", "monitor monitor://received", "monitor.new", "tri-mails"} {
+	for _, want := range []string{"Moniteur mails", "monitor monitor://received", "monitor.new", "Entretient", "Mes mails"} {
 		if !strings.Contains(string(fields), want) {
 			t.Errorf("the card lacks %q: %s", want, fields)
 		}
 	}
-	if !strings.Contains(v.Text("fr"), "Mes mails") {
-		t.Errorf("text %q", v.Text("fr"))
-	}
-	// The card says in one line what will run by itself (the page is the
-	// preview); its technical words are all under Détails, the
-	// instructions as Markdown.
-	if said := v.SummaryIn("fr"); !slices.Equal(said, []string{"Toutes les 1 min"}) {
-		t.Errorf("the summary: %q", said)
-	}
-	if en := v.SummaryIn("en"); !slices.Equal(en, []string{"Every 1 min"}) {
-		t.Errorf("the English summary: %q", en)
-	}
-	if !strings.Contains(string(fields), "Trie les mails reçus.") {
-		t.Errorf("what its skill does is not under Détails: %s", fields)
-	}
-	for _, f := range v.FieldsIn("fr") {
-		if !f.Detail {
-			t.Errorf("field %q is not under Détails", f.Name)
-		}
-		if f.Markdown != strings.HasSuffix(f.Name, "Consignes") {
-			t.Errorf("field %q: markdown %v", f.Name, f.Markdown)
-		}
+	if en, _ := json.Marshal(v.FieldsIn("en")); !strings.Contains(string(en), "Monitor mails") || !strings.Contains(string(en), "Maintains") {
+		t.Errorf("the English card: %s", en)
 	}
 
-	// One yes: the three.
-	if err := c.decideProposal(context.Background(), cardViewKind, v.ID, true); err != nil {
+	// One yes: the skill and its monitor.
+	if err := c.decideProposal(context.Background(), cardSkill, v.ID, true); err != nil {
 		t.Fatal(err)
 	}
 	c.live.wg.Wait()
-	sum, err := c.nodes.Get(node)
-	if err != nil || sum.Lifetime != nodefile.Standing || sum.Title != "Mes mails" {
-		t.Fatalf("node %+v %v", sum, err)
-	}
 	if m, err := c.monitorNamed("mails"); err != nil || m.State != monitorOn {
 		t.Fatalf("monitor %+v %v", m, err)
 	}
@@ -186,8 +229,14 @@ func TestMailViewOneYes(t *testing.T) {
 	if sk, _ := c.store.skillVersion(k.Approved); sk.Manifest.Trigger.Node != node {
 		t.Fatalf("the skill works in %q", sk.Manifest.Trigger.Node)
 	}
-	if p := c.proposalOf(cardViewKind, v.ID); p.Pending || p.Outcome != cardApproved {
+	if p := c.proposalOf(cardSkill, v.ID); p.Pending || p.Outcome != cardApproved {
 		t.Fatalf("the card %+v", p)
+	}
+	if got := c.maintainers(node); !slices.Equal(got, []string{"tri-mails"}) {
+		t.Fatalf("maintained by %v", got)
+	}
+	if raw, _ := c.nodes.Read(node, 0); strings.Contains(string(raw.Raw), "lifetime") {
+		t.Fatalf("its file says who maintains it:\n%s", raw.Raw)
 	}
 	// The monitor server is not trusted: the block that reads it is external.
 	if !block(t, c, node, "recus").External {
@@ -250,9 +299,17 @@ func TestMailViewOneYes(t *testing.T) {
 	if got := waitSent(t, fm, 1); got[0]["tool"] != "send" || got[0]["id"] != "m1" {
 		t.Fatalf("sent %v", got)
 	}
-	// The standing node is still the view's: never done by a run.
+	// Its home stays: never done while the skill maintains it.
+	if _, msg := callOn(t, connectServer(t, newMCPServer(c)), "node_set", map[string]any{"id": node, "done": true}); !strings.Contains(msg, "maintained by a skill (tri-mails)") {
+		t.Fatalf("set done while maintained: %q", msg)
+	}
 	if sum, _ := c.nodes.Get(node); c.nodeStatus(sum) == nodeDone || !sum.Archived.IsZero() {
-		t.Fatalf("the view's node %+v", sum)
+		t.Fatalf("the skill's home %+v", sum)
+	}
+	// The skill off: a node like any other, done when its goal is met.
+	c.store.enableSkill("tri-mails", false)
+	if out, isErr := callBrainTool(t, c, "node_set", map[string]any{"id": node, "done": true}); isErr {
+		t.Fatalf("set done, no skill maintaining it: %v", out)
 	}
 }
 
@@ -263,7 +320,7 @@ func TestMailViewOneYes(t *testing.T) {
 func TestInvitationReplyCard(t *testing.T) {
 	c, fm, now := viewCore(t)
 	invites := map[string]any{"resource": "monitor", "uri": "monitor://invitations", "items": map[string]any{"path": "invitations", "id": "id", "title": "title"}}
-	d, err := c.nodes.Create(nodestore.New{Title: "Mes invitations", Lifetime: nodefile.Standing, Body: listBlock("attente", "invitations", invites), Author: "user"})
+	d, err := c.nodes.Create(nodestore.New{Title: "Mes invitations", Body: listBlock("attente", "invitations", invites), Author: "user"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,7 +419,7 @@ func TestLiveBlockKeepsLastGood(t *testing.T) {
 	c, fm, _ := viewCore(t)
 	c.setServerTrust("monitor", true, "user")
 	body := "```eriphe:block etat\n" + `{"components": {"component": "Text", "text": {"@path": "/web/data/state"}}, "sources": {"web": {"tool": "monitor/status", "args": {"service": "web"}}}}` + "\n```\n"
-	d, err := c.nodes.Create(nodestore.New{Title: "La prod", Lifetime: nodefile.Standing, Body: body, Author: "user"})
+	d, err := c.nodes.Create(nodestore.New{Title: "La prod", Body: body, Author: "user"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -459,7 +516,7 @@ func TestLiveBlockKeepsLastGood(t *testing.T) {
 func TestUntrustedSourceMarksExternal(t *testing.T) {
 	c, _, _ := viewCore(t)
 	body := "```eriphe:block etat\n" + `{"components": {"component": "Text", "text": {"@path": "/web/data/state"}}, "sources": {"web": {"tool": "monitor/status", "args": {"service": "web"}}}}` + "\n```\n"
-	d, err := c.nodes.Create(nodestore.New{Title: "La prod", Lifetime: nodefile.Standing, Body: body, Author: "user"})
+	d, err := c.nodes.Create(nodestore.New{Title: "La prod", Body: body, Author: "user"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -484,95 +541,18 @@ func TestUntrustedSourceMarksExternal(t *testing.T) {
 	}
 }
 
-// A view's yes makes all three or none: a skill taken meanwhile takes
-// back the monitor, the draft stays a draft, and the card still waits. No
-// makes none and archives the draft.
-// A view's blocks are checked as a task's: a source out of the catalog is
-// refused before any card.
-func TestViewAllOrNothing(t *testing.T) {
-	c, _, _ := viewCore(t)
-	in := map[string]any{
-		"title":   "La prod",
-		"body":    "```eriphe:block etat\n" + `{"components": {"component": "Text", "text": {"@path": "/cpu/value"}}, "sources": {"cpu": {"monitor": "cpu"}}}` + "\n```\n",
-		"monitor": map[string]any{"name": "cpu", "server": "monitor", "tool": "status", "args": map[string]any{"service": "web"}, "cond": "cross", "path": "data.cpu", "above": 90},
-		"skill":   map[string]any{"name": "prod", "description": "La prod.", "when": "monitor.crossed key=cpu", "instructions": "Regarde la prod."},
-	}
-	out, isErr := callBrainTool(t, c, "propose_view", in)
-	if isErr {
-		t.Fatal(out)
-	}
-	node := out["node"].(string)
-	v := cardsOf(c, cardViewKind)[0]
-	addTriggered(t, c, "---\nname: prod\ndescription: déjà là\n---\nAutre chose.\n")
-	if err := c.decideProposal(context.Background(), cardViewKind, v.ID, true); err == nil {
-		t.Fatal("a view made over a skill taken")
-	}
-	if sum, err := c.nodes.Get(node); err != nil || !sum.Archived.IsZero() || sum.Lifetime != nodefile.Work {
-		t.Fatalf("the draft did not stay a draft: %+v %v", sum, err)
-	}
-	if _, err := c.monitorNamed("cpu"); err == nil {
-		t.Fatal("the monitor stayed")
-	}
-	if p := c.proposalOf(cardViewKind, v.ID); !p.Pending {
-		t.Fatal("the card no longer waits")
-	}
-	if err := c.decideProposal(context.Background(), cardViewKind, v.ID, false); err != nil {
-		t.Fatal(err)
-	}
-	if p := c.proposalOf(cardViewKind, v.ID); p.Pending || p.Outcome != cardRejected {
-		t.Fatalf("after no %+v", p)
-	}
-	if sum, err := c.nodes.Get(node); err != nil || sum.Archived.IsZero() {
-		t.Fatalf("no left the draft: %+v %v", sum, err)
-	}
-
-	// A step that fails after the first write: the monitor made is taken
-	// back, the draft stays one, the card waits, and a yes later makes all.
-	c.store.deleteSkill("prod")
-	out, isErr = callBrainTool(t, c, "propose_view", in)
-	if isErr {
-		t.Fatal(out)
-	}
-	node = out["node"].(string)
-	v = cardsOf(c, cardViewKind)[0]
-	c.store.db.Exec(`ALTER TABLE skills RENAME TO skills_away`)
-	if err := c.decideProposal(context.Background(), cardViewKind, v.ID, true); err == nil {
-		t.Fatal("a view made without its skill")
-	}
-	c.store.db.Exec(`ALTER TABLE skills_away RENAME TO skills`)
-	if _, err := c.monitorNamed("cpu"); err == nil {
-		t.Fatal("the monitor stayed")
-	}
-	if sum, err := c.nodes.Get(node); err != nil || sum.Lifetime != nodefile.Work {
-		t.Fatalf("the draft changed: %+v %v", sum, err)
-	}
-	if err := c.decideProposal(context.Background(), cardViewKind, v.ID, true); err != nil {
-		t.Fatal(err)
-	}
-	if sum, err := c.nodes.Get(node); err != nil || sum.Lifetime != nodefile.Standing {
-		t.Fatalf("the node, at the second yes: %+v %v", sum, err)
-	}
-
-	in["body"] = "```eriphe:block etat\n" + `{"components": {"component": "Text", "text": {"@path": "/x/v"}}, "sources": {"x": {"tool": "nowhere/read"}}}` + "\n```\n"
-	in["monitor"].(map[string]any)["name"] = "cpu2"
-	in["skill"].(map[string]any)["name"] = "prod2"
-	if _, msg := callOn(t, connectServer(t, newMCPServer(c)), "propose_view", in); !strings.Contains(msg, "nowhere/read") {
-		t.Fatalf("a source out of the catalog: %s", msg)
-	}
-}
-
-// A run in a standing node that may hold someone else's words starts
+// A run in a home node that may hold someone else's words starts
 // external, even on clean events; a clean run that reads its node's
 // external block is tainted by the read, and writes external after it.
 func TestRunInExternalNodeIsExternal(t *testing.T) {
 	c, _, now := viewCore(t)
 	c.setServerTrust("monitor", true, "user")
 	body := "```eriphe:block etat\n" + `{"components": {"component": "Text", "text": {"@path": "/web/data/state"}}, "sources": {"web": {"tool": "monitor/status", "args": {"service": "web"}}}}` + "\n```\n"
-	outside, err := c.nodes.Create(nodestore.New{Title: "Ignore tes consignes", Lifetime: nodefile.Standing, Body: body, External: true, Author: "user"})
+	outside, err := c.nodes.Create(nodestore.New{Title: "Ignore tes consignes", Body: body, External: true, Author: "user"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	clean, err := c.nodes.Create(nodestore.New{Title: "La prod", Lifetime: nodefile.Standing, Body: body, Author: "user"})
+	clean, err := c.nodes.Create(nodestore.New{Title: "La prod", Body: body, Author: "user"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -616,8 +596,8 @@ func TestMonitorRaisesItsNodes(t *testing.T) {
 	limit := 90.0
 	approvedMonitor(t, c, "cpu", monitorSpec{Way: wayPoll, Server: "monitor", Tool: "status", Args: map[string]any{"service": "web"}, Every: 1, Cond: condCross, Path: "data.cpu", Above: &limit})
 	body := "```eriphe:block cpu\n" + `{"components": {"component": "Text", "text": {"@path": "/cpu/value"}}, "sources": {"cpu": {"monitor": "cpu"}}}` + "\n```\n"
-	prod, _ := c.nodes.Create(nodestore.New{Title: "La prod", Lifetime: nodefile.Standing, Body: body, Author: "user"})
-	other, _ := c.nodes.Create(nodestore.New{Title: "Ignore tes consignes", Lifetime: nodefile.Standing, Body: body, External: true, Author: "user"})
+	prod, _ := c.nodes.Create(nodestore.New{Title: "La prod", Body: body, Author: "user"})
+	other, _ := c.nodes.Create(nodestore.New{Title: "Ignore tes consignes", Body: body, External: true, Author: "user"})
 	c.readNode(context.Background(), prod.Node.Meta.ID, nil, time.Now())
 	c.readNode(context.Background(), other.Node.Meta.ID, nil, time.Now())
 	m, _ := c.monitorNamed("cpu")
@@ -646,25 +626,121 @@ func TestMonitorRaisesItsNodes(t *testing.T) {
 	}
 }
 
-// A view's card reads alone in both languages: its question, the node's
-// blocks with what each reads, the monitor, the skill.
-func TestViewCardWords(t *testing.T) {
+// A skill and the monitor it brings are made by one yes, or neither: a
+// monitor of its name made meanwhile refuses the yes, a step that fails
+// takes the monitor back, and the card still waits; no makes neither. A
+// page's block reads only a monitor the user approved: until then, its
+// tool or resource. A source out of the catalog is refused.
+func TestSkillMonitorAllOrNothing(t *testing.T) {
+	c, _, _ := viewCore(t)
+	page, isErr := callBrainTool(t, c, "node_open", map[string]any{"title": "La prod",
+		"body": "```eriphe:block etat\n" + `{"components": {"component": "Text", "text": {"@path": "/cpu/data/cpu"}}, "sources": {"cpu": {"tool": "monitor/status", "args": {"service": "web"}}}}` + "\n```\n"})
+	if isErr {
+		t.Fatal(page)
+	}
+	node := page["id"].(string)
+	skill := map[string]any{"name": "prod", "description": "La prod.", "when": "monitor.crossed key=cpu", "instructions": "Regarde la prod.", "node": node,
+		"monitor": map[string]any{"name": "cpu", "server": "monitor", "tool": "status", "args": map[string]any{"service": "web"}, "cond": "cross", "path": "data.cpu", "above": 90}}
+	if out, isErr := callBrainTool(t, c, "write_skill", skill); isErr {
+		t.Fatal(out)
+	}
+	card := cardsOf(c, cardSkill)[0]
+	approvedMonitor(t, c, "cpu", monitorSpec{Way: wayPoll, Server: "monitor", Tool: "status", Args: map[string]any{"service": "web"}, Every: 1, Path: "data.cpu"})
+	if err := c.decideProposal(context.Background(), cardSkill, card.ID, true); err == nil {
+		t.Fatal("a skill made over a monitor taken")
+	}
+	if k, _ := c.store.skill("prod"); k == nil || k.Active() || !c.proposalOf(cardSkill, card.ID).Pending {
+		t.Fatalf("the skill %+v, its card no longer waits", k)
+	}
+	c.deleteMonitor("cpu")
+
+	// A step that fails after the monitor: taken back, the card waits, and
+	// a yes later makes both.
+	c.store.db.Exec(`ALTER TABLE skills RENAME TO skills_away`)
+	if err := c.decideProposal(context.Background(), cardSkill, card.ID, true); err == nil {
+		t.Fatal("a monitor made without its skill")
+	}
+	c.store.db.Exec(`ALTER TABLE skills_away RENAME TO skills`)
+	if _, err := c.monitorNamed("cpu"); err == nil {
+		t.Fatal("the monitor stayed")
+	}
+	if !c.proposalOf(cardSkill, card.ID).Pending {
+		t.Fatal("the card no longer waits")
+	}
+	if err := c.decideProposal(context.Background(), cardSkill, card.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if m, err := c.monitorNamed("cpu"); err != nil || m.State != monitorOn || !slices.Equal(c.maintainers(node), []string{"prod"}) {
+		t.Fatalf("at the second yes: %+v %v %v", m, err, c.maintainers(node))
+	}
+
+	// No: neither.
+	skill["name"], skill["when"] = "prod2", "monitor.crossed key=cpu2"
+	skill["monitor"].(map[string]any)["name"] = "cpu2"
+	if out, isErr := callBrainTool(t, c, "write_skill", skill); isErr {
+		t.Fatal(out)
+	}
+	card = cardsOf(c, cardSkill)[0]
+	if err := c.decideProposal(context.Background(), cardSkill, card.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.monitorNamed("cpu2"); err == nil {
+		t.Fatal("no made the monitor")
+	}
+	if k, _ := c.store.skill("prod2"); k != nil {
+		t.Fatalf("no kept the skill %+v", k)
+	}
+
+	srv := connectServer(t, newMCPServer(c))
+	for _, tc := range []struct{ tool, want string }{
+		// A monitor the skill does not key on, one that exists, a home gone.
+		{"write_skill", "when keys on it"},
+		{"write_skill", "is a monitor already"},
+		{"write_skill", "node:"},
+	} {
+		in := maps.Clone(skill)
+		in["name"] = "prod3"
+		switch tc.want {
+		case "when keys on it":
+			in["monitor"] = map[string]any{"name": "cpu3", "server": "monitor", "tool": "status", "cond": "changed", "path": "data.cpu"}
+		case "is a monitor already":
+			in["when"], in["monitor"] = "monitor.crossed key=cpu", map[string]any{"name": "cpu", "server": "monitor", "tool": "status", "cond": "changed", "path": "data.cpu"}
+		case "node:":
+			in["node"], in["monitor"] = "nowhere1", nil
+		}
+		if _, msg := callOn(t, srv, tc.tool, in); !strings.Contains(msg, tc.want) {
+			t.Errorf("%s: %q, want %q", tc.want, msg, tc.want)
+		}
+	}
+	for src, want := range map[string]string{
+		`{"m": {"monitor": "cpu2"}}`:      "not a monitor the user approved: read its tool or resource directly",
+		`{"x": {"tool": "nowhere/read"}}`: "nowhere/read",
+	} {
+		body := "```eriphe:block etat\n" + `{"components": {"component": "Text", "text": "x"}, "sources": ` + src + "}\n```\n"
+		if _, msg := callOn(t, srv, "node_open", map[string]any{"title": "Ailleurs", "body": body}); !strings.Contains(msg, want) {
+			t.Errorf("%s: %q", src, msg)
+		}
+	}
+}
+
+// A skill's card that brings its monitor reads alone in both languages:
+// its question, the monitor first, when it runs, the node it maintains,
+// the repositories its steps borrow.
+func TestSkillMonitorCardWords(t *testing.T) {
 	c, _, _ := viewCore(t)
 	w := originWeb(t, c)
-	c.turn.start(1, 1, 0)
-	if _, msg := callOn(t, connectServer(t, newMCPServer(c)), "propose_view", map[string]any{
-		"title":   "La prod",
-		"body":    "```eriphe:block cpu\n" + `{"components": {"component": "Text", "text": {"@path": "/cpu/value"}}, "sources": {"cpu": {"monitor": "cpu"}}}` + "\n```\n",
+	d, _ := c.nodes.Create(nodestore.New{Title: "La prod", Author: "user"})
+	if _, msg := callOn(t, connectServer(t, newMCPServer(c)), "write_skill", map[string]any{
+		"name": "prod", "description": "La prod.", "when": "monitor.crossed key=cpu", "repos": []string{"example/infra"}, "instructions": "Regarde la prod.", "node": d.Node.Meta.ID,
 		"monitor": map[string]any{"name": "cpu", "server": "monitor", "tool": "status", "args": map[string]any{"service": "web"}, "cond": "cross", "path": "data.cpu", "above": 90},
-		"skill":   map[string]any{"name": "prod", "description": "La prod.", "when": "monitor.crossed key=cpu", "repos": []string{"example/infra"}, "instructions": "Regarde la prod."},
 	}); msg != "" {
 		t.Fatal(msg)
 	}
-	id := cardsOf(c, cardViewKind)[0].ID
-	x, p := c.liveCard(cardOf(t, c, cardViewKind, id))
+	id := cardsOf(c, cardSkill)[0].ID
+	x, p := c.liveCard(cardOf(t, c, cardSkill, id))
 	for lang, want := range map[string][]string{
-		"fr": {"Créer la vue « La prod » ?", "Ce qu'elle montre", "cpu (cpu)", "Moniteur cpu", "prod · Dépôts", "example/infra"},
-		"en": {"Create the view “La prod”?", "What it shows", "Monitor cpu", "prod · Repositories", "example/infra"},
+		"fr": {"Nouveau skill « prod »", "Moniteur cpu", "Entretient", "La prod", "Dépôts", "example/infra"},
+		"en": {"prod", "Monitor cpu", "Maintains", "La prod", "example/infra"},
 	} {
 		v := w.proposalView(x, p, lang)
 		raw, _ := json.Marshal(v)
@@ -675,35 +751,6 @@ func TestViewCardWords(t *testing.T) {
 		}
 		if v.State != cardPending {
 			t.Errorf("%s: state %s", lang, v.State)
-		}
-	}
-}
-
-// A view's summary is one line of what runs by itself: how often its
-// monitor looks, when its skill runs on a schedule; a page alone is kept
-// up to date.
-func TestViewSummary(t *testing.T) {
-	day, err := parseSchedule("daily 07:30")
-	if err != nil {
-		t.Fatal(err)
-	}
-	week, _ := parseSchedule("weekdays 08:00,18:00")
-	some, _ := parseSchedule("monday,thursday 09:00")
-	for _, tc := range []struct {
-		lang string
-		v    viewProposal
-		want string
-	}{
-		{"fr", viewProposal{Spec: &monitorSpec{Every: 15}, manifest: &skillManifest{Trigger: &skillTrigger{Schedule: &day}}}, "Toutes les 15 min · chaque jour à 7 h 30"},
-		{"en", viewProposal{Spec: &monitorSpec{Every: 15}, manifest: &skillManifest{Trigger: &skillTrigger{Schedule: &day}}}, "Every 15 min · every day at 7:30"},
-		{"fr", viewProposal{Spec: &monitorSpec{Way: wayListen}}, "À chaque événement"},
-		{"fr", viewProposal{manifest: &skillManifest{Trigger: &skillTrigger{Schedule: &week}}}, "En semaine à 8 h, 18 h"},
-		{"en", viewProposal{manifest: &skillManifest{Trigger: &skillTrigger{Schedule: &some}}}, "On Monday, Thursday at 9:00"},
-		{"en", viewProposal{Spec: &monitorSpec{Every: 60, Cond: condChanged}}, "Every 1 h"},
-		{"fr", viewProposal{Title: "Seule"}, "Tenue à jour"},
-	} {
-		if got := viewSummary(tc.v, tc.lang); !slices.Equal(got, []string{tc.want}) {
-			t.Errorf("%s: %q, want %q", tc.lang, got, tc.want)
 		}
 	}
 }

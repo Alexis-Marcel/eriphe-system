@@ -120,8 +120,8 @@ type graphNode struct {
 	TitleExternal bool         `json:"titleExternal,omitempty"`
 	Parent        string       `json:"parent,omitempty"`
 	Links         []string     `json:"links,omitempty"`
-	Lifetime      string       `json:"lifetime"`
-	Status        string       `json:"status"` // running, waits, done or idle, computed (node_status.go)
+	Maintained    []string     `json:"maintained,omitempty"` // the skills that maintain it: the graph draws its satellite (node_home.go)
+	Status        string       `json:"status"`               // running, waits, done or idle, computed (node_status.go)
 	Created       time.Time    `json:"created"`
 	Updated       time.Time    `json:"updated"`
 	Done          *time.Time   `json:"done,omitempty"`
@@ -139,7 +139,7 @@ func (c *core) graphRow(sum nodestore.Summary) graphNode {
 
 // graphRowWith is a node's row, its status from f.
 func (c *core) graphRowWith(sum nodestore.Summary, f statusFacts) graphNode {
-	g := graphNode{ID: sum.ID, Title: sum.Title, TitleExternal: sum.TitleExternal(), Parent: sum.Parent, Links: sum.Links, Lifetime: string(sum.Lifetime), Status: f.of(sum),
+	g := graphNode{ID: sum.ID, Title: sum.Title, TitleExternal: sum.TitleExternal(), Parent: sum.Parent, Links: sum.Links, Maintained: f.homes[sum.ID], Status: f.of(sum),
 		Created: sum.Created, Updated: sum.Updated, External: sum.External, Version: sum.Version, Unasked: sum.Unasked()}
 	if !sum.Done.IsZero() {
 		d := sum.Done
@@ -189,7 +189,7 @@ type nodePage struct {
 	// Refs: the node each [[name]] of its text opens, by the name as
 	// written; a name no node has is not there (the page greys it).
 	Refs map[string]pageRef `json:"refs"`
-	// Alive: a standing node's sources, monitors and skills (node_alive.go).
+	// Alive: what keeps it alive: its skills, monitors and sources (node_alive.go).
 	Alive *pageAlive `json:"alive,omitempty"`
 	// Origin: who wanted it, as code recorded it (node_origin.go).
 	Origin pageOrigin `json:"origin"`
@@ -460,7 +460,7 @@ func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlo
 		}
 	}
 	// The items' notes on them (list_sections.go): the values are this
-	// view's own, read for it.
+	// node's own, read for it.
 	c.noteSources(id, b, v.Data)
 
 	var list []map[string]any

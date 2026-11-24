@@ -123,7 +123,7 @@ var benchMetrics = []struct{ key, want string }{
 	{"watch: subject first", "yes"},
 	{"watch: first node (s)", "-"},
 	{"watch: card in the first turn", "yes"},
-	{"watch: draft beside its subject", "yes"},
+	{"watch: skill homed on its page", "yes"},
 	{"watch: no questionnaire", "yes"},
 	{"watch: changes offered (ask)", "-"},
 	{"view approved", "yes"},
@@ -135,7 +135,7 @@ var benchMetrics = []struct{ key, want string }{
 	{"day: subject first", "yes"},
 	{"day: first node (s)", "-"},
 	{"day: card in the first turn", "yes"},
-	{"day: draft beside its subject", "yes"},
+	{"day: skill homed on its page", "yes"},
 	{"day: no questionnaire", "yes"},
 	{"day: changes offered (ask)", "-"},
 	{"day: short titles", "yes"},
@@ -256,7 +256,7 @@ func (x liveCall) taintOrStale() bool {
 }
 
 // benchWrites are the calls whose refusal is a refused write.
-var benchWrites = []string{"node_open", "node_write", "node_edit", "node_set", "propose_view", "item_note", "node_settle"}
+var benchWrites = []string{"node_open", "node_write", "node_edit", "node_set", "write_skill", "item_note", "node_settle"}
 
 // playNodesBench plays the scenario once, on a core of its own.
 func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
@@ -376,7 +376,7 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 	b.s.yes("glance set", b.glance("maison/conso"), "no glance reads maison/conso")
 
 	// 12. Setting up a mail watch shows it first: its subject opens before
-	// anything is read, then the view's draft beside it with its card in
+	// anything is read, then the skill that maintains it with its card in
 	// the same turn, with sensible defaults, its choices adjustable after
 	// (ask buttons, in a tainted turn too), never a questionnaire before.
 	b.say("Tu peux garder un œil sur mes mails, m'aider à les gérer et me proposer des actions à faire.", "", turnWork)
@@ -388,7 +388,7 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 
 	// 13. The day asked to be followed, at the home, as on a fresh install
 	// (the seed's day page archived first): its subject opens first, then
-	// its view's draft beside it, its card in that turn, an Agenda on it, no
+	// the skill that maintains it, its card in that turn, an Agenda on it, no
 	// questionnaire, no title made of the sentence. The last turn: the
 	// replay checks it again (nodes_replay_test.go).
 	if err := sc.c.archiveNode(ctx, day, byUser); err != nil {
@@ -583,9 +583,6 @@ func (b *bench) say(text, node, may string) {
 		b.born = append(b.born, sum.Title)
 		b.bornIDs = append(b.bornIDs, id)
 		b.allowed[id] = true // counted here, once
-		if sum.Lifetime == nodefile.Standing && !b.viewMade(id) {
-			b.s.note(fmt.Sprintf("a standing node the brain made itself: %s", sum.Title))
-		}
 	}
 	if may == turnNoNode && len(b.born) > 0 {
 		b.reopened = append(b.reopened, fmt.Sprintf("%s: %q", turn, b.born))
@@ -636,12 +633,8 @@ func (b *bench) codes(id string) bool {
 	return n > 0
 }
 
-// viewMade tells a standing node a view's card created.
-func (b *bench) viewMade(id string) bool {
-	var n int
-	b.sc.c.store.db.QueryRow(`SELECT COUNT(*) FROM view_proposals WHERE node = ? AND state = ?`, id, viewApproved).Scan(&n)
-	return n > 0
-}
+// viewMade tells a node a skill maintains.
+func (b *bench) viewMade(id string) bool { return len(b.sc.c.maintainers(id)) > 0 }
 
 // lastAnswer is the brain's last message.
 func (b *bench) lastAnswer() (Message, bool) {
@@ -868,9 +861,7 @@ func (b *bench) shows(tool string) bool {
 			return true
 		}
 	}
-	var n int
-	b.sc.c.store.db.QueryRow(`SELECT COUNT(*) FROM view_proposals WHERE body LIKE ?`, "%"+tool+"%").Scan(&n)
-	return n > 0
+	return false
 }
 
 // glance tells a node's source reads tool with a glance.
@@ -898,11 +889,11 @@ func (b *bench) scoreShownFirst(what, sentence string) {
 				firstAt = x.endAt.Sub(b.saidAt)
 			}
 		}
-		if x.tool == "propose_view" && x.err == "" {
+		if x.tool == "write_skill" && x.err == "" {
 			proposed = true
-			if node, _ := x.out["node"].(string); node != "" {
-				sum, err := b.sc.c.nodes.Get(node)
-				beside = beside || err == nil && x.about != "" && x.about != node && slices.Contains(sum.Links, x.about)
+			if node, _ := x.args["node"].(string); node != "" {
+				_, err := b.sc.c.nodes.Get(node)
+				beside = beside || err == nil // the page it maintains, written already
 			}
 		}
 		if !slices.Contains(benchWrites, x.tool) || x.err != "" {
@@ -917,7 +908,7 @@ func (b *bench) scoreShownFirst(what, sentence string) {
 			raw, _ := json.Marshal(v)
 			asks = asks || strings.Contains(string(raw), `"ask"`)
 		}
-		if t, _ := x.args["title"].(string); t != "" && (x.tool == "node_open" || x.tool == "propose_view" || x.tool == "node_set") {
+		if t, _ := x.args["title"].(string); t != "" && (x.tool == "node_open" || x.tool == "node_set") {
 			titles = append(titles, t)
 		}
 	}
@@ -931,8 +922,8 @@ func (b *bench) scoreShownFirst(what, sentence string) {
 	} else {
 		b.s.set(what+": first node (s)", "-", true)
 	}
-	b.s.yes(what+": card in the first turn", proposed, "no view proposed in the turn it was asked")
-	b.s.yes(what+": draft beside its subject", beside, "the view's draft is not linked to the turn's subject")
+	b.s.yes(what+": card in the first turn", proposed, "no skill proposed to maintain it in the turn it was asked")
+	b.s.yes(what+": skill homed on its page", beside, "the skill names no page it maintains")
 	b.s.yes(what+": no questionnaire", !asked, "questions asked before the page was shown")
 	b.s.set(what+": changes offered (ask)", yesNo(asks), true)
 	if !proposed || asked || !subjectFirst {
@@ -947,15 +938,24 @@ func (b *bench) scoreShownFirst(what, sentence string) {
 	b.s.yes(what+": short titles", short, fmt.Sprintf("titled %q", titles))
 }
 
-// approveView says yes on the view's card: the view's node, "" if none.
+// approveView says yes on the card of the skill that maintains the page
+// asked for: its home node, "" if none.
 func (b *bench) approveView() string {
 	c := b.sc.c
-	var id int64
 	var node string
-	if c.store.db.QueryRow(`SELECT id, node FROM view_proposals WHERE state = ? ORDER BY id DESC LIMIT 1`, viewProposed).Scan(&id, &node) != nil {
+	var card *proposal
+	for _, p := range c.pendingProposals() {
+		var pending string
+		c.store.db.QueryRow(`SELECT pending FROM skills WHERE rowid = ?`, p.ID).Scan(&pending)
+		if v, err := c.store.skillVersion(pending); p.Kind == cardSkill && err == nil && v.Manifest.Trigger != nil && v.Manifest.Trigger.Node != "" {
+			node, card = v.Manifest.Trigger.Node, &p
+		}
+	}
+	if card == nil {
+		b.note("view: no skill's card maintaining a page waits")
 		return ""
 	}
-	xs, err := c.cardsWhere(`ref = ? AND state = ?`, proposalRef(cardViewKind, id), cardPending)
+	xs, err := c.cardsWhere(`ref = ? AND state = ?`, proposalRef(cardSkill, card.ID), cardPending)
 	if err != nil || len(xs) == 0 {
 		b.note("view: its card does not wait")
 		return ""

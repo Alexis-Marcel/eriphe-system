@@ -84,7 +84,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(pageOf("Ma journée").locator(".pg-trace")).toHaveCount(0);
   await pageOf("Ma journée").getByRole("button", { name: "Fermer cette page" }).click();
 
-  // 3. The user opens the standing subject « Substack ».
+  // 3. The user opens the subject « Substack ».
   await bubble("Substack").click();
   await expect(pageOf("Substack")).toBeVisible();
 
@@ -176,7 +176,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await page.keyboard.press("Escape");
   await expect(page.locator(".pg-menu")).toHaveCount(0);
 
-  // 8. A draft with its « Envoyer ? » card, the production view beside it,
+  // 8. A draft with its « Envoyer ? » card, the production page beside it,
   // a research child running.
   await say("Réponds que je regarde dans l'heure, ouvre-moi la prod, et lance en arrière-plan une recherche sur l'erreur.");
   // Its send waits for the user's yes: the orb only answers, about the
@@ -287,9 +287,9 @@ test("the steps of the scenario", async ({ page, request }) => {
   // 14. Asked at the home, a subject opens its page, the bar in it;
   // Eriphe asks there what matters first: its questions, each with its
   // default, are in the subject's document, with the buttons that answer
-  // them; the bar has one line. The view it proposes then waits in the
-  // document, where Eriphe placed it, recalling the choices. Its yes makes
-  // the view, which opens.
+  // them; the bar has one line. Answered, Eriphe writes the page at once
+  // and proposes the skill that keeps it up, with its monitor, on one card
+  // on the page. Its yes makes both: the page is maintained.
   await home(page);
   await say("Garde un œil sur mes mails.");
   const watch = pageOf("Garder un œil sur mes mails");
@@ -313,58 +313,59 @@ test("the steps of the scenario", async ({ page, request }) => {
   const defaults = watch.getByRole("button", { name: "Fais comme tu proposes" });
   await expect(watch.getByRole("button", { name: "Toutes, et réveille-moi la nuit pour la prod" })).toBeVisible();
   await defaults.click();
-  // The view is proposed as a draft of its own, opened beside the
-  // subject: its card waits on it for the user's yes, its node's halo says
-  // so, and the orb says the answer, as any other.
-  await expect(said).toContainText("Voici la vue : dis oui sur sa carte et elle s'ouvre.");
+  // The page is written at once and opened beside the subject: the
+  // skill's card waits on it for the user's yes, its node's halo says so,
+  // and the orb says the answer, as any other.
+  await expect(said).toContainText("Voici la page : dis oui sur sa carte et elle se tient à jour.");
   await expect(words).toHaveClass(/answer/);
-  const draft = pageOf("Mes mails");
-  await expect(draft).toBeVisible();
-  await expect(page.locator(`.gr-node.yours[data-node="${await page.locator(".gr-page", { has: draft }).getAttribute("data-page")}"]`)).toHaveCount(1);
-  // The draft opened beside it takes nothing from the orb: its answer stays.
-  await expect(said).toContainText("Voici la vue : dis oui sur sa carte et elle s'ouvre.");
+  const mailsPage = pageOf("Mes mails");
+  await expect(mailsPage).toBeVisible();
+  await expect(mailsPage).toContainText("Les mails qui demandent une réponse.");
+  await expect(page.locator(`.gr-node.yours[data-node="${await page.locator(".gr-page", { has: mailsPage }).getAttribute("data-page")}"]`)).toHaveCount(1);
+  // No skill keeps it up yet: no ∞, no satellite.
+  await expect(mailsPage.locator(".pg-maintained")).toHaveCount(0);
+  await expect(page.locator(".gr-node.maintained", { has: page.locator('.gr-core[aria-label^="Mes mails"]') })).toHaveCount(0);
   // The subject says where things stand: the questions and their
-  // buttons gone, the choices written, the draft linked; no card in it.
+  // buttons gone, the choices written, the page linked; no card in it.
   await expect(defaults).toHaveCount(0);
   await expect(watch).not.toContainText("Par défaut au brief");
   await expect(watch).toContainText("Ce qu'on a décidé");
   await expect(watch.locator(".pg-foot")).toHaveCount(0);
-  // The draft's card says in one line what will run by itself, the page
-  // above it its preview; its technical words, the skill's instructions
-  // drawn as Markdown, are one click away.
-  const viewCard = draft.locator(".pg-foot .a2-proposal");
-  await expect(viewCard).toHaveCount(1);
-  await expect(viewCard).toContainText("Mes mails");
-  await expect(viewCard).toContainText("prévenu au brief, jamais la nuit");
-  await expect(viewCard.locator(".a2-proposal-summary")).toHaveText("Toutes les 5 min");
-  await expect(draft).toContainText("Les mails qui demandent une réponse.");
-  const details = viewCard.locator("details.a2-proposal-details");
+  // The skill's card names it and the monitor its yes makes too; its
+  // technical words, the skill's instructions drawn as Markdown, are one
+  // click away.
+  const skillCard = mailsPage.locator(".pg-foot .a2-proposal");
+  await expect(skillCard).toHaveCount(1);
+  await expect(skillCard).toContainText("mails-trier");
+  await expect(skillCard).toContainText("mails-recus");
+  const details = skillCard.locator("details.a2-proposal-details");
   await expect(details.locator(".a2-proposal-md")).toBeHidden();
-  await shot(page, "view-card");
+  await shot(page, "skill-card");
   await details.locator("summary").click();
   await expect(details.locator(".a2-proposal-md h3")).toHaveText("Trier les mails");
   await expect(details).not.toContainText("**chaque**");
   await details.locator(".a2-proposal-md").scrollIntoViewIfNeeded();
-  await shot(page, "view-card-details", true);
+  await shot(page, "skill-card-details", true);
   // On a laptop's screen, where two pages side by side do not fit.
   await page.setViewportSize({ width: 1180, height: 720 });
-  await viewCard.getByRole("button", { name: "Oui" }).click();
-  await expect(page.locator(".gr-node.standing", { has: page.locator('.gr-core[aria-label="Mes mails"]') })).toHaveCount(1);
+  await skillCard.getByRole("button", { name: "Oui" }).click();
+  // Its yes makes the skill and its monitor: the page is maintained.
+  await expect(page.locator(".gr-node.maintained", { has: page.locator('.gr-core[aria-label^="Mes mails"]') })).toHaveCount(1);
   await expect(pageOf("Mes mails")).toBeVisible();
-  // Opened beside the subject, the view's page takes free room next to
-  // it: the two never overlap, and the one the bar talks to, the graph's
-  // centre, is framed whole, its head on screen, above the bar.
+  // Opened beside the subject, the page takes free room next to it: the
+  // two never overlap, and the one the bar talks to, the graph's centre,
+  // is framed whole, its head on screen, above the bar.
   await still(pageOf("Mes mails"));
-  await shot(page, "view-beside", false);
+  await shot(page, "page-beside", false);
   await expectApart(page, [watch, pageOf("Mes mails")]);
   await page.setViewportSize({ width: 1440, height: 900 });
   // Answered, the card is decided: it leaves the document (the page's ⋯
   // menu lists it).
-  await expect(viewCard).toHaveCount(0);
+  await expect(skillCard).toHaveCount(0);
   await expect(watch.getByRole("button", { name: "Oui" })).toHaveCount(0);
-  // Its pages closed, the view's bubble, made on the subject, sits beside
-  // it. Dropped right on the view, nothing is pinned: the two are set
-  // apart and the graph settles again, no bubble on another.
+  // Its pages closed, the page's bubble, made on the subject, sits beside
+  // it. Dropped right on it, nothing is pinned: the two are set apart and
+  // the graph settles again, no bubble on another.
   await home(page);
   const mine = page.locator(".gr-node:not(.external)", { has: page.locator('.gr-core[aria-label^="Mes mails"]') });
   const watching = page.locator(".gr-node:not(.external)", { has: page.locator('.gr-core[aria-label^="Garder un œil sur mes mails"]') });
@@ -377,8 +378,8 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expectBubblesApart(page);
   await shot(page, "graph-apart");
 
-  // 14b. The view's skill, woken once per mail, proposed to archive
-  // three: they wait as one card on the view's page, in plain
+  // 14b. The page's skill, woken once per mail, proposed to archive
+  // three: they wait as one card on its page, in plain
   // words (« Déplacer 3 mails vers les archives »), each mail a line
   // ticked, still signed as someone else's words (⚠), where it comes from
   // under Détails. The user leaves one out: Oui archives the two others,
@@ -387,19 +388,20 @@ test("the steps of the scenario", async ({ page, request }) => {
   await bubble("Mes mails").click();
   const view = pageOf("Mes mails");
   await expect(view).toBeVisible();
-  // A permanent subject shows it: a small sign by its date, a satellite
-  // orbiting its bubble; its ⋯ menu says what keeps it alive, in code's
-  // words: the monitor that watches, the skill it starts.
-  await expect(view.locator(".pg-title .pg-standing")).toHaveAttribute("title", "Sujet permanent");
-  await expect(page.locator(".gr-node.standing", { has: page.locator('.gr-core[aria-label="Mes mails"]') }).locator(".gr-sat")).toHaveCount(1);
-  await expect(page.locator(".gr-node:not(.standing) .gr-sat")).toHaveCount(0);
+  // A node a skill maintains shows it: a small sign by its date, a
+  // satellite orbiting its bubble, both naming the skill; its ⋯ menu says
+  // what keeps it alive, in code's words: the monitor that watches, the
+  // skill it starts.
+  await expect(view.locator(".pg-title .pg-maintained")).toHaveAttribute("title", "Entretenu par mails-trier");
+  await expect(page.locator(".gr-node.maintained", { has: page.locator('.gr-core[aria-label="Mes mails"]') }).locator(".gr-sat")).toHaveCount(1);
+  await expect(page.locator(".gr-node:not(.maintained) .gr-sat")).toHaveCount(0);
   await view.getByRole("button", { name: "Plus" }).click();
   const alive = page.locator(".pg-menu .pg-alive");
   await expect(alive.locator("h3")).toHaveText("Ce qui le fait vivre");
   await expect(alive.locator(".pg-alive-monitors li")).toContainText("mails-recus");
   await expect(alive.locator(".pg-alive-skills li")).toHaveText("mails-trier lancé quand la surveillance « mails-recus » voit quelque chose, au plus une fois toutes les 15 min");
   await expect(alive.locator(".pg-alive-at")).toContainText("Mis à jour");
-  await expect(page.locator(".pg-menu .pg-origin p")).toHaveText("Ouvert à ta demande : tu as dit oui à sa carte.");
+  await expect(page.locator(".pg-menu .pg-origin p")).toContainText("Ouvert à ta demande");
   await shot(page, "alive-menu");
   await page.keyboard.press("Escape");
   await expect(alive).toHaveCount(0);
@@ -450,19 +452,19 @@ test("the steps of the scenario", async ({ page, request }) => {
   await page.keyboard.press("Escape");
   await shot(page, "chosen-calls");
 
-  // 15. A view proposed at the home, no subject opened: its draft is the
-  // subject, opened in front with its card at its foot, never above the
-  // bar; answered, the card leaves and the page stands.
+  // 15. A page asked at the home, no subject opened: written at once and
+  // opened in front, the bar in it; nothing to approve, no card, and no
+  // skill keeps it up: no satellite.
   await home(page);
-  await say("Propose-moi une vue de l'agenda.");
-  await expect(said).toContainText("Voici la vue de ton agenda");
+  await say("Fais-moi une page de l'agenda.");
+  await expect(said).toContainText("Voici ton agenda.");
   const agenda = pageOf("Mon agenda");
   await expect(agenda).toBeVisible();
+  await expect(agenda).toContainText("Les rendez-vous du jour.");
+  await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Mon agenda");
   await expect(page.locator(".cs-cards")).toHaveCount(0);
-  const agendaCard = agenda.locator(".pg-foot .a2-proposal");
-  await agendaCard.getByRole("button", { name: "Oui" }).click();
-  await expect(agendaCard).toHaveCount(0);
-  await expect(page.locator(".gr-node.standing", { has: page.locator('.gr-core[aria-label="Mon agenda"]') })).toHaveCount(1);
+  await expect(agenda.locator(".pg-foot .a2-proposal")).toHaveCount(0);
+  await expect(page.locator(".gr-node.maintained", { has: page.locator('.gr-core[aria-label^="Mon agenda"]') })).toHaveCount(0);
 
   // 16. Asked on the side: its node is born on the graph, not opened, and
   // the bar stays at the home.
@@ -827,7 +829,7 @@ test("the workspace on a small screen", async ({ page }) => {
   const day = page.locator('article.pg[aria-label="Ma journée"]');
   await expect(day).toBeVisible();
   await expect(day).toContainText("Point produit");
-  await expect(day.locator(".pg-standing")).toBeVisible(); // a permanent subject, on a phone too
+  await expect(day.locator(".pg-maintained")).toBeVisible(); // a skill maintains it, on a phone too
   await shot(page, "phone-page");
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Ma journée");
   // The orb on the phone: no gliding, a line above the bar, its subject named.

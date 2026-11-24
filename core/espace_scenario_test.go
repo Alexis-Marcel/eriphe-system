@@ -220,7 +220,7 @@ func newScenarioWith(t *testing.T, ctx context.Context, live *liveBrain) *scenar
 	return sc
 }
 
-// seed is the graph the scenario starts from: the standing nodes the brain
+// seed is the graph the scenario starts from: the nodes the brain
 // opened before (« Ma journée », the subject « Substack », the mails), and
 // Eriphe's word for the morning.
 func (sc *scenario) seed() {
@@ -238,10 +238,23 @@ func (sc *scenario) seed() {
 		// made, to the second, and the scenario is the same each run.
 		time.Sleep(time.Second)
 	}
-	mk("day", nodestore.New{Title: "Ma journée", Lifetime: nodefile.Standing, Body: "Ce qui se passe aujourd'hui.\n"})
-	mk("substack", nodestore.New{Title: "Substack", Lifetime: nodefile.Standing, Goal: "Lancer la newsletter", Body: "La newsletter : des articles sur le métier de développeur, un par semaine.\n\n" +
+	mk("day", nodestore.New{Title: "Ma journée", Body: "Ce qui se passe aujourd'hui.\n"})
+	mk("substack", nodestore.New{Title: "Substack", Goal: "Lancer la newsletter", Body: "La newsletter : des articles sur le métier de développeur, un par semaine.\n\n" +
 		"Les articles qui marchent le mieux : « Dix ans de code », « Ce que m'a appris ma première panne », « Le métier change ».\n"})
-	mk("mails", nodestore.New{Title: "Mails", Lifetime: nodefile.Standing, Body: "Les mails qui comptent.\n"})
+	mk("mails", nodestore.New{Title: "Mails", Body: "Les mails qui comptent.\n"})
+	// The day and the mails are kept up by a skill each, approved before:
+	// homed on them, they are maintained (their satellite, their ∞). Keyed
+	// on monitors the scenario never makes, they never run.
+	for name, home := range map[string]string{"journee": "day", "mails-suivre": "mails"} {
+		md := "---\nname: " + name + "\ndescription: Tient la page à jour.\nwhen: monitor.new key=" + name + "-jamais\nnode: " + sc.nodes[home] + "\n---\nTiens la page à jour.\n"
+		k, _, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte(md)}}, skillFromEriphe)
+		if err == nil {
+			err = c.store.approveSkill(k.Name, k.Pending)
+		}
+		if err != nil {
+			sc.t.Fatal(err)
+		}
+	}
 	sc.c.store.addMessage(roleBrain, "Bonjour. Rien ne t'attend ce matin.", true)
 }
 
@@ -953,27 +966,27 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		b.self("node_write", map[string]any{"id": node, "expect": hash, "body": articleDoc("## Ce qu'on a décidé\n\n- Pour des salariés, 1 000 mots.\n", "", "Une recherche, puis l'angle.")})
 		return "C'est noté : pour des salariés, 1 000 mots."
 	case strings.Contains(said, "Fais comme tu proposes"):
-		// The card recalls the choices: the view's goal is its why. The whole
-		// view, as a real brain composes it: its node, the monitor that looks
-		// every 5 minutes and the skill that sorts each mail. Its node opens
-		// at once as a draft beside the subject, its card on it; the
-		// subject links it under what was decided.
-		b.self("propose_view", map[string]any{"title": "Mes mails", "goal": "Toutes les boîtes ; ce qui demande une réponse ; prévenu au brief, jamais la nuit",
-			"body":    "Les mails qui demandent une réponse.\n",
-			"monitor": map[string]any{"name": "mails-recus", "server": "mail", "tool": "recus", "cond": "new", "path": "messages", "id": "id", "every": "5m"},
-			"skill": map[string]any{"name": "mails-trier", "description": "Trie chaque mail reçu et prépare une réponse à ceux qui en demandent une.",
-				"when": "monitor.new key=mails-recus", "every": "15m", "model": "small", "tools": []string{"mail"},
-				"instructions": "# Trier les mails\n\nPour **chaque** mail reçu :\n\n1. Note-le dans la page.\n2. S'il demande une réponse, ouvre un node « Répondre à … » avec un brouillon.\n\nN'envoie rien : l'envoi attend le `oui`.\n"}})
+		// The subject says what was decided; the page is written at once,
+		// beside it, its goal the choices; the skill that keeps it up is
+		// proposed with the monitor that looks every 5 minutes, one card on
+		// the page: its yes makes both.
 		_, hash := b.read(node)
 		b.self("node_write", map[string]any{"id": node, "expect": hash, "body": "## Ce qu'on suit\n\nLes mails qui demandent quelque chose, triés pour toi.\n\n" +
 			"## Ce qu'on a décidé\n\n- Toutes les boîtes ; ce qui demande une réponse.\n- Prévenu au brief, jamais la nuit.\n\n" +
-			"## Ensuite\n\nTon oui sur la carte de [[Mes mails]] crée la vue.\n"})
-		return "Voici la vue : dis oui sur sa carte et elle s'ouvre."
-	case strings.Contains(said, "vue de l'agenda"):
-		// Proposed at the home with no subject opened: its draft is the
-		// subject, opened with the bar in it, its card at its foot.
-		b.self("propose_view", map[string]any{"title": "Mon agenda", "body": "Les rendez-vous du jour.\n"})
-		return "Voici la vue de ton agenda : dis oui sur sa carte."
+			"## Ensuite\n\nTon oui sur la carte de [[Mes mails]] la tient à jour.\n"})
+		out := b.self("node_open", map[string]any{"title": "Mes mails", "goal": "Toutes les boîtes ; ce qui demande une réponse ; prévenu au brief, jamais la nuit",
+			"body": "Les mails qui demandent une réponse.\n"})
+		page, _ := out["id"].(string)
+		b.self("write_skill", map[string]any{"name": "mails-trier", "description": "Trie chaque mail reçu et prépare une réponse à ceux qui en demandent une.",
+			"when": "monitor.new key=mails-recus", "every": "15m", "model": "small", "tools": []string{"mail"}, "node": page,
+			"monitor":      map[string]any{"name": "mails-recus", "server": "mail", "tool": "recus", "cond": "new", "path": "messages", "id": "id", "every": "5m"},
+			"instructions": "# Trier les mails\n\nPour **chaque** mail reçu :\n\n1. Note-le dans la page.\n2. S'il demande une réponse, ouvre un node « Répondre à … » avec un brouillon.\n\nN'envoie rien : l'envoi attend le `oui`.\n"})
+		return "Voici la page : dis oui sur sa carte et elle se tient à jour."
+	case strings.Contains(said, "page de l'agenda"):
+		// Asked at the home for a page: written at once, opened with the bar
+		// in it; nothing to approve, no card.
+		b.self("node_open", map[string]any{"title": "Mon agenda", "goal": "Les rendez-vous du jour", "body": "Les rendez-vous du jour.\n"})
+		return "Voici ton agenda."
 	case strings.Contains(said, "à part"):
 		// On the side: opened in the background, the bar stays.
 		b.self("node_open", map[string]any{"title": "Recherche sur les newsletters", "aside": true, "goal": "Les newsletters à garder"})
@@ -1341,7 +1354,7 @@ func (sc *scenario) handleProposals(rw http.ResponseWriter, r *http.Request) {
 // of its own (each moves to another folder: none folds with another).
 func (sc *scenario) handleRows(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
-	d, err := c.nodes.Create(nodestore.New{Title: "Tri de la boîte", Lifetime: nodefile.Standing, Author: byBrain, Body: "La boîte, à trier.\n"})
+	d, err := c.nodes.Create(nodestore.New{Title: "Tri de la boîte", Author: byBrain, Body: "La boîte, à trier.\n"})
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
@@ -1351,7 +1364,7 @@ func (sc *scenario) handleRows(rw http.ResponseWriter, r *http.Request) {
   {"id": "root", "component": "List", "children": {"path": "/boite/messages", "componentId": "row"}},
   {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
  "sources": {"boite": {"tool": "mail/boite", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1425,7 +1438,7 @@ func (sc *scenario) handleReview(rw http.ResponseWriter, r *http.Request) {
 // mails waits on their rows, one card.
 func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
-	d, err := c.nodes.Create(nodestore.New{Title: "Mails en sections", Lifetime: nodefile.Standing, Author: byBrain, Body: "Les mails, triés.\n"})
+	d, err := c.nodes.Create(nodestore.New{Title: "Mails en sections", Author: byBrain, Body: "Les mails, triés.\n"})
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
@@ -1439,7 +1452,7 @@ func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
   {"id": "info", "component": "List", "children": {"path": "/tri/messages[_group=Pour info]", "componentId": "row"}},
   {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
  "sources": {"tri": {"tool": "mail/tri", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1468,7 +1481,7 @@ func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
 // group; written by the brain as any author, read once, and shown.
 func (sc *scenario) handleOpen(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
-	d, err := c.nodes.Create(nodestore.New{Title: "Mails à lire", Lifetime: nodefile.Standing, Author: byBrain, Body: "Les mails.\n"})
+	d, err := c.nodes.Create(nodestore.New{Title: "Mails à lire", Author: byBrain, Body: "Les mails.\n"})
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
@@ -1478,7 +1491,7 @@ func (sc *scenario) handleOpen(rw http.ResponseWriter, r *http.Request) {
   {"id": "root", "component": "List", "children": {"path": "/lus/messages", "componentId": "row"}},
   {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
  "sources": {"lus": {"tool": "mail/lus", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from", "open": {"tool": "mail/lire", "id": "id"}}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1500,7 +1513,7 @@ func (sc *scenario) handleOpen(rw http.ResponseWriter, r *http.Request) {
 func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
 	lead := "1 réponse attendue : Sam, avant vendredi. 1 hameçonnage dans le lot à jeter.\n\n**Pour info** · La facture d'électricité est arrivée (62 €, prélevés le 5 décembre). Le club avance l'entraînement de samedi à 9 h.\n"
-	d, err := c.nodes.Create(nodestore.New{Title: "Mes mails du jour", Lifetime: nodefile.Standing, Author: byBrain, Body: lead})
+	d, err := c.nodes.Create(nodestore.New{Title: "Mes mails du jour", Author: byBrain, Body: lead})
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
@@ -1518,7 +1531,7 @@ func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
   {"id": "infos", "component": "List", "children": {"path": "/mails/messages[_group=Pour info]", "componentId": "info_row"}},
   {"id": "info_row", "component": "Item", "level": "low", "title": {"@path": "subject"}, "detail": {"@path": "from"}, "note": {"@path": "_note"}}],
  "sources": {"mails": {"tool": "mail/bilan", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from", "open": {"tool": "mail/lettre", "id": "id"}}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, true, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, true, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1578,7 +1591,7 @@ func (sc *scenario) handleView(rw http.ResponseWriter, r *http.Request) {
 // the user would have (view-refresh.spec.ts).
 func (sc *scenario) handlePurge(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
-	d, err := c.nodes.Create(nodestore.New{Title: "Boîte à nettoyer", Lifetime: nodefile.Standing, Author: byBrain, Body: "La boîte.\n"})
+	d, err := c.nodes.Create(nodestore.New{Title: "Boîte à nettoyer", Author: byBrain, Body: "La boîte.\n"})
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
@@ -1588,7 +1601,7 @@ func (sc *scenario) handlePurge(rw http.ResponseWriter, r *http.Request) {
   {"id": "root", "component": "List", "children": {"path": "/promos/messages", "componentId": "row"}},
   {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
  "sources": {"promos": {"tool": "mail/promos", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1629,7 +1642,7 @@ func (sc *scenario) handleConso(rw http.ResponseWriter, r *http.Request) {
 // of its rows waits on them.
 func (sc *scenario) handleCourrier(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
-	d, err := c.nodes.Create(nodestore.New{Title: "Courrier", Lifetime: nodefile.Standing, Author: byBrain, Body: "Le courrier du jour.\n"})
+	d, err := c.nodes.Create(nodestore.New{Title: "Courrier", Author: byBrain, Body: "Le courrier du jour.\n"})
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
@@ -1639,7 +1652,7 @@ func (sc *scenario) handleCourrier(rw http.ResponseWriter, r *http.Request) {
   {"id": "root", "component": "List", "children": {"path": "/mails/messages", "componentId": "row"}},
   {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
  "sources": {"mails": {"tool": "mail/courrier", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, true, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, true, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}

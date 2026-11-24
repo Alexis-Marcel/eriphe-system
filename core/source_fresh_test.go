@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
@@ -179,10 +178,10 @@ func TestRereadScope(t *testing.T) {
 		raw, _ := json.Marshal(map[string]any{"components": []map[string]any{{"id": "root", "component": "Text", "text": "x"}}, "sources": map[string]any{name: s}})
 		return "```eriphe:block " + name + "\n" + string(raw) + "\n```\n"
 	}
-	perso := mustNode(t, c, nodestore.New{Title: "Perso", Lifetime: nodefile.Standing, Body: "x\n\n" + src("p", "perso")})
-	travail := mustNode(t, c, nodestore.New{Title: "Travail", Lifetime: nodefile.Standing, Body: "x\n\n" + src("w", "travail")})
-	all := mustNode(t, c, nodestore.New{Title: "Tout", Lifetime: nodefile.Standing, Body: "x\n\n" + src("a", "")})
-	other := mustNode(t, c, nodestore.New{Title: "Ailleurs", Lifetime: nodefile.Standing,
+	perso := mustNode(t, c, nodestore.New{Title: "Perso", Body: "x\n\n" + src("p", "perso")})
+	travail := mustNode(t, c, nodestore.New{Title: "Travail", Body: "x\n\n" + src("w", "travail")})
+	all := mustNode(t, c, nodestore.New{Title: "Tout", Body: "x\n\n" + src("a", "")})
+	other := mustNode(t, c, nodestore.New{Title: "Ailleurs",
 		Body: "x\n\n```eriphe:block o\n" + `{"components": [{"id": "root", "component": "Text", "text": "x"}], "sources": {"o": {"tool": "agenda/today"}}}` + "\n```\n"})
 	for _, tc := range []struct {
 		accounts map[string]bool
@@ -320,7 +319,7 @@ func TestToolServerResourcesFollowed(t *testing.T) {
 	if none != 0 {
 		t.Fatalf("followed with no node: %d", none)
 	}
-	mustNode(t, c, nodestore.New{Title: "État", Lifetime: nodefile.Standing,
+	mustNode(t, c, nodestore.New{Title: "État",
 		Body: "x\n\n```eriphe:block s\n" + `{"components": [{"id": "root", "component": "Text", "text": "x"}], "sources": {"s": {"tool": "monitor/status", "args": {"service": "web"}}}}` + "\n```\n"})
 	c.followNodeResources()
 	u.mu.Lock()

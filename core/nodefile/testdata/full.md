@@ -1,9 +1,9 @@
 ---
+format: 2
 id: m4ilx7q2
 title: "Reply to Sam: the production app"
 parent: k3v9q2m7
 links: [p8d2x4c1, a1b2c3d4]
-lifetime: work
 goal: |-
   Answer Sam within the hour.
   Find why the app fails.

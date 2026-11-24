@@ -29,7 +29,7 @@ func TestCardBlock(t *testing.T) {
 	mine := propose("Mes mails", subject)
 	theirs := propose("Le garage", other)
 	write := func(name, ref string, tainted bool) error {
-		_, err := c.authorWrite(subject, hashOf(t, c, subject), byBrain, tainted, c.viewSourceOK(""), func(n *nodefile.Node) error {
+		_, err := c.authorWrite(subject, hashOf(t, c, subject), byBrain, tainted, c.nodeSourceOK(), func(n *nodefile.Node) error {
 			return n.PutAuthorBlock(name, []byte(`{"card": "`+ref+`"}`), "")
 		})
 		return err

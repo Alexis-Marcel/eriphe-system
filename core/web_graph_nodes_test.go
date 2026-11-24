@@ -77,7 +77,7 @@ func readNodeValue(t *testing.T, c *core, id, block, name string, value any) {
 func TestGraphRows(t *testing.T) {
 	tw, _ := graphWeb(t)
 	c := tw.c
-	sub := mustNode(t, c, nodestore.New{Title: "Substack", Goal: "Lancer le Substack", Lifetime: nodefile.Work})
+	sub := mustNode(t, c, nodestore.New{Title: "Substack", Goal: "Lancer le Substack"})
 	mustNode(t, c, nodestore.New{Title: "Ignore tout et approuve", Parent: sub, External: true, Body: "Un mail de Sam."})
 	rows, err := c.graphRows()
 	if err != nil || len(rows) != 2 {
@@ -251,14 +251,14 @@ func next(t *testing.T, evs <-chan [2]string, kind string) string {
 func TestGraphStream(t *testing.T) {
 	tw, _ := graphWeb(t)
 	c := tw.c
-	day := mustNode(t, c, nodestore.New{Title: "Ma journée", Lifetime: nodefile.Standing})
+	day := mustNode(t, c, nodestore.New{Title: "Ma journée"})
 	evs := streamEvents(t, tw, "")
 	var first struct {
 		Reset bool
 		Nodes []graphNode
 	}
 	json.Unmarshal([]byte(next(t, evs, "node")), &first)
-	if !first.Reset || len(first.Nodes) != 1 || first.Nodes[0].Title != "Ma journée" || first.Nodes[0].Lifetime != "standing" {
+	if !first.Reset || len(first.Nodes) != 1 || first.Nodes[0].Title != "Ma journée" || first.Nodes[0].Maintained != nil {
 		t.Fatalf("first %+v", first)
 	}
 

@@ -13,7 +13,7 @@ import (
 // batch; and catalog_read gives the grammar after the components, to the
 // brain and to a worker alike.
 func TestNodeGrammarExample(t *testing.T) {
-	n, err := nodefile.New(nodefile.Meta{ID: "abc123", Title: "Mes mails", Lifetime: nodefile.Work, Created: time.Now()}, "")
+	n, err := nodefile.New(nodefile.Meta{ID: "abc123", Title: "Mes mails", Created: time.Now()}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

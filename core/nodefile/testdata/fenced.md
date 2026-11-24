@@ -1,7 +1,7 @@
 ---
+format: 2
 id: doc1
 title: How to write a block
-lifetime: standing
 created: 2026-11-17T09:00:00Z
 ---
 A block looks like this:

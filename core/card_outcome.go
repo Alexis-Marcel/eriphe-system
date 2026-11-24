@@ -151,7 +151,7 @@ func (c *core) asksExec(asks []accessQuestion) (state, why, words string, extern
 // decided on the workspace, a page or a channel tells it at once, as the
 // user's act (nodeEvent), on the card's node: what was decided, and what
 // came of it, so that the brain updates what it wrote of the card (a
-// view's subject that still called it a draft). A call's yes is told once
+// subject that still said it waits). A call's yes is told once
 // it ran (callToBrain, callsCardRan). A plain yes or no in words is told
 // with the user's message (cardAnswerLine), which carries the outcome.
 // A card withdrawn tells nobody: with its node, the user set the subject
@@ -259,48 +259,4 @@ func (c *core) taskStartTold(id int64, approve bool) cardTold {
 		return cardTold{node, fmt.Sprintf("la tâche %s démarre ; sa fin te réveillera.", s.TaskID)}
 	}
 	return cardTold{node, fmt.Sprintf("la tâche %s ne démarre pas. Ne la relance pas telle quelle ; dis-le en une phrase seulement s'il attend une suite.", s.TaskID)}
-}
-
-// viewTold is a view card's outcome, told in the subject it came from:
-// what the subject says of its draft is to be updated.
-func (c *core) viewTold(id int64, approve bool) cardTold {
-	v, err := c.viewOf(id)
-	if err != nil {
-		return cardTold{Text: "la vue est introuvable."}
-	}
-	var subjects []string
-	if c.nodes != nil {
-		if d, err := c.nodes.Read(v.Node, 0); err == nil {
-			for _, s := range d.Node.Meta.Links {
-				if sum, err := c.nodes.Get(s); err == nil && sum.Archived.IsZero() {
-					subjects = append(subjects, s)
-				}
-			}
-		}
-	}
-	node, of := "", ""
-	if len(subjects) > 0 {
-		node, of = subjects[0], fmt.Sprintf(" Mets à jour ce qu'en dit son sujet (%s) : ", strings.Join(subjects, ", "))
-	}
-	if approve {
-		if of != "" {
-			of += "ce n'est plus un brouillon, la vue est en place."
-		} else {
-			node = v.Node
-		}
-		made := ""
-		switch {
-		case v.Spec != nil && v.MD != "":
-			made = fmt.Sprintf(" ; sa surveillance « %s » et son skill « %s » tournent", v.Monitor, v.Skill)
-		case v.Spec != nil:
-			made = fmt.Sprintf(" ; sa surveillance « %s » tourne", v.Monitor)
-		case v.MD != "":
-			made = fmt.Sprintf(" ; son skill « %s » tourne", v.Skill)
-		}
-		return cardTold{node, fmt.Sprintf("la vue est en place sur le nœud %s, ce n'est plus un brouillon%s.%s", v.Node, made, of)}
-	}
-	if of != "" {
-		of += "la vue n'a pas été retenue."
-	}
-	return cardTold{node, fmt.Sprintf("son brouillon, le nœud %s, est archivé ; rien ne tourne.%s", v.Node, of)}
 }

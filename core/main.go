@@ -92,7 +92,6 @@ func main() {
 		log.Printf("nodes: %v", err)
 	} else {
 		c.useNodes(nodes)
-		c.trustViewTitles()
 	}
 	if err := c.reconcileServices(); err != nil {
 		log.Fatalf("services: %v", err)

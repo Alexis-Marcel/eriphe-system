@@ -7,7 +7,7 @@ import { still } from "./rest";
 // one ⚠ beside it, nothing past the page's edge. Played on
 // the scenario's test core (TestEspaceScenario), signed in as there, on a
 // fresh urgent mail (POST /e2e/mail: an external node a skill opened, the
-// one thing this file adds to the core), and on the standing « Mails »;
+// one thing this file adds to the core), and on « Mails », which a skill maintains;
 // their pages are given 17 versions here, and the view is not written.
 
 const title = "Urgent : la prod renvoie des 500";
@@ -68,7 +68,7 @@ async function oneLine(pg: Locator, name = title) {
   // graph's camera may scale the page)
   const [w, full] = await tx.evaluate((e) => [e.offsetWidth, e.scrollWidth]);
   expect(w).toBeGreaterThanOrEqual(Math.min(full, 60));
-  for (const sign of await pg.locator(".pg-title h2 .ext-mark, .pg-title .pg-standing").all()) {
+  for (const sign of await pg.locator(".pg-title h2 .ext-mark, .pg-title .pg-maintained").all()) {
     const b = (await sign.boundingBox())!;
     expect(Math.abs(b.y + b.height / 2 - (t.y + t.height / 2))).toBeLessThan(t.height / 2);
     expect(b.x).toBeGreaterThan(t.x);
@@ -159,11 +159,11 @@ test("pages with 17 versions, two open on a narrow screen", async ({ page, reque
   await page.locator(`[data-node="${id}"] .gr-core`).click();
   const mail = page.locator("article.pg").filter({ has: page.locator(".pg-title-tx", { hasText: title }) });
   await expect(mail).toContainText("Le texte de la version 17.");
-  // « Mails », standing, opened beside it: its ∞ by its title.
+  // « Mails », which a skill maintains, opened beside it: its ∞ by its title.
   await page.locator('.gr-node:not(.external) .gr-core[aria-label^="Mails"]').first().click({ modifiers: ["Meta"] });
   const mails = page.locator("article.pg").filter({ has: page.locator(".pg-title-tx", { hasText: /^Mails$/ }) });
   await expect(mails).toContainText("Le texte de la version 17.");
-  await expect(mails.locator(".pg-standing")).toBeVisible();
+  await expect(mails.locator(".pg-maintained")).toBeVisible();
   await expect(page.locator("article.pg")).toHaveCount(2);
   for (const [pg, name] of [[mail, title], [mails, "Mails"]] as const) {
     await expect(pg.locator(".pg-vchip")).toHaveText("v17");

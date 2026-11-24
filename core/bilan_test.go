@@ -330,7 +330,7 @@ func TestNoProposalInABlock(t *testing.T) {
   {"id": "t", "component": "Text", "text": {"@path": "subject"}},
   {"id": "yes", "component": "Proposal", "inline": true, "proposalId": {"@path": "_card"}}],
  "sources": {"received": {"resource": "monitor", "uri": "monitor://received", "items": {"path": "messages", "id": "id", "title": "subject"}}}}` + "\n```\n"
-		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, tainted, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody("Les mails.\n\n" + block) })
+		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, tainted, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody("Les mails.\n\n" + block) })
 		if err == nil || !strings.Contains(err.Error(), "Proposal") {
 			t.Errorf("tainted %v: %v", tainted, err)
 		}

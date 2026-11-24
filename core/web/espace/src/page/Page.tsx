@@ -6,7 +6,7 @@ import { archive, label, type PageAlive, type PageOrigin, type ProposalView, typ
 import { pathOf, subtree, useGraph } from "../data/store";
 import { Doc } from "../doc/Doc";
 import { titleOf } from "../graph/model";
-import { ExtMark, NodeTitle, StandingMark, UnaskedMark } from "../graph/Title";
+import { ExtMark, MaintainedMark, NodeTitle, UnaskedMark } from "../graph/Title";
 import { useWords } from "../i18n";
 import { Cards } from "./Cards";
 import { MdTab } from "./MdTab";
@@ -114,7 +114,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen, big, 
             )}
             {node?.unasked && <UnaskedMark />}
           </h2>
-          {node?.lifetime === "standing" && <StandingMark />}
+          {node?.maintained?.length ? <MaintainedMark by={node.maintained} /> : null}
           <span className="pg-when" title={at && !running ? t("espace.alive.updated", at) : undefined}>
             {running ? (
               <span className="pg-live">
@@ -325,7 +325,7 @@ export function Origin({ origin }: { origin: PageOrigin }) {
   );
 }
 
-// Alive is what keeps a permanent subject alive, as eriphe-core says it:
+// Alive is what keeps a node a skill maintains alive, as eriphe-core says it:
 // its sources, monitors and skills, each by its name and what it does,
 // and when it last changed.
 export function Alive({ alive }: { alive: PageAlive }) {
@@ -334,17 +334,6 @@ export function Alive({ alive }: { alive: PageAlive }) {
   return (
     <section className="pg-alive" role="group" aria-label={t("espace.alive")}>
       <h3>{t("espace.alive")}</h3>
-      {/* What the user approved the view for: its notes, once, here. */}
-      {alive.decided && (
-        <div className="pg-alive-decided">
-          <h4>{t("espace.page.decided")}</h4>
-          <p>
-            {alive.decided}
-            {alive.decidedExternal && <ExtMark why={t("espace.external.why")} />}
-          </p>
-        </div>
-      )}
-      {groups.length === 0 && !alive.decided && <p className="pg-alive-none">{t("espace.alive.none")}</p>}
       {groups.map((k) => (
         <div key={k} className={`pg-alive-${k}`}>
           <h4>{t(`espace.alive.${k}`)}</h4>

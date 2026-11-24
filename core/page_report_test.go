@@ -65,14 +65,11 @@ func TestPageReportAndSetupButtons(t *testing.T) {
 	fm.failing = true
 	fm.mu.Unlock()
 
-	out, isErr := callBrainTool(t, c, "propose_view", map[string]any{
-		"title": "Mes mails", "goal": "Sam voit ses mails.", "body": recus + etat,
-		"monitor": map[string]any{"name": "mails", "server": "monitor", "resource": "monitor://received", "cond": "new", "path": "messages", "id": "id", "every": "1m"},
-	})
+	out, isErr := callBrainTool(t, c, "node_open", map[string]any{"title": "Mes mails", "goal": "Sam voit ses mails.", "body": recus + etat})
 	if isErr {
-		t.Fatalf("propose_view: %v", out)
+		t.Fatalf("node_open: %v", out)
 	}
-	node, _ := out["node"].(string)
+	node, _ := out["id"].(string)
 	raw, _ := json.Marshal(out)
 	var said map[string]any
 	json.Unmarshal(raw, &said)
@@ -121,8 +118,11 @@ func TestPageReportAndSetupButtons(t *testing.T) {
 
 	// Yes: the monitor runs, the button leaves the page, and the column
 	// no longer names it.
-	views := cardsOf(c, cardViewKind)
-	if err := c.decideProposal(context.Background(), cardViewKind, views[0].ID, true); err != nil {
+	if out, isErr := callBrainTool(t, c, "write_monitor", map[string]any{"name": "mails", "server": "monitor", "resource": "monitor://received", "cond": "new", "path": "messages", "id": "id", "every": "1m"}); isErr {
+		t.Fatalf("write_monitor: %v", out)
+	}
+	monitors := cardsOf(c, cardMonitor)
+	if err := c.decideProposal(context.Background(), cardMonitor, monitors[0].ID, true); err != nil {
 		t.Fatal(err)
 	}
 	c.live.wg.Wait()

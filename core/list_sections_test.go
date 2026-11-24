@@ -39,8 +39,8 @@ func sectionsWeb(t *testing.T) (*testWeb, string, *fakeMonitor, string) {
 	fm.mu.Unlock()
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
-	id := mustNode(t, c, nodestore.New{Title: "Mails", Lifetime: nodefile.Standing, Body: "Les mails.\n"})
-	if _, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error {
+	id := mustNode(t, c, nodestore.New{Title: "Mails", Body: "Les mails.\n"})
+	if _, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error {
 		return n.AuthorBody("Les mails.\n\n" + sectionsBlock())
 	}); err != nil {
 		t.Fatal(err)
@@ -62,9 +62,9 @@ func sectionsWeb(t *testing.T) (*testWeb, string, *fakeMonitor, string) {
 // author writes it; only a List, on a source's items, one filter.
 func TestListSectionsChecked(t *testing.T) {
 	c, _, _ := viewCore(t)
-	id := mustNode(t, c, nodestore.New{Title: "Mails", Lifetime: nodefile.Standing, Body: "Les mails.\n"})
+	id := mustNode(t, c, nodestore.New{Title: "Mails", Body: "Les mails.\n"})
 	write := func(body string) error {
-		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error {
+		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error {
 			return n.AuthorBody("Les mails.\n\n" + body)
 		})
 		return err

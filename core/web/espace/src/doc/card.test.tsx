@@ -14,13 +14,13 @@ import { Doc } from "./Doc";
 // A card block places one of the node's cards in its document: the card
 // itself, what it says and where it stands, is eriphe-core's (proposal);
 // one that is not the node's shows as not found, with no Oui or Non.
-const view = (state: string): ProposalView => ({ ref: "view:3", card: 7, kind: "view", state, text: "Créer la vue « Mes mails »" });
+const skill = (state: string): ProposalView => ({ ref: "skill:3", card: 7, kind: "skill", state, text: "Créer le skill « tri-mails »" });
 
 const pageWith = (proposal: ProposalView | undefined): NodePage => ({
-  node: { id: "n1", title: "Garder un œil sur mes mails", lifetime: "work", status: "waits", created: "", updated: "", version: 2 },
+  node: { id: "n1", title: "Garder un œil sur mes mails", status: "waits", created: "", updated: "", version: 2 },
   version: 2,
   versions: [],
-  parts: [{ text: "## Ce qu'on a décidé\n\nToutes les boîtes.\n" }, { block: { name: "vue", components: [], data: {}, card: "view:3", proposal } }, { text: "La suite.\n" }],
+  parts: [{ text: "## Ce qu'on a décidé\n\nToutes les boîtes.\n" }, { block: { name: "vue", components: [], data: {}, card: "skill:3", proposal } }, { text: "La suite.\n" }],
   cards: [],
 });
 
@@ -37,7 +37,7 @@ describe("a card block", () => {
     el.remove();
   });
   const draw = async (page: NodePage, state: string) => {
-    const src: Proposals = { read: async (ref) => (ref === "view:3" ? view(state) : null), answer: async () => true, day: async () => [], follow: () => () => {} };
+    const src: Proposals = { read: async (ref) => (ref === "skill:3" ? skill(state) : null), answer: async () => true, day: async () => [], follow: () => () => {} };
     await act(async () =>
       root.render(
         <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}>
@@ -51,28 +51,28 @@ describe("a card block", () => {
   };
 
   it("reads as a card piece, between the text", () => {
-    expect(pieces(pageWith(view("pending"))).map((p) => p.kind)).toEqual(["text", "card", "text"]);
-    expect(pieces(pageWith(view("pending")))[1]).toMatchObject({ kind: "card", ref: "view:3", found: true });
+    expect(pieces(pageWith(skill("pending"))).map((p) => p.kind)).toEqual(["text", "card", "text"]);
+    expect(pieces(pageWith(skill("pending")))[1]).toMatchObject({ kind: "card", ref: "skill:3", found: true });
     expect(pieces(pageWith(undefined))[1]).toMatchObject({ kind: "card", found: false });
   });
 
   it("shows the card where the document places it: one Oui and a discreet ✕ while it waits", async () => {
-    await draw(pageWith(view("pending")), "pending");
+    await draw(pageWith(skill("pending")), "pending");
     const card = el.querySelector(".pg-card");
     expect(card?.previousElementSibling?.textContent).toContain("Toutes les boîtes.");
-    expect(card?.querySelector(".a2-proposal-text")?.textContent).toBe("Créer la vue « Mes mails »");
+    expect(card?.querySelector(".a2-proposal-text")?.textContent).toBe("Créer le skill « tri-mails »");
     expect(card?.querySelector(".a2-proposal-actions .a2-button-primary")?.textContent).toBe("Oui");
     expect(card?.querySelector(".a2-proposal-actions .a2-proposal-no")?.getAttribute("aria-label")).toBe("Non");
   });
 
   it("leaves the body once decided, done, failed, refused or withdrawn with its node; stays while its yes runs", async () => {
-    for (const p of [view("approved"), { ...view("approved"), exec: "failed" as const }, view("rejected"), view("gone")]) {
+    for (const p of [skill("approved"), { ...skill("approved"), exec: "failed" as const }, skill("rejected"), skill("gone")]) {
       expect(pieces(pageWith(p)).map((x) => x.kind)).toEqual(["text", "text"]);
       await draw(pageWith(p), p.state);
       expect(el.querySelector(".pg-card")).toBeNull();
       expect(el.querySelector(".pg-card-missing")).toBeNull();
     }
-    const running = { ...view("approved"), exec: "running" as const };
+    const running = { ...skill("approved"), exec: "running" as const };
     expect(pieces(pageWith(running)).map((x) => x.kind)).toEqual(["text", "card", "text"]);
   });
 

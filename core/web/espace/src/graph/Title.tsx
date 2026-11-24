@@ -33,15 +33,15 @@ export function NodeTitle({ x, fallback, mark = true }: { x: GraphNode | undefin
   );
 }
 
-// StandingMark is the sign of a permanent subject, the same words
+// MaintainedMark is the sign of a node a skill maintains, the same words
 // everywhere: ∞ beside its title (its page, its row on a phone); on its
 // bubble, the satellite that orbits it, whose words are its core's
-// tooltip.
-export function StandingMark() {
+// tooltip. by: the skills that maintain it.
+export function MaintainedMark({ by }: { by: string[] }) {
   const { t } = useWords();
-  const why = t("espace.standing");
+  const why = t("espace.maintained", by.join(", "));
   return (
-    <span className="pg-standing" role="img" aria-label={why} title={why}>
+    <span className="pg-maintained" role="img" aria-label={why} title={why}>
       ∞
     </span>
   );

@@ -296,8 +296,8 @@ func TestSharedShapesCheckedWhole(t *testing.T) {
 			map[string]any{"kind": "tool", "ref": "mail.search", "hlod": true}}},
 		"run_task ": {"title": "T", "prompt": "p", "contract": map[string]any{
 			"objective": "o", "chekcs": []any{}}},
-		"node_settle":  {"id": "n", "outcome": "replan", "steps": []any{map[string]any{"name": "a", "promt": "p"}}},
-		"propose_view": {"title": "T", "body": "b", "monitor": map[string]any{"name": "m", "evrey": "1h"}},
+		"node_settle": {"id": "n", "outcome": "replan", "steps": []any{map[string]any{"name": "a", "promt": "p"}}},
+		"write_skill": {"name": "x", "description": "d", "instructions": "i", "monitor": map[string]any{"name": "m", "evrey": "1h"}},
 	} {
 		res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: strings.TrimSpace(name), Arguments: args})
 		if err == nil && !res.IsError {

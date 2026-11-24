@@ -3,7 +3,7 @@ import { closePage, depthOf, openPage, step, store, talkTo, useGraph } from "../
 import { useWords } from "../i18n";
 import { Page } from "../page/Page";
 import { listOrder, waits } from "./model";
-import { NodeTitle, StandingMark, UnaskedMark } from "./Title";
+import { MaintainedMark, NodeTitle, UnaskedMark } from "./Title";
 
 // The workspace on a small screen (#633): the graph as a simple list, each
 // subject and its bubbles under it, in the order they were made; a tap
@@ -60,7 +60,7 @@ export function List({ live }: { live: boolean }) {
                 <b>
                   <NodeTitle x={x} fallback={external} />
                 </b>
-                {x.lifetime === "standing" && <StandingMark />}
+                {x.maintained?.length ? <MaintainedMark by={x.maintained} /> : null}
                 {x.unasked && <UnaskedMark />}
                 {x.status === "running" && x.line && <em className="runs">{x.line}</em>}
               </button>

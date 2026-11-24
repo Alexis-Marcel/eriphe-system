@@ -89,7 +89,7 @@ func (f nodeFound) MarshalJSON() ([]byte, error) {
 }
 
 // fixedFound are the fields of a node found, which no column replaces.
-var fixedFound = []string{"id", "title", "title_external", "status", "lifetime", "parent", "changed", "done", "archived", "external", "withheld"}
+var fixedFound = []string{"id", "title", "title_external", "status", "maintained", "parent", "changed", "done", "archived", "external", "withheld"}
 
 // findNodes is node_find, for the brain and a block's source alike: it
 // never taints; quoted says it gave words that may be someone else's.
@@ -146,8 +146,9 @@ func (c *core) findNodes(in nodeFindIn) (found []nodeFound, quoted bool, err err
 		}
 	}
 	found = make([]nodeFound, 0, len(xs))
+	homes := c.homeSkills()
 	for _, x := range xs {
-		f := c.foundNode(x, in.IncludeExternal)
+		f := c.foundNode(x, in.IncludeExternal, homes)
 		quoted = quoted || f.TitleExternal && f.Title != ""
 		if len(cols[x.ID]) > 0 {
 			if x.External && !in.IncludeExternal {

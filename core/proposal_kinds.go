@@ -40,7 +40,7 @@ type proposalKind struct {
 }
 
 // proposalKinds names the kinds in the order what waits is listed.
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardSetting, cardTaskStart, cardUnlearn, cardAccess, cardSkill, cardRunCalls, cardCalls, cardMonitor, cardViewKind}
+var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardSetting, cardTaskStart, cardUnlearn, cardAccess, cardSkill, cardRunCalls, cardCalls, cardMonitor}
 
 // kindsOf is the table, by kind; filled in init, since its rows call the
 // functions that read it.
@@ -112,7 +112,8 @@ func init() {
 				return ""
 			}},
 		cardSkill: {read: (*core).skillProposal, waiting: (*core).proposedSkills, outcome: told("le skill est en place", "cette version est écartée"), // skill_write.go
-			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideSkill(id, yes) }},
+			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideSkill(id, yes) },
+			node:    (*core).skillHomeOf}, // its card waits on the node it will maintain
 		cardRunCalls: {read: (*core).runCallsProposal, waiting: (*core).runsWithCalls, decides: (*core).decideRunCalls, outcome: callsTold, // skill_cards.go
 			withdraw: func(c *core, ctx context.Context, id int64) error {
 				for _, a := range c.runAsks(id) {
@@ -142,17 +143,6 @@ func init() {
 			decided: func(c *core, id int64, _ bool, _ string) { c.itemCardMoved(id) }}, // its item's row
 		cardMonitor: {read: (*core).monitorProposal, waiting: (*core).proposedMonitors, outcome: told("la surveillance tourne", "elle est écartée"), // monitors.go
 			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideMonitor(id, yes) }},
-		cardViewKind: {read: (*core).viewProposalOf, waiting: (*core).proposedViews, outcome: (*core).viewTold, // view_card.go
-			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideView(id, yes) },
-			withdraw: func(c *core, _ context.Context, id int64) error {
-				_, err := c.store.db.Exec(`UPDATE view_proposals SET state = ? WHERE id = ? AND state = ?`, viewDropped, id, viewProposed)
-				return err
-			},
-			node: func(c *core, id int64) string { // its draft: the card waits on it
-				var node string
-				c.store.db.QueryRow(`SELECT node FROM view_proposals WHERE id = ?`, id).Scan(&node)
-				return node
-			}},
 	}
 	for _, k := range proposalKinds {
 		if kindsOf[k].read == nil || kindsOf[k].waiting == nil || kindsOf[k].decides == nil || kindsOf[k].outcome == nil {

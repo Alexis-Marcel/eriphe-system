@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
@@ -83,7 +82,7 @@ func nodeStatusNow(t *testing.T, c *core, id string) string {
 func TestNodeStatusOf(t *testing.T) {
 	at := time.Date(2026, 11, 20, 10, 0, 0, 0, time.UTC)
 	node := func(id string, done, archived bool) nodestore.Summary {
-		x := nodestore.Summary{ID: id, Lifetime: nodefile.Work}
+		x := nodestore.Summary{ID: id}
 		if done {
 			x.Done = at
 		}
@@ -175,7 +174,7 @@ func TestNodeStatusFromRecords(t *testing.T) {
 		t.Fatalf("said done: %s", s)
 	}
 
-	standing := mustNode(t, c, nodestore.New{Title: "Mails", Lifetime: nodefile.Standing})
+	standing := mustNode(t, c, nodestore.New{Title: "Mails"})
 	run := workIn(t, c, standing, stateRunning)
 	if s := nodeStatusNow(t, c, standing); s != nodeRunning {
 		t.Fatalf("a run in a standing node: %s", s)

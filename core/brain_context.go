@@ -7,8 +7,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
 
 // The context pack: what a fresh session of the brain is given so that it
@@ -293,17 +291,17 @@ func notShown(xs []*Memory, shown map[string]bool) []*Memory {
 	return slices.DeleteFunc(xs, func(x *Memory) bool { return shown[fmt.Sprintf("memory:%d", x.ID)] })
 }
 
-// nodeLine is a node in a line: its id, status, lifetime, title and the
-// first line of its doc. One whose words may carry what someone else
-// wrote is named, not quoted.
+// nodeLine is a node in a line: its id, status, the skills that maintain
+// it, its title and the first line of its doc. One whose words may carry
+// what someone else wrote is named, not quoted.
 func (c *core) nodeLine(x statusNode) string {
 	if x.External {
 		return fmt.Sprintf("- nœud %s [%s] : il peut porter ce qu'un autre a écrit : node_read le relit", x.ID, x.Status)
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "- nœud %s [%s", x.ID, x.Status)
-	if x.Lifetime == nodefile.Standing {
-		b.WriteString(", permanent")
+	if ks := c.maintainers(x.ID); len(ks) > 0 {
+		b.WriteString(", entretenu par " + strings.Join(ks, ", "))
 	}
 	if x.Parent != "" {
 		b.WriteString(", enfant de " + x.Parent)

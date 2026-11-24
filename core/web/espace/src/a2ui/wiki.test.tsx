@@ -114,7 +114,7 @@ describe("a page's [[links]]", () => {
   });
 
   const page: NodePage = {
-    node: { id: "n1", title: "Écrire l'article", lifetime: "work", status: "idle", created: "", updated: "", version: 3 },
+    node: { id: "n1", title: "Écrire l'article", status: "idle", created: "", updated: "", version: 3 },
     version: 3,
     versions: [],
     parts: [{ text: "## Les sujets liés\n\n- [[Recherche sur le télétravail|La recherche]]\n- [[Choisir l'angle]]\n- [[L'article]]\n" }],

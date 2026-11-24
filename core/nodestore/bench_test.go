@@ -90,7 +90,7 @@ func TestFindBench(t *testing.T) {
 	tags := []string{"cuisine/recette", "cuisine/recette/dessert", "etude", "maison/travaux", "lecture"}
 	for i := range nodes {
 		id := fmt.Sprintf("b%d", i)
-		n, err := nodefile.New(nodefile.Meta{ID: id, Title: fmt.Sprintf("Node %d", i), Lifetime: nodefile.Work, Created: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+		n, err := nodefile.New(nodefile.Meta{ID: id, Title: fmt.Sprintf("Node %d", i), Created: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
 			fmt.Sprintf("Text of node %d, about apples %d.\n", i, i%50))
 		if err != nil {
 			t.Fatal(err)

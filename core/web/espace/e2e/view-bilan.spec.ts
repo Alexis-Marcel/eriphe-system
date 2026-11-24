@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import { rest } from "./rest";
 
-// A view as a bilan (docs/node-format.md), against the test core of
+// A page as a bilan (docs/node-format.md), against the test core of
 // TestEspaceScenario: the bilan on top, drawn larger; one block that reads
 // the mails of two accounts (mail/bilan) once, written after an external
 // read (one sign in the page's head, a quiet edge on the block); « À
@@ -15,7 +15,7 @@ import { rest } from "./rest";
 // resizes the page. Seeded at /e2e/bilan, on its own node.
 
 
-test("a view as a bilan: a proposal's Oui, a batch, an item read as a letter, a page as a window", async ({ page, request }) => {
+test("a page as a bilan: a proposal's Oui, a batch, an item read as a letter, a page as a window", async ({ page, request }) => {
   const problems: string[] = [];
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
@@ -96,7 +96,7 @@ test("a view as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect(batch.locator(".a2-inline-yes")).toHaveCount(0);
   await shots(page, "5-after-actions");
 
-  // The ⋯ menu: what was decided, and what the view was asked for.
+  // The ⋯ menu: what was decided.
   await pg.getByRole("button", { name: "Plus" }).click();
   await expect(page.locator(".pg-menu .pg-settled li").first()).toContainText("Fait");
   await shots(page, "6-menu-settled");

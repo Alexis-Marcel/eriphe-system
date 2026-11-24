@@ -12,7 +12,7 @@ import "./dev.css";
 
 const at = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
 const row = (id: string, title: string, more: Partial<GraphNode> = {}): GraphNode => ({
-  id, title, lifetime: "work", status: "idle", created: at(600), updated: at(30), version: 1, ...more,
+  id, title, status: "idle", created: at(600), updated: at(30), version: 1, ...more,
 });
 
 // The owner's graph. The views take the sample's ids: their pages are the
@@ -20,11 +20,11 @@ const row = (id: string, title: string, more: Partial<GraphNode> = {}): GraphNod
 function ownerGraph(): GraphNode[] {
   return [
     row("sj", "Suivre mes journées", { links: ["day"], created: at(700) }),
-    row("day", "Ma journée", { links: ["sj"], lifetime: "standing", created: at(699) }),
+    row("day", "Ma journée", { links: ["sj"], maintained: ["journee"], created: at(699) }),
     row("sm", "Suivre mes mails", { links: ["mails"], created: at(698) }),
-    row("mails", "Mes mails", { links: ["sm"], lifetime: "standing", external: true, created: at(697) }),
+    row("mails", "Mes mails", { links: ["sm"], maintained: ["tri-mails"], external: true, created: at(697) }),
     row("si", "Suivre mes investissements", { links: ["invest"], created: at(696) }),
-    row("invest", "Mon portefeuille", { links: ["si"], lifetime: "standing", created: at(695) }),
+    row("invest", "Mon portefeuille", { links: ["si"], maintained: ["portefeuille"], created: at(695) }),
     row("tools", "Outils à revoir", { created: at(694) }),
   ];
 }
@@ -45,9 +45,9 @@ function scaleGraph(): GraphNode[] {
     kids.forEach((k, i) => out.push(row(`${id}${i}`, k, { parent: id, created: at(m--), status: i === 1 ? "running" : "idle" })));
   }
   out.push(row("sub0a", "Idées de titres", { parent: "sub0", created: at(m--) }));
-  out.push(row("day", "Ma journée", { lifetime: "standing", links: ["voy0", "mai0"], created: at(m--) }));
-  out.push(row("mails", "Mes mails", { lifetime: "standing", links: ["sub"], status: "waits", created: at(m--) }));
-  out.push(row("invest", "Mon portefeuille", { lifetime: "standing", created: at(m--) }));
+  out.push(row("day", "Ma journée", { maintained: ["journee"], links: ["voy0", "mai0"], created: at(m--) }));
+  out.push(row("mails", "Mes mails", { maintained: ["tri-mails"], links: ["sub"], status: "waits", created: at(m--) }));
+  out.push(row("invest", "Mon portefeuille", { maintained: ["portefeuille"], created: at(m--) }));
   out.push(row("fac", "Factures du mois", { links: ["mai1"], created: at(m--) }));
   out.push(row("tools", "Outils à revoir", { created: at(m--) }));
   out.push(row("lec", "Lectures", { created: at(m--) }));

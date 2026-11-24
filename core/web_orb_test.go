@@ -142,14 +142,14 @@ func TestFewLines(t *testing.T) {
 // waits above the bar.
 func TestOrbAnswersWithACard(t *testing.T) {
 	c, answer := netCore(t, "Tu peux garder un œil sur mes mails ?", "")
-	if _, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Title: "Garder un œil sur mes mails", Body: "Ce qu'on suit.\n"}); err != nil {
-		t.Fatal(err)
-	}
-	res, err := c.proposeView(proposeViewIn{Title: "Mes mails", Body: "Les mails.\n"}, nil)
+	opened, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Title: "Mes mails", Body: "Les mails.\n"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	draft := res["node"].(string) // the card waits on the view's draft
+	draft := opened["id"].(string) // the card waits on the page it will maintain
+	if _, err := c.writeSkill(writeSkillIn{Name: "mails", Description: "Les mails.", Instructions: "Tiens la page.", When: "time daily 08:00", Node: draft}, nil); err != nil {
+		t.Fatal(err)
+	}
 	w := &web{c: c}
 	// While the turn is under way, the orb is at work, nothing else.
 	if x, _ := w.orbFor("", true); x.Work == nil || x.Answer != nil {
@@ -157,7 +157,7 @@ func TestOrbAnswersWithACard(t *testing.T) {
 	}
 	answer("Dis oui sur sa carte.")
 	x, _ := w.orbFor("", false)
-	if x.Answer == nil || x.Answer.Text != "Dis oui sur sa carte." || x.Answer.Node == draft || len(x.Cards) != 0 {
+	if x.Answer == nil || x.Answer.Text != "Dis oui sur sa carte." || len(x.Cards) != 0 {
 		t.Fatalf("answer %+v, cards %v", x.Answer, x.Cards)
 	}
 	raw, _ := json.Marshal(x)

@@ -105,7 +105,7 @@ func (c *core) readOne(ctx context.Context, s sourceCall) sourceRead {
 // blockSourceWhy is sourceWhy for a block's source: besides the brain's
 // free reads, the free reads of a server Eriphe provides for code's own
 // blocks, lent to no agent (providedUpstream.codeReads, tool_review.go).
-// No author may write such a source (viewSourceOK, lentSource: it is no
+// No author may write such a source (nodeSourceOK, lentSource: it is no
 // catalog server); a monitor may not look at it (sourceWhy).
 func (c *core) blockSourceWhy(s monitorSpec) string {
 	if u := c.pool.get(s.Server); u != nil && u.provided != nil && u.provided.codeReads && s.Resource == "" {

@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
@@ -37,7 +36,7 @@ func TestOneNodeOpen(t *testing.T) {
 	k := mustNodes(t, c.core, task.ID, "node_open", map[string]any{"title": "Pages", "body": askBody})
 	for id, parent := range map[string]string{b["id"].(string): sid, k["id"].(string): own} {
 		sum, _ := c.nodes.Get(id)
-		if sum.Parent != parent || sum.Lifetime != nodefile.Work || sum.External {
+		if sum.Parent != parent || sum.External {
 			t.Errorf("node %s: %+v", id, sum)
 		}
 	}

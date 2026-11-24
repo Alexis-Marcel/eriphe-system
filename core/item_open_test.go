@@ -31,8 +31,8 @@ func openWeb(t *testing.T, open string) (*testWeb, string, *fakeMonitor, string)
 	fm.mu.Unlock()
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
-	id := mustNode(t, c, nodestore.New{Title: "Mails", Lifetime: nodefile.Standing, Body: "Les mails.\n"})
-	if _, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error {
+	id := mustNode(t, c, nodestore.New{Title: "Mails", Body: "Les mails.\n"})
+	if _, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error {
 		return n.AuthorBody("Les mails.\n\n" + openBlock(open))
 	}); err != nil {
 		t.Fatal(err)
@@ -51,9 +51,9 @@ func openedNow(fm *fakeMonitor) []string {
 // source's own server, its id parameter there, nothing else required.
 func TestItemOpenChecked(t *testing.T) {
 	c, _, _ := viewCore(t)
-	id := mustNode(t, c, nodestore.New{Title: "Mails", Lifetime: nodefile.Standing, Body: "Les mails.\n"})
+	id := mustNode(t, c, nodestore.New{Title: "Mails", Body: "Les mails.\n"})
 	write := func(open string) error {
-		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error {
+		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error {
 			return n.AuthorBody("Les mails.\n\n" + openBlock(open))
 		})
 		return err

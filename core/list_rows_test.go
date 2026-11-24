@@ -33,7 +33,7 @@ func rowsWeb(t *testing.T) (*testWeb, string, *fakeMonitor, string) {
 	}
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
-	id := mustNode(t, c, nodestore.New{Title: "Mails", Lifetime: nodefile.Standing, Body: "Les mails.\n\n" + rowsBlock("")})
+	id := mustNode(t, c, nodestore.New{Title: "Mails", Body: "Les mails.\n\n" + rowsBlock("")})
 	c.readNode(context.Background(), id, nil, time.Now())
 	return tw, csrf, fm, id
 }
@@ -42,12 +42,12 @@ func rowsWeb(t *testing.T) (*testWeb, string, *fakeMonitor, string) {
 // read, whoever writes it. A row's yes is its card's, drawn by code.
 func TestNoBlockActions(t *testing.T) {
 	c, _, _ := viewCore(t)
-	id := mustNode(t, c, nodestore.New{Title: "Mails", Lifetime: nodefile.Standing, Body: "Les mails.\n"})
+	id := mustNode(t, c, nodestore.New{Title: "Mails", Body: "Les mails.\n"})
 	for _, extra := range []string{
 		`, "actions": {"archive": {"tool": "monitor/move", "items": "ids", "source": "received"}}`,
 		`, "marks": {"titles": {"t1": "keep"}}`,
 	} {
-		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error {
+		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error {
 			return n.AuthorBody("Les mails.\n\n" + rowsBlock(extra))
 		})
 		if err == nil || !strings.Contains(err.Error(), "unknown field") {
@@ -101,7 +101,7 @@ func TestBlockRowsOfAgenda(t *testing.T) {
 	c := tw.c
 	block := func(events string) {
 		t.Helper()
-		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error {
+		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error {
 			return n.AuthorBody("Les rendez-vous.\n\n```eriphe:block inbox\n" + `{"components": [{"id": "root", "component": "Agenda", "days": 2, "events": ` + events + `}],
  "sources": {"received": {"resource": "monitor", "uri": "monitor://received", "items": {"path": "messages", "id": "id", "title": "subject"}}}}` + "\n```\n")
 		})

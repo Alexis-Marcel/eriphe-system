@@ -122,6 +122,6 @@ func (c *core) toolSourcesRead(in sourcesIn) (map[string]any, error) {
 }
 
 // sourcesReadHelp is sources_read's description.
-const sourcesReadHelp = "What a node's block may read live: the user's read-only tools and resources that code reads for you (a block's sources, propose_view), " +
+const sourcesReadHelp = "What a node's block may read live: the user's read-only tools and resources that code reads for you (a block's sources), " +
 	"each with whether it is a free read now; one by name with its arguments and the shape of its result when the tool gives it. The brain need not be lent them: code reads them under the user's access policy; a task's block reads only the tools it is lent. " +
 	"It lists, it reads nothing."

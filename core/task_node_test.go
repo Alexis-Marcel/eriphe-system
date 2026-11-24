@@ -81,7 +81,7 @@ func startInNode(t *testing.T, c *catalogCore, r runRequest) (*TaskRow, string) 
 // entries), on the version it read; it writes no other node.
 func TestTaskWritesItsNode(t *testing.T) {
 	c := nodeCore(t)
-	parent, err := c.nodes.Create(nodestore.New{Title: "Substack", Lifetime: "standing", Author: "brain"})
+	parent, err := c.nodes.Create(nodestore.New{Title: "Substack", Author: "brain"})
 	if err != nil {
 		t.Fatal(err)
 	}

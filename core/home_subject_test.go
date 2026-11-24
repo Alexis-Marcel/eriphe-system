@@ -34,8 +34,8 @@ func cardOfRef(t *testing.T, c *core, ref string) convoCard {
 
 // At the home, « keep an eye on my mails » opens its subject: the user's
 // message and the brain's answer belong to it, the page opens with the
-// bar in it; the view proposed there is the subject's card, at the
-// foot of its page; its yes makes the standing node and opens it.
+// bar in it; the skill proposed there to maintain it is the subject's
+// card, at the foot of its page; its yes makes the subject its home.
 func TestHomeSubjectTakesTheExchange(t *testing.T) {
 	c, answer := netCore(t, "Tu peux garder un œil sur mes mails ?", "")
 	asked := c.turn.answer
@@ -58,76 +58,36 @@ func TestHomeSubjectTakesTheExchange(t *testing.T) {
 		t.Errorf("the orb does not speak beside the subject: %+v", x.Answer)
 	}
 
-	// The user answers in the subject; the view is proposed there.
+	// The user answers in the subject; the skill that will maintain it
+	// is proposed there, its card at the subject's foot.
 	seq, _ := c.store.addUserMessage("Ceux qui demandent une réponse.", nil, subject)
 	c.turn.start(int(seq), int(seq), 0)
 	c.turn.answersIn(subject)
 	c.nodesDelivered([]Message{{Seq: int(seq), Role: roleUser, Node: subject}})
-	res, err := c.proposeView(proposeViewIn{Title: "Mes mails", Body: "Les mails qui demandent une réponse.\n"}, nil)
+	res, err := c.writeSkill(writeSkillIn{Name: "mails", Description: "Les mails qui demandent une réponse.", Instructions: "Tiens la page à jour.",
+		When: "time daily 08:00", Node: subject}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	view := res["node"].(string)
 	answer(longAnswer) // the exchange about the card: no new node for it
 	if m := lastBrainMessage(t, c); m.Filed != "" || m.Node != subject {
 		t.Errorf("the answer about the card was filed: %+v", m)
 	}
-	ref := proposalRef(cardViewKind, 1)
-	if !slices.Equal(c.cardNodes(ref), []string{view}) || !cardWaitsOn(c, view) || cardWaitsOn(c, subject) {
-		t.Fatalf("the view's card does not wait on its draft alone: %v", c.cardNodes(ref))
+	ref := res["card"].(string)
+	if !cardWaitsOn(c, subject) {
+		t.Fatalf("the skill's card does not wait on its subject: %v", c.cardNodes(ref))
 	}
-	w := &web{c: c}
-	if x, _ := w.orbFor("", false); len(x.Cards) != 0 {
-		t.Errorf("a card its draft holds is above the bar too: %v", x.Cards)
+	if x, _ := (&web{c: c}).orbFor("", false); len(x.Cards) != 0 {
+		t.Errorf("a card its subject holds is above the bar too: %v", x.Cards)
 	}
 	if _, err := c.decideCard(context.Background(), cardOfRef(t, c, ref).ID, true, "web"); err != nil {
 		t.Fatal(err)
 	}
-	if sum, err := c.nodes.Get(view); err != nil || sum.Lifetime != "standing" {
-		t.Fatalf("the view's node: %+v %v", sum, err)
-	} else if !slices.Equal(sum.Links, []string{subject}) {
-		t.Errorf("the view is not linked to the subject it came from: %v", sum.Links)
+	if got := c.maintainers(subject); !slices.Equal(got, []string{"mails"}) {
+		t.Fatalf("the subject is maintained by %v", got)
 	}
-	if sum, _ := c.nodes.Get(subject); sum.Done.IsZero() {
-		t.Error("the subject is not done once its view is made")
-	}
-	if x, _ := c.lastShown(); x.Node != view || x.Talk {
-		t.Errorf("the view does not open beside: %+v", x)
-	}
-}
-
-// A view proposed at the home, no subject opened first: its draft is the
-// subject. It opens with the bar in it, its card waits on it, never above
-// the bar, and the long answer about it stays in it.
-func TestHomeViewDraftTakesTheExchange(t *testing.T) {
-	c, answer := netCore(t, "Tu peux garder un œil sur mes mails ?", "")
-	out, err := c.proposeView(proposeViewIn{Title: "Mes mails", Body: "Les mails.\n"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	draft := out["node"].(string)
-	if x, ok := c.lastShown(); !ok || x.Node != draft || !x.Talk {
-		t.Errorf("the draft is not opened with the bar: %+v", x)
-	}
-	answer(longAnswer)
-	m := lastBrainMessage(t, c)
-	if m.Filed != "" || m.Node != draft {
-		t.Errorf("the answer that proposes the view: %+v", m)
-	}
-	ref := proposalRef(cardViewKind, 1)
-	x := cardOfRef(t, c, ref)
-	if !slices.Equal(c.cardNodes(ref), []string{draft}) {
-		t.Fatalf("card %+v, nodes %v", x, c.cardNodes(ref))
-	}
-	w := &web{c: c}
-	if ex, _ := w.orbFor("", false); len(ex.Cards) != 0 {
-		t.Errorf("orb: cards above the bar %v", ex.Cards)
-	}
-	if _, err := c.decideCard(context.Background(), x.ID, false, "web"); err != nil {
-		t.Fatal(err)
-	}
-	if sum, _ := c.nodes.Get(draft); sum.Archived.IsZero() {
-		t.Error("no left the draft in the graph")
+	if sum, _ := c.nodes.Get(subject); !sum.Done.IsZero() {
+		t.Error("the subject is done once a skill maintains it")
 	}
 }
 

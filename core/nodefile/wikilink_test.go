@@ -30,7 +30,7 @@ func TestWikiLinksCases(t *testing.T) {
 // A node's links are its text's, each name once whatever its case or
 // accents, never a block's words.
 func TestNodeWikiLinks(t *testing.T) {
-	n, err := New(Meta{ID: "abc", Title: "Écrire l'article", Lifetime: Work, Created: time.Unix(1700000000, 0)}, "")
+	n, err := New(Meta{ID: "abc", Title: "Écrire l'article", Created: time.Unix(1700000000, 0)}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

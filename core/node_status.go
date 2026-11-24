@@ -47,11 +47,12 @@ const (
 // statusFacts are what nodes' statuses are computed from, read in a
 // constant number of queries, whatever the size of the graph.
 type statusFacts struct {
-	cards   map[string]bool   // nodes a waiting card is linked to
-	tasks   map[string]bool   // nodes a live task works in, not held for its start
-	steps   map[string]string // step's node → its status
-	results map[string]bool   // results of a finished work, waiting until the user says them done
-	settled map[string]bool   // nodes the steps' engine finished
+	cards   map[string]bool     // nodes a waiting card is linked to
+	tasks   map[string]bool     // nodes a live task works in, not held for its start
+	steps   map[string]string   // step's node → its status
+	results map[string]bool     // results of a finished work, waiting until the user says them done
+	settled map[string]bool     // nodes the steps' engine finished
+	homes   map[string][]string // node → the skills that maintain it (node_home.go)
 }
 
 // of is a node's status.
@@ -82,7 +83,7 @@ func (f statusFacts) of(sum nodestore.Summary) string {
 // only one node's (and its work's, for a step) when only is given.
 func (c *core) statusFacts(only string) statusFacts {
 	f := statusFacts{cards: map[string]bool{}, tasks: map[string]bool{}, steps: map[string]string{},
-		results: map[string]bool{}, settled: map[string]bool{}}
+		results: map[string]bool{}, settled: map[string]bool{}, homes: c.homeSkills()}
 	db := c.store.db
 	filter := func(q, col string) (string, []any) {
 		if only == "" {

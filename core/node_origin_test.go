@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -120,14 +119,10 @@ func TestSkillRunOpensUnasked(t *testing.T) {
 	}
 }
 
-// The user's yes on a view's card makes its node: theirs. A node made
-// before origins were recorded says none: no sign, an unknown origin.
-func TestViewAndUnknownOrigins(t *testing.T) {
-	c, node, _ := mailView(t)
-	if o, g, line := originNow(t, c, node); o == nil || o.By != nodefile.OpenedUser || !strings.HasPrefix(o.Card, "view:") ||
-		g.Unasked || line.Text != "Ouvert à ta demande : tu as dit oui à sa carte." {
-		t.Errorf("a view %+v, %+v", o, line)
-	}
+// One of Eriphe's places is his. A node made before origins were
+// recorded says none: no sign, an unknown origin.
+func TestPlaceAndUnknownOrigins(t *testing.T) {
+	c, _, _ := viewCore(t)
 	review, err := c.ensureToolReview()
 	if err != nil {
 		t.Fatal(err)

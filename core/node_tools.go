@@ -89,7 +89,7 @@ type settleIn struct {
 }
 
 func registerNodeTools(s *mcp.Server, c *core) {
-	tool(s, "node_open", "Open a node on the user's graph: one piece of work and its result. For a new subject, your first call, before any read: a short title, a one-line « En cours : … » body, filled as the work goes. It opens in front of the user (asked from the home, the bar moves into it; from a node, beside it), or in the background with aside. With parent, a part of that node; with steps, its work cut in steps, each a child an agent runs, accepted by Eriphe on its proof. What the user follows continuously is a view: only propose_view makes one.",
+	tool(s, "node_open", "Open a node on the user's graph: one piece of work and its result. For a new subject, your first call, before any read: a short title, a one-line « En cours : … » body, filled as the work goes. It opens in front of the user (asked from the home, the bar moves into it; from a node, beside it), or in the background with aside. With parent, a part of that node; with steps, its work cut in steps, each a child an agent runs, accepted by Eriphe on its proof.",
 		func(ctx context.Context, in brainNodeOpenIn) (map[string]any, error) { return c.brainNodeOpen(ctx, in) })
 	tool(s, "node_find", "Find nodes by words of their title, goal, text or blocks, and/or by tags and properties (where), sorted, with the properties asked as columns; with neither words nor filters, those running or waiting for the user, then the last changed; with archived, the archived ones too. Each gives its id, status (running, waits, done, idle), parent and when it changed; a title written after an external read, and an external node's properties (withheld), are quoted only with include_external, which taints the turn. A block's source too: eriphe-core/node_find.",
 		func(ctx context.Context, in nodeFindIn) (map[string]any, error) { return c.brainNodeFind(in) })
@@ -153,7 +153,7 @@ func (c *core) brainNode(id string) (nodestore.Summary, error) {
 // brain's, a short name of what it is about, never replaced: opened
 // after the turn read external content, it is marked as such.
 func (c *core) brainNodeOpen(ctx context.Context, in brainNodeOpenIn) (map[string]any, error) {
-	by := nodeOpener{stepOpener: stepOpener{author: byBrain, tainted: c.turnTaint()}, origin: c.turnOrigin(), sourceOK: c.viewSourceOK("")}
+	by := nodeOpener{stepOpener: stepOpener{author: byBrain, tainted: c.turnTaint()}, origin: c.turnOrigin(), sourceOK: c.nodeSourceOK()}
 	parent := strings.TrimSpace(in.Parent)
 	d, steps, err := c.openNode(ctx, in.nodeOpenFields, parent, by)
 	if d == nil {
@@ -166,7 +166,7 @@ func (c *core) brainNodeOpen(ctx context.Context, in brainNodeOpenIn) (map[strin
 		c.showNode(id, byBrain, false) // from a node: beside it, the bar where it is
 	}
 	out := map[string]any{"id": id, "title": d.Node.Meta.Title, "version": d.Version.N, "hash": d.Version.Hash}
-	if page := c.pageReport(id, false); page != nil {
+	if page := c.pageReport(id); page != nil {
 		out["page"] = page // what its blocks show (page_report.go)
 	}
 	c.noteWaitingLinks(out, d)
@@ -191,8 +191,7 @@ type nodeOpener struct {
 // openNode is node_open, for the brain and for a task alike: a work node
 // under parent ("" for the top), its body checked as a write of the
 // opener's (nodeGuard), external when the opener is tainted, its steps
-// checked before anything is made and opened under it. It never opens a
-// standing node: a view is made only by propose_view, on the user's yes.
+// checked before anything is made and opened under it.
 // A node made whose steps could not open is given with the error.
 func (c *core) openNode(ctx context.Context, in nodeOpenFields, parent string, by nodeOpener) (*nodestore.Doc, map[string]string, error) {
 	if c.nodes == nil {
@@ -206,7 +205,7 @@ func (c *core) openNode(ctx context.Context, in nodeOpenFields, parent string, b
 		return nil, nil, err
 	}
 	tainted := len(by.tainted) > 0
-	probe, err := nodefile.New(nodefile.Meta{ID: "probe", Title: "probe", Lifetime: nodefile.Work, Created: time.Now()}, "")
+	probe, err := nodefile.New(nodefile.Meta{ID: "probe", Title: "probe", Created: time.Now()}, "")
 	if err == nil {
 		err = probe.AuthorBody(in.Body)
 	}
@@ -221,7 +220,7 @@ func (c *core) openNode(ctx context.Context, in nodeOpenFields, parent string, b
 			return nil, nil, err
 		}
 	}
-	d, err := c.nodes.Create(nodestore.New{Title: title, Parent: parent, Lifetime: nodefile.Work, Goal: strings.TrimSpace(in.Goal),
+	d, err := c.nodes.Create(nodestore.New{Title: title, Parent: parent, Goal: strings.TrimSpace(in.Goal),
 		Body: in.Body, External: tainted, OpenedBy: by.origin, Author: by.author})
 	if err != nil {
 		return nil, nil, err
@@ -248,14 +247,14 @@ type nodeFound struct {
 	ID    string `json:"id"`
 	Title string `json:"title,omitempty"` // one that may be someone else's words only with include_external
 	// TitleExternal: its title was written after an external read
-	TitleExternal bool   `json:"title_external,omitempty"`
-	Status        string `json:"status"` // running, waits, done or idle (node_status.go)
-	Lifetime      string `json:"lifetime"`
-	Parent        string `json:"parent,omitempty"`
-	Changed       string `json:"changed"`
-	Done          bool   `json:"done,omitempty"`
-	Archived      bool   `json:"archived,omitempty"`
-	External      bool   `json:"external,omitempty"`
+	TitleExternal bool     `json:"title_external,omitempty"`
+	Status        string   `json:"status"`               // running, waits, done or idle (node_status.go)
+	Maintained    []string `json:"maintained,omitempty"` // the skills that maintain it (node_home.go)
+	Parent        string   `json:"parent,omitempty"`
+	Changed       string   `json:"changed"`
+	Done          bool     `json:"done,omitempty"`
+	Archived      bool     `json:"archived,omitempty"`
+	External      bool     `json:"external,omitempty"`
 	// Withheld: it has properties asked for (columns), not given: it is
 	// external, and include_external was not said.
 	Withheld bool `json:"withheld,omitempty"`
@@ -266,8 +265,8 @@ type nodeFound struct {
 
 // foundNode is a node as node_find gives it; quote: its title too when it
 // may be someone else's words (the caller taints the turn).
-func (c *core) foundNode(x statusNode, quote bool) nodeFound {
-	f := nodeFound{ID: x.ID, Status: x.Status, Lifetime: string(x.Lifetime), Parent: x.Parent, Changed: x.Updated.Local().Format("2006-01-02 15:04"),
+func (c *core) foundNode(x statusNode, quote bool, homes map[string][]string) nodeFound {
+	f := nodeFound{ID: x.ID, Status: x.Status, Maintained: homes[x.ID], Parent: x.Parent, Changed: x.Updated.Local().Format("2006-01-02 15:04"),
 		Done: !x.Done.IsZero(), Archived: !x.Archived.IsZero(), External: x.External, TitleExternal: x.TitleExternal()}
 	if !f.TitleExternal || quote {
 		f.Title = x.Title
@@ -294,7 +293,7 @@ func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 	c.turnNode(id)
 	c.cardLookedUp(nodeRef(id)) // its card was not enough (card_use.go)
 	m := d.Node.Meta
-	out := map[string]any{"id": id, "title": m.Title, "status": c.nodeStatus(sum), "lifetime": string(m.Lifetime), "version": d.Version.N, "last": d.Last,
+	out := map[string]any{"id": id, "title": m.Title, "status": c.nodeStatus(sum), "version": d.Version.N, "last": d.Last,
 		"hash": d.Version.Hash, "external": m.External, "body": nodeBody(d.Raw)}
 	if values != nil {
 		out["values"] = values // code's, never in the file
@@ -314,10 +313,14 @@ func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 	if len(sum.Links) > 0 {
 		out["links"] = sum.Links // its text's [[links]], resolved, and code's
 	}
+	homes := c.homeSkills()
+	if ks := homes[id]; len(ks) > 0 {
+		out["maintained"] = ks // the skills that keep it up (node_home.go)
+	}
 	if back, err := c.nodes.Backlinks(id); err == nil && len(back) > 0 {
 		list := make([]nodeFound, 0, len(back))
 		for _, b := range c.withStatus(back) {
-			list = append(list, c.foundNode(b, false)) // a title that may be someone else's words is not quoted
+			list = append(list, c.foundNode(b, false, homes)) // a title that may be someone else's words is not quoted
 		}
 		out["backlinks"] = list // the nodes that link it
 	}
@@ -330,7 +333,7 @@ func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 	if kids, err := c.nodes.Children(id); err == nil && len(kids) > 0 {
 		list := make([]nodeFound, 0, len(kids))
 		for _, k := range c.withStatus(kids) {
-			list = append(list, c.foundNode(k, false))
+			list = append(list, c.foundNode(k, false, homes))
 		}
 		out["children"] = list
 	}
@@ -364,7 +367,7 @@ func (c *core) brainNodeWrite(id, expect string, fn func(*nodefile.Node) error) 
 	if err != nil {
 		return nil, err
 	}
-	d, err := c.authorWrite(sum.ID, expect, byBrain, len(c.turnTaint()) > 0, c.viewSourceOK(""), fn)
+	d, err := c.authorWrite(sum.ID, expect, byBrain, len(c.turnTaint()) > 0, c.nodeSourceOK(), fn)
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +376,7 @@ func (c *core) brainNodeWrite(id, expect string, fn func(*nodefile.Node) error) 
 	out := written(d)
 	// Its sources read at once, and what its page shows said back
 	// (page_report.go): its author fixes it in this turn.
-	if page := c.pageReport(sum.ID, d.Node.Meta.Lifetime == nodefile.Standing); page != nil {
+	if page := c.pageReport(sum.ID); page != nil {
 		out["page"] = page
 	}
 	c.noteWaitingLinks(out, d)
@@ -497,10 +500,11 @@ func (c *core) brainNodeSet(in brainNodeSetIn) (map[string]any, error) {
 
 // setNodeDone marks a node done, or not done any more. A node done now
 // leaves its decision memory (nodeDoneDecision) and the event node.done,
-// once: done again, nothing changes. A standing node is never done.
+// once: done again, nothing changes. A node a skill maintains is not
+// set done (node_home.go): the skill stops, or leaves it, first.
 func (c *core) setNodeDone(sum nodestore.Summary, done bool, by string) (bool, error) {
-	if done && sum.Lifetime == nodefile.Standing {
-		return false, errors.New("a standing node is never done: what the user follows continuously stays")
+	if ks := c.maintainers(sum.ID); done && len(ks) > 0 {
+		return false, fmt.Errorf("a node maintained by a skill (%s) is not set done: what it keeps up stays", strings.Join(ks, ", "))
 	}
 	changed, err := c.nodes.SetDone(sum.ID, done, by)
 	if err != nil || !changed || !done {

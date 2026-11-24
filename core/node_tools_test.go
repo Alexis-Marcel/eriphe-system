@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
@@ -240,13 +239,14 @@ func TestBrainNodeSetShow(t *testing.T) {
 	if n := c.mem.count(`kind = 'decision' AND status = 'active' AND superseded_by IS NULL AND source_ref = '` + nodeRef(id) + `'`); n != 1 {
 		t.Errorf("%d current decisions", n)
 	}
-	dd, err := c.nodes.Create(nodestore.New{Title: "Ma journée", Lifetime: nodefile.Standing, Author: "user"}) // a view the user said yes to
+	dd, err := c.nodes.Create(nodestore.New{Title: "Ma journée", Author: "user"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	day := dd.Node.Meta.ID
-	if _, msg := brainNodes(t, c, "node_set", map[string]any{"id": day, "done": true}); !strings.Contains(msg, "standing") {
-		t.Errorf("a standing node done: %q", msg)
+	addTriggered(t, c, "---\nname: journee\ndescription: La journée.\nwhen: time daily 07:00\nnode: "+day+"\n---\nTiens la journée.\n") // it maintains it
+	if _, msg := brainNodes(t, c, "node_set", map[string]any{"id": day, "done": true}); !strings.Contains(msg, "maintained by a skill (journee)") {
+		t.Errorf("a node a skill maintains done: %q", msg)
 	}
 	before, _ := c.lastShown()
 	_, seq, _, ch := c.graphAfter(0)
