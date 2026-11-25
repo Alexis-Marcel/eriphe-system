@@ -1120,7 +1120,7 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   line (`ackLine`, #663; beside a subject the orb says only its first lines), or, said in a node, any
   answer at all of a turn that answers no act of the user's (an event's, a wake's: the orb never says
   it, so its node's trace keeps it; a line, in its trace only, never as its doc), when the brain wrote no node in the turn (`node_open`,
-  `node_write`, `node_edit`) and proposed nothing on a card (`cardProposed`: what it says is then
+  `node_write`, `node_edit`), launched no task on one (`run_task`: the task writes it) and proposed nothing on a card (`cardProposed`: what it says is then
   about the card, which waits under it), is filed by code: in the node the turn answers in (whole in its
   trace, and as its doc when it has none), else in a new work node at
   the top titled from the user's request (its first line; a neutral « Réponse du … » when there is

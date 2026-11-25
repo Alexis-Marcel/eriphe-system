@@ -56,6 +56,22 @@ func TestReworkAPageEndToEnd(t *testing.T) {
 	if d.Version.Author != "task:"+task.ID || !strings.Contains(string(d.Raw), "Par expéditeur") || d.Node.Block("suivis") == nil {
 		t.Fatalf("the page rewritten by %s:\n%s", d.Version.Author, d.Raw)
 	}
+	// On a page of the user's own, a node_find block is trusted; quoting
+	// what may be someone else's words (include_external), it is
+	// external, as the brain's is (untrustedSources).
+	own := mustNode(t, c, nodestore.New{Title: "Suivis", Goal: "Les suivis de courrier.", Author: byBrain})
+	follow, _ := launched(t, c, map[string]any{"ask": "Liste les suivis.", "node": own})
+	quoted := strings.Replace(found, `"tags": ["courrier"]`, `"tags": ["courrier"], "include_external": true`, 1)
+	for _, w := range []struct {
+		body     string
+		external bool
+	}{{found, false}, {quoted, true}} {
+		r := mustNodes(t, c, follow.ID, "node_read", map[string]any{"id": own})
+		mustNodes(t, c, follow.ID, "node_write", map[string]any{"id": own, "expect": r["hash"], "body": "Les suivis.\n" + w.body})
+		if d, _ := c.nodes.Read(own, 0); d.Node.Block("suivis").External != w.external {
+			t.Fatalf("external %v, want %v:\n%s", d.Node.Block("suivis").External, w.external, d.Raw)
+		}
+	}
 
 	// Launched without the tool: its rewrite of a sourced block is
 	// refused, and the error says which tool it lacks.

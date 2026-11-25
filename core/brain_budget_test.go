@@ -26,10 +26,27 @@ func TestBrainBudgetIsTheBrainsOnly(t *testing.T) {
 	mux.Handle("/v1/device/tasks/{id}/mcp/{server}", c.taskMCPHandler())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	for _, task := range []string{"m-1", "w-1"} {
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "pc", Runtime: "claude-code", State: stateRunning})
+	setBrainTask(c.core, "b-1")
+	dial := func(task string) (*mcp.ClientSession, error) {
 		tr := &mcp.StreamableClientTransport{Endpoint: srv.URL + "/v1/device/tasks/" + task + "/mcp/" + selfServer,
 			HTTPClient: &http.Client{Transport: headerTransport{"Authorization": "Bearer device-secret", "Eriphe-Device": "pc"}}, MaxRetries: -1}
-		if cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(context.Background(), tr, nil); err == nil {
+		return mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(context.Background(), tr, nil)
+	}
+	// The brain's task, on the same server and device, reaches them and
+	// is held: the others' refusal is theirs, not the setup's.
+	brain, err := dial("b-1")
+	if err != nil {
+		t.Fatalf("the brain's task: %v", err)
+	}
+	defer brain.Close()
+	c.turn.start(1, 1, 0)
+	if _, msg := callOn(t, brain, "node_open", map[string]any{"title": "Page", "goal": "Une page.",
+		"body": strings.Repeat("Une ligne. ", brainWriteRunes/10)}); !strings.HasPrefix(msg, "Refused") {
+		t.Fatalf("the brain's whole page: %q", msg)
+	}
+	for _, task := range []string{"m-1", "w-1"} { // the memory's extraction, a worker (a skill's run is one)
+		if cs, err := dial(task); err == nil {
 			cs.Close()
 			t.Fatalf("task %s reached eriphe-core's own tools", task)
 		}

@@ -447,6 +447,9 @@ func (c *core) brainRunTask(ctx context.Context, launch launchRequest) (map[stri
 	out := map[string]any{"task": t.ID, "state": t.State, "start_state": c.startState(t)} // task_start.go
 	if node := c.taskNode(t.ID); node != "" {
 		out["node"] = node
+		// The turn's answer has its place: the node the task writes, as a
+		// node the brain wrote does; its ack is a line (node_net.go).
+		c.turn.wrote()
 	}
 	if launch.Skill != "" {
 		// What it is lent, the skill's defaults or the call's (task_launch.go).

@@ -224,3 +224,19 @@ func TestStartCardWithoutAroundLine(t *testing.T) {
 		t.Fatal("aroundHolds: an ancestor or itself only")
 	}
 }
+
+// A task launched on a node gives the turn's answer its place, as a node
+// the brain wrote does: the net leaves the ack of an orchestrating turn
+// in the exchange (node_net.go). A refused launch gives it none.
+func TestLaunchPlacesTheAnswer(t *testing.T) {
+	c := launchCore(t)
+	page := mustNode(t, c, nodestore.New{Title: "Mes mails", Goal: "Les mails à traiter."})
+	c.turn.start(1, 1, 0)
+	if _, msg := brainNodes(t, c, "run_task", map[string]any{"ask": "x", "skill": "inconnu", "node": page}); msg == "" || c.turn.wroteNode() {
+		t.Fatalf("a refused launch: %q, placed %v", msg, c.turn.wroteNode())
+	}
+	launched(t, c, map[string]any{"ask": "Refais la page.", "node": page})
+	if !c.turn.wroteNode() {
+		t.Fatal("a launch on the page left the answer to the net")
+	}
+}
