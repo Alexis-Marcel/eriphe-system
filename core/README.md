@@ -876,6 +876,38 @@ worker tasks, read from what eriphe-core keeps (no service of their own):
 - **cost by role**: what every task (workers, the brain, the assistants) cost each of the last 7
   days, by its kind.
 
+**The turn report** (`turn_report.go`): `GET /api/report/turns[?days=n]` (7 days by default, 1 to
+90), JSON, the owner's alone (a session of the workspace; without one, 401) and read-only. It says
+how long the brain's turns take, what it does in them and how tasks are launched, so that a change to
+the brain is measured before and after. A turn is a brain task's (kind `brain`) events after its
+previous `turn_end`, up to its own; it is in the window when its `turn_end` is. Tool names are bare
+(`mcp__eriphe-core__node_write` is `node_write`). Each measure over a set of values is a spread:
+`n` (how many values were measured: a failed turn may report no duration or usage, and is counted
+in `turns` but not here), `median`, `p75`, `p90` (by nearest rank: the smallest value with at
+least that share of the values at or below it) and `max`.
+
+- `brain.turns`: the turns that ended in the window; `brain.duration_ms`: their duration
+  (`turn_end.duration_ms`); `brain.slow_turns`: the turns over 30 s; `brain.slow_share`: the share
+  of the brain's time spent in them (their duration over all the turns', 0 to 1): high, the user
+  waits most of the time on a few long turns;
+- `brain.output_tokens`: what a turn wrote; `brain.context_tokens`: its context
+  (`usage.context_tokens`, else its input, cache reads and writes);
+- `brain.tools`: the brain's tool calls in the window, by name: heavy writes it did itself
+  (`node_write`, `propose_view`, `write_skill`, `item_note`…) show here;
+- `launches.turns`: the turns that called `run_task`, with their `duration_ms` and
+  `output_tokens`; `launches.run_task_calls`: those calls (a call, not a started task: it may be
+  refused or wait for a card); `launches.brain_prompt_chars`: the length of the prompts they
+  wrote, in characters; `launches.skill_runs`: the worker tasks started in the window by a skill
+  (`skill_runs`), `launches.skill_prompt_chars` their prompt's length; `launches.other_tasks`: the
+  other worker tasks started in the window (the brain's, a node's steps');
+- `reads.tasks`: the worker tasks started in the window; `reads.tasks_reading`: those that called
+  `node_read` or `node_find`; `reads.calls`: those calls per task (all the window's tasks, zeros
+  included); `reads.by_others` is `null`: a task reads only its own node for now, the nodes it
+  reads that someone else wrote are counted once it can read the graph (#766);
+- `turn_list`: every turn of the window, the longest first (unmeasured ones last): its `task`,
+  `seq` (its `turn_end`'s), `at`, `duration_ms`, `output_tokens`, `context_tokens`, `tools` (its
+  calls by name) and `launches` (its `run_task` calls).
+
 ### Receipts (`receipt.go`)
 
 A worker ends every turn with a **receipt**: a fenced ```` ```json ```` block, the last thing of its
@@ -3466,6 +3498,8 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
 - `GET /api/archives`: what the user archived, the latest first (`nodestore.Archives`): each node
   archived with no parent archived with it, a row as below with `archived` (when) and `with` (how
   many nodes below it went with it).
+- `GET /api/report/turns[?days=n]`: the brain's turns and how tasks are launched (`turn_report.go`,
+  see [Usage and measures](#usage-and-measures-task_statsgo)).
 - A node's row (`graphNode`), in the page and the stream: `id`, `title`, `titleExternal` (its
   title may be someone else's words, written on an external node and not `title_trusted`: the
   workspace shows it as it is, in amber with a ⚠ saying « Titre écrit après une lecture
