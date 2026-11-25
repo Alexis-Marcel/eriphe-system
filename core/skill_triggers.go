@@ -23,11 +23,15 @@ import (
 //	                                         both: a schedule, then by ; events (and their filters)
 //	when: user.returned away_minutes>=180    a payload number compared: >= or <=
 //	every: 15m                               batch: at most one task per period, with every event since
-//	model: haiku                             the agent its tasks run with (Settings → Agents)
-//	tools: [mail, calendar]                  the catalog servers its tasks are lent
-//	repos: [owner/name]                      the repositories its runs' steps may borrow (node_steps.go)
 //	node: k3x9m2p7qa                         a standing node its runs work in (the view's: mails,
 //	                                         a production app); without it, a node of each run's own
+//
+// Any skill, triggered or not, may also declare what it uses (skillUses):
+//
+//	model: haiku                             the agent its tasks run with (Settings → Agents)
+//	tools: [mail, calendar]                  the catalog servers its tasks are lent
+//	repos: [owner/name]                      its repositories: a run's steps may borrow them
+//	                                         (node_steps.go), run_task lends the one (task_launch.go)
 //
 // Each is checked when the skill is added: a version with a bad trigger is
 // refused. The user approves them with the rest of the skill, as one
@@ -51,11 +55,58 @@ type skillTrigger struct {
 	At       string            // the schedule as written, without time
 	When     string            // as written
 	Every    time.Duration     // 0: at once
-	Model    string
-	Tools    []string
-	Repos    []string // the repositories its runs' steps may borrow, owner/name (node_steps.go)
-	Urgent   string   // the fixed text of an urgent run (skill_cards.go)
-	Node     string   // the standing node its runs work in; "" for a node of each run's own (skill_runs.go)
+	Urgent   string            // the fixed text of an urgent run (skill_cards.go)
+	Node     string            // the standing node its runs work in; "" for a node of each run's own (skill_runs.go)
+}
+
+// skillUses is what a skill declares it uses, triggered or not: its runs'
+// resources and agent, run_task's defaults when the brain names it
+// (task_launch.go). The user approves them with the rest of the version.
+type skillUses struct {
+	Model string
+	Tools []string // catalog servers
+	Repos []string // owner/name
+}
+
+// parseSkillUses reads a front matter's model, tools and repos.
+func parseSkillUses(model, tools, repos string) (skillUses, error) {
+	u := skillUses{Model: strings.TrimSpace(model), Tools: frontList(tools)}
+	if len(u.Tools) > maxSkillTools {
+		return u, skillErr("skills.err.tools", tools)
+	}
+	for _, t := range u.Tools {
+		if !serverName.MatchString(t) {
+			return u, skillErr("skills.err.tools", t)
+		}
+	}
+	for _, r := range frontList(repos) {
+		repo := repoOf(r)
+		if repo == "" {
+			return u, skillErr("skills.err.repos", r)
+		}
+		if !slices.ContainsFunc(u.Repos, func(x string) bool { return strings.EqualFold(x, repo) }) {
+			u.Repos = append(u.Repos, repo)
+		}
+	}
+	if len(u.Repos) > maxSkillTools {
+		return u, skillErr("skills.err.repos", repos)
+	}
+	return u, nil
+}
+
+// Text says what a skill uses in words, "" for nothing.
+func (u skillUses) Text(lang string) string {
+	var parts []string
+	if u.Model != "" {
+		parts = append(parts, fmt.Sprintf(tr(lang, "skills.uses.model"), u.Model))
+	}
+	if len(u.Tools) > 0 {
+		parts = append(parts, fmt.Sprintf(tr(lang, "skills.uses.tools"), strings.Join(u.Tools, ", ")))
+	}
+	if len(u.Repos) > 0 {
+		parts = append(parts, fmt.Sprintf(tr(lang, "skills.uses.repos"), strings.Join(u.Repos, ", ")))
+	}
+	return strings.Join(parts, " · ")
 }
 
 // filterBound is a filter on a number of the event's payload.
@@ -88,18 +139,18 @@ func splitWhen(when string) (at, events string) {
 }
 
 // parseSkillTrigger reads a manifest's trigger keys; nil when it has none.
-// The keys other than when need it: a skill without when runs only when
-// someone follows it.
+// Its other keys need it: a skill without when runs only when someone
+// follows it.
 func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 	if m.When == "" {
-		for k, v := range map[string]string{"every": m.Every, "model": m.Model, "tools": m.Tools, "repos": m.Repos, "urgent": m.Urgent, "node": m.Node} {
+		for k, v := range map[string]string{"every": m.Every, "urgent": m.Urgent, "node": m.Node} {
 			if v != "" {
 				return nil, skillErr("skills.err.nowhen", k)
 			}
 		}
 		return nil, nil
 	}
-	st := &skillTrigger{When: m.When, Model: strings.TrimSpace(m.Model)}
+	st := &skillTrigger{When: m.When}
 	at, events := splitWhen(m.When)
 	if at != "" {
 		r, err := parseSchedule(at)
@@ -159,28 +210,6 @@ func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 			return nil, skillErr("skills.err.every", m.Every)
 		}
 		st.Every = d
-	}
-	st.Tools = frontList(m.Tools)
-	if len(st.Tools) > maxSkillTools {
-		return nil, skillErr("skills.err.tools", m.Tools)
-	}
-	for _, t := range st.Tools {
-		switch {
-		case !serverName.MatchString(t):
-			return nil, skillErr("skills.err.tools", t)
-		}
-	}
-	for _, r := range frontList(m.Repos) {
-		repo := repoOf(r)
-		if repo == "" {
-			return nil, skillErr("skills.err.repos", r)
-		}
-		if !slices.ContainsFunc(st.Repos, func(x string) bool { return strings.EqualFold(x, repo) }) {
-			st.Repos = append(st.Repos, repo)
-		}
-	}
-	if len(st.Repos) > maxSkillTools {
-		return nil, skillErr("skills.err.repos", m.Repos)
 	}
 	if u := strings.TrimSpace(m.Urgent); u != "" {
 		if utf8.RuneCountInString(u) > urgentTextMax || urlRe2.MatchString(u) {
@@ -273,15 +302,6 @@ func (st *skillTrigger) Text(lang string) string {
 	}
 	if st.Every > 0 {
 		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.every"), span(st.Every)))
-	}
-	if st.Model != "" {
-		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.model"), st.Model))
-	}
-	if len(st.Tools) > 0 {
-		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.tools"), strings.Join(st.Tools, ", ")))
-	}
-	if len(st.Repos) > 0 {
-		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.repos"), strings.Join(st.Repos, ", ")))
 	}
 	if st.Node != "" {
 		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.node"), st.Node))

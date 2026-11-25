@@ -223,10 +223,13 @@ type skillManifest struct {
 	Description  string
 	AllowedTools string // shown, never honoured: Eriphe's permissions decide
 	Body         string // the instructions, after the front matter
-	// Its trigger, as written (skill_triggers.go): when, every, model,
-	// tools, repos, urgent, node.
-	When, Every, Model, Tools, Repos, Urgent, Node string
-	Trigger                                        *skillTrigger
+	// What any skill declares it uses (skill_triggers.go): model, tools,
+	// repos; run_task's defaults, a run's resources.
+	Uses skillUses
+	// Its trigger, as written (skill_triggers.go): when, every, urgent,
+	// node; nil without when.
+	When, Every, Urgent, Node string
+	Trigger                   *skillTrigger
 }
 
 // The name of a skill (agentskills.io): lowercase letters, digits and
@@ -283,8 +286,8 @@ func parseSkillMD(raw []byte) (skillManifest, error) {
 		}
 	}
 	m.Name, m.Description, m.AllowedTools = keys["name"], keys["description"], keys["allowed-tools"]
-	m.When, m.Every, m.Model, m.Tools, m.Urgent = keys["when"], keys["every"], keys["model"], keys["tools"], keys["urgent"]
-	m.Node, m.Repos = strings.TrimSpace(keys["node"]), keys["repos"]
+	m.When, m.Every, m.Urgent = keys["when"], keys["every"], keys["urgent"]
+	m.Node = strings.TrimSpace(keys["node"])
 	switch {
 	case !skillName.MatchString(m.Name):
 		return m, skillErr("skills.err.name", m.Name)
@@ -292,6 +295,9 @@ func parseSkillMD(raw []byte) (skillManifest, error) {
 		return m, skillErr("skills.err.description", "")
 	}
 	var err error
+	if m.Uses, err = parseSkillUses(keys["model"], keys["tools"], keys["repos"]); err != nil {
+		return m, err
+	}
 	m.Trigger, err = parseSkillTrigger(m)
 	return m, err
 }

@@ -35,7 +35,7 @@ type writeSkillIn struct {
 	Model        string          `json:"model,omitempty" jsonschema:"an agent of list_agents for its runs (a small one to sort); empty for the default"`
 	Tools        []string        `json:"tools,omitempty" jsonschema:"the catalog servers its runs are lent (list_tools); each call still follows the user's grid"`
 	Urgent       string          `json:"urgent,omitempty" jsonschema:"with when: a fixed message (160 characters, no link) sent at any hour when a run weighs something 5"`
-	Repos        []string        `json:"repos,omitempty" jsonschema:"with when: the repositories (list_repos) its runs' steps may borrow"`
+	Repos        []string        `json:"repos,omitempty" jsonschema:"repositories (list_repos): run_task lends one, runs' steps borrow them"`
 	Node         string          `json:"node,omitempty" jsonschema:"with when: its home, the node it maintains: its runs work in it; empty: each in a node of its own"`
 	Monitor      *writeMonitorIn `json:"monitor,omitempty" jsonschema:"write_monitor's fields: a new monitor its when keys on, made by the same yes"`
 }
@@ -130,9 +130,9 @@ func (c *core) writeSkill(in writeSkillIn, tainted []string) (map[string]any, er
 			return nil, fmt.Errorf("monitor: %w", err)
 		}
 	}
-	k, changed, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte(md)}}, skillFromEriphe)
+	k, changed, err := c.proposeSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte(md)}}, tainted, mon)
 	if err != nil {
-		return nil, skillErrText(err)
+		return nil, err
 	}
 	if !changed {
 		if mon != nil {
@@ -140,7 +140,28 @@ func (c *core) writeSkill(in writeSkillIn, tainted []string) (map[string]any, er
 		}
 		return map[string]any{"result": "the same as the version already approved: nothing to approve"}, nil
 	}
-	id := c.skillRowID(k.Name)
+	card := c.cardProposed(cardSkill, c.skillRowID(k.Name))
+	out := map[string]any{"result": "written; it waits for the user's approval on its card, then runs as it says",
+		"skill": k.Name, "card": card, "see": "/settings/skills/" + k.Name}
+	if mon != nil {
+		out["result"] = "written with its monitor; one yes on its card makes both"
+	}
+	return out, nil
+}
+
+// proposeSkillVersion adds a version written by Eriphe, the brain's
+// (write_skill) or a task's (skill_propose, skill_propose.go): it waits
+// for the user's yes on its card (kind skill), marked when its writer
+// was tainted, with the monitor it brings (nil: none). changed is false
+// when it is the version approved already: nothing waits.
+func (c *core) proposeSkillVersion(files []skillFile, tainted []string, mon *skillMonitorSpec) (k *Skill, changed bool, err error) {
+	k, changed, err = c.store.addSkillVersion(files, skillFromEriphe)
+	if err != nil {
+		return nil, false, skillErrText(err)
+	}
+	if !changed {
+		return k, false, nil
+	}
 	if len(tainted) > 0 {
 		c.store.set(skillTaintKey(k.Name, k.Pending), strings.Join(tainted, ", "))
 	}
@@ -150,13 +171,7 @@ func (c *core) writeSkill(in writeSkillIn, tainted []string) (map[string]any, er
 		kept = string(raw)
 	}
 	c.store.set(skillMonitorKey(k.Name, k.Pending), kept)
-	card := c.cardProposed(cardSkill, id)
-	out := map[string]any{"result": "written; it waits for the user's approval on its card, then runs as it says",
-		"skill": k.Name, "card": card, "see": "/settings/skills/" + k.Name}
-	if mon != nil {
-		out["result"] = "written with its monitor; one yes on its card makes both"
-	}
-	return out, nil
+	return k, true, nil
 }
 
 func skillTaintKey(name, sha string) string { return "skill_taint:" + name + ":" + sha }
@@ -284,11 +299,15 @@ func (c *core) skillProposal(p proposal) proposal {
 		return fmt.Sprintf(tr(lang, "card.skill.new"), name)
 	}
 	mon := c.skillMonitorOf(name, pending)
+	by := c.skillProposedBy(name, pending)
 	p.fields = func(lang string) []cardField {
 		fs := c.skillFields(m, lang)
 		if mon != nil { // made by the same yes
 			mf := append([]cardField{{Name: fmt.Sprintf(tr(lang, "card.skill.monitor"), mon.Name), Value: mon.Spec.Text(lang)}}, mon.Spec.argsFields(lang)...)
 			fs = slices.Insert(fs, 0, mf...)
+		}
+		if by != nil { // a task that followed it: why
+			fs = slices.Insert(fs, 0, cardField{Name: tr(lang, "card.skill.by"), Value: by.Why})
 		}
 		return fs
 	}
@@ -296,27 +315,33 @@ func (c *core) skillProposal(p proposal) proposal {
 	return p
 }
 
-// skillFields are what a skill's card shows of it: when it runs, the
-// repositories its steps may borrow, the node its runs work in, its
-// instructions.
+// skillFields are what a skill's card shows of it: when it runs, what it
+// uses (its tools, repositories and agent, any skill's: the user approves
+// them here, as its runs' steps borrow its repositories with no card of
+// their own, node_steps.go), the node its runs work in, its instructions.
 func (c *core) skillFields(m skillManifest, lang string) []cardField {
 	var fs []cardField
-	if st := m.Trigger; st != nil {
+	st := m.Trigger
+	if st != nil {
 		fs = append(fs, cardField{Name: tr(lang, "card.skill.when"), Value: st.Text(lang)})
-		if len(st.Repos) > 0 {
-			// Its steps borrow them with no card of their own (node_steps.go):
-			// the user approves them here.
-			fs = append(fs, cardField{Name: tr(lang, "card.skill.repos"), Value: strings.Join(st.Repos, ", ")})
-		}
-		if st.Node != "" {
-			title := st.Node
-			if c.nodes != nil {
-				if sum, err := c.nodes.Get(st.Node); err == nil {
-					title = sum.Title
-				}
+	}
+	if u := m.Uses; len(u.Tools) > 0 {
+		fs = append(fs, cardField{Name: tr(lang, "card.skill.tools"), Value: strings.Join(u.Tools, ", ")})
+	}
+	if u := m.Uses; len(u.Repos) > 0 {
+		fs = append(fs, cardField{Name: tr(lang, "card.skill.repos"), Value: strings.Join(u.Repos, ", ")})
+	}
+	if m.Uses.Model != "" {
+		fs = append(fs, cardField{Name: tr(lang, "card.skill.model"), Value: m.Uses.Model})
+	}
+	if st != nil && st.Node != "" {
+		title := st.Node
+		if c.nodes != nil {
+			if sum, err := c.nodes.Get(st.Node); err == nil {
+				title = sum.Title
 			}
-			fs = append(fs, cardField{Name: tr(lang, "card.skill.node"), Value: title})
 		}
+		fs = append(fs, cardField{Name: tr(lang, "card.skill.node"), Value: title})
 	}
 	return append(fs, cardField{Name: tr(lang, "card.skill.instructions"), Value: truncate(m.Body, cardValueMax), Detail: true, Markdown: true})
 }

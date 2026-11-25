@@ -340,6 +340,9 @@ type runRequest struct {
 	// method: the skill the brain launched it with, after what it is asked
 	// (task_launch.go); in the device's spec only, never in tasks.prompt.
 	method string
+	// skill: the skill it follows, the brain's run_task's or a skill's
+	// run: it may propose a new version of that one (skill_propose.go).
+	skill string
 }
 
 // workerVoice is a worker's standing instruction: its last message reaches
@@ -503,8 +506,16 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra d
 	spec.Folders = nil                                                                 // the same
 	if kind == "worker" {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + c.taskNowText()) // situations.go
+		// The skill it follows: a tool of its eriphe-nodes proposes a
+		// version of it (skill_propose.go).
+		if r.skill != "" {
+			c.store.set(taskSkillKey(t.ID), r.skill)
+		}
 		if c.taskNode(t.ID) != "" {
 			spec.AppendSystemPrompt += "\n\n" + nodesInstruction // task_nodes.go
+			if r.skill != "" {
+				spec.AppendSystemPrompt += "\n\n" + skillProposeInstruction
+			}
 		}
 	}
 	if len(folders) > 0 {

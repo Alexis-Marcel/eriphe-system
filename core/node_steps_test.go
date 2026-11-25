@@ -365,7 +365,7 @@ func TestSkillStepsStartWithoutCard(t *testing.T) {
 	ctx := context.Background()
 	repoTool(t, c, "acme", accessGrid{Read: gridFree, Change: gridApproval, Delete: gridApproval, Send: gridApproval})
 	c.skillRuns.mu.Lock()
-	c.skillRuns.cache = map[string]skillManifest{"sha1": {Name: "veille", Trigger: &skillTrigger{Repos: []string{"owner/repo", "acme/app"}}}}
+	c.skillRuns.cache = map[string]skillManifest{"sha1": {Name: "veille", Uses: skillUses{Repos: []string{"owner/repo", "acme/app"}}, Trigger: &skillTrigger{}}}
 	c.skillRuns.mu.Unlock()
 	run := func(id string, external bool) {
 		t.Helper()

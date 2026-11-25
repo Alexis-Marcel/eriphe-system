@@ -14,8 +14,8 @@ import (
 // worker instructions (workerVoice). The context is the graph, the method
 // the skill: the brain never restates the node.
 //
-// A skill's declared tools, repository and model (a triggered skill's
-// front matter: skill_triggers.go) are the launch's defaults: resources
+// A skill's declared tools, repository and model (its front matter's
+// model, tools, repos, any skill: skillUses) are the launch's defaults: resources
 // named by the call replace them, and an agent named wins over its model.
 // Rights do not move: what the task is lent goes through its start card,
 // as for any launch of the brain (task_start.go).
@@ -57,21 +57,21 @@ func (c *core) launchOf(in launchRequest) (runRequest, error) {
 	if err != nil {
 		return runRequest{}, err
 	}
+	r.skill = name
 	r.method = "[Your method: the user's skill « " + name + " », approved by them. Follow it for what you are asked]\n" + skillMethod(name, m)
-	if t := m.Trigger; t != nil {
-		if len(r.Resources) == 0 {
-			for _, tool := range t.Tools {
-				r.Resources = append(r.Resources, ResourceRef{Kind: resTool, Ref: tool})
-			}
-			// A task takes one repository: a skill that declares several
-			// lets the call name the one.
-			if len(t.Repos) == 1 {
-				r.Resources = append(r.Resources, ResourceRef{Kind: resRepo, Ref: t.Repos[0]})
-			}
+	u := m.Uses
+	if len(r.Resources) == 0 {
+		for _, tool := range u.Tools {
+			r.Resources = append(r.Resources, ResourceRef{Kind: resTool, Ref: tool})
 		}
-		if strings.TrimSpace(r.Agent) == "" {
-			r.Agent = t.Model
+		// A task takes one repository: a skill that declares several lets
+		// the call name the one.
+		if len(u.Repos) == 1 {
+			r.Resources = append(r.Resources, ResourceRef{Kind: resRepo, Ref: u.Repos[0]})
 		}
+	}
+	if strings.TrimSpace(r.Agent) == "" {
+		r.Agent = u.Model
 	}
 	return r, nil
 }

@@ -29,7 +29,7 @@ func TestSkillTriggerParse(t *testing.T) {
 		"every: 15m\n", "when: Mail\n", "when: monitor.new key\n", "when: time\n", "when: time weekdays 08:00\nevery: 1h\n",
 		"when: monitor.new\nevery: 2m\n", "when: monitor.new\nevery: 3d\n", "when: monitor.new\nnode: task:t-1\n",
 		"when: monitor.new\ntools: [Bad Name]\n",
-		"when: monitor.new\nrepos: [not-a-repo]\n", "repos: [owner/repo]\n",
+		"when: monitor.new\nrepos: [not-a-repo]\n", "repos: [not-a-repo]\n", "tools: [Bad Name]\n", "urgent: vite\n",
 		"when: monitor.new, time\n", "when: monitor.new, Mail\n", "when: a.b, c.d, e.f, g.h, i.j, k.l\n", "when: , key=x\n",
 	} {
 		if _, err := parseSkillMD(front(bad)); err == nil {
@@ -45,13 +45,22 @@ func TestSkillTriggerParse(t *testing.T) {
 	if s := tr.Text("fr"); !strings.Contains(s, "monitor.received") || !strings.Contains(s, "15 min") || !strings.Contains(s, "k3x9m2p7qa") {
 		t.Fatalf("text %q", s)
 	}
-	// The repositories its runs' steps may borrow, each once, said.
+	// The repositories it uses, each once, said.
 	m, err := parseSkillMD(front("when: monitor.new\nrepos: [owner/repo, Owner/Repo, https://github.com/acme/app]\n"))
-	if err != nil || !slices.Equal(m.Trigger.Repos, []string{"owner/repo", "acme/app"}) {
-		t.Fatalf("repos %v %v", m.Trigger, err)
+	if err != nil || !slices.Equal(m.Uses.Repos, []string{"owner/repo", "acme/app"}) {
+		t.Fatalf("repos %v %v", m.Uses, err)
 	}
-	if s := m.Trigger.Text("en"); !strings.Contains(s, "owner/repo, acme/app") {
+	if s := m.Uses.Text("en"); !strings.Contains(s, "owner/repo, acme/app") {
 		t.Errorf("text %q", s)
+	}
+	// Any skill declares what it uses, without when: it is not triggered.
+	m, err = parseSkillMD(front("model: haiku\ntools: [github, mail]\nrepos: owner/repo\n"))
+	if err != nil || m.Trigger != nil || m.Uses.Model != "haiku" || !slices.Equal(m.Uses.Tools, []string{"github", "mail"}) ||
+		!slices.Equal(m.Uses.Repos, []string{"owner/repo"}) {
+		t.Fatalf("uses without when: %+v %v", m, err)
+	}
+	if s := m.Uses.Text("fr"); !strings.Contains(s, "haiku") || !strings.Contains(s, "github, mail") || !strings.Contains(s, "owner/repo") {
+		t.Errorf("uses text %q", s)
 	}
 	// Several kinds share the filters; the run says each event's kind.
 	m, _ = parseSkillMD(front("when: monitor.failed, monitor.recovered key=getout-prod\n"))
@@ -131,6 +140,9 @@ func TestSkillRunBatches(t *testing.T) {
 	}
 	if len(c.taskTaint(task.ID)) == 0 {
 		t.Fatal("a run on external events is not tainted")
+	}
+	if c.taskSkill(task.ID) != "mails-rdv" {
+		t.Fatalf("a run follows %q: it may propose a version of its skill", c.taskSkill(task.ID))
 	}
 	if len(c.turnTaint()) != 0 {
 		t.Fatal("the brain's turn was tainted")
@@ -373,7 +385,7 @@ func TestWriteSkill(t *testing.T) {
 			p = x
 		}
 	}
-	if !p.Pending || p.Tainted == "" || !strings.Contains(p.Text("fr"), "mails-rdv") || len(p.Fields) != 2 ||
+	if !p.Pending || p.Tainted == "" || !strings.Contains(p.Text("fr"), "mails-rdv") || len(p.Fields) != 3 ||
 		!strings.Contains(p.Fields[0].Value, "monitor.new") {
 		t.Fatalf("card %+v %q", p, p.Text("fr"))
 	}
@@ -411,7 +423,7 @@ func TestWriteSkill(t *testing.T) {
 	}
 	k, _ := c.store.skill("tri")
 	v, _ := c.store.skillVersion(k.Pending)
-	if st := v.Manifest.Trigger; st == nil || st.Node != "k3x9m2p7qa" || len(st.Repos) != 1 || st.Repos[0] != "example/infra" {
+	if st, u := v.Manifest.Trigger, v.Manifest.Uses; st == nil || st.Node != "k3x9m2p7qa" || len(u.Repos) != 1 || u.Repos[0] != "example/infra" {
 		t.Fatalf("manifest %+v", v.Manifest)
 	}
 	var fields []cardField
@@ -420,7 +432,7 @@ func TestWriteSkill(t *testing.T) {
 			fields = x.Fields
 		}
 	}
-	if len(fields) != 4 || fields[1].Value != "example/infra" || fields[2].Value != "Mes mails" {
+	if len(fields) != 5 || fields[1].Value != "monitor" || fields[2].Value != "example/infra" || fields[3].Value != "Mes mails" {
 		t.Fatalf("card fields %+v", fields)
 	}
 }

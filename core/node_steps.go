@@ -429,16 +429,16 @@ func (c *core) borrowOf(task string) *skillBorrow {
 	}
 	if r := c.runOfTask(task); r != nil {
 		b := &skillBorrow{skill: r.Skill, sha: r.SHA, clean: !r.External}
-		if m, ok := c.skillManifestOf(r.SHA); ok && m.Trigger != nil {
-			b.tools, b.repos = m.Trigger.Tools, m.Trigger.Repos
+		if m, ok := c.skillManifestOf(r.SHA); ok {
+			b.tools, b.repos = m.Uses.Tools, m.Uses.Repos
 		}
 		return b
 	}
 	if st, ok := c.stepOfTask(task); ok && st.Skill != "" {
 		name, sha, _ := strings.Cut(st.Skill, "@")
 		b := &skillBorrow{skill: name, sha: sha, clean: st.Clean}
-		if m, ok := c.skillManifestOf(sha); ok && m.Trigger != nil {
-			b.tools, b.repos = m.Trigger.Tools, m.Trigger.Repos
+		if m, ok := c.skillManifestOf(sha); ok {
+			b.tools, b.repos = m.Uses.Tools, m.Uses.Repos
 		}
 		return b
 	}

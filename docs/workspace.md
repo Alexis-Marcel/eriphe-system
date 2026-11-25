@@ -239,6 +239,11 @@ you already said. You see it on a card, recalling your choices, in plain words, 
 say yes**. Then it is in Settings → Skills with its runs; to change it or stop it, ask, or do it
 there.
 
+Skills get better with use. When a piece of work that followed a skill had to correct its method
+to finish (a step or a check was missing), it proposes a new version of that skill: you see why on
+its card, and the diff in Settings → Skills. It changes only the instructions, never what the
+skill may use or when it runs, and nothing changes before you say yes.
+
 ## Shape it by talking
 
 "No more newsletters from news.example.org", "show me less of this" are **preferences**. Eriphe

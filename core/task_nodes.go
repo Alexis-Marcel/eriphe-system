@@ -26,7 +26,8 @@ import (
 // it works for, the nodes someone else linked to or from these
 // (node_write, node_edit, node_append); it opens a child of one of them
 // (node_open), notes an item a source of one of them lists (item_note),
-// and says how its work goes (progress). It never starts a task (the
+// and says how its work goes (progress). Following a skill, it proposes a
+// version of it (skill_propose.go). It never starts a task (the
 // engine starts steps), never archives, approves nor closes a node.
 //
 // What code keeps, whatever the task reads and writes:
@@ -57,7 +58,8 @@ const (
 )
 
 // nodesTools are its tools, in order.
-var nodesTools = []string{"node_read", "node_find", "node_write", "node_edit", "node_append", "node_open", "item_note", "progress", "catalog_read", "sources_read"}
+// skill_propose is only a task's that follows a skill (skill_propose.go).
+var nodesTools = []string{"node_read", "node_find", "node_write", "node_edit", "node_append", "node_open", "item_note", "progress", "catalog_read", "sources_read", "skill_propose"}
 
 // taskNodesTools are its tools as the task's agent names them: allowed in
 // advance, they ask nothing.
@@ -305,6 +307,12 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			}
 			return map[string]any{"note": "Noted."}, nil
 		})
+	if c.taskSkill(t.ID) != "" {
+		tool(s, "skill_propose", "Propose a new version of the skill you follow, only that one: its whole instructions rewritten, and why in one line. Only when its method was wrong, or missed a step or a check it should have had; never for a detail of this node or of this one time. The user approves it on a card; until then the approved version stays, and nothing else of the skill changes.",
+			func(ctx context.Context, in skillProposeIn) (map[string]any, error) {
+				return c.proposeTaskSkill(t.ID, in)
+			})
+	}
 	c.registerCatalogTools(s) // the grammar its node is written in (node_catalog.go)
 	return s
 }
