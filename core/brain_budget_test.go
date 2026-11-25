@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -32,6 +33,9 @@ func TestBrainBudgetClassifiesTools(t *testing.T) {
 	}
 }
 
+// refusal is a charge's refusal, "" when it may run.
+func refusal(why string, _ spent) string { return why }
+
 // refusedFor tells a budget's refusal: its words, with the hint to launch
 // a task.
 func refusedFor(t *testing.T, why string) {
@@ -54,60 +58,60 @@ func TestTurnBudget(t *testing.T) {
 	b := newTurnBudget(1)
 	for range 50 {
 		for _, read := range []string{"node_read", "node_find", "recall", "list_skills", "since", "task_status", "catalog_read"} {
-			if why := b.charge(read, map[string]any{"id": "n1"}); why != "" {
+			if why := refusal(b.charge(read, map[string]any{"id": "n1"})); why != "" {
 				t.Fatalf("%s refused: %s", read, why)
 			}
 		}
 	}
 	// A whole page: refused, by node_write, node_open or node_edit.
-	refusedFor(t, b.charge("node_write", map[string]any{"id": "n1", "expect": "h", "body": page}))
-	refusedFor(t, b.charge("node_open", map[string]any{"title": "Mes mails", "goal": "Un but.", "body": page}))
-	refusedFor(t, b.charge("node_edit", map[string]any{"id": "n1", "block": "b", "value": map[string]any{"components": page}}))
-	refusedFor(t, b.charge("node_edit", map[string]any{"id": "n1", "old": "x", "new": page}))
+	refusedFor(t, refusal(b.charge("node_write", map[string]any{"id": "n1", "expect": "h", "body": page})))
+	refusedFor(t, refusal(b.charge("node_open", map[string]any{"title": "Mes mails", "goal": "Un but.", "body": page})))
+	refusedFor(t, refusal(b.charge("node_edit", map[string]any{"id": "n1", "block": "b", "value": map[string]any{"components": page}})))
+	refusedFor(t, refusal(b.charge("node_edit", map[string]any{"id": "n1", "old": "x", "new": page})))
 	// A work cut in steps is orchestration: its steps are not page text.
 	steps := []any{map[string]any{"key": "style", "do": page}, map[string]any{"key": "plan", "do": page}}
-	if why := b.charge("node_open", map[string]any{"title": "Premier article", "goal": "Un plan.", "body": "En cours.", "steps": steps}); why != "" {
+	if why := refusal(b.charge("node_open", map[string]any{"title": "Premier article", "goal": "Un plan.", "body": "En cours.", "steps": steps})); why != "" {
 		t.Fatalf("a work in steps refused: %s", why)
 	}
 	// A short write passes, three of them; the fourth is a rewrite.
 	for i := range brainNodeWrites {
 		name := []string{"node_write", "node_edit", "node_write"}[i]
-		if why := b.charge(name, line); why != "" {
+		if why := refusal(b.charge(name, line)); why != "" {
 			t.Fatalf("write %d refused: %s", i+1, why)
 		}
 	}
-	refusedFor(t, b.charge("node_edit", line))
+	refusedFor(t, refusal(b.charge("node_edit", line)))
 
 	// Item notes: a few, not a burst.
 	b = newTurnBudget(1)
 	for i := range brainItemNotes {
-		if why := b.charge("item_note", map[string]any{"node": "n1", "item": "m1"}); why != "" {
+		if why := refusal(b.charge("item_note", map[string]any{"node": "n1", "item": "m1"})); why != "" {
 			t.Fatalf("note %d refused: %s", i+1, why)
 		}
 	}
-	refusedFor(t, b.charge("item_note", map[string]any{"node": "n1", "item": "m4"}))
+	refusedFor(t, refusal(b.charge("item_note", map[string]any{"node": "n1", "item": "m4"})))
 
 	// One skill a turn; a monitor tried and written are changes.
 	b = newTurnBudget(1)
-	if why := b.charge("write_skill", map[string]any{"name": "mails"}); why != "" {
+	if why := refusal(b.charge("write_skill", map[string]any{"name": "mails"})); why != "" {
 		t.Fatalf("a skill refused: %s", why)
 	}
-	refusedFor(t, b.charge("write_skill", map[string]any{"name": "jour"}))
+	refusedFor(t, refusal(b.charge("write_skill", map[string]any{"name": "jour"})))
 	for _, name := range []string{"try_monitor", "write_monitor", "remember", "node_set", "notify"} {
-		if why := b.charge(name, nil); why != "" {
+		if why := refusal(b.charge(name, nil)); why != "" {
 			t.Fatalf("%s refused: %s", name, why)
 		}
 	}
 	// Six changes made: the seventh, of any kind, catalog included, is work.
-	refusedFor(t, b.charge("remember", nil))
-	refusedFor(t, b.chargeCatalog())
+	refusedFor(t, refusal(b.charge("remember", nil)))
+	refusedFor(t, refusal(b.chargeCatalog()))
 	// The way out is always open.
 	for _, name := range []string{"run_task", "node_show", "turn_home", "answer_task", "stop_task", "withdraw_proposal", "node_settle"} {
-		if why := b.charge(name, map[string]any{"node": "n1", "ask": "Fais avancer ce nœud."}); why != "" {
+		if why := refusal(b.charge(name, map[string]any{"node": "n1", "ask": "Fais avancer ce nœud."})); why != "" {
 			t.Fatalf("%s refused when the budget is spent: %s", name, why)
 		}
 	}
-	if why := b.charge("node_open", map[string]any{"title": "Mes mails", "goal": "Un but.", "body": "En cours : je m'en occupe."}); why != "" {
+	if why := refusal(b.charge("node_open", map[string]any{"title": "Mes mails", "goal": "Un but.", "body": "En cours : je m'en occupe."})); why != "" {
 		t.Fatalf("opening a node refused when the budget is spent: %s", why)
 	}
 
@@ -115,12 +119,63 @@ func TestTurnBudget(t *testing.T) {
 	// three nodes and their parents; never more than three times the budget.
 	b = newTurnBudget(3)
 	for i := range brainNodeWrites * 3 {
-		if why := b.charge("node_edit", line); why != "" {
+		if why := refusal(b.charge("node_edit", line)); why != "" {
 			t.Fatalf("edit %d of a delivery of three refused: %s", i+1, why)
 		}
 	}
 	if newTurnBudget(10).scale != brainBudgetScale {
 		t.Errorf("a delivery of ten scales the budget by %d", newTurnBudget(10).scale)
+	}
+
+	// A page split in pieces is a page: the turn's node text is held.
+	b = newTurnBudget(1)
+	half := map[string]any{"id": "n1", "expect": "h", "old": "x", "new": strings.Repeat("é", brainWriteRunes/2+50)}
+	if why := refusal(b.charge("node_edit", half)); why != "" {
+		t.Fatalf("half a page refused: %s", why)
+	}
+	refusedFor(t, refusal(b.charge("node_edit", half)))
+
+	// A call that failed changed nothing: what it took comes back.
+	b = newTurnBudget(1)
+	for range 5 {
+		_, took := b.charge("node_edit", line)
+		b.refund(took) // stale: read again, and made again
+	}
+	for i := range brainNodeWrites {
+		if why := refusal(b.charge("node_edit", line)); why != "" {
+			t.Fatalf("write %d after failed ones refused: %s", i+1, why)
+		}
+	}
+	b = newTurnBudget(1)
+	b.refund(spent{class: budgetWrite, runes: 100}) // taken from an earlier delivery's
+	if b.gestures != 0 || b.nodeWrites != 0 || b.runes != 0 {
+		t.Errorf("a refund went below nothing: %+v", b)
+	}
+}
+
+// A delivery's budget is scaled by the messages it brings: three tasks'
+// ends delivered together may update their three nodes.
+func TestBrainDeliveryScalesBudget(t *testing.T) {
+	c, _ := testMemoryCore(t)
+	setBrain(c, &BrainConfig{Agent: "small"})
+	ctx := context.Background()
+	if err := tendBrain(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	c.store.updateTask("t-brain", map[string]any{"state": stateIdle})
+	for _, text := range []string{"La tâche A a fini.", "La tâche B a fini.", "La tâche C a fini."} {
+		if _, err := c.store.addMessage(roleEvent, text, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tendBrain(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	c.turn.mu.Lock()
+	scale := c.turn.budget.scale
+	c.turn.mu.Unlock()
+	if scale != 3 {
+		t.Fatalf("a delivery of three events: budget scaled by %d", scale)
 	}
 }
 
@@ -145,7 +200,7 @@ func TestTurnBudgetCardFollowUp(t *testing.T) {
 		{"withdraw_proposal", map[string]any{"ref": "calls:2"}},
 		{"run_task", map[string]any{"node": "n1", "ask": "Fais avancer ce nœud."}},
 	} {
-		if why := c.turn.charge(call.name, call.args); why != "" {
+		if why := refusal(c.turn.charge(call.name, call.args)); why != "" {
 			t.Fatalf("a card's follow-up: %s refused: %s", call.name, why)
 		}
 	}
@@ -219,33 +274,50 @@ func TestBrainBudgetHoldsTheBrainOnly(t *testing.T) {
 	relayed := connect("/v1/device/tasks/b-1/mcp/"+selfServer, headerTransport{"Authorization": "Bearer device-secret", "Eriphe-Device": "pc"})
 	selfURL := connect("/mcp", headerTransport{"Authorization": "Bearer " + assistantToken(c.token)})
 	owners := connect("/mcp", headerTransport{"Authorization": "Bearer api-token", brainCallHeader: "0"})
-	note := map[string]any{"node": "nowhere", "item": "m1", "note": "Une facture.", "state": "info"}
-	burst := func(cs *mcp.ClientSession) (refusals []string) {
-		for range brainItemNotes + 2 {
-			if _, msg := callOn(t, cs, "item_note", note); strings.HasPrefix(msg, "Refused") {
-				refusals = append(refusals, msg)
-			}
+	d, err := c.nodes.Create(nodestore.New{Title: "Devis", Goal: "Un devis.", Body: "v0", Author: "brain"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, word := d.Node.Meta.ID, 0
+	// edit replaces the node's word by the next, on expect (its last
+	// version's when ""): the error's words, "" when it was written.
+	edit := func(cs *mcp.ClientSession, expect string) string {
+		d, err := c.nodes.Read(id, 0)
+		if err != nil {
+			t.Fatal(err)
 		}
-		return refusals
+		_, msg := callOn(t, cs, "node_edit", map[string]any{"id": id, "expect": cmpOr(expect, d.Version.Hash),
+			"old": strings.TrimSpace(d.Node.Text()), "new": "v" + strconv.Itoa(word+1)})
+		if msg == "" {
+			word++
+		}
+		return msg
 	}
 	for name, cs := range map[string]*mcp.ClientSession{"relayed by its device": relayed, "at self_url": selfURL} {
 		c.turn.start(1, 1, 0)
-		refused := burst(cs)
-		if len(refused) != 2 {
-			t.Fatalf("the brain %s: %d notes of %d refused", name, len(refused), brainItemNotes+2)
+		// A stale edit fails: it costs nothing.
+		if msg := edit(cs, "stale"); msg == "" || strings.HasPrefix(msg, "Refused") {
+			t.Fatalf("the brain %s: a stale edit: %q", name, msg)
 		}
-		refusedFor(t, refused[0])
+		for i := range brainNodeWrites {
+			if msg := edit(cs, ""); msg != "" {
+				t.Fatalf("the brain %s: edit %d: %s", name, i+1, msg)
+			}
+		}
+		refusedFor(t, edit(cs, ""))
 		// Reads go on; a fresh delivery has a fresh budget.
-		if _, msg := callOn(t, cs, "node_find", map[string]any{}); msg != "" {
+		if _, msg := callOn(t, cs, "node_read", map[string]any{"id": id}); msg != "" {
 			t.Fatalf("a read after the budget: %s", msg)
 		}
 		c.turn.goOn(2, 2, 0, nil)
-		if _, msg := callOn(t, cs, "item_note", note); strings.HasPrefix(msg, "Refused") {
-			t.Fatalf("the brain %s: the next delivery's first note refused: %s", name, msg)
+		if msg := edit(cs, ""); msg != "" {
+			t.Fatalf("the brain %s: the next delivery's first edit: %s", name, msg)
 		}
 	}
 	c.turn.start(3, 3, 0)
-	if refused := burst(owners); len(refused) != 0 {
-		t.Fatalf("the owner's own client was budgeted: %q", refused)
+	for i := range brainNodeWrites + 2 {
+		if msg := edit(owners, ""); msg != "" {
+			t.Fatalf("the owner's own client, edit %d: %s", i+1, msg)
+		}
 	}
 }

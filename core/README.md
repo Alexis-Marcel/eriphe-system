@@ -893,8 +893,8 @@ least that share of the values at or below it) and `max`.
 - `brain.output_tokens`: what a turn wrote; `brain.context_tokens`: its context
   (`usage.context_tokens`, else its input, cache reads and writes);
 - `brain.tools`: the brain's tool calls in the window, by name: heavy writes it did itself
-  (`node_write`, `write_skill`, `item_note`…) show here, and what its budget now refuses
-  ([The brain's budget](#the-brains-budget-brain_budgetgo));
+  (`node_write`, `write_skill`, `item_note`…) show here (its budget holds them since #770:
+  [The brain's budget](#the-brains-budget-brain_budgetgo));
 - `launches.turns`: the turns that called `run_task`, with their `duration_ms` and
   `output_tokens`; `launches.run_task_calls`: those calls (a call, not a started task: it may be
   refused or wait for a card); `launches.brain_prompt_chars`: the length of what they wrote to
@@ -2493,13 +2493,14 @@ server (a receiving middleware of `newMCPServer`) and on its catalog calls (the 
 
 | Constant | Value | Refused in a turn of the brain's |
 |---|---|---|
-| `brainWriteRunes` | 800 | a node write carrying more text (`node_open`'s title, goal and body; `node_write`'s body; `node_edit`'s block or new text): a whole page. A work's `steps` are not counted |
+| `brainWriteRunes` | 800 | a node write carrying more text (`node_open`'s title, goal and body; `node_write`'s body; `node_edit`'s block or new text): a whole page; and the turn's `node_write` and `node_edit` together past it, so a page split in pieces is one. A work's `steps` are not counted |
 | `brainNodeWrites` | 3 | a fourth `node_write` or `node_edit` |
 | `brainItemNotes` | 3 | a fourth `item_note` |
 | `brainSkillWrites` | 1 | a second `write_skill` |
 | `brainGestures` | 6 | a seventh change of any kind: the writes above, `node_set`, a memory, an intention, `notify`, a rule, a setting, `write_monitor`, `try_monitor`, a catalog call that is not a read |
 
-Each refusal is a tool error that says why and ends with the way out: launch a task on the node
+A call that fails (stale, invalid, refused by the policy) gives back what it took: it changed
+nothing. Each refusal is a tool error that says why and ends with the way out: launch a task on the node
 (`run_task` with node, skill, ask), then answer in one line naming it. Never counted, never refused:
 reads (`node_read`, `node_find`, `recall`, `since`, the `list_*`, `catalog_read`…) and what routes and
 launches (`run_task`, `answer_task`, `stop_task`, `node_open` with a short body, `node_show`,
@@ -2514,7 +2515,7 @@ three tasks' ends may update their three nodes. A card's follow-up (the user's O
 the conversation) fits in it: eriphe-core applies the card itself, and the brain says what came of
 it in its node and the parent, sets it done, withdraws a card or launches the next work. It is not
 kept: a restart starts a fresh one. Only the brain is held: a call relayed by its device for its
-task (eriphe-core marks it, `Eriphe-Brain-Call`) or made at `self_url` with its token. The owner's
+task (eriphe-core marks each call it relays to its own server, `Eriphe-Brain-Call`) or made at `self_url` with its token. The owner's
 own MCP client with the API token, and tasks (on their own `eriphe-nodes`), are never counted.
 
 It gets one turn per event: my messages (`POST /v1/messages {text}`) and what happens to its workers

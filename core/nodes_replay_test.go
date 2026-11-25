@@ -337,9 +337,12 @@ func TestNodesReplayBudget(t *testing.T) {
 		}
 		var args map[string]any
 		json.Unmarshal(call.Args, &args)
-		if why := b.charge(call.Tool, args); why != "" {
+		why, took := b.charge(call.Tool, args)
+		if why != "" {
 			refusedFor(t, why)
 			refused[fmt.Sprintf("%d %s", call.Turn, call.Tool)] = true
+		} else if !call.OK {
+			b.refund(took) // refused by code then: it changed nothing
 		}
 	}
 	want := map[string]bool{"12 node_write": true, "13 node_open": true}

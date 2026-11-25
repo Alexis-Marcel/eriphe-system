@@ -34,12 +34,15 @@ import (
 // one, scaled by how many messages it brings, so a delivery of three
 // tasks' ends may update their three nodes. It is not kept: a restart of
 // eriphe-core starts a fresh one.
+// A call that fails (stale, invalid) gives back what it took (refund):
+// it changed nothing.
 const (
 	// brainWriteRunes is the most text a node write of the brain's
 	// carries (node_open's title, goal and body; node_write's body;
 	// node_edit's block or new text): a status line, a question and its
 	// answers fit; a whole page (the bench's mails page: 1,166 to 1,416
-	// runes, the owner's longer) is a task's work.
+	// runes, the owner's longer) is a task's work. It holds the turn's
+	// node_write and node_edit together too: a page split in pieces is one.
 	brainWriteRunes = 800
 	// brainNodeWrites is how many node_write or node_edit a turn makes per
 	// message it answers: the node of the turn and its parent, a card
@@ -94,9 +97,16 @@ const launchHint = "launch a task on the node it is for: run_task with node, ski
 
 // turnBudget is what a turn of the brain's spent.
 type turnBudget struct {
-	scale                       int // the messages the delivery brought, 1 to brainBudgetScale
-	gestures, nodeWrites, notes int
-	skills                      int
+	scale                               int // the messages the delivery brought, 1 to brainBudgetScale
+	gestures, nodeWrites, notes, skills int
+	runes                               int // of text written in nodes (node_write, node_edit)
+}
+
+// spent is what one call took from the budget, given back if it fails
+// (refund): a stale write read again and made once counts once.
+type spent struct {
+	class string
+	runes int
 }
 
 func newTurnBudget(messages int) turnBudget {
@@ -104,69 +114,74 @@ func newTurnBudget(messages int) turnBudget {
 }
 
 // charge counts a call of the brain's tool name with its arguments, or
-// refuses it: the refusal's words, "" when it may run.
-func (b *turnBudget) charge(name string, args map[string]any) string {
+// refuses it: the refusal's words, "" when it may run, and what it took.
+func (b *turnBudget) charge(name string, args map[string]any) (string, spent) {
 	class, ok := brainToolClass[name]
 	if !ok {
 		class = budgetCounts
 	}
-	if b.scale == 0 {
-		b.scale = 1
+	b.scale = max(b.scale, 1)
+	n := writtenRunes(name, args)
+	switch {
+	case class == budgetRead:
+		return "", spent{}
+	case name == "node_open" && n > brainWriteRunes:
+		return fmt.Sprintf("Refused: node_open carries %d runes of text, more than %d: a whole page is a task's work. Open the node with a one-line body, then %s", n, brainWriteRunes, launchHint), spent{}
+	case class == budgetRoute:
+		return "", spent{}
+	case class == budgetWrite && b.runes+n > brainWriteRunes*b.scale:
+		return fmt.Sprintf("Refused: with this one, this turn would write %d runes in nodes, more than %d: writing a page is a task's work: %s", b.runes+n, brainWriteRunes*b.scale, launchHint), spent{}
+	case b.gestures >= brainGestures*b.scale:
+		return fmt.Sprintf("Refused: this turn already made %d changes, a gesture is one or two; more is work: %s", b.gestures, launchHint), spent{}
+	case class == budgetWrite && b.nodeWrites >= brainNodeWrites*b.scale:
+		return fmt.Sprintf("Refused: this turn already wrote nodes %d times; a series of writes is a rewrite: %s", b.nodeWrites, launchHint), spent{}
+	case class == budgetNote && b.notes >= brainItemNotes*b.scale:
+		return fmt.Sprintf("Refused: this turn already noted %d items; noting a whole source is a skill's run or a task's: %s", b.notes, launchHint), spent{}
+	case class == budgetSkill && b.skills >= brainSkillWrites:
+		return "Refused: one skill is proposed per turn; propose the next one in another turn, after the user's answer.", spent{}
 	}
-	switch class {
-	case budgetRead:
-		return ""
-	case budgetRoute:
-		if name == "node_open" {
-			return pageRefused(name, writtenRunes(name, args))
-		}
-		return ""
-	}
-	if n := writtenRunes(name, args); n > brainWriteRunes {
-		return pageRefused(name, n)
-	}
-	if b.gestures >= brainGestures*b.scale {
-		return fmt.Sprintf("Refused: this turn already made %d changes, a gesture is one or two; more is work: %s", b.gestures, launchHint)
-	}
+	s := spent{class: class}
 	switch class {
 	case budgetWrite:
-		if b.nodeWrites >= brainNodeWrites*b.scale {
-			return fmt.Sprintf("Refused: this turn already wrote nodes %d times; a series of writes is a rewrite: %s", b.nodeWrites, launchHint)
-		}
 		b.nodeWrites++
+		b.runes += n
+		s.runes = n
 	case budgetNote:
-		if b.notes >= brainItemNotes*b.scale {
-			return fmt.Sprintf("Refused: this turn already noted %d items; noting a whole source is a skill's run or a task's: %s", b.notes, launchHint)
-		}
 		b.notes++
 	case budgetSkill:
-		if b.skills >= brainSkillWrites {
-			return "Refused: one skill is proposed per turn; propose the next one in another turn, after the user's answer."
-		}
 		b.skills++
 	}
 	b.gestures++
-	return ""
+	return "", s
 }
 
 // chargeCatalog counts a catalog call of the brain's that is not a read
 // (proxy.go): a change, as any other.
-func (b *turnBudget) chargeCatalog() string {
-	if b.scale == 0 {
-		b.scale = 1
-	}
+func (b *turnBudget) chargeCatalog() (string, spent) {
+	b.scale = max(b.scale, 1)
 	if b.gestures >= brainGestures*b.scale {
-		return fmt.Sprintf("Refused: this turn already made %d changes, a gesture is one or two; more is work: %s", b.gestures, launchHint)
+		return fmt.Sprintf("Refused: this turn already made %d changes, a gesture is one or two; more is work: %s", b.gestures, launchHint), spent{}
 	}
 	b.gestures++
-	return ""
+	return "", spent{class: budgetCounts}
 }
 
-func pageRefused(name string, n int) string {
-	if n <= brainWriteRunes {
-		return ""
+// refund gives back what a call that failed took: it changed nothing.
+func (b *turnBudget) refund(s spent) {
+	if s.class == "" {
+		return
 	}
-	return fmt.Sprintf("Refused: %s carries %d runes of text, more than %d: a whole page is a task's work. Write a line yourself (node_open's body: « En cours : … »), and %s", name, n, brainWriteRunes, launchHint)
+	back := func(n *int, by int) { *n = max(*n-by, 0) }
+	switch s.class {
+	case budgetWrite:
+		back(&b.nodeWrites, 1)
+		back(&b.runes, s.runes)
+	case budgetNote:
+		back(&b.notes, 1)
+	case budgetSkill:
+		back(&b.skills, 1)
+	}
+	back(&b.gestures, 1)
 }
 
 // writtenRunes is the text a node write carries: what lands on the page.
@@ -218,10 +233,15 @@ func (c *core) budgetMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 		if len(call.Params.Arguments) > 0 {
 			json.Unmarshal(call.Params.Arguments, &args) // invalid arguments: the tool says so
 		}
-		if why := c.turn.charge(call.Params.Name, args); why != "" {
+		why, took := c.turn.charge(call.Params.Name, args)
+		if why != "" {
 			return toolError(why), nil
 		}
-		return next(ctx, method, req)
+		res, err := next(ctx, method, req)
+		if r, ok := res.(*mcp.CallToolResult); err != nil || ok && r.IsError {
+			c.turn.refund(took) // it changed nothing
+		}
+		return res, err
 	}
 }
 
@@ -244,17 +264,25 @@ func (c *core) brainCall(extra *mcp.RequestExtra) bool {
 }
 
 // charge counts a call in the turn's budget (turnBudget.charge).
-func (t *brainTurn) charge(name string, args map[string]any) string {
+func (t *brainTurn) charge(name string, args map[string]any) (string, spent) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.budget.charge(name, args)
 }
 
 // chargeCatalog counts a catalog change in the turn's budget.
-func (t *brainTurn) chargeCatalog() string {
+func (t *brainTurn) chargeCatalog() (string, spent) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.budget.chargeCatalog()
+}
+
+// refund gives back what a failed call took. A delivery since started a
+// fresh budget: what it gives back is the new one's, never below nothing.
+func (t *brainTurn) refund(s spent) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.budget.refund(s)
 }
 
 // delivered starts the budget of a delivery of n messages.
