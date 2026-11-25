@@ -389,7 +389,7 @@ func (c *core) runApprovedCall(a accessQuestion) {
 	case a.Run != 0:
 		c.runCallDone(a, text) // a run's: its note keeps it (skill_cards.go)
 	case !c.brainKept(a):
-		c.itemCallDone(a, text) // code's (a tools review): its node's trace
+		c.itemCallDone(a, text, server) // code's (a tools review): its node's trace
 	}
 	c.itemCardMoved(a.Batch) // its rows, its items settled once all ran
 	if c.brainKept(a) {
@@ -762,7 +762,7 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 		case c.brainKept(a):
 			return nil // its card's no tells the brain (callsTold)
 		case a.Batch != 0:
-			c.itemCallDone(a, fmt.Sprintf("%s a refusé : %s n'est pas exécutée.", c.conf().User, name))
+			c.itemCallDone(a, fmt.Sprintf("%s a refusé : %s n'est pas exécutée.", c.conf().User, name), "")
 			return nil
 		}
 		c.callToBrain(a, fmt.Sprintf("%s a refusé sur la carte : %s n'est pas exécutée.", c.conf().User, name), "")

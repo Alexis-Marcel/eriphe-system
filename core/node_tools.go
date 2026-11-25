@@ -290,13 +290,34 @@ func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	out, err := c.readNodeFor(sum, in.Version, c.turn.taint)
+	out, err := c.readNodeFor(sum, in.Version, nodeReading{taint: c.turn.taint, archived: true})
 	if err != nil {
 		return nil, err
 	}
 	c.turnNode(sum.ID)
 	c.cardLookedUp(nodeRef(sum.ID)) // its card was not enough (card_use.go)
 	return out, nil
+}
+
+// nodeReading is who reads a node (readNodeFor): taint is called with
+// why when what it is given may be someone else's words; archived gives
+// its archived children too; most is the most children and backlinks it
+// is given, their count past it said (children_more, backlinks_more), 0
+// for all.
+type nodeReading struct {
+	taint    func(string)
+	archived bool
+	most     int
+}
+
+// cut keeps the first r.most of xs, and says in out under key how many
+// more there are.
+func (r nodeReading) cut(out map[string]any, key string, xs []nodestore.Summary) []nodestore.Summary {
+	if r.most <= 0 || len(xs) <= r.most {
+		return xs
+	}
+	out[key] = len(xs) - r.most
+	return xs[:r.most]
 }
 
 // readNodeFor is node_read, for the brain and a task alike: a node's
@@ -306,7 +327,8 @@ func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 // given: an external node, or one of its blocks or values, with
 // node:<id>; a tainted item note, with its taint. The titles around it
 // that may be someone else's words are not quoted.
-func (c *core) readNodeFor(sum nodestore.Summary, version int, taint func(string)) (map[string]any, error) {
+func (c *core) readNodeFor(sum nodestore.Summary, version int, r nodeReading) (map[string]any, error) {
+	taint := r.taint
 	id := sum.ID
 	d, err := c.nodes.Read(id, version)
 	if err != nil {
@@ -342,6 +364,7 @@ func (c *core) readNodeFor(sum nodestore.Summary, version int, taint func(string
 		out["maintained"] = ks // the skills that keep it up (node_home.go)
 	}
 	if back, err := c.nodes.Backlinks(id); err == nil && len(back) > 0 {
+		back = r.cut(out, "backlinks_more", back)
 		list := make([]nodeFound, 0, len(back))
 		for _, b := range c.withStatus(back) {
 			list = append(list, c.foundNode(b, false, homes)) // a title that may be someone else's words is not quoted
@@ -354,7 +377,12 @@ func (c *core) readNodeFor(sum nodestore.Summary, version int, taint func(string
 	if !m.Archived.IsZero() {
 		out["archived"] = m.Archived.Local().Format("2006-01-02 15:04")
 	}
-	if kids, err := c.nodes.Children(id); err == nil && len(kids) > 0 {
+	kids, _ := c.nodes.Children(id)
+	if !r.archived {
+		kids = slices.DeleteFunc(kids, func(k nodestore.Summary) bool { return !k.Archived.IsZero() })
+	}
+	if len(kids) > 0 {
+		kids = r.cut(out, "children_more", kids)
 		list := make([]nodeFound, 0, len(kids))
 		for _, k := range c.withStatus(kids) {
 			list = append(list, c.foundNode(k, false, homes))

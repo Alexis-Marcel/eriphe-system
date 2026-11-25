@@ -1315,7 +1315,9 @@ decided), and a run or a step that ends, or the node archived, drops its progres
   advance; it is not lent. **Its node is its work; the graph is its context** (#766): `node_read`
   reads any node of the graph, its own when it names none (as the brain's: a version, its hash,
   its body, its sources' last values, its parent, children, links and backlinks, its item notes,
-  the end of its trace; an archived node only with `archived`), and `node_find` finds nodes as the
+  the end of its trace; 50 children and 50 backlinks at most, `children_more` and
+  `backlinks_more` counting the rest; an archived node, and archived children, only with
+  `archived`), and `node_find` finds nodes as the
   brain's does (words, tags, properties, sort, columns; archived ones with `archived`; an external
   title or properties only with `include_external`). `node_write`
   (the whole body), `node_edit` (one block, or a piece of text found once) and `node_append` work
