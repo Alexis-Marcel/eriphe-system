@@ -141,8 +141,19 @@ func TestSkillRunBatches(t *testing.T) {
 	if len(c.taskTaint(task.ID)) == 0 {
 		t.Fatal("a run on external events is not tainted")
 	}
-	if c.taskSkill(task.ID) != "mails-rdv" {
-		t.Fatalf("a run follows %q: it may propose a version of its skill", c.taskSkill(task.ID))
+	// It follows its skill: a version it proposes keeps its trigger and
+	// what it uses, and is marked, the run being tainted.
+	if _, err := c.proposeTaskSkill(task.ID, skillProposeIn{Skill: "mails-rdv", Instructions: "Repère les rendez-vous, et leur lieu.", Why: "Le lieu manquait."}); err != nil {
+		t.Fatal(err)
+	}
+	k, _ := c.store.skill("mails-rdv")
+	v, err := c.store.skillVersion(k.Pending)
+	if err != nil || v.Manifest.When != "monitor.new" || v.Manifest.Trigger.Every != 15*time.Minute || len(v.Manifest.Uses.Tools) != 1 ||
+		v.Manifest.Body != "Repère les rendez-vous, et leur lieu." {
+		t.Fatalf("its proposal %+v %v", v, err)
+	}
+	if p := c.proposalOf(cardSkill, c.skillRowID("mails-rdv")); !p.Pending || p.Tainted == "" {
+		t.Fatalf("a tainted run's proposal %+v", p)
 	}
 	if len(c.turnTaint()) != 0 {
 		t.Fatal("the brain's turn was tainted")

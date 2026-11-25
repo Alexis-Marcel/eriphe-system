@@ -120,6 +120,14 @@ func TestTaskProposesItsSkill(t *testing.T) {
 		p.Fields[0].Value != "Il manquait le test qui reproduit le bug." {
 		t.Fatalf("card %+v", p)
 	}
+	var linked int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM node_cards WHERE node = ? AND ref = ?`, c.taskNode(task.ID), out["card"]).Scan(&linked)
+	if linked != 1 {
+		t.Fatal("the card is not raised for the task's node")
+	}
+	if x, err := c.cardsWhere(`ref = ? AND state = ?`, out["card"], cardPending); err != nil || len(x) != 1 {
+		t.Fatalf("its card: %v %v", x, err)
+	}
 	if text := waitEvent(t, c, "en propose une nouvelle version"); !strings.Contains(text, "« code »") {
 		t.Fatalf("the brain is told %q", text)
 	}
@@ -138,6 +146,14 @@ func TestTaskProposesItsSkill(t *testing.T) {
 	c.store.db.QueryRow(`SELECT COUNT(*) FROM skill_kept WHERE name = 'code' AND sha = ?`, before.Approved).Scan(&kept)
 	if kept != 1 {
 		t.Fatal("the version replaced is not kept")
+	}
+
+	// Settings → Skills says what it uses, in the list and on its page.
+	tw := newTestWebFor(t, c)
+	tw.setup()
+	for _, path := range []string{"/settings/skills", "/settings/skills/code"} {
+		_, body, _ := tw.do("GET", path, nil, nil)
+		hasAll(t, path, body, "Ce qu&#39;il emprunte", "l&#39;agent kimi", "les outils notes", "les dépôts example/app")
 	}
 }
 
