@@ -510,9 +510,14 @@ func (c *core) lentTo(grant []string) func(nodefile.Source) error {
 }
 
 // lentSource refuses a source the task could not read itself: a tool or
-// a server it is not lent, a monitor the user has not approved.
+// a server it is not lent, a monitor the user has not approved. node_find
+// over the graph is its own: a task reads the whole graph (#766), and a
+// block that quotes what may be someone else's words (include_external)
+// is external, as the brain's (untrustedSources).
 func (c *core) lentSource(src nodefile.Source, grant []string) error {
 	switch {
+	case src.Tool == nodeFindSource:
+		return checkNodeFindSource(src)
 	case src.Tool != "":
 		server, name, _ := strings.Cut(src.Tool, "/")
 		if server == "" || name == "" || providedServer(server) || !grantAllows(grant, server, name) {

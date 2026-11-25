@@ -12,6 +12,40 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// Only the brain is budgeted. The memory's extraction and a worker (a
+// skill's run among them) never reach eriphe-core's own tools, where the
+// budget is held: the relay refuses them. A task's own tools
+// (eriphe-nodes) are another server, never budgeted: a task writes as
+// much as its work needs.
+func TestBrainBudgetIsTheBrainsOnly(t *testing.T) {
+	c := nodeCore(t)
+	c.self = newMCPServer(c.core)
+	c.store.insertTask(&TaskRow{ID: "m-1", Kind: taskKindMemory, Device: "pc", Runtime: "claude-code", State: stateRunning})
+	c.store.insertTask(&TaskRow{ID: "w-1", Kind: "worker", Device: "pc", Runtime: "claude-code", State: stateRunning})
+	mux := http.NewServeMux()
+	mux.Handle("/v1/device/tasks/{id}/mcp/{server}", c.taskMCPHandler())
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	for _, task := range []string{"m-1", "w-1"} {
+		tr := &mcp.StreamableClientTransport{Endpoint: srv.URL + "/v1/device/tasks/" + task + "/mcp/" + selfServer,
+			HTTPClient: &http.Client{Transport: headerTransport{"Authorization": "Bearer device-secret", "Eriphe-Device": "pc"}}, MaxRetries: -1}
+		if cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(context.Background(), tr, nil); err == nil {
+			cs.Close()
+			t.Fatalf("task %s reached eriphe-core's own tools", task)
+		}
+	}
+	page := mustNode(t, c.core, nodestore.New{Title: "Mes mails", Body: "v0", Author: byBrain})
+	task, _ := startInNode(t, c, runRequest{Title: "Tri", Prompt: "Trie.", Node: page})
+	c.turn.start(1, 1, 0)
+	for i := range brainNodeWrites + 3 {
+		read := mustNodes(t, c.core, task.ID, "node_read", map[string]any{"id": page})
+		if _, msg := callNodes(t, c.core, task.ID, "node_edit", map[string]any{"id": page, "expect": read["hash"],
+			"old": "v" + strconv.Itoa(i), "new": "v" + strconv.Itoa(i+1)}); msg != "" {
+			t.Fatalf("a task's edit %d: %s", i+1, msg)
+		}
+	}
+}
+
 // Each of the brain's tools has its class in the budget: a tool added
 // without one would be counted as a change, unseen.
 func TestBrainBudgetClassifiesTools(t *testing.T) {

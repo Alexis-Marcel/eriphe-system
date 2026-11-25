@@ -1459,8 +1459,8 @@ a page: the brain composes each one from the catalog.
   a server's resource, or a monitor the user approved. `eriphe-core/node_find` is read by code from
   the graph itself (`node_find.go`), with node_find's arguments and trust: once a block reads it,
   any node's change reads these blocks again a second later (`nodesChanged`, `readServerSoon`); a
-  block whose source says `include_external` is external (`untrustedSources`). A task may not name
-  it (`lentSource`). A source new or changed is read at once,
+  block whose source says `include_external` is external (`untrustedSources`). A task may name it
+  too (`lentSource`): it reads the whole graph, and the same `include_external` rule marks its block. A source new or changed is read at once,
   then every `every` minutes (5 by default), at a resource's update, and a monitor's at each of its
   looks (`monitorLooked`). A read that fails or waits keeps the last good value, with why. The
   values stay in `node_reads`, never in the node's file: a read makes no version, however often it
@@ -2514,9 +2514,12 @@ time, scaled by the messages it brings, at most 3 times (`brainBudgetScale`), so
 three tasks' ends may update their three nodes. A card's follow-up (the user's Oui, or a yes in
 the conversation) fits in it: eriphe-core applies the card itself, and the brain says what came of
 it in its node and the parent, sets it done, withdraws a card or launches the next work. It is not
-kept: a restart starts a fresh one. Only the brain is held: a call relayed by its device for its
-task (eriphe-core marks each call it relays to its own server, `Eriphe-Brain-Call`) or made at `self_url` with its token. The owner's
-own MCP client with the API token, and tasks (on their own `eriphe-nodes`), are never counted.
+kept: a restart starts a fresh one. Only the brain is held: a call relayed by its device for a task of
+the brain's role (eriphe-core marks it, `Eriphe-Brain-Call`) or made at `self_url` with the assistant
+token, which only that role, the one that launches tasks, is given. The owner's own MCP client with
+the API token is never counted; the memory's extraction and workers, skills' runs among them, never
+reach eriphe-core's own tools (the relay refuses them), and a task's own `eriphe-nodes` is never
+budgeted (`TestBrainBudgetIsTheBrainsOnly`).
 
 It gets one turn per event: my messages (`POST /v1/messages {text}`) and what happens to its workers
 (a permission request, the end of a turn, a stop), several at once if they queued during a turn.

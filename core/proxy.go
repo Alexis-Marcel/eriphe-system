@@ -66,7 +66,9 @@ func (c *core) taskMCPHandler() http.Handler {
 				http.Error(w, "this task has no access to "+server, http.StatusForbidden)
 				return
 			}
-			r.Header.Set(brainCallHeader, "1") // the brain's calls: held to its budget (brain_budget.go)
+			if a.Role == assistantRoleBrain {
+				r.Header.Set(brainCallHeader, "1") // the brain's calls: held to its budget (brain_budget.go)
+			}
 			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, s)))
 			return
 		}

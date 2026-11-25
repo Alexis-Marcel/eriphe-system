@@ -1372,7 +1372,8 @@ func (sc *scenario) failedOnce() bool {
 // (one that comes after none) says where it is and waits for the scenario
 // to finish it; the first try of a plan fails, once in a run; then each
 // writes a short result that fits its title in its node (a plan of three
-// titles, the production's error, an analysis) and reports done.
+// titles, the production's error, an analysis) and, launched on a node,
+// in that node too (writeLaunchNode), then reports done.
 func (sc *scenario) liveWork(id string, t *TaskRow) {
 	first := false
 	for range 20 {
@@ -1414,7 +1415,53 @@ func (sc *scenario) liveWork(id string, t *TaskRow) {
 		hash, _ := out["hash"].(string)
 		sc.call(id, nodesServer, "node_write", map[string]any{"expect": hash, "body": body})
 	}
+	if !first && !sc.isStep(id) {
+		summary = sc.writeLaunchNode(id, t, body, summary)
+	}
 	sc.done(id, summary)
+}
+
+// isStep tells the task is a step of a node's work.
+func (sc *scenario) isStep(id string) bool {
+	var n int
+	sc.c.store.db.QueryRow(`SELECT COUNT(*) FROM node_steps WHERE task = ?`, id).Scan(&n)
+	return n > 0
+}
+
+// writeLaunchNode writes the result where a real task would (#776): in
+// the node run_task launched it on, the parent of its own node. Asked
+// shorter, the plan keeps its title 2; a page keeps its blocks as they
+// are (a block it changes needs its source lent) under a first line that
+// says what changed. It gives the summary the task reports.
+func (sc *scenario) writeLaunchNode(id string, t *TaskRow, result, summary string) string {
+	own, err := sc.c.nodes.Get(sc.c.taskNode(id))
+	if err != nil || own.Parent == "" {
+		return summary
+	}
+	d, err := sc.c.nodes.Read(own.Parent, 0)
+	if err != nil {
+		return summary
+	}
+	ask := strings.ToLower(t.Prompt)
+	head, _, _ := strings.Cut(strings.TrimSpace(result), "\n")
+	switch {
+	case strings.Contains(ask, "court"):
+		return sc.writeNode(id, own.Parent, d.Version.Hash, "1. Ce qui a changé en dix ans\n2. Ce qui vient\n", "Le plan en deux titres, le titre 2 gardé.")
+	case strings.Contains(ask, "expéditeur"):
+		head, summary = "Par expéditeur, le plus pressé en haut : Sam d'abord.", "La page regroupée par expéditeur."
+	case strings.Contains(ask, "journée") || strings.Contains(ask, "agenda") || strings.Contains(ask, "prévu"):
+		head, summary = "Aujourd'hui : le point produit à 11 h, le dentiste à 14 h 30.", "La journée écrite en tête de sa page."
+	}
+	return sc.writeNode(id, own.Parent, d.Version.Hash, head+"\n\n"+nodeBody(d.Raw), summary)
+}
+
+// writeNode is node_write on node as task id: the summary it reports, the
+// error said in it when the write is refused.
+func (sc *scenario) writeNode(id, node, hash, body, summary string) string {
+	if _, err := sc.call(id, nodesServer, "node_write", map[string]any{"id": node, "expect": hash, "body": body}); err != nil {
+		return summary + " (" + err.Error() + ")"
+	}
+	return summary
 }
 
 // failedReceipt ends a worker's turn with a receipt that says it is blocked.
