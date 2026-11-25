@@ -194,7 +194,7 @@ func durOf(t reportTurn) int64 {
 }
 
 // brainTurns are the brain's turns that ended since, oldest first, and the
-// length of the prompts its run_task calls wrote. A turn is a brain task's
+// length of what its run_task calls wrote (an ask, a prompt before). A turn is a brain task's
 // events after its previous turn_end, up to its own: its tool calls may be
 // older than since.
 func (s *Store) brainTurns(since time.Time) ([]reportTurn, []int64, error) {
@@ -245,7 +245,12 @@ func (s *Store) brainTurns(since time.Time) ([]reportTurn, []int64, error) {
 				if name == "run_task" {
 					cur.Launches++
 					in, _ := d["input"].(map[string]any)
-					p, _ := in["prompt"].(string)
+					// What the brain wrote to launch: its ask (#767); a
+					// call from before it wrote a whole prompt.
+					p, ok := in["ask"].(string)
+					if !ok {
+						p, _ = in["prompt"].(string)
+					}
 					curPrompts = append(curPrompts, int64(utf8.RuneCountInString(p)))
 				}
 				continue

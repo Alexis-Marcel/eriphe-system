@@ -296,13 +296,13 @@ func TestTaskStartCardOutsideTurn(t *testing.T) {
 // or pending with no device.
 func TestRunTaskTellsStartState(t *testing.T) {
 	c := startCore(t)
-	out, isErr := callBrainTool(t, c, "run_task", map[string]any{"title": "Lire le dépôt", "prompt": "Lis le README."})
+	out, isErr := callBrainTool(t, c, "run_task", map[string]any{"title": "Lire le dépôt", "ask": "Lis le README."})
 	st, _ := out["start_state"].(map[string]any)
 	if isErr || out["task"] == nil || st["start"] != "started" {
 		t.Fatalf("started now: %v", out)
 	}
 	// A second task says the same.
-	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Lire la doc", "prompt": "Lis la doc."})
+	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Lire la doc", "ask": "Lis la doc."})
 	st, _ = out["start_state"].(map[string]any)
 	if isErr || out["task"] == nil || st["start"] != "started" {
 		t.Fatalf("a step started now: %v", out)
@@ -326,7 +326,7 @@ func TestRunTaskTellsStartState(t *testing.T) {
 	}
 
 	c.store.setDeviceStatus("nas", false, nil)
-	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Résumer", "prompt": "Résume."})
+	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Résumer", "ask": "Résume."})
 	st, _ = out["start_state"].(map[string]any)
 	if isErr || st["start"] != "waits_for_device" || st["pending_reason"] == "" {
 		t.Fatalf("no device: %v", out)

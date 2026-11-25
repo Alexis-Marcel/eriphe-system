@@ -69,7 +69,7 @@ func reportFixture(t *testing.T, s *Store, now time.Time) {
 	task("m-1", "memory", "", now.Add(-day))
 	end("m-1", now.Add(-day), 500000, map[string]any{"output_tokens": 1})
 	task("a-1", "home", "", now.Add(-day))
-	tool("a-1", "mcp__eriphe-core__run_task", now.Add(-day), map[string]any{"prompt": "x"})
+	tool("a-1", "mcp__eriphe-core__run_task", now.Add(-day), map[string]any{"ask": "x"})
 	end("a-1", now.Add(-day), 500000, map[string]any{"output_tokens": 1})
 
 	// Worker tasks: a skill's run, another, and one before the window.

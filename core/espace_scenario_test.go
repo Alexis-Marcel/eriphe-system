@@ -961,7 +961,7 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 			keep("prod", id)
 			b.self("node_show", map[string]any{"id": id})
 		}
-		b.self("run_task", map[string]any{"title": "Recherche sur l'erreur", "prompt": "Cherche d'où vient l'erreur 500 de la prod.", "node": mail})
+		b.self("run_task", map[string]any{"title": "Recherche sur l'erreur", "ask": "Cherche d'où vient l'erreur 500 de la prod.", "node": mail})
 		_, hash := b.read(mail)
 		b.self("node_edit", map[string]any{"id": mail, "expect": hash, "old": "À écrire.", "new": "Je regarde dans l'heure."})
 		b.catalog("mail", "envoyer", map[string]any{"to": "sam@example.org", "body": "Je regarde dans l'heure."}, false)
@@ -1081,7 +1081,7 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		out := b.self("node_open", map[string]any{"title": "Recherche sur le télétravail", "parent": node, "aside": true, "goal": "Ce que disent les études"})
 		if id, _ := out["id"].(string); id != "" {
 			keep("wresearch", id)
-			b.self("run_task", map[string]any{"title": "Documentation sur le télétravail", "prompt": "Lis les études récentes sur le télétravail et résume-les.", "node": id})
+			b.self("run_task", map[string]any{"title": "Documentation sur le télétravail", "ask": "Lis les études récentes sur le télétravail et résume-les.", "node": id})
 		}
 		return "Je lance la recherche sur le côté."
 	case strings.Contains(said, "angle des managers"):

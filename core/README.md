@@ -707,7 +707,7 @@ whatever address it dials) and one client certificate per device.
 | `list_agents` | agents, when to use each, and whether a device can run them now |
 | `list_tools` | the tool catalog: servers, status, `use`, tools, which need the user to connect them |
 | `list_devices` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
-| `run_task` | start a task: title (what the user reads; else its contract's objective, else the prompt's first line), prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), device (or let the scheduler choose), an optional [contract](#contracts-contractgo), `node` (its own node is a child of that node, else of the turn's node, else at the top) |
+| `run_task` | start a task with a node, a skill and a short ask (`task_launch.go`): `ask` (one or two sentences, 1,000 characters at most: the user's request as said, or « move this node forward »; the brain never copies the node into it), `skill` (optional: one of the user's active skills, its method given to the task, its tools, repository and model the defaults; [skills](#skills)), title (what the user reads; else its contract's objective, else the ask's first line), [resources](#resources) (a repository, the user's folders, catalog tools; given, they replace the skill's), agent (or the skill's model, or the default), device (or let the scheduler choose), an optional [contract](#contracts-contractgo), `node` (its own node is a child of that node, else of the turn's node, else at the top). Code builds the task's first prompt: the ask, the skill's method, [its surroundings](#a-tasks-node-task_nodego-task_nodesgo), then the start card of its node; the standing worker instructions are its system prompt. The task's kept prompt is the ask; with a skill, the result says what is lent (`lent`) |
 | `list_repos` | the GitHub repositories the app's connections reach: `repo`, its `cases` (`read`, `change`, `delete`, `send`: `free`, `approval` or `never`) and `own_rules` when it has cases of its own (listed first); a task is lent only one of these |
 | `list_folders` | the user's folders: name, machine (online or not), access (`read` or `write`, as shared on its machine), `rights` (`read`, `change`: free, approval or never), `copyable`, where a task finds it, and `machines`: every machine holding it (its own, then its copies), each `online` and `up_to_date` or not; a task may run on any up to date |
 | `list_skills` | the user's [skills](#skills), approved and on: name, description, files, whether it has scripts |
@@ -896,8 +896,9 @@ least that share of the values at or below it) and `max`.
   (`node_write`, `propose_view`, `write_skill`, `item_note`…) show here;
 - `launches.turns`: the turns that called `run_task`, with their `duration_ms` and
   `output_tokens`; `launches.run_task_calls`: those calls (a call, not a started task: it may be
-  refused or wait for a card); `launches.brain_prompt_chars`: the length of the prompts they
-  wrote, in characters; `launches.skill_runs`: the worker tasks started in the window by a skill
+  refused or wait for a card); `launches.brain_prompt_chars`: the length of what they wrote to
+  launch, in characters: their `ask` since #767, their `prompt` for a call made before (the key
+  keeps its name, so a window across the change compares both); `launches.skill_runs`: the worker tasks started in the window by a skill
   (`skill_runs`), `launches.skill_prompt_chars` their prompt's length; `launches.other_tasks`: the
   other worker tasks started in the window (the brain's, a node's steps');
 - `reads.tasks`: the worker tasks started in the window; `reads.tasks_reading`: those that called
@@ -1291,7 +1292,7 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
 
 Every worker task works in a node of its own (#629). `run_task` takes `node`: the task's node is
 opened as a child of it, else, for the brain's `run_task`, of its turn's node (one archived is passed over), else at the top (an unknown or archived node named refuses the start). The node
-is titled as the task, its goal its contract's objective or its prompt's first line, `external`
+is titled as the task, its goal its contract's objective or its prompt's (a launch's ask's) first line, `external`
 when the task starts on a tainted turn. Code keeps which task works in which node (`task_nodes`).
 
 **A node's status** (`node_status.go`) is computed each time it is read, never stored: the graph,
@@ -1340,8 +1341,12 @@ decided), and a run or a step that ends, or the node archived, drops its progres
   task with a node, after what it is asked, its node's place in the graph under a fixed heading:
   its node (id, status, title, goal), its ancestors, the nearest first (8 at most), and an index of
   its children, links and backlinks (id, status, title, goal; archived ones left out), within
-  6,000 characters (about 2,000 tokens), each index ending in « … n more » when it is cut. A
-  skill's run gets its home node's, a step its own. Nothing about the user, no memory: the task
+  6,000 characters (about 2,000 tokens), each index ending in « … n more » when it is cut. A task
+  in a node of its own (the brain's, a work's final task) gets, within the same cap, the node it
+  works for's other children (« Beside it, under <id>, the node it works for ») and that node's
+  links (« <id> links to »): the subject it works for. A skill's run gets its home node's, a step
+  its own, without those. The task's start card (its about card, below) then leaves out the line
+  of a node its surroundings give, its own or an ancestor (`aroundHolds`): one place for it. Nothing about the user, no memory: the task
   reads more with `node_read` and `node_find`. No one else's words in it: a title that may be
   (written after an external read) is named, not quoted, and an external node's goal is left out,
   as `node_find` gives them. It goes in the device's spec only, never in the task's kept prompt
@@ -1937,6 +1942,16 @@ on someone else's repository, where every skill is off.
 text (not their scripts), and a skill's scripts run in a task. Nothing of a skill enters the brain's
 privileged, long-lived container, whatever its runtime. A skill is the user's own, approved by them:
 reading one does not taint the turn.
+
+**A task launched with a skill** (`run_task`'s `skill`, `task_launch.go`): the brain names one of
+the user's active skills (approved and on), and code gives the task its method after its ask:
+« [Your method: the user's skill « name », approved by them …] », then the skill's name,
+description and `SKILL.md` body, as a skill's run gets them (`skillMethod`). A triggered skill's
+declared `tools`, single repository (read) and `model` are the launch's defaults: `resources` named
+by the call replace them, an `agent` named wins over the model. A skill that declares several
+repositories lends none by default: the call names the one. An unknown, unapproved or disabled
+skill is refused with the active ones' names. Rights do not move: what the task is lent goes
+through its start card as any launch of the brain's (no `approvedInAdvance`, no clean start).
 
 ## GitHub in a task
 
@@ -4931,7 +4946,7 @@ ref (which record: `intention:12`, `skill:<name>`).
   it is now: the session's cards are kept by hash (`AssistantStatus.Cards`, like the profile), set
   to the pack's on a fresh session and to the cards given since. To a fresh session's context
   pack, one per node running or waiting. To a worker task's first prompt, after what it is asked (its shown
-  prompt unchanged). A brain on a self-hosted model gets
+  prompt unchanged), without the line of a node its surroundings already give (`startCard`). A brain on a self-hosted model gets
   600-character cards. Each card pushed is logged: `card <about> → <place> [<task id>]:
   <chars>, <lines>, <left out>`.
 - **Cards measured** (`card_use.go`): each card pushed is counted in `card_pushes` (about, place:

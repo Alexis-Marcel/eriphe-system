@@ -82,7 +82,7 @@ func TestRunTaskUnderTurnNode(t *testing.T) {
 	ctx := context.Background()
 	run := func() nodestore.Summary {
 		t.Helper()
-		out, err := c.brainRunTask(ctx, runRequest{Title: "Recherche", Prompt: "Cherche."})
+		out, err := c.brainRunTask(ctx, launchRequest{Title: "Recherche", Ask: "Cherche."})
 		if err != nil {
 			t.Fatal(err)
 		}

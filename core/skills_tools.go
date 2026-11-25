@@ -21,7 +21,7 @@ import (
 const maxSkillRead = 64 << 10
 
 func registerSkillTools(s *mcp.Server, c *core) {
-	tool(s, "list_skills", "The user's skills: instructions (and maybe scripts) the user approved in Settings → Skills. Each has a name, a description saying when it applies, its files, and whether it has scripts. Read one with read_skill before following it. Every worker task has them too, at "+skillsDir+"/<name>: to run a skill's scripts, start a task.",
+	tool(s, "list_skills", "The user's skills: instructions (and maybe scripts) the user approved in Settings → Skills. Each has a name, a description saying when it applies, its files, and whether it has scripts. A task follows one when launched with it (run_task skill); read_skill reads it. Every worker task has them too, at "+skillsDir+"/<name>: a skill's scripts run in a task.",
 		func(ctx context.Context, _ struct{}) (map[string]any, error) {
 			type entry struct {
 				Name        string   `json:"name"`
