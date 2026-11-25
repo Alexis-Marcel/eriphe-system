@@ -394,12 +394,10 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 	// 12b. Rework the page (#770): the brain orchestrates. It launches a
 	// task on the page in a short turn and answers in a line, rewriting
 	// nothing itself; its budget would refuse a whole page.
-	if view != "" {
-		b.say("Refais cette page : regroupe les mails par expéditeur, le plus pressé en haut.", view, turnNoNode)
-		b.scoreRework(view)
-	} else {
-		b.s.set("rework: task launched on the page", "no view", false)
-	}
+	// Said on the view made just before, else on the seed's mails page.
+	rework := cmpOr(view, sc.nodes["mails"])
+	b.say("Refais cette page : regroupe les mails par expéditeur, le plus pressé en haut.", rework, turnNoNode)
+	b.scoreRework(rework)
 
 	// 13. The day asked to be followed, at the home, as on a fresh install
 	// (the seed's day page archived first): its subject opens first, then

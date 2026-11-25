@@ -846,10 +846,41 @@ type brainPlay struct {
 func (b *brainPlay) self(tool string, args map[string]any) map[string]any {
 	b.evs = append(b.evs, EventRow{Type: "tool_use", Data: map[string]any{"name": "mcp__" + selfServer + "__" + tool, "input": args}})
 	out, err := b.sc.call(b.task, selfServer, tool, args)
+	if err != nil && strings.Contains(err.Error(), ": Refused") {
+		// The brain's budget refused a heavy write (brain_budget.go): the
+		// brain would launch a task that writes it. The scripted brain
+		// stands in for that task, which works outside the budget.
+		out, err = b.sc.asTask(tool, args)
+	}
 	if err != nil {
 		log.Printf("scenario: brain %s: %v", tool, err)
 	}
 	return out
+}
+
+// asTask makes a call the brain's budget refused, as the task it would
+// launch: on eriphe-core's own tools, not as the brain (not budgeted).
+func (sc *scenario) asTask(tool string, args map[string]any) (map[string]any, error) {
+	ct, st := mcp.NewInMemoryTransports()
+	if _, err := sc.c.self.Connect(sc.ctx, st, nil); err != nil {
+		return nil, err
+	}
+	sess, err := mcp.NewClient(&mcp.Implementation{Name: "task"}, nil).Connect(sc.ctx, ct, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer sess.Close()
+	res, err := sess.CallTool(sc.ctx, &mcp.CallToolParams{Name: tool, Arguments: args})
+	if err != nil {
+		return nil, err
+	}
+	if res.IsError {
+		return nil, fmt.Errorf("%s: %s", tool, resultText(res))
+	}
+	var out map[string]any
+	raw, _ := json.Marshal(res.StructuredContent)
+	json.Unmarshal(raw, &out)
+	return out, nil
 }
 
 // catalog calls a tool of the catalog. A read the brain reads freely
