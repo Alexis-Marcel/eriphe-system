@@ -906,6 +906,14 @@ least that share of the values at or below it) and `max`.
   `node_read` or `node_find`; `reads.calls`: those calls per task (all the window's tasks, zeros
   included); `reads.by_others`: per task, its `node_read` calls that name a node other than its
   own (`input.id`, against `task_nodes`; all the window's tasks, zeros included);
+- `delegated.tasks`: the tasks the brain's `run_task` started in the window (recorded at launch in
+  `task_launches`, with the user's message the launching turn answered: a task launched before #771
+  is not counted); `delegated.ended`: those that ended, at their first `turn_end`, else their first
+  stop, failure or loss (`task_log`, else the task's row for one stopped before a device took it);
+  `delegated.from_message_ms`: for those that ended and whose
+  turn answered a message of the user's (one launched in a turn of events only is counted, not
+  timed), the time from that message to their end, in whole seconds, the wait on a start card
+  included. Brain turns get short when the brain delegates; this says when the answer comes;
 - `turn_list`: every turn of the window, the longest first (unmeasured ones last): its `task`,
   `seq` (its `turn_end`'s), `at`, `duration_ms`, `output_tokens`, `context_tokens`, `tools` (its
   calls by name) and `launches` (its `run_task` calls).
@@ -2528,14 +2536,31 @@ resume that keeps failing is dropped for a fresh session.
 
 eriphe-core, not the harness, holds the conversation: the harness session (`--resume`) is only a cache.
 Each resumed call reads the whole history, and a cache left for over an hour is written again in
-full: a new brain task resumes its session only while its last turn's context was under 150,000
+full: a new brain task resumes its session only while its last turn's context was under 100,000
 tokens per call and, above 60,000 tokens, that turn ended less than 55 minutes ago
-(`brainResumeTokens`, `brainResumeIdle`, `brainResumeIdleFloor`; the role card's `ResumeTokens`,
+(`brainSessionTokens`, `brainResumeIdle`, `brainResumeIdleFloor`; the role card's `SessionTokens`,
 `ResumeIdle` and `ResumeIdleFloor`): a smaller session costs little to write again and holds more
 than the pack. The measure is the session's
 last `turn_end`, whichever task ran it: its `usage.context_tokens` (the device's, Claude Code's last
 call), or else the turn's input, cache reads and writes. Past either bound, the task starts a fresh
-session. A fresh session (the first one, a dropped resume, a session past its bounds, a resume the
+session.
+
+A running session is bounded too, by the same 100,000 tokens: on the owner's install a brain session
+grew from ~42,000 tokens per call to ~372,000, median 124,000, each turn reading the whole history
+again, while the graph holds the state. At 100,000 a session that starts near 42,000 keeps more than
+half the bound as history, and a fresh start costs one short turn. Once a session's last turn is past
+the bound, with at least half the bound as history (its last turn's context less its first's, so a
+session that starts near the bound is not restarted after each turn), the controller stops its task
+at its next idle (`refreshIfOutgrown`, the status's `refresh`) and the next task starts a fresh
+session, never the old one resumed, though the status and the last task row still name it. Only the
+exact measure counts (`usage.context_tokens`): a sum over a turn's calls errs high. Nothing is cut:
+not before the start turn is answered nor while a delivery waits on the device; nothing is
+delivered to the session that ends, so the waiting messages go to the fresh one at its first idle;
+the cards waiting for the user stay (a call the old task asked for is still the brain's); the turn
+goes on with its taint, as after a resume, until the user's next message; the budget is per
+delivery anyway.
+
+A fresh session (the first one, a dropped resume, a session past its bounds, a resume the
 device could not do, another harness) gets a context pack in its first turn, never in its system prompt,
 within about 16,000 tokens (`brain_context.go`). The state of things comes first, in at most half of
 it: the card of each node running or waiting, up to 20 (`about_card.go`: its line says its
@@ -3618,7 +3643,7 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
 - `GET /api/archives`: what the user archived, the latest first (`nodestore.Archives`): each node
   archived with no parent archived with it, a row as below with `archived` (when) and `with` (how
   many nodes below it went with it).
-- `GET /api/report/turns[?days=n]`: the brain's turns and how tasks are launched (`turn_report.go`,
+- `GET /api/report/turns[?days=n]`: the brain's turns, how tasks are launched and when delegated work ends (`turn_report.go`,
   see [Usage and measures](#usage-and-measures-task_statsgo)).
 - A node's row (`graphNode`), in the page and the stream: `id`, `title`, `titleExternal` (its
   title may be someone else's words, written on an external node and not `title_trusted`: the

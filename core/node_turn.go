@@ -444,6 +444,7 @@ func (c *core) brainRunTask(ctx context.Context, launch launchRequest) (map[stri
 	if err != nil {
 		return nil, err
 	}
+	c.recordLaunch(t.ID)                                                                  // for the turn report (turn_report.go)
 	out := map[string]any{"task": t.ID, "state": t.State, "start_state": c.startState(t)} // task_start.go
 	if node := c.taskNode(t.ID); node != "" {
 		out["node"] = node

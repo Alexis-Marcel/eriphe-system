@@ -60,6 +60,20 @@ func (s *Store) lastSessionTurn(session string) (at time.Time, tokens int64, ok 
 	return time.Unix(when, 0), tokens, true
 }
 
+// sessionContext is a harness session's context per call at its first
+// turn and at its last (whichever tasks ran them), by the device's exact
+// measure only (usage.context_tokens); ok false without one.
+func (s *Store) sessionContext(session string) (first, last int64, ok bool) {
+	q := `SELECT json_extract(e.data, '$.usage.context_tokens') FROM events e JOIN tasks t ON t.id = e.task_id
+		WHERE t.session_id = ? AND e.type = 'turn_end' AND json_extract(e.data, '$.usage.context_tokens') IS NOT NULL
+		ORDER BY e.time %[1]s, e.seq %[1]s LIMIT 1`
+	if s.db.QueryRow(fmt.Sprintf(q, "ASC"), session).Scan(&first) != nil ||
+		s.db.QueryRow(fmt.Sprintf(q, "DESC"), session).Scan(&last) != nil {
+		return 0, 0, false
+	}
+	return first, last, true
+}
+
 // taskStats are the measures over the last statsDays.
 type taskStats struct {
 	Finished  int // worker tasks that ended

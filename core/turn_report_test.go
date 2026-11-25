@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -203,5 +204,102 @@ func TestTurnReportRoute(t *testing.T) {
 		if code, _, _ := tw.do("GET", "/api/report/turns?days="+q, nil, nil); code != http.StatusBadRequest {
 			t.Errorf("days=%s: %d", q, code)
 		}
+	}
+}
+
+// The delegated work: the tasks the brain's run_task started in the
+// window, how many ended (a first turn_end, else a stop, failure or loss),
+// and the time from the user's message their turn answered to that end.
+func TestTurnReportDelegated(t *testing.T) {
+	tw := newTestWeb(t)
+	s := tw.c.store
+	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
+	exec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := s.db.Exec(q, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	msg := func(seq int, at time.Time) {
+		exec(`INSERT INTO messages (seq, time, role, text, delivered) VALUES (?, ?, ?, 'x', 1)`, seq, at.Unix(), roleUser)
+	}
+	launched := func(id string, created time.Time, msg int) {
+		exec(`INSERT INTO tasks (id, device, runtime, dir, prompt, state, kind, created, updated)
+			VALUES (?, 'd', 'claude-code', '/w', 'x', 'idle', 'worker', ?, ?)`, id, created.Unix(), now.Unix())
+		if msg >= 0 {
+			exec(`INSERT INTO task_launches (task, msg) VALUES (?, ?)`, id, msg)
+		}
+	}
+	turnEnd := func(id string, seq int, at time.Time) {
+		exec(`INSERT INTO events (task_id, seq, time, type, data) VALUES (?, ?, ?, 'turn_end', '{}')`, id, seq, at.Unix())
+	}
+	logged := func(id, state string, at time.Time) {
+		exec(`INSERT INTO task_log (task_id, at, state) VALUES (?, ?, ?)`, id, at.Unix(), state)
+	}
+	// Ended by its first turn: 60 s after the message.
+	t1 := now.Add(-2 * day)
+	msg(1, t1.Add(-10*time.Second))
+	launched("d-1", t1, 1)
+	turnEnd("d-1", 1, t1.Add(50*time.Second))
+	turnEnd("d-1", 2, t1.Add(time.Hour))
+	// Stopped before a turn ended: 120 s.
+	t2 := now.Add(-day)
+	msg(2, t2)
+	launched("d-2", t2, 2)
+	logged("d-2", stateRunning, t2.Add(5*time.Second))
+	logged("d-2", stateStopped, t2.Add(120*time.Second))
+	// Launched in a turn of events: counted, not timed.
+	launched("d-3", t2, 0)
+	turnEnd("d-3", 1, t2.Add(time.Minute))
+	// Still at work: counted, not ended.
+	launched("d-4", t2, 2)
+	// Before the window, and a task the brain's run_task did not start.
+	launched("d-5", now.Add(-10*day), 2)
+	turnEnd("d-5", 1, now.Add(-9*day))
+	launched("w-1", t2, -1)
+	turnEnd("w-1", 1, t2.Add(time.Second))
+	// Stopped before a device took it: no task_log, its row says when.
+	launched("d-6", t2, 2)
+	exec(`UPDATE tasks SET state = ? WHERE id = 'd-6'`, statePending)
+	if err := tw.c.stop(context.Background(), "d-6"); err != nil {
+		t.Fatal(err)
+	}
+	exec(`UPDATE tasks SET updated = ? WHERE id = 'd-6'`, t2.Add(90*time.Second).Unix())
+
+	rep, err := s.turnReport(now.Add(-7*day), 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := rep.Delegated
+	if d.Tasks != 5 || d.Ended != 4 || d.FromMessageMS != (spread{N: 3, Median: 90000, P75: 120000, P90: 120000, Max: 120000}) {
+		t.Errorf("delegated: %+v", d)
+	}
+}
+
+// run_task records the message of the user's its turn answers; a turn of
+// events only records none.
+func TestRunTaskRecordsLaunch(t *testing.T) {
+	c := nodeCore(t)
+	seq := say(t, c.core, roleUser, "Cherche un hôtel", true)
+	launch := func() int {
+		t.Helper()
+		out, err := c.brainRunTask(context.Background(), launchRequest{Title: "Recherche", Ask: "Cherche."})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var msg int
+		if err := c.store.db.QueryRow(`SELECT msg FROM task_launches WHERE task = ?`, out["task"]).Scan(&msg); err != nil {
+			t.Fatal(err)
+		}
+		return msg
+	}
+	c.turn.start(seq, seq, 0)
+	if msg := launch(); msg != seq {
+		t.Errorf("a user's turn: msg %d, want %d", msg, seq)
+	}
+	c.turn.goOn(0, 0, 0, nil)
+	if msg := launch(); msg != 0 {
+		t.Errorf("a turn of events: msg %d", msg)
 	}
 }
