@@ -17,7 +17,7 @@ import (
 // A worker task works in a node of its own (#629): code opens it when the
 // task starts, a child of the node run_task names (node), else of the
 // brain's turn's node, else at the top. The task writes it as it goes with eriphe-nodes (task_nodes.go),
-// on its own node only. Its node's status follows it (node_status.go):
+// and where else it works (task_write.go). Its node's status follows it (node_status.go):
 // running while it works, waiting while it is held for its card or for a
 // permission, idle once its turn ended or it ended.
 //

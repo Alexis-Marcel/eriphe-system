@@ -78,7 +78,7 @@ func startInNode(t *testing.T, c *catalogCore, r runRequest) (*TaskRow, string) 
 
 // A task works in a node of its own, a child of the node run_task names,
 // running while it runs; it writes it as it goes (versions, trace
-// entries), on the version it read; it writes no other node.
+// entries), on the version it read.
 func TestTaskWritesItsNode(t *testing.T) {
 	c := nodeCore(t)
 	parent, err := c.nodes.Create(nodestore.New{Title: "Substack", Author: "brain"})
@@ -121,33 +121,15 @@ func TestTaskWritesItsNode(t *testing.T) {
 	if trace, _ := c.nodes.Trace(id); !strings.Contains(string(trace), "Dix articles lus sur dix.") {
 		t.Fatalf("trace:\n%s", trace)
 	}
-	// It reads the graph, its parent too; it writes its own node only: any
-	// other is refused, by name.
+	// It reads the graph, its parent too (where else it writes:
+	// task_write_test.go).
 	if p := mustNodes(t, c.core, task.ID, "node_read", map[string]any{"id": pid}); p["title"] != "Substack" {
 		t.Fatalf("its parent read: %v", p)
 	}
-	for _, call := range []struct {
-		name string
-		args map[string]any
-	}{
-		{"node_write", map[string]any{"id": pid, "body": "x", "expect": parent.Version.Hash}},
-		{"node_append", map[string]any{"id": pid, "text": "x"}},
-		{"node_edit", map[string]any{"id": pid, "expect": parent.Version.Hash, "old": "a", "new": "b"}},
-	} {
-		if _, err := callNodes(t, c.core, task.ID, call.name, call.args); !strings.Contains(err, "your own node "+id) || !strings.Contains(err, pid) {
-			t.Errorf("%s on its parent: %q", call.name, err)
-		}
-	}
-	if p, _ := c.nodes.Read(pid, 0); p.Version.N != 1 {
-		t.Fatal("its parent was written")
-	}
-	// A child of its node, which it does not write.
+	// A child of its node, under it.
 	kid := mustNodes(t, c.core, task.ID, "node_open", map[string]any{"title": "Plan", "goal": "Un plan d'article.", "body": "À faire."})
 	if k, _ := c.nodes.Get(kid["id"].(string)); k.Parent != id {
 		t.Fatalf("child %+v", k)
-	}
-	if _, err := callNodes(t, c.core, task.ID, "node_write", map[string]any{"id": kid["id"], "body": "x", "expect": "x"}); err == "" {
-		t.Fatal("a task wrote its child")
 	}
 	// Its status follows the task's: stopped, it is idle, not done (only
 	// the user says a node is done).

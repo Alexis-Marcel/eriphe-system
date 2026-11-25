@@ -319,7 +319,10 @@ Long or heavy work (a research, code to change, a page to capture) runs as a **t
 eriphe-device, listed in Settings → Devices. A task works in a bubble of its own under the page you
 asked from: it writes there as it goes, says where it is under the bubble's name, and keeps its full
 report in the page's **Trace**. It starts knowing where its bubble sits (the pages above it, below
-it and linked to it) and reads any other page it needs; it writes only its own. A page that may
+it and linked to it) and reads any other page it needs. It writes where it works: its bubble and
+what is under it, the page you asked from, and the pages someone else linked to or from these (a
+link the task wrote itself does not count); never an archived page, and it never marks a page done
+or archives it. Anywhere else it says what it found in its bubble, or asks. A page that may
 hold someone else's words, read by a task, makes what it writes marked as such, as when Eriphe
 reads it. A task that captures a web page (most sites cannot be shown inside
 another page) keeps the image in its bubble.
