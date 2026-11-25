@@ -97,6 +97,7 @@ var benchMetrics = []struct{ key, want string }{
 	{"duplicate nodes", "0"},
 	{"refused writes: grammar, catalog", "≤ 1"},
 	{"refused writes: taint, stale", "-"},
+	{"refused by the budget", "-"},
 	{"view valid", "yes"},
 	{"user turns", "≤ 15"},
 	{"brain turns", "-"},
@@ -127,6 +128,9 @@ var benchMetrics = []struct{ key, want string }{
 	{"watch: no questionnaire", "yes"},
 	{"watch: changes offered (ask)", "-"},
 	{"view approved", "yes"},
+	{"rework: task launched on the page", "yes"},
+	{"rework: brain's own writes", "≤ 1"},
+	{"rework: answered in (s)", "≤ 20"},
 	{"view: bilan lead", "yes"},
 	{"view: items, sections", "yes"},
 	{"view: batch", "yes"},
@@ -301,9 +305,9 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 	b.say("Qu'est-ce que j'ai de prévu aujourd'hui ?", substack, turnNoNode)
 	b.s.yes("turn_home on the agenda", b.called("turn_home"), "not called")
 	shown, _ := sc.c.lastShown()
-	b.s.yes("agenda: day page written, shown", b.version(day) > v && shown.Node == day,
+	b.s.yes("agenda: day page written, shown", (b.version(day) > v || b.launchedOn(day)) && shown.Node == day,
 		fmt.Sprintf("version %d → %d, shown %q", v, b.version(day), shown.Node))
-	if b.version(day) == v {
+	if b.version(day) == v && !b.launchedOn(day) {
 		b.lost("agenda: « Ma journée » not written")
 	}
 
@@ -340,8 +344,9 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 	} else {
 		v := b.version(plan)
 		b.say("Plus court, et garde le titre 2.", plan, turnNoNode)
-		b.s.yes("plus court: new version", b.version(plan) > v, "")
-		if b.version(plan) == v {
+		// A new version, written or asked of a task on the plan.
+		b.s.yes("plus court: new version", b.version(plan) > v || b.launchedOn(plan), "")
+		if b.version(plan) == v && !b.launchedOn(plan) {
 			b.lost("plus court: no new version of the plan")
 		}
 		b.say("Ce plan me va.", plan, turnNoNode)
@@ -385,6 +390,16 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 	b.s.yes("view approved", view != "", "no view approved")
 	b.scoreView(view)
 	b.runSkill(view)
+
+	// 12b. Rework the page (#770): the brain orchestrates. It launches a
+	// task on the page in a short turn and answers in a line, rewriting
+	// nothing itself; its budget would refuse a whole page.
+	if view != "" {
+		b.say("Refais cette page : regroupe les mails par expéditeur, le plus pressé en haut.", view, turnNoNode)
+		b.scoreRework(view)
+	} else {
+		b.s.set("rework: task launched on the page", "no view", false)
+	}
 
 	// 13. The day asked to be followed, at the home, as on a fresh install
 	// (the seed's day page archived first): its subject opens first, then
@@ -527,6 +542,42 @@ func (b *bench) turnCalls(n int) []liveCall {
 // called tells the last turn called tool.
 func (b *bench) called(tool string) bool {
 	return slices.ContainsFunc(b.turnCalls(b.turn), func(x liveCall) bool { return x.tool == tool })
+}
+
+// launchedOn tells the last turn launched a task for node: run_task on it
+// or under it, or on the turn's node when it names none.
+func (b *bench) launchedOn(node string) bool {
+	return slices.ContainsFunc(b.turnCalls(b.turn), func(x liveCall) bool {
+		if x.tool != "run_task" || x.err != "" {
+			return false
+		}
+		on, _ := x.args["node"].(string)
+		if on == "" {
+			on = cmpOr(x.talk, x.about)
+		}
+		return on != "" && b.under(on, node)
+	})
+}
+
+// scoreRework scores « rework this page » said on it: a task launched on
+// it, the brain's own writes one at most, its answer within 20 s (to the
+// second the conversation keeps).
+func (b *bench) scoreRework(page string) {
+	writes := 0
+	for _, x := range b.turnCalls(b.turn) {
+		if x.err == "" && (x.tool == "node_write" || x.tool == "node_edit" || x.tool == "item_note") {
+			writes++
+		}
+	}
+	b.s.yes("rework: task launched on the page", b.launchedOn(page), "no run_task on the page")
+	b.s.set("rework: brain's own writes", strconv.Itoa(writes), writes <= 1)
+	answered := "-"
+	ok := false
+	if msgs, _ := b.sc.c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ? AND seq > (SELECT MAX(seq) FROM messages WHERE role = ?) ORDER BY seq LIMIT 1`, roleBrain, roleUser); len(msgs) > 0 {
+		took := msgs[0].Time.Sub(b.saidAt)
+		answered, ok = fmt.Sprintf("%.1f", took.Seconds()), took <= 20*time.Second
+	}
+	b.s.set("rework: answered in (s)", answered, ok)
 }
 
 // readAny tells the last turn read one of ids.
@@ -1213,11 +1264,16 @@ func (b *bench) filed() {
 func (b *bench) scoreCalls(record string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	grammar, other := 0, 0
+	grammar, other, budget := 0, 0, 0
 	var recorded []replayCall
 	for _, x := range b.calls {
 		if x.recorded != nil {
 			recorded = append(recorded, *x.recorded)
+		}
+		if strings.HasPrefix(x.err, "Refused") {
+			budget++ // the brain's budget (brain_budget.go), any tool
+			b.s.note(fmt.Sprintf("refused by the budget, turn %d, %s: %s", x.turn, x.tool, truncate(x.err, 120)))
+			continue
 		}
 		if x.err == "" || !slices.Contains(benchWrites, x.tool) {
 			continue
@@ -1232,6 +1288,7 @@ func (b *bench) scoreCalls(record string) {
 	b.s.grammar = grammar
 	b.s.set("refused writes: grammar, catalog", strconv.Itoa(grammar), grammar <= 1)
 	b.s.set("refused writes: taint, stale", strconv.Itoa(other), true)
+	b.s.set("refused by the budget", strconv.Itoa(budget), true)
 	if record == "" {
 		return
 	}

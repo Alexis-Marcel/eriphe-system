@@ -719,7 +719,7 @@ whatever address it dials) and one client certificate per device.
 | `withdraw_proposal` | withdraw a card the brain made that still waits and the work made obsolete (`ref`): nothing of it runs, nothing is decided for the user; never a task's own ask or start ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
 | `catalog_read`, `sources_read` | the whole grammar of a node's block (components, sources, items, sections, glance) and what a block may read ([The catalog tools](#the-catalog-tools-node_cataloggo)) |
-| `node_open` | open a work node, for a new subject the brain's first call, before any read (a short title, a one-line « En cours : … » body, filled as the work goes): `title`, `parent` (a child of that node), `goal` (required: one line, what it is for, which guides what is written in it; `node_find` and the brain's node list give it), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); its `title` a short name of what it is about, never the user's sentence; written in a tainted turn, the node is external and its title marked; asked for a page, the brain writes it here at once, no card (a skill may then maintain it: [Live pages](#live-pages-node_livego-node_homego)); the same `openNode` as a task's `node_open`; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
+| `node_open` | open a work node, for a new subject the brain's first call, before any read (a short title, a one-line « En cours : … » body, filled as the work goes): `title`, `parent` (a child of that node), `goal` (required: one line, what it is for, which guides what is written in it; `node_find` and the brain's node list give it), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); its `title` a short name of what it is about, never the user's sentence; written in a tainted turn, the node is external and its title marked; asked for a page, the brain opens it here, no card, and launches the task that composes it (a skill may then maintain it: [Live pages](#live-pages-node_livego-node_homego)); its text held to 800 runes in a brain turn ([The brain's budget](#the-brains-budget-brain_budgetgo)); the same `openNode` as a task's `node_open`; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_find` | find nodes by words of their title, goal, text or blocks (any word of three letters or more is enough, the nodes that hold the most first), each with its `status`, `goal` (one line; an external node's only with `include_external`, as its columns) and `maintained` (the skills that maintain it); and/or by their `tags` (each, or one below it) and properties (`where`: `{key, op, value}`, `op` one of `=`, `!=`, `<`, `<=`, `>`, `>=`, `exists`, `missing`; a number compares as a number, a date as a date, a text without case; `=` on a list holds when one value is equal), sorted (`sort` a property, `title`, `created` or `changed`; `desc`), the properties asked (`columns`) written beside each node's fields, `limit` (30, 200 at most); with neither words nor filters, those running or waiting, the heaviest first ([weight](#the-graph-workspace-the-home-page-)), then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does); an external node's columns are `withheld` the same way. A task calls the same on `eriphe-nodes` ([a task's node](#a-tasks-node-task_nodego-task_nodesgo)), which taints the task instead. It is also a block's source, `eriphe-core/node_find` (`node_find.go`) |
 | `node_read` | a node's title, state, version and `hash`, body, goal, `maintained` (the skills that maintain it), parent, children, links, `backlinks` (the live nodes that link it, by their text or code), done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
 | `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying `external` (code's field); they answer `page`, what each block shows (the render report, below); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
@@ -893,7 +893,8 @@ least that share of the values at or below it) and `max`.
 - `brain.output_tokens`: what a turn wrote; `brain.context_tokens`: its context
   (`usage.context_tokens`, else its input, cache reads and writes);
 - `brain.tools`: the brain's tool calls in the window, by name: heavy writes it did itself
-  (`node_write`, `propose_view`, `write_skill`, `item_note`…) show here;
+  (`node_write`, `write_skill`, `item_note`…) show here, and what its budget now refuses
+  ([The brain's budget](#the-brains-budget-brain_budgetgo));
 - `launches.turns`: the turns that called `run_task`, with their `duration_ms` and
   `output_tokens`; `launches.run_task_calls`: those calls (a call, not a started task: it may be
   refused or wait for a card); `launches.brain_prompt_chars`: the length of what they wrote to
@@ -973,9 +974,9 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   or in the open node; in the open node; or a new subject, alone or linked to another. For a new
   subject the brain's first call is `node_open`, before any read, `recall` or search (`node_find`
   alone may come before, to take up the node that holds it): a short title and a one-line « En
-  cours : … », so the user sees it appear within seconds; the brain, or the tasks that work under it
-  (their nodes are its children; the brain writes their result into the subject on their wake),
-  fills it as the work goes.
+  cours : … », so the user sees it appear within seconds; then it launches the task that does the
+  work on it (`run_task` with the node), which fills it, and answers in one line naming the node
+  ([The brain's budget](#the-brains-budget-brain_budgetgo)).
 - **Tools.** The brain finds a node before it opens another (`node_find`), opens one at once, with
   no card (`node_open`: a piece of work, or a page the user follows; a skill may then maintain it,
   [Live pages](#live-pages-node_livego-node_homego)), reads it (`node_read`: its version's `hash`), writes it on the version it read
@@ -2418,7 +2419,7 @@ task on a device (stable `profile`, so its session survives restarts), with only
 `brain-prompt.md`, built into the binary, or the file `prompt_file` names instead.
 
 **Its fixed context** (#706) is what it reads before any work: the standing prompt (in French,
-at most 35,000 characters), its tools as the MCP client lists them (at most 45 KB of JSON for the
+at most 33,710 characters), its tools as the MCP client lists them (at most 45 KB of JSON for the
 46 tools) and their instructions (`tools.go`, at most 5 KB, the concepts' map with them). A test
 (`brain_size_test.go`) prints and bounds the three. What keeps them small: a rule the code
 enforces is code, not a sentence (a home call's trace, a subject's title after an external read, a
@@ -2478,6 +2479,43 @@ network (localhost, a loopback, private, link-local or CGNAT IP, a name without 
 conversation), unless the URL is written in the user's own message of that turn. Reads asked
 together are judged on the taint before them. Every decision is logged (`brain: WebFetch …`) and
 kept in the decisions table. A read, like a search, taints the turn.
+
+### The brain's budget (`brain_budget.go`)
+
+The brain orchestrates (#770): it understands, chooses where the thing lives in the graph, launches
+a task on that node (`run_task` with `node`, `skill` if one fits, a short `ask`) and answers in one
+line naming the node. It does itself only a read, a gesture of a call or two, a yes or no, a
+one-line correction, choosing or opening the node, proposing a skill or a monitor. A prompt rule
+did not hold it: on the owner's install (8 days, 244 turns; median 7 s, p90 50 s), 42 of the 48
+turns over 30 s were heavy writes the brain made itself (whole pages, skills, monitors tried,
+bursts of up to 50 `item_note`, series of `node_edit`). So code holds it, on eriphe-core's own
+server (a receiving middleware of `newMCPServer`) and on its catalog calls (the proxy):
+
+| Constant | Value | Refused in a turn of the brain's |
+|---|---|---|
+| `brainWriteRunes` | 800 | a node write carrying more text (`node_open`'s title, goal and body; `node_write`'s body; `node_edit`'s block or new text): a whole page. A work's `steps` are not counted |
+| `brainNodeWrites` | 3 | a fourth `node_write` or `node_edit` |
+| `brainItemNotes` | 3 | a fourth `item_note` |
+| `brainSkillWrites` | 1 | a second `write_skill` |
+| `brainGestures` | 6 | a seventh change of any kind: the writes above, `node_set`, a memory, an intention, `notify`, a rule, a setting, `write_monitor`, `try_monitor`, a catalog call that is not a read |
+
+Each refusal is a tool error that says why and ends with the way out: launch a task on the node
+(`run_task` with node, skill, ask), then answer in one line naming it. Never counted, never refused:
+reads (`node_read`, `node_find`, `recall`, `since`, the `list_*`, `catalog_read`…) and what routes and
+launches (`run_task`, `answer_task`, `stop_task`, `node_open` with a short body, `node_show`,
+`turn_home`, `node_settle`, `withdraw_proposal`). `write_skill`, `write_monitor` and `try_monitor`
+stay the brain's, counted: no task proposes a new skill or monitor (a task proposes only its own
+skill's next version, `skill_propose`). Each tool has its class (`brainToolClass`); a test fails on
+one without.
+
+The budget is per delivery (`deliverConversation`, a wake, a session started): a fresh one each
+time, scaled by the messages it brings, at most 3 times (`brainBudgetScale`), so a delivery of
+three tasks' ends may update their three nodes. A card's follow-up (the user's Oui, or a yes in
+the conversation) fits in it: eriphe-core applies the card itself, and the brain says what came of
+it in its node and the parent, sets it done, withdraws a card or launches the next work. It is not
+kept: a restart starts a fresh one. Only the brain is held: a call relayed by its device for its
+task (eriphe-core marks it, `Eriphe-Brain-Call`) or made at `self_url` with its token. The owner's
+own MCP client with the API token, and tasks (on their own `eriphe-nodes`), are never counted.
 
 It gets one turn per event: my messages (`POST /v1/messages {text}`) and what happens to its workers
 (a permission request, the end of a turn, a stop), several at once if they queued during a turn.
