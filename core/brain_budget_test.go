@@ -1,0 +1,251 @@
+package main
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+// Each of the brain's tools has its class in the budget: a tool added
+// without one would be counted as a change, unseen.
+func TestBrainBudgetClassifiesTools(t *testing.T) {
+	res, err := connectServer(t, newMCPServer(graphCore(t))).ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := map[string]bool{}
+	for _, tl := range res.Tools {
+		listed[tl.Name] = true
+		if _, ok := brainToolClass[tl.Name]; !ok {
+			t.Errorf("%s has no class in brainToolClass (brain_budget.go)", tl.Name)
+		}
+	}
+	for name := range brainToolClass {
+		if !listed[name] {
+			t.Errorf("brainToolClass names %s, which the brain does not have", name)
+		}
+	}
+}
+
+// refusedFor tells a budget's refusal: its words, with the hint to launch
+// a task.
+func refusedFor(t *testing.T, why string) {
+	t.Helper()
+	if !strings.HasPrefix(why, "Refused") {
+		t.Fatalf("not refused by the budget: %q", why)
+	}
+	if !strings.Contains(why, "skill is proposed per turn") && !strings.Contains(why, "run_task with node, skill") {
+		t.Errorf("no hint to launch a task: %q", why)
+	}
+}
+
+// The budget of one turn: reads never count; a whole page, a series of
+// node writes or item notes, a second skill and too many changes are
+// refused, each with the hint; what routes and launches always passes.
+func TestTurnBudget(t *testing.T) {
+	page := strings.Repeat("Une ligne de la page, ses blocs et ses sources.\n", 20)
+	line := map[string]any{"id": "n1", "expect": "h", "body": "En cours : je m'en occupe."}
+
+	b := newTurnBudget(1)
+	for range 50 {
+		for _, read := range []string{"node_read", "node_find", "recall", "list_skills", "since", "task_status", "catalog_read"} {
+			if why := b.charge(read, map[string]any{"id": "n1"}); why != "" {
+				t.Fatalf("%s refused: %s", read, why)
+			}
+		}
+	}
+	// A whole page: refused, by node_write, node_open or node_edit.
+	refusedFor(t, b.charge("node_write", map[string]any{"id": "n1", "expect": "h", "body": page}))
+	refusedFor(t, b.charge("node_open", map[string]any{"title": "Mes mails", "goal": "Un but.", "body": page}))
+	refusedFor(t, b.charge("node_edit", map[string]any{"id": "n1", "block": "b", "value": map[string]any{"components": page}}))
+	refusedFor(t, b.charge("node_edit", map[string]any{"id": "n1", "old": "x", "new": page}))
+	// A work cut in steps is orchestration: its steps are not page text.
+	steps := []any{map[string]any{"key": "style", "do": page}, map[string]any{"key": "plan", "do": page}}
+	if why := b.charge("node_open", map[string]any{"title": "Premier article", "goal": "Un plan.", "body": "En cours.", "steps": steps}); why != "" {
+		t.Fatalf("a work in steps refused: %s", why)
+	}
+	// A short write passes, three of them; the fourth is a rewrite.
+	for i := range brainNodeWrites {
+		name := []string{"node_write", "node_edit", "node_write"}[i]
+		if why := b.charge(name, line); why != "" {
+			t.Fatalf("write %d refused: %s", i+1, why)
+		}
+	}
+	refusedFor(t, b.charge("node_edit", line))
+
+	// Item notes: a few, not a burst.
+	b = newTurnBudget(1)
+	for i := range brainItemNotes {
+		if why := b.charge("item_note", map[string]any{"node": "n1", "item": "m1"}); why != "" {
+			t.Fatalf("note %d refused: %s", i+1, why)
+		}
+	}
+	refusedFor(t, b.charge("item_note", map[string]any{"node": "n1", "item": "m4"}))
+
+	// One skill a turn; a monitor tried and written are changes.
+	b = newTurnBudget(1)
+	if why := b.charge("write_skill", map[string]any{"name": "mails"}); why != "" {
+		t.Fatalf("a skill refused: %s", why)
+	}
+	refusedFor(t, b.charge("write_skill", map[string]any{"name": "jour"}))
+	for _, name := range []string{"try_monitor", "write_monitor", "remember", "node_set", "notify"} {
+		if why := b.charge(name, nil); why != "" {
+			t.Fatalf("%s refused: %s", name, why)
+		}
+	}
+	// Six changes made: the seventh, of any kind, catalog included, is work.
+	refusedFor(t, b.charge("remember", nil))
+	refusedFor(t, b.chargeCatalog())
+	// The way out is always open.
+	for _, name := range []string{"run_task", "node_show", "turn_home", "answer_task", "stop_task", "withdraw_proposal", "node_settle"} {
+		if why := b.charge(name, map[string]any{"node": "n1", "ask": "Fais avancer ce nœud."}); why != "" {
+			t.Fatalf("%s refused when the budget is spent: %s", name, why)
+		}
+	}
+	if why := b.charge("node_open", map[string]any{"title": "Mes mails", "goal": "Un but.", "body": "En cours : je m'en occupe."}); why != "" {
+		t.Fatalf("opening a node refused when the budget is spent: %s", why)
+	}
+
+	// A delivery of three messages (three tasks ended) may update their
+	// three nodes and their parents; never more than three times the budget.
+	b = newTurnBudget(3)
+	for i := range brainNodeWrites * 3 {
+		if why := b.charge("node_edit", line); why != "" {
+			t.Fatalf("edit %d of a delivery of three refused: %s", i+1, why)
+		}
+	}
+	if newTurnBudget(10).scale != brainBudgetScale {
+		t.Errorf("a delivery of ten scales the budget by %d", newTurnBudget(10).scale)
+	}
+}
+
+// A turn that answers the user's yes on a card keeps what it needs: what
+// came of it said in its node and its parent, the node done, another card
+// withdrawn, the next work launched.
+func TestTurnBudgetCardFollowUp(t *testing.T) {
+	c := graphCore(t)
+	c.turn.start(1, 1, 0)
+	c.turn.goOn(2, 2, 0, nil) // the card's outcome, delivered as an event
+	c.turn.answersUser()
+	c.turn.delivered(1)
+	line := map[string]any{"id": "n1", "expect": "h", "old": "attend ton oui", "new": "C'est envoyé."}
+	for _, call := range []struct {
+		name string
+		args map[string]any
+	}{
+		{"node_read", map[string]any{"id": "n1"}},
+		{"node_edit", line},
+		{"node_edit", map[string]any{"id": "parent", "expect": "h", "old": "Reste à", "new": "Fait :"}},
+		{"node_set", map[string]any{"id": "n1", "done": true}},
+		{"withdraw_proposal", map[string]any{"ref": "calls:2"}},
+		{"run_task", map[string]any{"node": "n1", "ask": "Fais avancer ce nœud."}},
+	} {
+		if why := c.turn.charge(call.name, call.args); why != "" {
+			t.Fatalf("a card's follow-up: %s refused: %s", call.name, why)
+		}
+	}
+}
+
+// The brain's catalog calls that change something count in its budget;
+// its reads never do, and a worker's calls are never budgeted.
+func TestBrainBudgetCountsCatalogChanges(t *testing.T) {
+	c := newCatalogCore(t, withGraph(t))
+	setBrain(c, &BrainConfig{})
+	editBrain(c, func(a *Assistant) { a.Tools = []string{"github"} })
+	c.store.insertTask(&TaskRow{ID: "b-1", Device: "pc", Kind: "brain", Runtime: "claude-code", State: stateRunning})
+	setBrainTask(c, "b-1")
+	c.turn.start(1, 1, 0)
+	ctx := context.Background()
+	cs := connectTo(t, c.taskServer("b-1", c.brainGrant(), "github"))
+	args := map[string]any{"title": "x"}
+	create := func(n int) *mcp.CallToolResult {
+		c.store.recordDecision("b-1", "p"+strconv.Itoa(n), "mcp__github__create_issue", args, decideAllow, byUser, "")
+		out, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "create_issue", Arguments: args})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	for i := range brainGestures {
+		if out := create(i); out.IsError {
+			t.Fatalf("change %d = %s", i+1, resultText(out))
+		}
+		if out, _ := cs.CallTool(ctx, &mcp.CallToolParams{Name: "get_issue", Arguments: map[string]any{"number": 3}}); out.IsError {
+			t.Fatalf("free read = %s", resultText(out))
+		}
+	}
+	refusedFor(t, resultText(create(brainGestures)))
+	// A worker's calls are its own: no budget.
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Runtime: "claude-code", State: stateRunning, Tools: "github"})
+	w := connectTo(t, c.taskServer("t-1", []string{"github"}, "github"))
+	for i := range brainGestures + 1 {
+		c.store.recordDecision("t-1", "w"+strconv.Itoa(i), "mcp__github__create_issue", args, decideAllow, byUser, "")
+		if out, _ := w.CallTool(ctx, &mcp.CallToolParams{Name: "create_issue", Arguments: args}); out.IsError {
+			t.Fatalf("a worker's change %d = %s", i+1, resultText(out))
+		}
+	}
+}
+
+// The budget holds the brain's calls on both of its ways to eriphe-core's
+// own server, a fresh delivery starts a fresh budget, and the owner's own
+// client with the API token is not the brain: never counted.
+func TestBrainBudgetHoldsTheBrainOnly(t *testing.T) {
+	c := newCatalogCore(t, withGraph(t))
+	setBrain(c, &BrainConfig{})
+	c.token = "api-token"
+	c.self = newMCPServer(c)
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "pc", Runtime: "claude-code", State: stateRunning})
+	setBrainTask(c, "b-1")
+	mux := http.NewServeMux()
+	mux.Handle("/v1/device/tasks/{id}/mcp/{server}", c.taskMCPHandler())
+	mux.Handle("/mcp", selfMCPHandler(c.self, c.token))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	connect := func(endpoint string, headers headerTransport) *mcp.ClientSession {
+		tr := &mcp.StreamableClientTransport{Endpoint: srv.URL + endpoint, HTTPClient: &http.Client{Transport: headers}, MaxRetries: -1}
+		cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(context.Background(), tr, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { cs.Close() })
+		return cs
+	}
+	relayed := connect("/v1/device/tasks/b-1/mcp/"+selfServer, headerTransport{"Authorization": "Bearer device-secret", "Eriphe-Device": "pc"})
+	selfURL := connect("/mcp", headerTransport{"Authorization": "Bearer " + assistantToken(c.token)})
+	owners := connect("/mcp", headerTransport{"Authorization": "Bearer api-token", brainCallHeader: "0"})
+	note := map[string]any{"node": "nowhere", "item": "m1", "note": "Une facture.", "state": "info"}
+	burst := func(cs *mcp.ClientSession) (refusals []string) {
+		for range brainItemNotes + 2 {
+			if _, msg := callOn(t, cs, "item_note", note); strings.HasPrefix(msg, "Refused") {
+				refusals = append(refusals, msg)
+			}
+		}
+		return refusals
+	}
+	for name, cs := range map[string]*mcp.ClientSession{"relayed by its device": relayed, "at self_url": selfURL} {
+		c.turn.start(1, 1, 0)
+		refused := burst(cs)
+		if len(refused) != 2 {
+			t.Fatalf("the brain %s: %d notes of %d refused", name, len(refused), brainItemNotes+2)
+		}
+		refusedFor(t, refused[0])
+		// Reads go on; a fresh delivery has a fresh budget.
+		if _, msg := callOn(t, cs, "node_find", map[string]any{}); msg != "" {
+			t.Fatalf("a read after the budget: %s", msg)
+		}
+		c.turn.goOn(2, 2, 0, nil)
+		if _, msg := callOn(t, cs, "item_note", note); strings.HasPrefix(msg, "Refused") {
+			t.Fatalf("the brain %s: the next delivery's first note refused: %s", name, msg)
+		}
+	}
+	c.turn.start(3, 3, 0)
+	if refused := burst(owners); len(refused) != 0 {
+		t.Fatalf("the owner's own client was budgeted: %q", refused)
+	}
+}

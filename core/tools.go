@@ -28,6 +28,7 @@ What the code enforces is a rule, a setting or an intention, never a memory. A r
 func newMCPServer(c *core) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "eriphe-core", Version: version},
 		&mcp.ServerOptions{Instructions: instructions})
+	s.AddReceivingMiddleware(c.budgetMiddleware) // the brain's budget (brain_budget.go)
 
 	tool(s, "list_agents", "Agents you can give a task to: runtime, model, when to use each, and whether a device can run it now.",
 		func(ctx context.Context, _ struct{}) (map[string]any, error) {

@@ -106,10 +106,7 @@ func main() {
 	c.self = server
 	mux := http.NewServeMux()
 	// The API token, or an assistant's (self_url), which opens nothing else.
-	mux.Handle("/mcp", bearerAny(mcp.NewStreamableHTTPHandler(
-		func(*http.Request) *mcp.Server { return server },
-		&mcp.StreamableHTTPOptions{Stateless: true, DisableLocalhostProtection: true},
-	), token, assistantToken(token)))
+	mux.Handle("/mcp", selfMCPHandler(server, token))
 	mux.Handle("POST /v1/messages", bearer(token, http.HandlerFunc(c.handlePostMessage)))
 	mux.Handle("GET /v1/messages", bearer(token, http.HandlerFunc(c.handleGetMessages)))
 	// The channels the user added, each with its own token (channel_in.go,
@@ -264,6 +261,15 @@ func joinQuery(name string, rejoin bool, ttl time.Duration) string {
 func bearer(token string, next http.Handler) http.Handler { return bearerAny(next, token) }
 
 // bearerAny lets a request through with any of tokens.
+// selfMCPHandler serves eriphe-core's own MCP server at /mcp: to the API
+// token, or an assistant's (self_url), which opens nothing else.
+func selfMCPHandler(server *mcp.Server, token string) http.Handler {
+	return bearerAny(mcp.NewStreamableHTTPHandler(
+		func(*http.Request) *mcp.Server { return server },
+		&mcp.StreamableHTTPOptions{Stateless: true, DisableLocalhostProtection: true},
+	), token, assistantToken(token))
+}
+
 func bearerAny(next http.Handler, tokens ...string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if clearFromInternet(r) {

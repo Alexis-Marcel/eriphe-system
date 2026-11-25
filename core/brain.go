@@ -315,6 +315,7 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 			c.turn.taint(why) // a tainted task's result, an untrusted channel, a tool's result run on a card
 		}
 	}
+	c.turn.delivered(len(msgs))    // its budget, for what it answers (brain_budget.go)
 	c.turn.answersIn(talkOf(msgs)) // where its answer goes (node_turn.go)
 	c.nodesDelivered(msgs)         // a node's message: the turn is about it (node_turn.go)
 	// The entities my message names: the turn is about them (names.go).
