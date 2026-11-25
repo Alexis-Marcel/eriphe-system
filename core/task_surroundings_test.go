@@ -109,7 +109,7 @@ func TestTaskSurroundings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	b := c.surroundings(own)
+	b := c.surroundings(own, false)
 	for _, want := range []string{aroundHeading, "Your node: " + own, "« Style des articles » — goal: Analyse le style.",
 		"Its ancestors, the nearest first:\n- " + mid, "« Substack » — goal: Une lettre par semaine.", top + " [", "« Écriture »",
 		"Its children (3):", kid + " [", "« Plan » — goal: Un plan d'article.",
@@ -144,7 +144,7 @@ func TestTaskSurroundings(t *testing.T) {
 
 	// An archived child is not in it.
 	c.nodes.Archive(kid, "user")
-	if b := c.surroundings(own); strings.Contains(b, kid) || !strings.Contains(b, "Its children (2):") {
+	if b := c.surroundings(own, false); strings.Contains(b, kid) || !strings.Contains(b, "Its children (2):") {
 		t.Fatalf("an archived child:\n%s", b)
 	}
 }
@@ -161,7 +161,7 @@ func TestSurroundingsCapped(t *testing.T) {
 	for i := range 40 {
 		mustNode(t, c.core, nodestore.New{Title: fmt.Sprintf("Menu %d", i), Goal: "Un menu.", Links: []string{hub}})
 	}
-	b := c.surroundings(hub)
+	b := c.surroundings(hub, false)
 	if n := runeLen(b); n > aroundMax {
 		t.Fatalf("%d runes, over %d", n, aroundMax)
 	}
@@ -200,7 +200,7 @@ func TestSkillRunSurroundings(t *testing.T) {
 			t.Errorf("the run's prompt lacks %q:\n%s", want, spec.Prompt)
 		}
 	}
-	t.Logf("a skill run's surroundings: %d runes", runeLen(c.surroundings(home)))
+	t.Logf("a skill run's surroundings: %d runes", runeLen(c.surroundings(home, false)))
 }
 
 // A call run on a yes leaves its result in its node's trace, which a

@@ -486,7 +486,7 @@ func (c *core) homeNode(id string) (title string, external bool, err error) {
 // (seePreferences).
 func skillRunPrompt(sk triggeredSkill, home string, events []journalEvent, now time.Time, prefs []string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Skill « %s » : %s\n\n%s\n\n", sk.Name, sk.Manifest.Description, sk.Manifest.Body)
+	b.WriteString(skillMethod(sk.Name, sk.Manifest) + "\n\n") // task_launch.go
 	if home != "" {
 		fmt.Fprintf(&b, "[tu entretiens le node « %s », ta maison (le but de ce node dit ce qu'on y écrit) : lis-le (node_read), note chaque élément de ses sources (item_note ; avec son group quand une List du node filtre sur _group : l'un de ses groupes), "+
 			"et ouvre un enfant (node_open) pour ce qui demande un travail, un brouillon par exemple ; ce que tu ferais qui change quelque chose attend son oui sur une carte]\n\n", home)

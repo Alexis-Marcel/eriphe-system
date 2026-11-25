@@ -23,7 +23,7 @@ func TestTurnNodeIsTheAbout(t *testing.T) {
 		t.Fatalf("open: %v", out)
 	}
 	key := nodeRef(out["id"].(string))
-	step, isErr := callBrainTool(t, c, "run_task", map[string]any{"prompt": "Cherche qui détient la marque Velora.", "title": "Velora"})
+	step, isErr := callBrainTool(t, c, "run_task", map[string]any{"ask": "Cherche qui détient la marque Velora.", "title": "Velora"})
 	if isErr {
 		t.Fatalf("run_task: %v", step)
 	}

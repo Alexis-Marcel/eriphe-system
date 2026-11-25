@@ -295,19 +295,21 @@ func (r runRequest) title() string {
 	return truncate(title, taskTitleMax)
 }
 
+// runRequest is a task to start, as code asks for it: the brain's launch
+// (launchRequest, task_launch.go), a skill's run, a step, an assistant.
 type runRequest struct {
-	Title     string        `json:"title,omitempty" jsonschema:"what the user reads, a few words in their language"`
-	Prompt    string        `json:"prompt" jsonschema:"what the agent must do, self-contained: it does not see this conversation"`
-	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what it is lent, as node_open's steps' resources: only what it needs, the least access"`
-	Agent     string        `json:"agent,omitempty" jsonschema:"from list_agents; empty for the default"`
-	Device    string        `json:"device,omitempty" jsonschema:"empty: the scheduler chooses"`
-	Node      string        `json:"node,omitempty" jsonschema:"the node it works under; empty for this turn's node"`
+	Title     string
+	Prompt    string // what the agent must do
+	Resources []ResourceRef
+	Agent     string // empty for the default
+	Device    string // empty: the scheduler chooses
+	Node      string // the node it works under
 	// Contract: what must be true at the end, for a task that changes
 	// something (contract.go); none for a search or a read.
-	Contract *taskContract `json:"contract,omitempty" jsonschema:"for a task that changes something, as node_open's steps' contract; none for a read. Approval is never in it"`
+	Contract *taskContract
 
 	// Tools is an assistant's grant, never a brain's call.
-	Tools []string `json:"-"`
+	Tools []string
 
 	// about: what it is about (about.go), set by code: the node it works
 	// under, a skill's alias.
@@ -335,6 +337,9 @@ type runRequest struct {
 	// card goes with its message; any other start shows its card at once
 	// (task_start.go).
 	byBrain bool
+	// method: the skill the brain launched it with, after what it is asked
+	// (task_launch.go); in the device's spec only, never in tasks.prompt.
+	method string
 }
 
 // workerVoice is a worker's standing instruction: its last message reaches
@@ -487,6 +492,9 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra d
 	}
 	spec := extra
 	spec.Runtime, spec.Prompt, spec.Dir, spec.Model = agent.Runtime, r.Prompt, dir, agent.Model
+	if r.method != "" {
+		spec.Prompt += "\n\n" + r.method
+	}
 	spec.Repo, spec.Ref, spec.Branch, spec.Image = repo, base, branch, agent.Image
 	spec.Command = agent.Command
 	spec.RepoSkills = c.repoSkills(ctx, lent.Repo)
@@ -511,12 +519,16 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra d
 	}
 	if kind == "worker" {
 		c.lendSkills(&spec) // skills_tasks.go
-		// Its node's place in the graph, after what it is asked (task_surroundings.go).
-		if around := c.surroundings(c.taskNode(t.ID)); around != "" {
+		// Its node's place in the graph, after what it is asked
+		// (task_surroundings.go); in a node of its own, beside the node it
+		// works for too.
+		node := c.taskNode(t.ID)
+		if around := c.surroundings(node, r.inNode == ""); around != "" {
 			spec.Prompt += "\n\n" + around
 		}
-		// What is known of what it is about, after what it is asked (about_card.go).
-		if card := c.startCard(about, placeTask, t.ID); card != "" {
+		// What is known of what it is about (about_card.go), without the
+		// line of a node its surroundings give.
+		if card := c.startCard(about, placeTask, t.ID, c.aroundHolds(node, about)); card != "" {
 			spec.Prompt += "\n\n" + card
 		}
 	}

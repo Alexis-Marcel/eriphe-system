@@ -292,9 +292,9 @@ func TestSharedShapesCheckedWhole(t *testing.T) {
 	c := newCatalogCore(t)
 	cs := connectTo(t, newMCPServer(c))
 	for name, args := range map[string]map[string]any{
-		"run_task": {"title": "T", "prompt": "p", "resources": []any{
+		"run_task": {"title": "T", "ask": "p", "resources": []any{
 			map[string]any{"kind": "tool", "ref": "mail.search", "hlod": true}}},
-		"run_task ": {"title": "T", "prompt": "p", "contract": map[string]any{
+		"run_task ": {"title": "T", "ask": "p", "contract": map[string]any{
 			"objective": "o", "chekcs": []any{}}},
 		"node_settle": {"id": "n", "outcome": "replan", "steps": []any{map[string]any{"name": "a", "promt": "p"}}},
 		"write_skill": {"name": "x", "description": "d", "instructions": "i", "monitor": map[string]any{"name": "m", "evrey": "1h"}},

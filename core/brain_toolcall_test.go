@@ -9,18 +9,18 @@ func TestToolCallText(t *testing.T) {
 	calls := []string{
 		`eriphe-core_answer_task {"task_id":"t-1a2b","allow":true}`,
 		"  eriphe-core_answer_task {\"task_id\": \"t-1\", \"allow\": true}\n",
-		`eriphe-core_run_task({"prompt":"Range le dossier","device":"pc"})`,
+		`eriphe-core_run_task({"ask":"Range le dossier","device":"pc"})`,
 		`mcp__eriphe-core__list_tasks {}`,
 		`memory_search {"query":"anniversaire"}`,
 		"eriphe-core_list_tasks {}\neriphe-core_answer_task {\"task_id\":\"t-1\",\"allow\":false}",
 		`{"name":"answer_task","arguments":{"task_id":"t-1","allow":true}}`,
-		`{"name": "eriphe-core_run_task", "arguments": "{\"prompt\":\"x\"}"}`,
-		`{"type":"function","function":{"name":"run_task","arguments":{"prompt":"x"}}}`,
+		`{"name": "eriphe-core_run_task", "arguments": "{\"ask\":\"x\"}"}`,
+		`{"type":"function","function":{"name":"run_task","arguments":{"ask":"x"}}}`,
 		`{"tool": "list_tasks", "parameters": {}}`,
 		"<tool_call>\n{\"name\": \"answer_task\", \"arguments\": {\"task_id\": \"t-1\"}}\n</tool_call>",
 		"```json\n{\"name\": \"answer_task\", \"arguments\": {\"task_id\": \"t-1\"}}\n```",
 		"```\neriphe-core_answer_task {\"task_id\":\"t-1\",\"allow\":true}\n```",
-		"{\n  \"name\": \"run_task\",\n  \"arguments\": {\n    \"prompt\": \"x\"\n  }\n}",
+		"{\n  \"name\": \"run_task\",\n  \"arguments\": {\n    \"ask\": \"x\"\n  }\n}",
 	}
 	for _, s := range calls {
 		if !toolCallText(s) {
@@ -41,7 +41,7 @@ func TestToolCallText(t *testing.T) {
 		"```go\nfunc main() { fmt.Println(\"hi\") }\n```",
 		"```json\n{\"port\": 8080, \"host\": \"example.org\"}\n```",
 		"Voici l'appel :\n```\neriphe-core_answer_task {\"task_id\":\"t-1\"}\n```\nC'est ce que j'ai fait.",
-		"J'ai lancé eriphe-core_run_task {\"prompt\":\"x\"} pour toi.",
+		"J'ai lancé eriphe-core_run_task {\"ask\":\"x\"} pour toi.",
 		"run_task {pas du json}",
 		"Sam {\"a\":1}",
 		"Deux étapes :\n- eriphe-core_list_tasks {}\n- puis je te réponds.",

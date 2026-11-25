@@ -53,12 +53,17 @@ type cardSection struct {
 // rounds: each part's first line, in the card's order, then each part's
 // second, and so on while it lasts; what is left out is said.
 func (c *core) aboutCard(key string, budget int) (string, aboutCardStats) {
+	return c.aboutCardOf(key, budget, true)
+}
+
+// aboutCardOf is aboutCard, with or without a node's line (line).
+func (c *core) aboutCardOf(key string, budget int, line bool) (string, aboutCardStats) {
 	key = c.store.resolveAbout(key)
 	var st aboutCardStats
 	if key == "" {
 		return "", st
 	}
-	parts := c.aboutCardParts(key)
+	parts := c.aboutCardParts(key, line)
 	total := 0
 	for _, p := range parts {
 		total += len(p.lines)
@@ -142,11 +147,12 @@ func cardMemoryLine(x *Memory, key string) string {
 	return truncate(fmt.Sprintf("- [%s] %s", head, packQuote(x.Text)), aboutCardLineMax)
 }
 
-// aboutCardParts are the card's parts, in its order.
-func (c *core) aboutCardParts(key string) []cardSection {
+// aboutCardParts are the card's parts, in its order; line: with a node's
+// line.
+func (c *core) aboutCardParts(key string, line bool) []cardSection {
 	var parts []cardSection
 	// Where it stands: the node's line.
-	if id, ok := strings.CutPrefix(key, "node:"); ok && c.nodes != nil {
+	if id, ok := strings.CutPrefix(key, "node:"); ok && line && c.nodes != nil {
 		if sum, err := c.nodes.Get(id); err == nil {
 			parts = append(parts, cardSection{lines: []string{truncate(c.nodeLine(statusNode{sum, c.nodeStatus(sum)}), aboutCardNodeMax)}, refs: []string{key}})
 		}
@@ -271,7 +277,12 @@ func (c *core) cardBudget() int {
 // compileCard is a node's or an entity's card to push; ok false when
 // nothing is known.
 func (c *core) compileCard(key string, budget int) (pushedCard, bool) {
-	text, st := c.aboutCard(key, budget)
+	return c.compileCardOf(key, budget, true)
+}
+
+// compileCardOf is compileCard, with or without a node's line (line).
+func (c *core) compileCardOf(key string, budget int, line bool) (pushedCard, bool) {
+	text, st := c.aboutCardOf(key, budget, line)
 	if text == "" {
 		return pushedCard{}, false
 	}
@@ -294,12 +305,13 @@ func (c *core) turnCard(held map[string]string) (pushedCard, bool) {
 
 // startCard is the card a task starts with, for what it is about; "" without
 // one. place and who (the task's id) are where
-// it is counted (card_use.go).
-func (c *core) startCard(key, place, who string) string {
+// it is counted (card_use.go). shown: the task's surroundings give the
+// node's line (aroundHolds), so the card leaves it out: one place for it.
+func (c *core) startCard(key, place, who string, shown bool) string {
 	if key == "" {
 		return ""
 	}
-	x, ok := c.compileCard(key, aboutCardChars)
+	x, ok := c.compileCardOf(key, aboutCardChars, !shown)
 	if !ok {
 		return ""
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
@@ -11,7 +12,9 @@ import (
 // to the first prompt of every worker task with a node (startTask), a
 // skill's run in its home node too. Short and capped: its node (title,
 // goal), the chain of its ancestors (title, goal), and an index of its
-// children, links and backlinks (id, status, title, goal). Nothing else:
+// children, links and backlinks (id, status, title, goal); for a task in a
+// node of its own (the brain's), its parent's other children and links
+// too, the subject it works for (#767). Nothing else:
 // nothing about the user, no memory; the task reads more with node_read
 // and node_find when its work needs it (task_nodes.go).
 //
@@ -36,28 +39,18 @@ const (
 // aroundSection is one of its indexes.
 type aroundSection struct {
 	title string
+	owner string // the node whose read lists them all
 	nodes []nodestore.Summary
 	more  int // past aroundIndexMost
 }
 
-// surroundings are node id's place in the graph, for a task working in
-// it: "" for none.
-func (c *core) surroundings(id string) string {
-	if id == "" || c.nodes == nil {
-		return ""
-	}
-	self, err := c.nodes.Get(id)
-	if err != nil {
-		return ""
-	}
-	// Its ancestors, the nearest first; a parent seen twice ends the walk.
-	var chain []nodestore.Summary
-	seen := map[string]bool{id: true}
-	higher := false
+// aroundChain are node self's ancestors, the nearest first, aroundAncestors
+// at most; higher: there are more. A parent seen twice ends the walk.
+func (c *core) aroundChain(self nodestore.Summary) (chain []nodestore.Summary, higher bool) {
+	seen := map[string]bool{self.ID: true}
 	for p := self.Parent; p != "" && !seen[p]; {
 		if len(chain) == aroundAncestors {
-			higher = true
-			break
+			return chain, true
 		}
 		seen[p] = true
 		x, err := c.nodes.Get(p)
@@ -67,6 +60,41 @@ func (c *core) surroundings(id string) string {
 		chain = append(chain, x)
 		p = x.Parent
 	}
+	return chain, false
+}
+
+// aroundHolds tells whether the surroundings of node id give the line of
+// what a task is about (about, node:<id>): its node or one of its
+// ancestors. Its start card then leaves that line out (startCard).
+func (c *core) aroundHolds(id, about string) bool {
+	key, ok := strings.CutPrefix(about, "node:")
+	if !ok || id == "" || c.nodes == nil {
+		return false
+	}
+	if key == id {
+		return true
+	}
+	self, err := c.nodes.Get(id)
+	if err != nil {
+		return false
+	}
+	chain, _ := c.aroundChain(self)
+	return slices.ContainsFunc(chain, func(x nodestore.Summary) bool { return x.ID == key })
+}
+
+// surroundings are node id's place in the graph, for a task working in
+// it: "" for none. beside: the task works in a node of its own, under the
+// node it works for (its parent): that node's other children and its
+// links are given too, so it sees the subject it works for.
+func (c *core) surroundings(id string, beside bool) string {
+	if id == "" || c.nodes == nil {
+		return ""
+	}
+	self, err := c.nodes.Get(id)
+	if err != nil {
+		return ""
+	}
+	chain, higher := c.aroundChain(self)
 	live := func(xs []nodestore.Summary) aroundSection {
 		var s aroundSection
 		for _, x := range xs {
@@ -81,19 +109,33 @@ func (c *core) surroundings(id string) string {
 		}
 		return s
 	}
-	kids, _ := c.nodes.Children(id)
-	var linked []nodestore.Summary
-	n := min(len(self.Links), aroundIndexMost)
-	for _, l := range self.Links[:n] {
-		if x, err := c.nodes.Get(l); err == nil {
-			linked = append(linked, x)
+	linksOf := func(x nodestore.Summary) aroundSection {
+		var linked []nodestore.Summary
+		n := min(len(x.Links), aroundIndexMost)
+		for _, l := range x.Links[:n] {
+			if y, err := c.nodes.Get(l); err == nil {
+				linked = append(linked, y)
+			}
 		}
+		s := live(linked)
+		s.more += len(x.Links) - n
+		return s
 	}
-	links := live(linked)
-	links.more += len(self.Links) - n
+	kids, _ := c.nodes.Children(id)
 	back, _ := c.nodes.Backlinks(id)
-	sections := []aroundSection{live(kids), links, live(back)}
+	sections := []aroundSection{live(kids), linksOf(self), live(back)}
 	sections[0].title, sections[1].title, sections[2].title = "Its children", "It links to", "Linked from"
+	if beside && len(chain) > 0 && chain[0].ID == self.Parent {
+		parent := chain[0]
+		siblings, _ := c.nodes.Children(parent.ID)
+		sections = append(sections, live(siblings), linksOf(parent))
+		sections[3].title = fmt.Sprintf("Beside it, under %s, the node it works for", parent.ID)
+		sections[4].title = fmt.Sprintf("%s links to", parent.ID)
+		sections[3].owner, sections[4].owner = parent.ID, parent.ID
+	}
+	for i := range sections[:3] {
+		sections[i].owner = id
+	}
 
 	// Their status, read at once.
 	all := append([]nodestore.Summary{self}, chain...)
@@ -146,7 +188,7 @@ func (c *core) surroundings(id string) string {
 			b.WriteString(line)
 		}
 		if n := len(s.nodes) + s.more - len(lines); n > 0 {
-			more := fmt.Sprintf("- … %d more: node_read %s lists them\n", n, id)
+			more := fmt.Sprintf("- … %d more: node_read %s lists them\n", n, s.owner)
 			b.WriteString(more)
 			used += runeLen(more)
 		}

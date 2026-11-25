@@ -420,9 +420,14 @@ func (c *core) callToBrain(a accessQuestion, text, taint string) {
 // written in the graph, under what it is for. Its start's card goes with
 // the brain's message, it is tainted by the turn, it is about the node it
 // works under, and its end reaches the brain as an event pointing to its
-// node (task_node.go).
-func (c *core) brainRunTask(ctx context.Context, in runRequest) (map[string]any, error) {
-	if err := c.taintedResources(in); err != nil { // resources.go
+// node (task_node.go). Its prompt is built from the launch: the ask and
+// the skill's method (task_launch.go).
+func (c *core) brainRunTask(ctx context.Context, launch launchRequest) (map[string]any, error) {
+	in, err := c.launchOf(launch)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.taintedResources(in); err != nil { // resources.go, the skill's defaults included
 		return nil, err
 	}
 	in.Node = strings.TrimSpace(in.Node)

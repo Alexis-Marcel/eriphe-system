@@ -580,7 +580,7 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 	th := workNode(t, c, "Elle est traitée.")
 	run := func(tools ...string) *mcp.CallToolResult {
 		c.turnNode(th)
-		args := map[string]any{"prompt": "do it"}
+		args := map[string]any{"ask": "do it"}
 		var lent []map[string]any
 		for _, ref := range tools {
 			lent = append(lent, map[string]any{"kind": resTool, "ref": ref})
