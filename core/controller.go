@@ -511,6 +511,10 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra d
 	}
 	if kind == "worker" {
 		c.lendSkills(&spec) // skills_tasks.go
+		// Its node's place in the graph, after what it is asked (task_surroundings.go).
+		if around := c.surroundings(c.taskNode(t.ID)); around != "" {
+			spec.Prompt += "\n\n" + around
+		}
 		// What is known of what it is about, after what it is asked (about_card.go).
 		if card := c.startCard(about, placeTask, t.ID); card != "" {
 			spec.Prompt += "\n\n" + card

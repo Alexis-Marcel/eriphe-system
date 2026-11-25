@@ -283,24 +283,39 @@ func (c *core) foundNode(x statusNode, quote bool, homes map[string][]string) no
 	return f
 }
 
-// brainNodeRead is node_read: what may be someone else's words taints the
-// turn.
+// brainNodeRead is node_read, as the brain calls it: what may be someone
+// else's words taints the turn.
 func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 	sum, err := c.brainNode(in.ID)
 	if err != nil {
 		return nil, err
 	}
+	out, err := c.readNodeFor(sum, in.Version, c.turn.taint)
+	if err != nil {
+		return nil, err
+	}
+	c.turnNode(sum.ID)
+	c.cardLookedUp(nodeRef(sum.ID)) // its card was not enough (card_use.go)
+	return out, nil
+}
+
+// readNodeFor is node_read, for the brain and a task alike: a node's
+// version, its body, its sources' last values, its place in the graph
+// (parent, children, links, backlinks), its items' notes and the end of
+// its trace. What may be someone else's words calls taint before it is
+// given: an external node, or one of its blocks or values, with
+// node:<id>; a tainted item note, with its taint. The titles around it
+// that may be someone else's words are not quoted.
+func (c *core) readNodeFor(sum nodestore.Summary, version int, taint func(string)) (map[string]any, error) {
 	id := sum.ID
-	d, err := c.nodes.Read(id, in.Version)
+	d, err := c.nodes.Read(id, version)
 	if err != nil {
 		return nil, err
 	}
 	values, untrusted := c.nodeValues(d.Node)
 	if nodeExternal(d.Node) || sum.External || untrusted {
-		c.turn.taint(nodeRef(id)) // its words may be someone else's
+		taint(nodeRef(id)) // its words may be someone else's
 	}
-	c.turnNode(id)
-	c.cardLookedUp(nodeRef(id)) // its card was not enough (card_use.go)
 	m := d.Node.Meta
 	out := map[string]any{"id": id, "title": m.Title, "status": c.nodeStatus(sum), "version": d.Version.N, "last": d.Last,
 		"hash": d.Version.Hash, "external": m.External, "body": nodeBody(d.Raw)}
@@ -350,7 +365,7 @@ func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 		var list []map[string]string
 		for _, it := range items {
 			if it.Tainted != "" {
-				c.turn.taint(it.Tainted)
+				taint(it.Tainted)
 			}
 			list = append(list, map[string]string{"source": it.Source, "item": it.Item, "note": it.Note, "state": it.State, "group": it.Group})
 		}

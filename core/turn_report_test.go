@@ -77,6 +77,12 @@ func reportFixture(t *testing.T, s *Store, now time.Time) {
 	task("w-2", "worker", "a long prompt", now.Add(-2*day))
 	tool("w-2", "mcp__eriphe-core__node_read", now.Add(-2*day), nil)
 	tool("w-2", "mcp__eriphe-core__node_find", now.Add(-2*day), nil)
+	// Its own node named, and another: only the other is by others.
+	if _, err := s.db.Exec(`INSERT INTO task_nodes (task, node) VALUES ('w-2', 'n-own')`); err != nil {
+		t.Fatal(err)
+	}
+	tool("w-2", "mcp__eriphe-nodes__node_read", now.Add(-2*day), map[string]any{"id": "n-own"})
+	tool("w-2", "mcp__eriphe-nodes__node_read", now.Add(-2*day), map[string]any{"id": "n-parent"})
 	tool("w-2", "mcp__eriphe-core__node_write", now.Add(-2*day), nil)
 	tool("w-2", "Read", now.Add(-2*day), nil)
 	task("w-3", "worker", "old", now.Add(-10*day))
@@ -125,7 +131,8 @@ func TestTurnReport(t *testing.T) {
 		t.Errorf("launches: %+v", l)
 	}
 	r := rep.Reads
-	if r.Tasks != 2 || r.TasksReading != 1 || r.Calls.Median != 0 || r.Calls.Max != 2 || r.ByOthers != nil {
+	if r.Tasks != 2 || r.TasksReading != 1 || r.Calls.Median != 0 || r.Calls.Max != 4 ||
+		r.ByOthers != (spread{N: 2, Median: 0, P75: 1, P90: 1, Max: 1}) {
 		t.Errorf("reads: %+v", r)
 	}
 	if len(rep.TurnList) != 7 {
@@ -180,8 +187,8 @@ func TestTurnReportRoute(t *testing.T) {
 	if rep.Days != 7 || rep.Brain.Turns != 7 || rep.Launches.RunTaskCalls != 1 {
 		t.Errorf("report: %+v", rep)
 	}
-	if !strings.Contains(body, `"by_others":null`) {
-		t.Errorf("by_others is not null: %s", body)
+	if !strings.Contains(body, `"by_others":{"n":2,`) {
+		t.Errorf("by_others: %s", body)
 	}
 
 	// One day: only b-2's two turns.
