@@ -72,6 +72,31 @@ func TestLaunchWithSkill(t *testing.T) {
 		t.Errorf("its node's goal %q", sum.Goal)
 	}
 	t.Logf("a launch with a skill, %d runes:\n%s", runeLen(spec.Prompt), spec.Prompt)
+
+	// The result says what the skill lent.
+	out, msg := brainNodes(t, c, "run_task", map[string]any{"ask": "Range.", "skill": "tri"})
+	if msg != "" || !strings.HasPrefix(fmt.Sprint(out["lent"]), "[tool notes") {
+		t.Errorf("result %v %s, want the tool notes lent", out, msg)
+	}
+}
+
+// Under a hub of 300 children, the node it works for's children share
+// the same cap, and their « more » line names the hub.
+func TestLaunchBesideCapped(t *testing.T) {
+	c := launchCore(t)
+	hub := mustNode(t, c, nodestore.New{Title: "Recettes", Goal: "Les recettes de Sam."})
+	for i := range 300 {
+		mustNode(t, c, nodestore.New{Title: fmt.Sprintf("Recette %d", i), Goal: strings.Repeat("Une recette longue à décrire. ", 10), Parent: hub})
+	}
+	task, _ := launched(t, c, map[string]any{"ask": "Fais le menu.", "node": hub})
+	b := c.surroundings(c.taskNode(task.ID), true)
+	if n := runeLen(b); n > aroundMax {
+		t.Fatalf("%d runes, over %d", n, aroundMax)
+	}
+	if !strings.Contains(b, "Beside it, under "+hub+", the node it works for (300):") || !strings.Contains(b, "more: node_read "+hub+" lists them") {
+		t.Fatalf("beside a hub:\n%s", b)
+	}
+	t.Logf("beside a hub: %d runes", runeLen(b))
 }
 
 // Without a skill: the ask, no method, the default agent, nothing lent.

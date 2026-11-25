@@ -448,6 +448,14 @@ func (c *core) brainRunTask(ctx context.Context, launch launchRequest) (map[stri
 	if node := c.taskNode(t.ID); node != "" {
 		out["node"] = node
 	}
+	if launch.Skill != "" {
+		// What it is lent, the skill's defaults or the call's (task_launch.go).
+		lent := []string{}
+		for _, e := range t.Resources {
+			lent = append(lent, e.String())
+		}
+		out["lent"] = lent
+	}
 	return out, nil
 }
 

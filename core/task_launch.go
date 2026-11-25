@@ -24,7 +24,7 @@ import (
 type launchRequest struct {
 	Title     string        `json:"title,omitempty" jsonschema:"what the user reads, a few words in their language"`
 	Ask       string        `json:"ask" jsonschema:"one or two sentences: the user's request as said, or « move this node forward ». Never the node's content: the task starts with its surroundings and reads the graph"`
-	Skill     string        `json:"skill,omitempty" jsonschema:"an approved skill that fits (list_skills): its instructions are the task's method, its tools, repository and model the defaults"`
+	Skill     string        `json:"skill,omitempty" jsonschema:"an approved skill that fits (list_skills): its instructions are the task's method; the tools, repository and model it declares, the defaults (the result says what is lent)"`
 	Node      string        `json:"node,omitempty" jsonschema:"the node it works for, under which it gets its own; empty for this turn's node"`
 	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what it is lent, as node_open's steps' resources: only what it needs, the least access; given, they replace the skill's"`
 	Agent     string        `json:"agent,omitempty" jsonschema:"from list_agents; empty for the skill's model, else the default"`
