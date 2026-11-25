@@ -13,7 +13,9 @@ import (
 // under it; the node it was launched for, its node's parent, when its
 // node is its own (the brain's launches; a skill's run works in its home
 // node, a step in its step node, and writes those); and the nodes linked
-// to or from these, one hop, read at each call. Elsewhere a write is
+// to or from these, one hop, read at each call; and the nodes it opened
+// itself, wherever it opened them, with what is under them (its own
+// work; underOpened), though links from or to them open nothing. Elsewhere a write is
 // refused with a hint: say it in its node, or ask for it.
 //
 // A link counts only when someone else wrote it: a task writes [[links]]
@@ -63,7 +65,7 @@ func (c *core) writable(w nodeWriter, id string) (string, error) {
 	}
 	launch := c.launchNode(w)
 	base := func(x string) bool { return x == launch || c.under(x, w.node) }
-	if base(id) {
+	if base(id) || c.underOpened(id, w.task) {
 		return id, nil
 	}
 	// Linked from one of them, by someone else.
@@ -103,6 +105,31 @@ func (c *core) launchNode(w nodeWriter) string {
 		return ""
 	}
 	return sum.Parent
+}
+
+// underOpened tells whether node id, or a node above it, was opened by
+// task itself: its own work, wherever it opened it. Its first version is
+// the task's, or code recorded the task as its opener (a skill's run
+// writes as its skill, so its origin tells). Such a node is written, but
+// links from it or to it open nothing.
+func (c *core) underOpened(id, task string) bool {
+	for range taskWriteAncestors {
+		if id == "" {
+			return false
+		}
+		if c.firstAuthor(id) == "task:"+task {
+			return true
+		}
+		if o := c.originOf(id); o != nil && o.Task == task {
+			return true
+		}
+		sum, err := c.nodes.Get(id)
+		if err != nil {
+			return false
+		}
+		id = sum.Parent
+	}
+	return false
 }
 
 // under tells whether node id is top or below it.

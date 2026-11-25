@@ -72,6 +72,20 @@ func TestTaskWritesWhereItWorks(t *testing.T) {
 	if k, _ := c.nodes.Get(beside["id"].(string)); k.Parent != parent {
 		t.Fatalf("opened under the node it works for: %+v", k)
 	}
+	// What it opened there is its own work: it writes it, and what is
+	// under it; another task under the same node does not.
+	besideKid := mustNodes(t, c.core, task.ID, "node_open", map[string]any{"parent": beside["id"], "title": "Idée 1", "goal": "Une idée.", "body": "x"})
+	rb := mustNodes(t, c.core, task.ID, "node_read", map[string]any{"id": beside["id"]})
+	mustNodes(t, c.core, task.ID, "node_edit", map[string]any{"id": beside["id"], "expect": rb["hash"], "old": "x", "new": "Trois idées."})
+	if err := appendAs(t, c.core, task.ID, besideKid["id"].(string)); err != "" {
+		t.Fatalf("under a node it opened: %s", err)
+	}
+	second, _ := startInNode(t, c, runRequest{Title: "Autre", Prompt: "Autre chose.", Node: parent})
+	for _, id := range []string{beside["id"].(string), besideKid["id"].(string)} {
+		if err := appendAs(t, c.core, second.ID, id); !strings.Contains(err, "you write where you work") {
+			t.Fatalf("another task wrote %s: %q", id, err)
+		}
+	}
 	// Elsewhere: refused, with the hint, the node untouched.
 	for _, id := range []string{other, far, sibling} {
 		err := appendAs(t, c.core, task.ID, id)

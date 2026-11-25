@@ -1331,7 +1331,10 @@ decided), and a run or a step that ends, or the node archived, drops its progres
 - **Where it writes** (#768, `writable` in `task_write.go`, read at each call): its node and every
   node under it; the node it was launched for, its node's parent, when its node was opened for it
   (the brain's launches: a skill's run works in its home node, a step in its step node, and
-  neither writes the node above); and the nodes linked to or from these, one hop. A link counts
+  neither writes the node above); the nodes linked to or from these, one hop; and every node it
+  opened itself, wherever (under the node it works for, under a linked node), with what is under
+  it: its own work (`underOpened`: its first version is `task:<id>`, or its origin names the task),
+  though links from or to such a node open nothing. A link counts
   only when someone else brought it: a link from one of these nodes counts when the version that
   brought it (the first of the last run of versions that hold it) is not the task's author's, so
   a `[[link]]` the task writes opens nothing, even kept by a later version of someone else's (a
