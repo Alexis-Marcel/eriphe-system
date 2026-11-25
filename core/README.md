@@ -1321,17 +1321,36 @@ decided), and a run or a step that ends, or the node archived, drops its progres
   `archived`), and `node_find` finds nodes as the
   brain's does (words, tags, properties, sort, columns; archived ones with `archived`; an external
   title or properties only with `include_external`). `node_write`
-  (the whole body), `node_edit` (one block, or a piece of text found once) and `node_append` work
-  on **its own node only**: another id is refused, naming the task's node. Each write names the
+  (the whole body), `node_edit` (one block, or a piece of text found once) and `node_append` write
+  its own node when they name none, else **a node where it works** (below). Each write names the
   hash of the version it was made on (`expect`; `node_append` writes over nothing). `node_open`
-  opens a child of its node (title, goal, body), which it does not write; with `steps`, its work cut in steps ([below](#work-in-steps-node_stepsgo)). `item_note` notes an item
-  a source of its node lists. `progress` adds one line to its trace. It never starts a task.
+  opens a child (title, goal, body) of its node, or of a node where it works (`parent`); with `steps`, its work cut in steps ([below](#work-in-steps-node_stepsgo)). `item_note` notes an item
+  a source of its node lists, or of a node where it works (`id`): there, an item the source lists
+  now, and no `call`. `progress` adds one line to its trace. It never starts a task, and never
+  archives, approves or closes a node (no `node_set`).
+- **Where it writes** (#768, `writable` in `task_write.go`, read at each call): its node and every
+  node under it; the node it was launched for, its node's parent, when its node was opened for it
+  (the brain's launches: a skill's run works in its home node, a step in its step node, and
+  neither writes the node above); the nodes linked to or from these, one hop; and every node it
+  opened itself, wherever (under the node it works for, under a linked node), with what is under
+  it: its own work (`underOpened`: its first version is `task:<id>`, or its origin names the task),
+  though links from or to such a node open nothing. A link counts
+  only when someone else brought it: a link from one of these nodes counts when the version that
+  brought it (the first of the last run of versions that hold it) is not the task's author's, so
+  a `[[link]]` the task writes opens nothing, even kept by a later version of someone else's (a
+  node the task never wrote is not walked; else no further back than the version before its
+  first); a link to one of them counts when that node is the task's node, the node it works for,
+  or one not opened by the task's author, since a `[[Name]]` waiting anywhere resolves to a node
+  the task opens with that name. Elsewhere, and on an archived node, the write is refused with a hint: say it in its node,
+  or ask for it in its final message. What holds for its own node holds wherever it writes:
+  `expect`, the user's marks and code's values kept, its author, the guards below, external when
+  it is tainted. Two writers of one node (the brain, another task) are kept apart by `expect`.
 - **Who writes** is code's: `skill:<name>` for a skill's run, `task:<id>` for another. Its calls
   to `eriphe-nodes` never taint it: what it reads there taints by its own record. A node whose
   title or goal the secret filter refuses is opened without the goal, then with a neutral title
   (« Tâche <id> »): the task still starts.
 - **Taint**: a task tainted at start or by what it read (`taskTaint`, read at each call) writes
-  external: code marks its node and the blocks it writes, in the same version; a child it opens is
+  external: code marks the node it writes and the blocks it writes, in the same version; a child it opens is
   external; its item notes carry the taint. Reading what may be someone else's words taints the
   task before it is given (`taskRead`, the brain's turn by the same code, `readNodeFor`): any
   external node, block or source value it reads (`node:<id>`), a tainted item note, a title

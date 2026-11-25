@@ -45,22 +45,7 @@ func (c *core) itemCall(task, node, source, item string, call int64) error {
 	if a.Item != "" && (a.Source != source || a.Item != item) {
 		return fmt.Errorf("call: %d is on another item (%s)", call, a.Item)
 	}
-	var label *itemLabel
-	for _, rd := range c.nodeReads(node) {
-		if rd.Name != source || rd.Source.Items == nil {
-			continue
-		}
-		for _, it := range sourceItems(rd.Name, rd.Source, rd.Value, 0) {
-			if id, _ := it["id"].(string); id == item {
-				l := itemLabel{ID: id}
-				if t, _ := it["title"].(string); t != id {
-					l.Title = t
-				}
-				l.Detail, _ = it["detail"].(string)
-				label = &l
-			}
-		}
-	}
+	label := c.listedItem(node, source, item)
 	if label == nil {
 		return fmt.Errorf("call: %s is not an item the source %s of your node lists", item, source)
 	}
@@ -77,6 +62,28 @@ func (c *core) itemCall(task, node, source, item string, call int64) error {
 	}
 	c.cardRaisedFor("", proposalRef(cardCalls, batch))
 	return nil
+}
+
+// listedItem is the item a source of node lists now, by its id, as a
+// card names it; nil when it lists none so named.
+func (c *core) listedItem(node, source, item string) *itemLabel {
+	var label *itemLabel
+	for _, rd := range c.nodeReads(node) {
+		if rd.Name != source || rd.Source.Items == nil {
+			continue
+		}
+		for _, it := range sourceItems(rd.Name, rd.Source, rd.Value, 0) {
+			if id, _ := it["id"].(string); id == item {
+				l := itemLabel{ID: id}
+				if t, _ := it["title"].(string); t != id {
+					l.Title = t
+				}
+				l.Detail, _ = it["detail"].(string)
+				label = &l
+			}
+		}
+	}
+	return label
 }
 
 // askRunCall keeps a run's call for its card (keepCall) and answers the

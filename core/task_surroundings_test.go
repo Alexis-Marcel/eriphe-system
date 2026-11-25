@@ -79,9 +79,9 @@ func TestTaskReadsTheGraph(t *testing.T) {
 		t.Fatalf("a node not there: %q", err)
 	}
 
-	// Writing: its own node only.
+	// Writing: where it works only (task_write_test.go).
 	d, _ := c.nodes.Read(clean, 0)
-	if _, err := callNodes(t, c.core, task.ID, "node_write", map[string]any{"id": clean, "body": "x", "expect": d.Version.Hash}); !strings.Contains(err, "your own node") {
+	if _, err := callNodes(t, c.core, task.ID, "node_write", map[string]any{"id": clean, "body": "x", "expect": d.Version.Hash}); !strings.Contains(err, "you write where you work") {
 		t.Fatalf("wrote another node: %q", err)
 	}
 }

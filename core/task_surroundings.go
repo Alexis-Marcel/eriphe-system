@@ -24,7 +24,7 @@ import (
 // node_read, which taints it.
 
 const (
-	aroundHeading = "[Your node on Eriphe's graph: where your work sits. node_read reads any of these nodes, node_find finds others]"
+	aroundHeading = "[Your node on Eriphe's graph: where your work sits. node_read reads any of these nodes, node_find finds others; you write your node, the nodes under it, the node you work for, and the nodes someone else linked to or from these]"
 	// aroundMax is the most runes of its surroundings: about 2,000 tokens.
 	aroundMax = 6000
 	// aroundAncestors is how many ancestors it gives, the nearest first.
