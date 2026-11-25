@@ -419,8 +419,8 @@ func (c *core) eventsTaint(id string, seq int, tainted []string, pending map[str
 		switch {
 		case strings.HasPrefix(name, "mcp__eriphe-core__"):
 		case strings.HasPrefix(name, "mcp__"+nodesServer+"__"):
-			// The task's own node: what it reads there taints by its own
-			// record (task_nodes.go).
+			// The graph: what a task reads there taints by its own record
+			// (task_nodes.go).
 		case providedCall(name):
 			// Eriphe's own (the folders): what it reads taints by its own
 			// record (folder_tools.go).

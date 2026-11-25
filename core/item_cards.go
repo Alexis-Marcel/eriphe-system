@@ -429,9 +429,14 @@ const itemDone = "done"
 
 // itemCallDone keeps how a call on an item went in its node's trace,
 // once decided: not a run's (its note keeps it); one that failed is
-// traced with why already (traceFailedCall).
-func (c *core) itemCallDone(a accessQuestion, text string) {
+// traced with why already (traceFailedCall). server is the one whose
+// words text carries ("" for none): one not trusted marks the node
+// external first, as any reader of its trace (node_read) must know.
+func (c *core) itemCallDone(a accessQuestion, text, server string) {
 	if s, _ := c.callState(a.ID); s != callFailed && c.nodes != nil && a.Node != "" {
+		if server != "" && !c.trustsServer(server) {
+			c.markNodeExternal(a.Node, nodeByCode) // the tool's words: never without the mark
+		}
 		if err := c.nodes.AppendTrace(a.Node, "user", truncate(text, 400)); err != nil {
 			log.Printf("item card %d: node %s: %v", a.Batch, a.Node, err)
 		}

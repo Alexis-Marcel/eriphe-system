@@ -283,24 +283,61 @@ func (c *core) foundNode(x statusNode, quote bool, homes map[string][]string) no
 	return f
 }
 
-// brainNodeRead is node_read: what may be someone else's words taints the
-// turn.
+// brainNodeRead is node_read, as the brain calls it: what may be someone
+// else's words taints the turn.
 func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 	sum, err := c.brainNode(in.ID)
 	if err != nil {
 		return nil, err
 	}
+	out, err := c.readNodeFor(sum, in.Version, nodeReading{taint: c.turn.taint, archived: true})
+	if err != nil {
+		return nil, err
+	}
+	c.turnNode(sum.ID)
+	c.cardLookedUp(nodeRef(sum.ID)) // its card was not enough (card_use.go)
+	return out, nil
+}
+
+// nodeReading is who reads a node (readNodeFor): taint is called with
+// why when what it is given may be someone else's words; archived gives
+// its archived children too; most is the most children and backlinks it
+// is given, their count past it said (children_more, backlinks_more), 0
+// for all.
+type nodeReading struct {
+	taint    func(string)
+	archived bool
+	most     int
+}
+
+// cut keeps the first r.most of xs, and says in out under key how many
+// more there are.
+func (r nodeReading) cut(out map[string]any, key string, xs []nodestore.Summary) []nodestore.Summary {
+	if r.most <= 0 || len(xs) <= r.most {
+		return xs
+	}
+	out[key] = len(xs) - r.most
+	return xs[:r.most]
+}
+
+// readNodeFor is node_read, for the brain and a task alike: a node's
+// version, its body, its sources' last values, its place in the graph
+// (parent, children, links, backlinks), its items' notes and the end of
+// its trace. What may be someone else's words calls taint before it is
+// given: an external node, or one of its blocks or values, with
+// node:<id>; a tainted item note, with its taint. The titles around it
+// that may be someone else's words are not quoted.
+func (c *core) readNodeFor(sum nodestore.Summary, version int, r nodeReading) (map[string]any, error) {
+	taint := r.taint
 	id := sum.ID
-	d, err := c.nodes.Read(id, in.Version)
+	d, err := c.nodes.Read(id, version)
 	if err != nil {
 		return nil, err
 	}
 	values, untrusted := c.nodeValues(d.Node)
 	if nodeExternal(d.Node) || sum.External || untrusted {
-		c.turn.taint(nodeRef(id)) // its words may be someone else's
+		taint(nodeRef(id)) // its words may be someone else's
 	}
-	c.turnNode(id)
-	c.cardLookedUp(nodeRef(id)) // its card was not enough (card_use.go)
 	m := d.Node.Meta
 	out := map[string]any{"id": id, "title": m.Title, "status": c.nodeStatus(sum), "version": d.Version.N, "last": d.Last,
 		"hash": d.Version.Hash, "external": m.External, "body": nodeBody(d.Raw)}
@@ -327,6 +364,7 @@ func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 		out["maintained"] = ks // the skills that keep it up (node_home.go)
 	}
 	if back, err := c.nodes.Backlinks(id); err == nil && len(back) > 0 {
+		back = r.cut(out, "backlinks_more", back)
 		list := make([]nodeFound, 0, len(back))
 		for _, b := range c.withStatus(back) {
 			list = append(list, c.foundNode(b, false, homes)) // a title that may be someone else's words is not quoted
@@ -339,7 +377,12 @@ func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 	if !m.Archived.IsZero() {
 		out["archived"] = m.Archived.Local().Format("2006-01-02 15:04")
 	}
-	if kids, err := c.nodes.Children(id); err == nil && len(kids) > 0 {
+	kids, _ := c.nodes.Children(id)
+	if !r.archived {
+		kids = slices.DeleteFunc(kids, func(k nodestore.Summary) bool { return !k.Archived.IsZero() })
+	}
+	if len(kids) > 0 {
+		kids = r.cut(out, "children_more", kids)
 		list := make([]nodeFound, 0, len(kids))
 		for _, k := range c.withStatus(kids) {
 			list = append(list, c.foundNode(k, false, homes))
@@ -350,7 +393,7 @@ func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 		var list []map[string]string
 		for _, it := range items {
 			if it.Tainted != "" {
-				c.turn.taint(it.Tainted)
+				taint(it.Tainted)
 			}
 			list = append(list, map[string]string{"source": it.Source, "item": it.Item, "note": it.Note, "state": it.State, "group": it.Group})
 		}

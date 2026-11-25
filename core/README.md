@@ -720,7 +720,7 @@ whatever address it dials) and one client certificate per device.
 | `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
 | `catalog_read`, `sources_read` | the whole grammar of a node's block (components, sources, items, sections, glance) and what a block may read ([The catalog tools](#the-catalog-tools-node_cataloggo)) |
 | `node_open` | open a work node, for a new subject the brain's first call, before any read (a short title, a one-line « En cours : … » body, filled as the work goes): `title`, `parent` (a child of that node), `goal` (required: one line, what it is for, which guides what is written in it; `node_find` and the brain's node list give it), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); its `title` a short name of what it is about, never the user's sentence; written in a tainted turn, the node is external and its title marked; asked for a page, the brain writes it here at once, no card (a skill may then maintain it: [Live pages](#live-pages-node_livego-node_homego)); the same `openNode` as a task's `node_open`; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
-| `node_find` | find nodes by words of their title, goal, text or blocks (any word of three letters or more is enough, the nodes that hold the most first), each with its `status`, `goal` (one line; an external node's only with `include_external`, as its columns) and `maintained` (the skills that maintain it); and/or by their `tags` (each, or one below it) and properties (`where`: `{key, op, value}`, `op` one of `=`, `!=`, `<`, `<=`, `>`, `>=`, `exists`, `missing`; a number compares as a number, a date as a date, a text without case; `=` on a list holds when one value is equal), sorted (`sort` a property, `title`, `created` or `changed`; `desc`), the properties asked (`columns`) written beside each node's fields, `limit` (30, 200 at most); with neither words nor filters, those running or waiting, the heaviest first ([weight](#the-graph-workspace-the-home-page-)), then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does); an external node's columns are `withheld` the same way. It is also a block's source, `eriphe-core/node_find` (`node_find.go`) |
+| `node_find` | find nodes by words of their title, goal, text or blocks (any word of three letters or more is enough, the nodes that hold the most first), each with its `status`, `goal` (one line; an external node's only with `include_external`, as its columns) and `maintained` (the skills that maintain it); and/or by their `tags` (each, or one below it) and properties (`where`: `{key, op, value}`, `op` one of `=`, `!=`, `<`, `<=`, `>`, `>=`, `exists`, `missing`; a number compares as a number, a date as a date, a text without case; `=` on a list holds when one value is equal), sorted (`sort` a property, `title`, `created` or `changed`; `desc`), the properties asked (`columns`) written beside each node's fields, `limit` (30, 200 at most); with neither words nor filters, those running or waiting, the heaviest first ([weight](#the-graph-workspace-the-home-page-)), then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does); an external node's columns are `withheld` the same way. A task calls the same on `eriphe-nodes` ([a task's node](#a-tasks-node-task_nodego-task_nodesgo)), which taints the task instead. It is also a block's source, `eriphe-core/node_find` (`node_find.go`) |
 | `node_read` | a node's title, state, version and `hash`, body, goal, `maintained` (the skills that maintain it), parent, children, links, `backlinks` (the live nodes that link it, by their text or code), done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
 | `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying `external` (code's field); they answer `page`, what each block shows (the render report, below); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_set` | change a node's `title` or `goal`, its properties and tags (`props`: `{"tags": ["cuisine/recette"], "temps": 15, "source": null}`, `null` removes one; set in a tainted turn, they mark the node external: [node-format](../docs/node-format.md#front-matter); an attachment's id as a value keeps that file in the node: [A file the user sent](#a-file-the-user-sent-kept-with-a-node-node_attachgo)), move it under another node (`parent`, `""` for the top; never under itself or a node below it, never a step: `nodestore.SetParent`), or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a node a skill maintains is not set done |
@@ -902,8 +902,8 @@ least that share of the values at or below it) and `max`.
   other worker tasks started in the window (the brain's, a node's steps');
 - `reads.tasks`: the worker tasks started in the window; `reads.tasks_reading`: those that called
   `node_read` or `node_find`; `reads.calls`: those calls per task (all the window's tasks, zeros
-  included); `reads.by_others` is `null`: a task reads only its own node for now, the nodes it
-  reads that someone else wrote are counted once it can read the graph (#766);
+  included); `reads.by_others`: per task, its `node_read` calls that name a node other than its
+  own (`input.id`, against `task_nodes`; all the window's tasks, zeros included);
 - `turn_list`: every turn of the window, the longest first (unmeasured ones last): its `task`,
   `seq` (its `turn_end`'s), `at`, `duration_ms`, `output_tokens`, `context_tokens`, `tools` (its
   calls by name) and `launches` (its `run_task` calls).
@@ -1312,7 +1312,14 @@ decided), and a run or a step that ends, or the node archived, drops its progres
 
 - **`eriphe-nodes`**, an MCP server Eriphe provides, relayed by the device like `eriphe-memory`
   (the name is reserved in the catalog): every worker with a node has it, its tools allowed in
-  advance; it is not lent. `node_read` (a version, its hash, its body, its sources' last values, its item notes), `node_write`
+  advance; it is not lent. **Its node is its work; the graph is its context** (#766): `node_read`
+  reads any node of the graph, its own when it names none (as the brain's: a version, its hash,
+  its body, its sources' last values, its parent, children, links and backlinks, its item notes,
+  the end of its trace; 50 children and 50 backlinks at most, `children_more` and
+  `backlinks_more` counting the rest; an archived node, and archived children, only with
+  `archived`), and `node_find` finds nodes as the
+  brain's does (words, tags, properties, sort, columns; archived ones with `archived`; an external
+  title or properties only with `include_external`). `node_write`
   (the whole body), `node_edit` (one block, or a piece of text found once) and `node_append` work
   on **its own node only**: another id is refused, naming the task's node. Each write names the
   hash of the version it was made on (`expect`; `node_append` writes over nothing). `node_open`
@@ -1324,7 +1331,21 @@ decided), and a run or a step that ends, or the node archived, drops its progres
   (« Tâche <id> »): the task still starts.
 - **Taint**: a task tainted at start or by what it read (`taskTaint`, read at each call) writes
   external: code marks its node and the blocks it writes, in the same version; a child it opens is
-  external; its item notes carry the taint. Reading an external node taints the task.
+  external; its item notes carry the taint. Reading what may be someone else's words taints the
+  task before it is given (`taskRead`, the brain's turn by the same code, `readNodeFor`): any
+  external node, block or source value it reads (`node:<id>`), a tainted item note, a title
+  `node_find` quotes with `include_external` (`node_find.external`). A clean start keeps its Free
+  writes whatever it reads since, as for any read (`lentByUserKey`).
+- **Its surroundings** (`task_surroundings.go`): code adds to the first prompt of every worker
+  task with a node, after what it is asked, its node's place in the graph under a fixed heading:
+  its node (id, status, title, goal), its ancestors, the nearest first (8 at most), and an index of
+  its children, links and backlinks (id, status, title, goal; archived ones left out), within
+  6,000 characters (about 2,000 tokens), each index ending in « … n more » when it is cut. A
+  skill's run gets its home node's, a step its own. Nothing about the user, no memory: the task
+  reads more with `node_read` and `node_find`. No one else's words in it: a title that may be
+  (written after an external read) is named, not quoted, and an external node's goal is left out,
+  as `node_find` gives them. It goes in the device's spec only, never in the task's kept prompt
+  (its title, its node's goal and the [turn report](#usage-and-measures-task_statsgo) read that).
 - **Guards** nodefile does not hold, on every block a write adds or changes (a block, or a fence
   written in its text): a Button or an `Asks` only asks, in its author's literal words, never a
   bare « Oui » (`a2ui.CheckActions`),

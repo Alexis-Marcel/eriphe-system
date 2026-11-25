@@ -81,7 +81,7 @@ type readReport struct {
 	Tasks        int    `json:"tasks"`         // worker tasks started in the window
 	TasksReading int    `json:"tasks_reading"` // of which called node_read or node_find
 	Calls        spread `json:"calls"`         // those calls per task
-	ByOthers     *int   `json:"by_others"`     // nodes written by someone else: not measured yet
+	ByOthers     spread `json:"by_others"`     // node_read calls per task on a node other than its own
 }
 
 type turnReport struct {
@@ -274,15 +274,15 @@ func (s *Store) brainTurns(since time.Time) ([]reportTurn, []int64, error) {
 
 // workerReport fills the launches by skills and the tasks' graph reads,
 // from the worker tasks started since: a skill's run is in skill_runs. The
-// reads are their node_read and node_find calls (a task reads only its
-// own node until #766).
+// reads are their node_read and node_find calls; by others, their
+// node_read calls that name a node other than their own (task_nodes).
 func (s *Store) workerReport(since time.Time, rep *turnReport) error {
 	rows, err := s.db.Query(`SELECT t.id, t.prompt, EXISTS (SELECT 1 FROM skill_runs r WHERE r.task = t.id)
 		FROM tasks t WHERE t.kind = 'worker' AND t.created >= ?`, since.Unix())
 	if err != nil {
 		return err
 	}
-	reads := map[string]int64{}
+	reads, others := map[string]int64{}, map[string]int64{}
 	var skillPrompts []int64
 	for rows.Next() {
 		var id, prompt string
@@ -291,7 +291,7 @@ func (s *Store) workerReport(since time.Time, rep *turnReport) error {
 			rows.Close()
 			return err
 		}
-		reads[id] = 0
+		reads[id], others[id] = 0, 0
 		if bySkill {
 			rep.Launches.SkillRuns++
 			skillPrompts = append(skillPrompts, int64(utf8.RuneCountInString(prompt)))
@@ -304,34 +304,41 @@ func (s *Store) workerReport(since time.Time, rep *turnReport) error {
 	if err != nil {
 		return err
 	}
-	calls, err := s.db.Query(`SELECT e.task_id, COALESCE(json_extract(e.data, '$.name'), '')
-		FROM events e JOIN tasks t ON t.id = e.task_id
+	calls, err := s.db.Query(`SELECT e.task_id, COALESCE(json_extract(e.data, '$.name'), ''),
+		COALESCE(json_extract(e.data, '$.input.id'), ''), COALESCE(n.node, '')
+		FROM events e JOIN tasks t ON t.id = e.task_id LEFT JOIN task_nodes n ON n.task = t.id
 		WHERE t.kind = 'worker' AND t.created >= ? AND e.type = 'tool_use'`, since.Unix())
 	if err != nil {
 		return err
 	}
 	defer calls.Close()
 	for calls.Next() {
-		var id, name string
-		if err := calls.Scan(&id, &name); err != nil {
+		var id, name, read, own string
+		if err := calls.Scan(&id, &name, &read, &own); err != nil {
 			return err
 		}
-		if b := bareTool(name); b == "node_read" || b == "node_find" {
+		switch b := bareTool(name); {
+		case b == "node_read":
+			reads[id]++
+			if read = strings.TrimSpace(read); read != "" && read != own {
+				others[id]++
+			}
+		case b == "node_find":
 			reads[id]++
 		}
 	}
 	if err := calls.Err(); err != nil {
 		return err
 	}
-	ns := make([]int64, 0, len(reads))
-	for _, n := range reads {
-		ns = append(ns, n)
+	ns, ob := make([]int64, 0, len(reads)), make([]int64, 0, len(others))
+	for id, n := range reads {
+		ns, ob = append(ns, n), append(ob, others[id])
 		if n > 0 {
 			rep.Reads.TasksReading++
 		}
 	}
 	rep.Launches.SkillPromptChars = spreadOf(skillPrompts)
-	rep.Reads.Tasks, rep.Reads.Calls = len(reads), spreadOf(ns)
+	rep.Reads.Tasks, rep.Reads.Calls, rep.Reads.ByOthers = len(reads), spreadOf(ns), spreadOf(ob)
 	return nil
 }
 

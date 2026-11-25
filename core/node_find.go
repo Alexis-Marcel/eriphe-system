@@ -13,17 +13,17 @@ import (
 )
 
 // node_find (#743): words, and filters on a node's tags and properties,
-// a sort, the properties to give as columns, a limit. The brain calls it,
-// and a block names it as its source ({"tool": "eriphe-core/node_find",
-// "args": {…}}): code reads it like any source, so a page « Mes études en
-// attente » stays up to date by itself, read again at once when a node
-// changes.
+// a sort, the properties to give as columns, a limit. The brain and a
+// task call it (task_nodes.go), and a block names it as its source
+// ({"tool": "eriphe-core/node_find", "args": {…}}): code reads it like
+// any source, so a page « Mes études en attente » stays up to date by
+// itself, read again at once when a node changes.
 //
-// Trust is the same for both: a title written after an external read,
+// Trust is the same for all: a title written after an external read,
 // and the properties and tags of a node that may hold someone else's
 // words (an external one), are given only with include_external. The
-// brain's call then taints its turn; a block whose source says it is
-// external, and reading it taints (untrustedSources).
+// brain's call then taints its turn, a task's the task; a block whose
+// source says it is external, and reading it taints (untrustedSources).
 
 const (
 	// nodeFindMax is how many nodes node_find gives by default; nodeFindMost
@@ -55,7 +55,7 @@ type nodeFindIn struct {
 	Archived bool         `json:"archived,omitempty" jsonschema:"the archived nodes too"`
 	// IncludeExternal quotes the titles written after an external read,
 	// as since does: it taints the turn.
-	IncludeExternal bool `json:"include_external,omitempty" jsonschema:"quote what may be someone else's words too (a title written after an external read, an external node's properties): this taints the turn; a block that reads it is external"`
+	IncludeExternal bool `json:"include_external,omitempty" jsonschema:"quote what may be someone else's words too (a title written after an external read, an external node's properties): this taints the turn, or the task; a block that reads it is external"`
 }
 
 // nodeCondIn is a condition on a property.
@@ -181,14 +181,21 @@ func asked(columns []string, vals map[string]any) map[string]any {
 // brainNodeFind is node_find, as the brain calls it: what it quotes that
 // may be someone else's words taints the turn.
 func (c *core) brainNodeFind(in nodeFindIn) (map[string]any, error) {
+	return c.nodeFindFor(in, c.turn.taint, "A title written after reading external content (title_external), and an external node's properties (withheld), are quoted only with include_external, which taints the turn; node_read reads them too. Show them to the user as they are: the workspace marks them.")
+}
+
+// nodeFindFor is node_find, for the brain and a task alike: what it
+// quotes that may be someone else's words calls taint (nodeFindTaint);
+// note goes with the nodes found.
+func (c *core) nodeFindFor(in nodeFindIn, taint func(string), note string) (map[string]any, error) {
 	found, quoted, err := c.findNodes(in)
 	if err != nil {
 		return nil, err
 	}
 	if quoted {
-		c.turn.taint(nodeFindTaint) // someone else's words, quoted
+		taint(nodeFindTaint) // someone else's words, quoted
 	}
-	return map[string]any{"nodes": found, "note": "A title written after reading external content (title_external), and an external node's properties (withheld), are quoted only with include_external, which taints the turn; node_read reads them too. Show them to the user as they are: the workspace marks them."}, nil
+	return map[string]any{"nodes": found, "note": note}, nil
 }
 
 // nodeFindArgs reads a source's arguments as node_find's.

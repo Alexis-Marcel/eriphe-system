@@ -121,12 +121,15 @@ func TestTaskWritesItsNode(t *testing.T) {
 	if trace, _ := c.nodes.Trace(id); !strings.Contains(string(trace), "Dix articles lus sur dix.") {
 		t.Fatalf("trace:\n%s", trace)
 	}
-	// Its own node only: any other is refused, by name.
+	// It reads the graph, its parent too; it writes its own node only: any
+	// other is refused, by name.
+	if p := mustNodes(t, c.core, task.ID, "node_read", map[string]any{"id": pid}); p["title"] != "Substack" {
+		t.Fatalf("its parent read: %v", p)
+	}
 	for _, call := range []struct {
 		name string
 		args map[string]any
 	}{
-		{"node_read", map[string]any{"id": pid}},
 		{"node_write", map[string]any{"id": pid, "body": "x", "expect": parent.Version.Hash}},
 		{"node_append", map[string]any{"id": pid, "text": "x"}},
 		{"node_edit", map[string]any{"id": pid, "expect": parent.Version.Hash, "old": "a", "new": "b"}},
@@ -143,8 +146,8 @@ func TestTaskWritesItsNode(t *testing.T) {
 	if k, _ := c.nodes.Get(kid["id"].(string)); k.Parent != id {
 		t.Fatalf("child %+v", k)
 	}
-	if _, err := callNodes(t, c.core, task.ID, "node_read", map[string]any{"id": kid["id"]}); err == "" {
-		t.Fatal("a task read its child")
+	if _, err := callNodes(t, c.core, task.ID, "node_write", map[string]any{"id": kid["id"], "body": "x", "expect": "x"}); err == "" {
+		t.Fatal("a task wrote its child")
 	}
 	// Its status follows the task's: stopped, it is idle, not done (only
 	// the user says a node is done).
