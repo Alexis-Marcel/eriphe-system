@@ -115,7 +115,9 @@ func (c *core) titleOfTask(id string) (title string, external bool) {
 // what its Oui does.
 func (c *core) accessOrigin(a accessQuestion, lang string) cardOrigin {
 	var o originParts
-	if a.Call != "" && a.TaskID != c.brainTaskID() {
+	// A brain's call, whichever of its tasks asked (a session that started
+	// fresh since has another): not a task's.
+	if t, err := c.store.task(a.TaskID); a.Call != "" && (err != nil || t.Kind != assistantRoleBrain) {
 		o.task, o.taskExt = c.titleOfTask(a.TaskID) // a grant or a release names its task in its text
 	}
 	from, ext := o.from(lang)

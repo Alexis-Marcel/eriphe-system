@@ -605,6 +605,9 @@ type AssistantStatus struct {
 	AccountStamp   string `json:"account_stamp,omitempty"` // a digest of its account's key when it started
 	ToolsHash      string `json:"tools_hash,omitempty"`
 	SeenSeq        int    `json:"seen_seq,omitempty"` // its events relayed
+	// Refresh: its session outgrew its role's SessionTokens; its task is
+	// stopped and the next starts a fresh session (refreshIfOutgrown).
+	Refresh bool `json:"refresh,omitempty"`
 
 	// The assistant role's (assistant_tools.go): when each schedule wakes
 	// it next, and why its session is tainted, read up to its task's event

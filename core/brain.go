@@ -15,10 +15,17 @@ import (
 // with only MCP tools. eriphe-core gives it one turn per event: my messages,
 // and what happens to its workers. It never polls.
 
-// The brain's session bounds (assistantRole.ResumeTokens, ResumeIdle).
+// The brain's session bounds (assistantRole.SessionTokens, ResumeIdle).
 const (
-	brainResumeTokens = 150_000
-	brainResumeIdle   = 55 * time.Minute
+	// brainSessionTokens bounds its context per call: a session past it is
+	// not resumed by a new task, and a running one starts fresh at its
+	// next idle with the context pack. On the owner's install a session
+	// grew from ~42k to ~372k, median 124k, each turn reading it all
+	// again. At 100k a session starting near 42k keeps more than half the
+	// bound as history, beside what the graph holds; a fresh start costs
+	// one short turn. Above brainResumeIdleFloor, under the median.
+	brainSessionTokens = 100_000
+	brainResumeIdle    = 55 * time.Minute
 	// Under it, the pause rule does not apply: the pack would save little
 	// and lose the session's detail.
 	brainResumeIdleFloor = 60_000
@@ -198,7 +205,7 @@ func init() {
 		// hour, less a margin): past that, a fresh one with the context
 		// pack costs a fraction of writing the whole history again.
 		// A small session is resumed after a pause all the same.
-		ResumeTokens: brainResumeTokens, ResumeIdle: brainResumeIdle, ResumeIdleFloor: brainResumeIdleFloor,
+		SessionTokens: brainSessionTokens, ResumeIdle: brainResumeIdle, ResumeIdleFloor: brainResumeIdleFloor,
 		instructions: func(c *core, _ Assistant, prompt string) string {
 			// The profile, from the memory: data about the user, quoted.
 			if profile := c.profileBlock(false); profile != "" {
@@ -226,14 +233,18 @@ func init() {
 
 // brainStarted resets what the conversation keeps of the brain's task:
 // its draft, and its turn. A resumed session still holds what the
-// previous task read: its turn goes on, as tainted.
-func (c *core) brainStarted(_ Assistant, _ *TaskRow, resumed bool) {
+// previous task read: its turn goes on, as tainted. So does the turn of a
+// session that outgrew its bound (refreshIfOutgrown): it was cut between
+// two deliveries, and what the old session read may be in what the pack
+// carries over (its own words); the user's next message starts a clean one.
+func (c *core) brainStarted(a Assistant, _ *TaskRow, resumed bool) {
+	goOn := resumed || c.assistantStatus(a.Name).Refresh
 	var carried []string
-	if resumed {
+	if goOn {
 		carried = c.turnTaint() // read from the previous task: its status still names it
 	}
 	c.draft.set("", c.store.lastMessageSeq())
-	if resumed {
+	if goOn {
 		c.turn.goOn(0, 0, 0, carried)
 	} else {
 		c.turn.start(0, 0, 0)

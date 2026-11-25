@@ -20,9 +20,11 @@ import (
 // The assistant controller: one loop keeps every assistant's task as its
 // spec says. An enabled assistant has exactly one task running; one that
 // fails is started again after a wait, resuming its session while that
-// works and stays cheap (its role's ResumeTokens and ResumeIdle); a change of its agent, instructions or tools restarts it once its
-// turn is over; a disabled or removed one has its task stopped. What an
-// assistant is comes from its role's card, what wakes it from its
+// works and stays cheap (its role's SessionTokens and ResumeIdle); a
+// session grown past SessionTokens starts fresh at its next idle; a change
+// of its agent, instructions or tools restarts it once its turn is over;
+// a disabled or removed one has its task stopped. What an assistant is
+// comes from its role's card, what wakes it from its
 // triggers' cards: the controller never asks for a name.
 
 // assistantRole is a role's card: what an assistant of that role gets and
@@ -56,22 +58,27 @@ type assistantRole struct {
 	// Fresh: each of its tasks starts a new session, never resuming the
 	// last one: each of its turns carries all it needs.
 	Fresh bool
-	// ResumeTokens and ResumeIdle bound the session a new task resumes:
+	// SessionTokens and ResumeIdle bound the session a new task resumes:
 	// past either (its last turn's context per call, the time since that
 	// turn ended) the task starts a fresh session instead, its role's
 	// first turn carrying the conversation over. Each resumed call reads the
 	// whole history, and a cache older than an hour is written again in
 	// full. Zero: no bound.
+	// SessionTokens bounds a running session too: past it, the session
+	// starts fresh at its next idle (sessionOutgrown).
 	// ResumeIdleFloor: a session under it is resumed even after the pause,
 	// its cache cheap to write again and its detail more than the pack's.
-	ResumeTokens    int64
+	SessionTokens   int64
 	ResumeIdle      time.Duration
 	ResumeIdleFloor int64
 
 	// Hooks; nil does nothing.
-	instructions func(c *core, a Assistant, prompt string) string     // completes its standing prompt
-	firstPrompt  func(c *core, a Assistant, resume bool) string       // its first turn
-	started      func(c *core, a Assistant, t *TaskRow, resumed bool) // after its task is created
+	instructions func(c *core, a Assistant, prompt string) string // completes its standing prompt
+	firstPrompt  func(c *core, a Assistant, resume bool) string   // its first turn
+	// started runs after its task is created; its status still names the
+	// previous task, and Refresh says whether that one's session outgrew
+	// SessionTokens.
+	started func(c *core, a Assistant, t *TaskRow, resumed bool)
 	// permission is its approval path; nil refuses everything: an
 	// assistant works through its MCP tools.
 	permission func(c *core, ctx context.Context, a Assistant, t *TaskRow) error
@@ -288,6 +295,9 @@ func (c *core) tendAssistant(ctx context.Context, a Assistant, token string) err
 		if stop, err := c.restartIfChanged(ctx, a, t); stop {
 			return err
 		}
+		if stop, err := c.refreshIfOutgrown(ctx, a, r, t); stop {
+			return err
+		}
 		return c.deliverAssistant(ctx, a, t)
 	}
 	return nil
@@ -322,8 +332,10 @@ func (c *core) restartAssistant(ctx context.Context, a Assistant, r assistantRol
 	if fails == 3 && r.failing != nil {
 		r.failing(c, a)
 	}
-	// A resume that keeps failing is dropped: better a fresh session than none.
-	resume := t != nil && fails < 2
+	// A resume that keeps failing is dropped: better a fresh session than
+	// none. A session that outgrew its bound is not resumed: its task was
+	// stopped to start a fresh one (refreshIfOutgrown).
+	resume := t != nil && fails < 2 && !st.Refresh
 	return c.startAssistant(ctx, a, r, token, resume)
 }
 
@@ -502,6 +514,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 		st.Profile = c.profileHash()
 		st.Resume = extra.Resume // checked against the session it reports
 		st.PackDue = false       // a fresh session has it in its first turn
+		st.Refresh = false
 	})
 	log.Printf("%s: started task %s on %s (resume=%v)", c.assistantLog(a), t.ID, orStr(t.Device, "no device yet"), extra.Resume != "")
 	return nil
@@ -510,20 +523,71 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 // sessionWorn says why a session is not worth resuming under its role's
 // bounds, from its last turn (whichever task ran it); "" to resume it.
 func (c *core) sessionWorn(r assistantRole, session string) string {
-	if r.ResumeTokens == 0 && r.ResumeIdle == 0 {
+	if r.SessionTokens == 0 && r.ResumeIdle == 0 {
 		return ""
 	}
 	at, tokens, ok := c.store.lastSessionTurn(session)
 	if !ok {
 		return "" // no turn measured: nothing to go by
 	}
-	if r.ResumeTokens > 0 && tokens > r.ResumeTokens {
+	if r.SessionTokens > 0 && tokens > r.SessionTokens {
 		return fmt.Sprintf("~%dk tokens per call", tokens/1000)
 	}
 	if idle := time.Since(at); r.ResumeIdle > 0 && idle > r.ResumeIdle && tokens > r.ResumeIdleFloor {
 		return fmt.Sprintf("last turn %s ago", idle.Round(time.Minute))
 	}
 	return ""
+}
+
+// refreshIfOutgrown stops an idle assistant's task whose session outgrew
+// its role's SessionTokens (stop true), so that a fresh session starts with
+// its role's first turn: for the brain, the context pack. Each call of a
+// running session reads its whole history again, which grows turn after
+// turn; eriphe-core holds the conversation, the graph the state.
+//
+// What waits for it stays: this runs before the delivery, and on every
+// tick until its task has stopped (the stop is the device's), so nothing
+// is delivered to the session that ends; the waiting messages go to the
+// fresh one at its first idle. Its cards and the turn's taint are carried
+// by the role's started hook (brainStarted). The fresh session is not the
+// old one resumed: restartAssistant reads Refresh, never st.Session.
+func (c *core) refreshIfOutgrown(ctx context.Context, a Assistant, r assistantRole, t *TaskRow) (stop bool, err error) {
+	st := c.assistantStatus(a.Name)
+	if !st.Refresh {
+		// Its start turn not answered yet, or a delivery its device has
+		// not taken: never cut what is in flight.
+		if st.Quiet || c.hasUndelivered(t.ID) {
+			return false, nil
+		}
+		why := c.sessionOutgrown(r, t.SessionID)
+		if why == "" {
+			return false, nil
+		}
+		log.Printf("%s: session %s outgrew its bound (%s): task %s stops, a fresh session starts", c.assistantLog(a), t.SessionID, why, t.ID)
+		c.updateAssistant(a.Name, func(st *AssistantStatus) { st.Refresh = true })
+	}
+	if c.store.get("brain_stopped:"+t.ID) != "" {
+		return true, nil // asked already: its device stops it
+	}
+	return true, c.stopByBrain(ctx, t.ID)
+}
+
+// sessionOutgrown says why a running session should start fresh, "" if it
+// should not: its last turn's context per call is past its role's
+// SessionTokens, and at least half of that bound is history, what a fresh
+// session drops (a session that starts near the bound would otherwise
+// start again after each turn). Only an exact measure counts
+// (usage.context_tokens, Claude Code's last call): a sum over a turn's
+// calls errs high, and would restart a session that is not large.
+func (c *core) sessionOutgrown(r assistantRole, session string) string {
+	if r.SessionTokens == 0 || session == "" {
+		return ""
+	}
+	first, last, ok := c.store.sessionContext(session)
+	if !ok || last <= r.SessionTokens || last-first < r.SessionTokens/2 {
+		return ""
+	}
+	return fmt.Sprintf("~%dk tokens per call", last/1000)
 }
 
 // A resume can also fall through on the device, which then opens a new

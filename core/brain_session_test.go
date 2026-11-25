@@ -28,7 +28,7 @@ func sessionTurn(t *testing.T, c *core, id, s string, ago time.Duration, usage m
 }
 
 // The brain resumes its session while it is small and its cache warm;
-// past brainResumeTokens per call, or brainResumeIdle above
+// past brainSessionTokens per call, or brainResumeIdle above
 // brainResumeIdleFloor, it starts fresh with the pack. The measure is the session's, whichever task ran its last turn.
 func TestBrainSessionBounds(t *testing.T) {
 	small := map[string]any{"input_tokens": 3, "cache_read_tokens": 60000, "cache_write_tokens": 2000, "context_tokens": 40000}

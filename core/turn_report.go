@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"math"
 	"net/http"
 	"sort"
@@ -84,12 +85,25 @@ type readReport struct {
 	ByOthers     spread `json:"by_others"`     // node_read calls per task on a node other than its own
 }
 
+// delegatedReport is how long the work the brain delegates takes to come
+// back: a short turn that launches a task answers the user only when the
+// task ends.
+type delegatedReport struct {
+	Tasks int `json:"tasks"` // started in the window by the brain's run_task
+	Ended int `json:"ended"` // of which ended: a first turn_end, or stopped, failed or lost
+	// FromMessageMS: for those that ended and whose launching turn
+	// answered a message of the user's, the time from that message to
+	// their end.
+	FromMessageMS spread `json:"from_message_ms"`
+}
+
 type turnReport struct {
-	Days     int          `json:"days"`
-	Since    time.Time    `json:"since"`
-	Brain    brainReport  `json:"brain"`
-	Launches launchReport `json:"launches"`
-	Reads    readReport   `json:"reads"`
+	Days      int             `json:"days"`
+	Since     time.Time       `json:"since"`
+	Brain     brainReport     `json:"brain"`
+	Launches  launchReport    `json:"launches"`
+	Reads     readReport      `json:"reads"`
+	Delegated delegatedReport `json:"delegated"`
 	// TurnList: every turn of the window, the longest first.
 	TurnList []reportTurn `json:"turn_list"`
 }
@@ -183,7 +197,71 @@ func (s *Store) turnReport(since time.Time, days int) (turnReport, error) {
 	if err := s.workerReport(since, &rep); err != nil {
 		return rep, err
 	}
+	if err := s.delegatedReport(since, &rep.Delegated); err != nil {
+		return rep, err
+	}
 	return rep, nil
+}
+
+// task_launches links a task the brain's run_task started to the message
+// of the user's its turn answered (0: a turn of events only), as the
+// launch knows it: no event says which call started which task.
+const taskLaunchesSchema = `CREATE TABLE IF NOT EXISTS task_launches (
+	task TEXT PRIMARY KEY,
+	msg  INTEGER NOT NULL DEFAULT 0
+);`
+
+func init() { extraSchema = append(extraSchema, taskLaunchesSchema) }
+
+// recordLaunch notes a task the brain's run_task started, with the message
+// of the user's its turn answers (turnOrigin).
+func (c *core) recordLaunch(task string) {
+	var msg int
+	if o := c.turnOrigin(); o != nil {
+		msg = o.Msg
+	}
+	if _, err := c.store.db.Exec(`INSERT OR REPLACE INTO task_launches (task, msg) VALUES (?, ?)`, task, msg); err != nil {
+		log.Printf("turn report: launch of %s: %v", task, err)
+	}
+}
+
+// delegatedReport fills the delegated work: the tasks the brain's run_task
+// started since, their end (their first turn_end, else their first stop,
+// failure or loss in task_log, else, for one stopped before a device took
+// it, which task_log never hears of, its row's last update), and the time from the user's message their
+// launching turn answered to that end.
+func (s *Store) delegatedReport(since time.Time, rep *delegatedReport) error {
+	rows, err := s.db.Query(`SELECT COALESCE(m.time, 0), COALESCE((SELECT MIN(at) FROM (
+			SELECT e.time AS at FROM events e WHERE e.task_id = l.task AND e.type = 'turn_end'
+			UNION ALL SELECT g.at FROM task_log g WHERE g.task_id = l.task AND g.state IN (?, ?, ?))),
+			CASE WHEN t.state IN (?, ?, ?) THEN t.updated END, 0)
+		FROM task_launches l JOIN tasks t ON t.id = l.task
+		LEFT JOIN messages m ON m.seq = l.msg AND m.role = ?
+		WHERE t.created >= ?`, stateStopped, stateFailed, stateLost, stateStopped, stateFailed, stateLost, roleUser, since.Unix())
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var waits []int64
+	for rows.Next() {
+		var asked, ended int64
+		if err := rows.Scan(&asked, &ended); err != nil {
+			return err
+		}
+		rep.Tasks++
+		if ended == 0 {
+			continue
+		}
+		rep.Ended++
+		if asked > 0 {
+			waits = append(waits, max(ended-asked, 0)*1000)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rep.FromMessageMS = spreadOf(waits)
+	return nil
 }
 
 func durOf(t reportTurn) int64 {

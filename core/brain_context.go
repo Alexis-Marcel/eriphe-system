@@ -14,7 +14,7 @@ import (
 // tasks and the memory; the harness session (--resume) is only a cache of
 // them. A session that cannot be resumed (the first one, a resume that kept
 // failing, another harness) or is not worth it (too large, or its cache
-// gone after a pause: brainResumeTokens, brainResumeIdle) starts from this
+// gone after a pause: brainSessionTokens, brainResumeIdle) starts from this
 // pack instead.
 //
 // It goes in the session's first turn, never in the system prompt: the
