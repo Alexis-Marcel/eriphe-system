@@ -558,23 +558,24 @@ func (b *bench) launchedOn(node string) bool {
 }
 
 // scoreRework scores « rework this page » said on it: a task launched on
-// it, the brain's own writes one at most, its answer within 20 s (to the
-// second the conversation keeps).
+// it, the brain's own writes before its answer one at most, its answer
+// within 20 s (to the second the conversation keeps).
 func (b *bench) scoreRework(page string) {
+	answered, ok, answerAt := "-", false, time.Time{}
+	if msgs, _ := b.sc.c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ? AND seq > (SELECT MAX(seq) FROM messages WHERE role = ?) ORDER BY seq LIMIT 1`, roleBrain, roleUser); len(msgs) > 0 {
+		answerAt = msgs[0].Time.Add(time.Second) // kept to the second
+		took := msgs[0].Time.Sub(b.saidAt)
+		answered, ok = fmt.Sprintf("%.1f", took.Seconds()), took <= 20*time.Second
+	}
+	// The launching turn's writes: those before its answer, not its wakes'.
 	writes := 0
 	for _, x := range b.turnCalls(b.turn) {
-		if x.err == "" && (x.tool == "node_write" || x.tool == "node_edit" || x.tool == "item_note") {
+		if x.err == "" && (x.tool == "node_write" || x.tool == "node_edit" || x.tool == "item_note") && (answerAt.IsZero() || x.endAt.Before(answerAt)) {
 			writes++
 		}
 	}
 	b.s.yes("rework: task launched on the page", b.launchedOn(page), "no run_task on the page")
 	b.s.set("rework: brain's own writes", strconv.Itoa(writes), writes <= 1)
-	answered := "-"
-	ok := false
-	if msgs, _ := b.sc.c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ? AND seq > (SELECT MAX(seq) FROM messages WHERE role = ?) ORDER BY seq LIMIT 1`, roleBrain, roleUser); len(msgs) > 0 {
-		took := msgs[0].Time.Sub(b.saidAt)
-		answered, ok = fmt.Sprintf("%.1f", took.Seconds()), took <= 20*time.Second
-	}
 	b.s.set("rework: answered in (s)", answered, ok)
 }
 

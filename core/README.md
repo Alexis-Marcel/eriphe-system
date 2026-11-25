@@ -2419,7 +2419,7 @@ task on a device (stable `profile`, so its session survives restarts), with only
 `brain-prompt.md`, built into the binary, or the file `prompt_file` names instead.
 
 **Its fixed context** (#706) is what it reads before any work: the standing prompt (in French,
-at most 33,710 characters), its tools as the MCP client lists them (at most 45 KB of JSON for the
+at most 33,700 characters), its tools as the MCP client lists them (at most 45 KB of JSON for the
 46 tools) and their instructions (`tools.go`, at most 5 KB, the concepts' map with them). A test
 (`brain_size_test.go`) prints and bounds the three. What keeps them small: a rule the code
 enforces is code, not a sentence (a home call's trace, a subject's title after an external read, a
