@@ -46,10 +46,11 @@ func (w *web) handleSkillRuns(rw http.ResponseWriter, r *http.Request, s *sessio
 }
 
 // skillsPage is Settings → Skills: the skills, each triggered one's
-// trigger in words.
+// trigger in words, and what each uses.
 type skillsPage struct {
 	Skills   any
 	Triggers map[string]string // a triggered skill's trigger, in words
+	Uses     map[string]string // what a skill uses, in words (skillUses)
 }
 
 func (w *web) handleSkills(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -58,8 +59,9 @@ func (w *web) handleSkills(rw http.ResponseWriter, r *http.Request, s *session) 
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	triggers, uses := w.skillTexts(w.lang(r))
 	w.render(rw, r, s, "settings", "", page{Title: "settings.skills", Nav: "settings", Tab: "skills",
-		Data: skillsPage{Skills: skills, Triggers: w.triggerTexts(w.lang(r))}})
+		Data: skillsPage{Skills: skills, Triggers: triggers, Uses: uses}})
 }
 
 // skillFileView is a file of the version shown.
@@ -259,22 +261,30 @@ func (v skillFileView) Human() string { return humanSize(int64(v.Size)) }
 // Short is the start of a version's hash, as the page shows it.
 func (v *skillVersion) Short() string { return v.SHA[:min(12, len(v.SHA))] }
 
-// triggerTexts say each approved skill's trigger in words.
-func (w *web) triggerTexts(lang string) map[string]string {
-	out := map[string]string{}
+// skillTexts say each approved skill's trigger, and what it uses, in
+// words.
+func (w *web) skillTexts(lang string) (triggers, uses map[string]string) {
+	triggers, uses = map[string]string{}, map[string]string{}
 	ks, err := w.c.store.skills()
 	if err != nil {
-		return out
+		return
 	}
 	for _, k := range ks {
 		if k.Approved == "" {
 			continue
 		}
-		if m, ok := w.c.skillManifestOf(k.Approved); ok && m.Trigger != nil {
-			out[k.Name] = m.Trigger.Text(lang)
+		m, ok := w.c.skillManifestOf(k.Approved)
+		if !ok {
+			continue
+		}
+		if m.Trigger != nil {
+			triggers[k.Name] = m.Trigger.Text(lang)
+		}
+		if u := m.Uses.Text(lang); u != "" {
+			uses[k.Name] = u
 		}
 	}
-	return out
+	return
 }
 
 // handleRunCall answers one action a run proposed: yes runs it as kept, no

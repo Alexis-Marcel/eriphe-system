@@ -1326,7 +1326,8 @@ decided), and a run or a step that ends, or the node archived, drops its progres
   hash of the version it was made on (`expect`; `node_append` writes over nothing). `node_open`
   opens a child (title, goal, body) of its node, or of a node where it works (`parent`); with `steps`, its work cut in steps ([below](#work-in-steps-node_stepsgo)). `item_note` notes an item
   a source of its node lists, or of a node where it works (`id`): there, an item the source lists
-  now, and no `call`. `progress` adds one line to its trace. It never starts a task, and never
+  now, and no `call`. `progress` adds one line to its trace. A task that follows a skill has
+  `skill_propose` too ([Skills improve with use](#skills)). It never starts a task, and never
   archives, approves or closes a node (no `node_set`).
 - **Where it writes** (#768, `writable` in `task_write.go`, read at each call): its node and every
   node under it; the node it was launched for, its node's parent, when its node was opened for it
@@ -1945,6 +1946,27 @@ Skills** (`web_skills.go`):
 - **A new version** (the same name, uploaded again) waits for approval with its diff against the
   approved one, file by file. Tasks keep the approved version until the user approves the new one
   (the hash they read is checked) or keeps the old one.
+- **What it uses**: any skill, triggered or not, may declare in its front matter the `model` its
+  tasks run with, the catalog `tools` they are lent (10 at most) and its `repos` (`owner/name`, 10
+  at most). They are approved with the rest of the version: its card and its page say them
+  (`skillUses`). A skill the brain launches a task with (`run_task`'s `skill`) gives them as the
+  launch's defaults; a triggered skill's runs are lent its tools, and their steps may borrow its
+  repositories ([Triggered skills](#triggered-skills)).
+- **Skills improve with use** (`skill_propose.go`, #769): a task that follows a skill (launched
+  with it by `run_task`, or a skill's run) is told, in its system prompt, to propose a better
+  version of it when, to finish, it had to correct its method: the method was wrong, or missed a
+  step or a check the skill should have had; never for a detail of its node or of that one time.
+  `skill_propose` (eriphe-nodes, registered only for such a task; `skill`, `instructions`, `why`)
+  takes only that skill (another, or a task without a skill, is refused) and only its
+  instructions: the new version keeps the approved `SKILL.md`'s front matter byte for byte (its
+  trigger, what it uses) and the bundle's other files, so a task never changes what its skill is
+  lent nor when it runs. It is added as a version written by Eriphe (`proposeSkillVersion`, the
+  same as `write_skill`'s): it waits on its card (kind `skill`, raised for the task's node and put
+  in the attention queue, `cardNow`) with why in the task's words first, marked when the task is
+  tainted; the approved version stays until the yes, and is kept after (`skill_kept`). One
+  version waits at a time: while one waits (the user's upload, the brain's, a task's), a
+  proposal is refused. The brain is told, as an event of the task's node in code's words only,
+  that a version waits.
 - **On or off**, and **delete**; only the user turns a skill off. A version that no longer
   reads (its front matter refused) is shown still, with the reason. Bundles no skill points at any more are deleted, but for the last five versions a skill replaced or had when deleted (`skill_kept`), which the [learning journal](#what-eriphe-learned) needs to undo a change; they are never given to a task.
 
@@ -1965,8 +1987,8 @@ reading one does not taint the turn.
 **A task launched with a skill** (`run_task`'s `skill`, `task_launch.go`): the brain names one of
 the user's active skills (approved and on), and code gives the task its method after its ask:
 « [Your method: the user's skill « name », approved by them …] », then the skill's name,
-description and `SKILL.md` body, as a skill's run gets them (`skillMethod`). A triggered skill's
-declared `tools`, single repository (read) and `model` are the launch's defaults: `resources` named
+description and `SKILL.md` body, as a skill's run gets them (`skillMethod`). The skill's
+declared `tools`, single repository (read) and `model` (any skill's, [Skills](#skills)) are the launch's defaults: `resources` named
 by the call replace them, an `agent` named wins over the model. A skill that declares several
 repositories lends none by default: the call names the one. An unknown, unapproved or disabled
 skill is refused with the active ones' names. Rights do not move: what the task is lent goes
@@ -2137,9 +2159,9 @@ turn is not tainted. Its front matter:
 |---|---|
 | `when` | an event kind of the [journal](#events) (`monitor.new key=mails`, `monitor.changed key=getout-prod`), with filters on its key or payload (`monitor.received key=getout status=firing`), or a payload number compared (`user.returned away_minutes>=180`, `<=` too); or up to 5 kinds, by commas, that share the filters (`monitor.failed, monitor.recovered key=getout-prod`: one skill for one way of reacting, its run says each event's kind); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules); or both, the schedule then `;` and the events (`time daily 06:00; user.returned away_minutes>=180`): it runs at its times and on its events |
 | `every` | batching, 5m to 1d: the period starts with the first event waiting; then one task gets all of them. Without it, at once |
-| `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
-| `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
-| `repos` | the repositories its runs' steps may borrow, `owner/name`, by commas or a list (10 at most): a clean run's step on them starts without a card ([Work in steps](#work-in-steps-node_stepsgo)); a run itself is not lent them |
+| `model` | the agent of its tasks (Settings → Agents); the default one otherwise. Any skill's, with or without `when` ([Skills](#skills)) |
+| `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid. Any skill's |
+| `repos` | its repositories, `owner/name`, by commas or a list (10 at most): its runs' steps may borrow them, a clean run's step on them starting without a card ([Work in steps](#work-in-steps-node_stepsgo)); a run itself is not lent them. Any skill's |
 | `node` | with `when`: the id of its home, any node, which it maintains ([Live pages](#live-pages-node_livego-node_homego)): each run's task is that node's, reads and writes it, notes its items and opens its children, and may act on other nodes; the node is never given a run's report, nor set done while the skill is approved and on. A node that is gone or archived refuses the run. Without it, each run works in a node of its own |
 | `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run weighs something 5 |
 
@@ -2169,7 +2191,7 @@ version, read with its diff.
   items coming with it (no heavier, delivered with it: one message); below, their items speak
   alone in the queue, not twice. The run's note lists
   what was dropped.
-  Then its task stops. The brain is not told of its state and never woken by a run; its
+  Then its task stops. The brain is not told of its state and never woken by a run (but for a version of its skill it proposes, [Skills](#skills)); its
   permissions are the user's, as any task's.
 - **One run open per skill and key**: the key's new events wait, and when its turn ends, its task
   gets them as a message instead of a second task.
@@ -2214,9 +2236,10 @@ keys and the runs' outcomes, but not their text: what a run read stays on its pa
 **Written by Eriphe.** The brain's `write_skill` (name, description, instructions, `when`,
 `every`, `model`, `tools`, `urgent`, `repos`, `node`, `monitor`) writes a `SKILL.md` and adds it as a version waiting for
 approval (source `eriphe`), checked as an upload is (its model an agent, its tools catalog
-servers). Its card (kind `skill`) says the monitor it brings (`monitor`: made on by the same yes, [Live pages](#live-pages-node_livego-node_homego)), the trigger in words, the repositories its steps may borrow, the node it maintains and the instructions; the yes approves
-exactly that version (and its monitor), the no drops it. Written on a tainted turn, the card says so. A triggered
-task has no such tool.
+servers). Its card (kind `skill`) says the monitor it brings (`monitor`: made on by the same yes, [Live pages](#live-pages-node_livego-node_homego)), the trigger in words, the tools, repositories and model it uses, the node it maintains and the instructions; the yes approves
+exactly that version (and its monitor), the no drops it. Written on a tainted turn, the card says so. A task
+has no such tool: one that follows a skill proposes a version of that one only, its instructions
+(`skill_propose`, [Skills](#skills)).
 
 ## Events
 

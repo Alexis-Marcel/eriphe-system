@@ -17,6 +17,7 @@
     <p class="muted small skill-desc">{{.Description}}</p>
     {{template "skill-unread" .}}
     {{with index $.Data.Triggers .Name}}<p class="small skill-trigger">{{.}}</p>{{end}}
+    {{with index $.Data.Uses .Name}}<p class="small skill-trigger">{{t "skills.uses"}} : {{.}}</p>{{end}}
     <p class="muted small">{{tf "skills.files" .Files}}</p>
   </li>
 {{end}}
@@ -52,6 +53,7 @@
   <h2 class="mono">{{.Skill.Name}}</h2>
   <p>{{.Shown.Manifest.Description}}</p>
   {{with .Shown.Manifest.Trigger}}<p><strong>{{t "skills.trigger"}}</strong> : {{.Text $.Lang}}</p>{{end}}
+  {{with .Shown.Manifest.Uses.Text $.Lang}}<p><strong>{{t "skills.uses"}}</strong> : {{.}}</p>{{end}}
   {{template "skill-unread" .Skill}}
 </header>
 
