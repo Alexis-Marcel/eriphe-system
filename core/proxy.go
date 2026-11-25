@@ -49,6 +49,7 @@ func (c *core) taskMCPHandler() http.Handler {
 			return
 		}
 		server := r.PathValue("server")
+		r.Header.Del(brainCallHeader) // only eriphe-core says it (brain_budget.go)
 		if server == selfServer {
 			// eriphe-core's own tools, for an assistant that launches tasks,
 			// without self_url: what the bearer token gives at /mcp.
@@ -64,6 +65,9 @@ func (c *core) taskMCPHandler() http.Handler {
 			if s == nil {
 				http.Error(w, "this task has no access to "+server, http.StatusForbidden)
 				return
+			}
+			if a.Role == assistantRoleBrain {
+				r.Header.Set(brainCallHeader, "1") // the brain's calls: held to its budget (brain_budget.go)
 			}
 			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, s)))
 			return
@@ -286,17 +290,27 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 	default:
 		return toolError("this call was not allowed through Eriphe's permissions: ask for it as usual")
 	}
+	brain := taskID == c.brainTaskID()
+	var took spent
+	if brain && !onlyReads(u.tool(tool), f) {
+		var why string
+		if why, took = c.turn.chargeCatalog(); why != "" {
+			return toolError(why) // the brain's budget (brain_budget.go)
+		}
+	}
 	c.calledCatalog(taskID, u.name, tool) // what a task reads taints it, and the brain's turn (memory_trust.go)
 	start := time.Now()
 	res, err := u.call(ctx, tool, args)
 	log.Printf("task %s: %s.%s %dms err=%v", taskID, u.name, tool, time.Since(start).Milliseconds(), err != nil)
+	if err != nil || res.IsError {
+		c.turn.refund(took) // it changed nothing
+	}
 	if err != nil {
 		return toolError(err.Error())
 	}
 	if res.IsError {
 		return res
 	}
-	brain := taskID == c.brainTaskID()
 	if acting && brain {
 		c.traceBrainCall(u.name, tool)
 	}

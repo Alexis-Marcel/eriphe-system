@@ -19,8 +19,9 @@ import (
 // #663), or any answer at all of a turn that answers no act of the
 // user's (an event's, a wake's: the orb never says it, web_orb.go), when
 // the brain wrote no
-// node in the turn (node_open, node_write, node_edit) and proposed nothing
-// on a card (what it says is then about the card, which waits under it),
+// node in the turn (node_open, node_write, node_edit), launched no task on
+// one (run_task: the task writes it, #770) and proposed nothing on a card
+// (what it says is then about the card, which waits under it),
 // goes:
 //
 //   - into the node the turn answers in (talkNode): whole in its trace,

@@ -13,7 +13,7 @@ import (
 // Each is bounded: a rule the code enforces is code, a shape is said once
 // (sharedShapes), a block's grammar is catalog_read's.
 const (
-	brainPromptMax  = 35000 // runes
+	brainPromptMax  = 33700 // runes
 	brainToolsMax   = 45000 // bytes of JSON, every tool
 	brainInstrucMax = 5000  // bytes
 )

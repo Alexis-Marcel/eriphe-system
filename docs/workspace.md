@@ -176,12 +176,15 @@ Eriphe first decides **where** the answer goes. A quick question ("what time is 
 "what's my next appointment?") or a simple action is answered in one line by the orb, with no new
 bubble. What is about the page you are on is answered there. Anything else is a subject: its bubble
 appears within seconds, before Eriphe reads anything, saying what it is doing, and fills as the
-work goes, written by Eriphe or by the agents working under it. Eriphe answers by **showing**: the
+work goes, written by the agent Eriphe launches on it. Eriphe orchestrates: it answers in one line
+naming the page ("I'm on it in « My mails »"), so you can go on with something else, and does
+itself only a quick read, a gesture of a call or two, a yes or no, a one-line fix; a whole page or
+a series of writes is an agent's work. Eriphe answers by **showing**: the
 subject's page opens in front of you with what you need to know, like a dashboard, and the
 conversation goes on there. Asked from the home, the bar moves into that page; asked from a page,
 the new one opens beside it.
 
-Each exchange rewrites the subject's page: the questions you answered go, what you chose is written
+Each exchange keeps the subject's page up to date: the questions you answered go, what you chose is written
 under « What we decided », and what comes next shows. When a part of it moves on in a bubble of its
 own (a research done, an angle chosen in « Choose the angle », a new version of the article), Eriphe
 updates the main page too: its summary, its plan, what remains. Work Eriphe hands to an agent goes in a bubble under the subject you are on; a bubble that turns out to be part of another subject, Eriphe moves under it.

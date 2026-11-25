@@ -207,6 +207,7 @@ type brainTurn struct {
 	home      bool                 // the user.s message, said in a node, is not about it: the turn answers as at the home (node_turn.go)
 	namedRefs []string             // the entities my messages of the turn name (names.go)
 	keep      func(brainTurnState) // stores it, so a restart of eriphe-core does not forget it
+	budget    turnBudget           // what this delivery spent: never kept (brain_budget.go)
 }
 
 // brainTurnState is the turn as the store keeps it (kv brain_turn).
@@ -265,6 +266,7 @@ func (t *brainTurn) start(from, to, eventSeq int) {
 	t.answer = to // what it writes past the messages delivered answers them; none delivered, nothing to file
 	t.asked = from != 0
 	t.home = false
+	t.budget = newTurnBudget(1)
 	t.save()
 }
 
@@ -283,6 +285,7 @@ func (t *brainTurn) goOn(from, to, eventSeq int, carried []string) {
 	t.answer = to   // past what it was just given; given nothing, nothing to file
 	t.asked = false // events or a wake: no request of the user's to answer now
 	t.home = false
+	t.budget = newTurnBudget(1) // a delivery: a fresh budget (brain_budget.go)
 	for _, why := range carried {
 		if !containsStr(t.tainted, why) {
 			t.tainted = append(t.tainted, why)

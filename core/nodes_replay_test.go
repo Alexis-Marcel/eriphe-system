@@ -312,6 +312,45 @@ func replayDay(t *testing.T, c *core, calls []replayCall, names *replayNames) {
 	}
 }
 
+// The recording was made before the brain's budget (#770, brain_budget.go):
+// TestNodesReplay plays it in memory, as a client that is not the brain,
+// for the rules on what a node may hold, which a task's writes keep too.
+// Played turn by turn through the budget, as the brain would make them
+// now: the pages it wrote whole (turn 12's mails page, turn 13's page
+// opened with its blocks) are refused with the hint to launch a task; its
+// other writes, short, pass.
+func TestNodesReplayBudget(t *testing.T) {
+	raw, err := os.ReadFile("testdata/nodes_replay.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls []replayCall
+	if err := json.Unmarshal(raw, &calls); err != nil {
+		t.Fatal(err)
+	}
+	refused := map[string]bool{}
+	var b turnBudget
+	turn := -1
+	for _, call := range calls {
+		if call.Turn != turn {
+			b, turn = newTurnBudget(1), call.Turn
+		}
+		var args map[string]any
+		json.Unmarshal(call.Args, &args)
+		why, took := b.charge(call.Tool, args)
+		if why != "" {
+			refusedFor(t, why)
+			refused[fmt.Sprintf("%d %s", call.Turn, call.Tool)] = true
+		} else if !call.OK {
+			b.refund(took) // refused by code then: it changed nothing
+		}
+	}
+	want := map[string]bool{"12 node_write": true, "13 node_open": true}
+	if !maps.Equal(refused, want) {
+		t.Errorf("refused by the budget: %v, want %v", refused, want)
+	}
+}
+
 // questionnaire tells a text that asks the user several things before
 // anything is shown: two lines or more that ask (a list item with a
 // question mark), or that say what happens without an answer.

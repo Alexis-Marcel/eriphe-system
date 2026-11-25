@@ -97,6 +97,7 @@ var benchMetrics = []struct{ key, want string }{
 	{"duplicate nodes", "0"},
 	{"refused writes: grammar, catalog", "≤ 1"},
 	{"refused writes: taint, stale", "-"},
+	{"refused by the budget", "-"},
 	{"view valid", "yes"},
 	{"user turns", "≤ 15"},
 	{"brain turns", "-"},
@@ -127,6 +128,9 @@ var benchMetrics = []struct{ key, want string }{
 	{"watch: no questionnaire", "yes"},
 	{"watch: changes offered (ask)", "-"},
 	{"view approved", "yes"},
+	{"rework: task launched on the page", "yes"},
+	{"rework: brain's own writes", "≤ 1"},
+	{"rework: answered in (s)", "≤ 20"},
 	{"view: bilan lead", "yes"},
 	{"view: items, sections", "yes"},
 	{"view: batch", "yes"},
@@ -301,9 +305,9 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 	b.say("Qu'est-ce que j'ai de prévu aujourd'hui ?", substack, turnNoNode)
 	b.s.yes("turn_home on the agenda", b.called("turn_home"), "not called")
 	shown, _ := sc.c.lastShown()
-	b.s.yes("agenda: day page written, shown", b.version(day) > v && shown.Node == day,
+	b.s.yes("agenda: day page written, shown", (b.version(day) > v || b.launchedOn(day)) && shown.Node == day,
 		fmt.Sprintf("version %d → %d, shown %q", v, b.version(day), shown.Node))
-	if b.version(day) == v {
+	if b.version(day) == v && !b.launchedOn(day) {
 		b.lost("agenda: « Ma journée » not written")
 	}
 
@@ -340,8 +344,9 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 	} else {
 		v := b.version(plan)
 		b.say("Plus court, et garde le titre 2.", plan, turnNoNode)
-		b.s.yes("plus court: new version", b.version(plan) > v, "")
-		if b.version(plan) == v {
+		// A new version, written or asked of a task on the plan.
+		b.s.yes("plus court: new version", b.version(plan) > v || b.launchedOn(plan), "")
+		if b.version(plan) == v && !b.launchedOn(plan) {
 			b.lost("plus court: no new version of the plan")
 		}
 		b.say("Ce plan me va.", plan, turnNoNode)
@@ -385,6 +390,14 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 	b.s.yes("view approved", view != "", "no view approved")
 	b.scoreView(view)
 	b.runSkill(view)
+
+	// 12b. Rework the page (#770): the brain orchestrates. It launches a
+	// task on the page in a short turn and answers in a line, rewriting
+	// nothing itself; its budget would refuse a whole page.
+	// Said on the view made just before, else on the seed's mails page.
+	rework := cmpOr(view, sc.nodes["mails"])
+	b.say("Refais cette page : regroupe les mails par expéditeur, le plus pressé en haut.", rework, turnNoNode)
+	b.scoreRework(rework)
 
 	// 13. The day asked to be followed, at the home, as on a fresh install
 	// (the seed's day page archived first): its subject opens first, then
@@ -527,6 +540,43 @@ func (b *bench) turnCalls(n int) []liveCall {
 // called tells the last turn called tool.
 func (b *bench) called(tool string) bool {
 	return slices.ContainsFunc(b.turnCalls(b.turn), func(x liveCall) bool { return x.tool == tool })
+}
+
+// launchedOn tells the last turn launched a task for node: run_task on it
+// or under it, or on the turn's node when it names none.
+func (b *bench) launchedOn(node string) bool {
+	return slices.ContainsFunc(b.turnCalls(b.turn), func(x liveCall) bool {
+		if x.tool != "run_task" || x.err != "" {
+			return false
+		}
+		on, _ := x.args["node"].(string)
+		if on == "" {
+			on = cmpOr(x.talk, x.about)
+		}
+		return on != "" && b.under(on, node)
+	})
+}
+
+// scoreRework scores « rework this page » said on it: a task launched on
+// it, the brain's own writes before its answer one at most, its answer
+// within 20 s (to the second the conversation keeps).
+func (b *bench) scoreRework(page string) {
+	answered, ok, answerAt := "-", false, time.Time{}
+	if msgs, _ := b.sc.c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ? AND seq > (SELECT MAX(seq) FROM messages WHERE role = ?) ORDER BY seq LIMIT 1`, roleBrain, roleUser); len(msgs) > 0 {
+		answerAt = msgs[0].Time.Add(time.Second) // kept to the second
+		took := msgs[0].Time.Sub(b.saidAt)
+		answered, ok = fmt.Sprintf("%.1f", took.Seconds()), took <= 20*time.Second
+	}
+	// The launching turn's writes: those before its answer, not its wakes'.
+	writes := 0
+	for _, x := range b.turnCalls(b.turn) {
+		if x.err == "" && (x.tool == "node_write" || x.tool == "node_edit" || x.tool == "item_note") && (answerAt.IsZero() || x.endAt.Before(answerAt)) {
+			writes++
+		}
+	}
+	b.s.yes("rework: task launched on the page", b.launchedOn(page), "no run_task on the page")
+	b.s.set("rework: brain's own writes", strconv.Itoa(writes), writes <= 1)
+	b.s.set("rework: answered in (s)", answered, ok)
 }
 
 // readAny tells the last turn read one of ids.
@@ -1213,11 +1263,16 @@ func (b *bench) filed() {
 func (b *bench) scoreCalls(record string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	grammar, other := 0, 0
+	grammar, other, budget := 0, 0, 0
 	var recorded []replayCall
 	for _, x := range b.calls {
 		if x.recorded != nil {
 			recorded = append(recorded, *x.recorded)
+		}
+		if strings.HasPrefix(x.err, "Refused") {
+			budget++ // the brain's budget (brain_budget.go), any tool
+			b.s.note(fmt.Sprintf("refused by the budget, turn %d, %s: %s", x.turn, x.tool, truncate(x.err, 120)))
+			continue
 		}
 		if x.err == "" || !slices.Contains(benchWrites, x.tool) {
 			continue
@@ -1232,6 +1287,7 @@ func (b *bench) scoreCalls(record string) {
 	b.s.grammar = grammar
 	b.s.set("refused writes: grammar, catalog", strconv.Itoa(grammar), grammar <= 1)
 	b.s.set("refused writes: taint, stale", strconv.Itoa(other), true)
+	b.s.set("refused by the budget", strconv.Itoa(budget), true)
 	if record == "" {
 		return
 	}
@@ -1316,7 +1372,8 @@ func (sc *scenario) failedOnce() bool {
 // (one that comes after none) says where it is and waits for the scenario
 // to finish it; the first try of a plan fails, once in a run; then each
 // writes a short result that fits its title in its node (a plan of three
-// titles, the production's error, an analysis) and reports done.
+// titles, the production's error, an analysis) and, launched on a node,
+// in that node too (writeLaunchNode), then reports done.
 func (sc *scenario) liveWork(id string, t *TaskRow) {
 	first := false
 	for range 20 {
@@ -1358,7 +1415,53 @@ func (sc *scenario) liveWork(id string, t *TaskRow) {
 		hash, _ := out["hash"].(string)
 		sc.call(id, nodesServer, "node_write", map[string]any{"expect": hash, "body": body})
 	}
+	if !first && !sc.isStep(id) {
+		summary = sc.writeLaunchNode(id, t, body, summary)
+	}
 	sc.done(id, summary)
+}
+
+// isStep tells the task is a step of a node's work.
+func (sc *scenario) isStep(id string) bool {
+	var n int
+	sc.c.store.db.QueryRow(`SELECT COUNT(*) FROM node_steps WHERE task = ?`, id).Scan(&n)
+	return n > 0
+}
+
+// writeLaunchNode writes the result where a real task would (#776): in
+// the node run_task launched it on, the parent of its own node. Asked
+// shorter, the plan keeps its title 2; a page keeps its blocks as they
+// are (a block it changes needs its source lent) under a first line that
+// says what changed. It gives the summary the task reports.
+func (sc *scenario) writeLaunchNode(id string, t *TaskRow, result, summary string) string {
+	own, err := sc.c.nodes.Get(sc.c.taskNode(id))
+	if err != nil || own.Parent == "" {
+		return summary
+	}
+	d, err := sc.c.nodes.Read(own.Parent, 0)
+	if err != nil {
+		return summary
+	}
+	ask := strings.ToLower(t.Prompt)
+	head, _, _ := strings.Cut(strings.TrimSpace(result), "\n")
+	switch {
+	case strings.Contains(ask, "court"):
+		return sc.writeNode(id, own.Parent, d.Version.Hash, "1. Ce qui a changé en dix ans\n2. Ce qui vient\n", "Le plan en deux titres, le titre 2 gardé.")
+	case strings.Contains(ask, "expéditeur"):
+		head, summary = "Par expéditeur, le plus pressé en haut : Sam d'abord.", "La page regroupée par expéditeur."
+	case strings.Contains(ask, "journée") || strings.Contains(ask, "agenda") || strings.Contains(ask, "prévu"):
+		head, summary = "Aujourd'hui : le point produit à 11 h, le dentiste à 14 h 30.", "La journée écrite en tête de sa page."
+	}
+	return sc.writeNode(id, own.Parent, d.Version.Hash, head+"\n\n"+nodeBody(d.Raw), summary)
+}
+
+// writeNode is node_write on node as task id: the summary it reports, the
+// error said in it when the write is refused.
+func (sc *scenario) writeNode(id, node, hash, body, summary string) string {
+	if _, err := sc.call(id, nodesServer, "node_write", map[string]any{"id": node, "expect": hash, "body": body}); err != nil {
+		return summary + " (" + err.Error() + ")"
+	}
+	return summary
 }
 
 // failedReceipt ends a worker's turn with a receipt that says it is blocked.
