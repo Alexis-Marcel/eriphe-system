@@ -93,6 +93,12 @@ func TestTaskWritesWhereItWorks(t *testing.T) {
 	if err := appendAs(t, c.core, task.ID, other); !strings.Contains(err, "you write where you work") {
 		t.Fatalf("its own link opened a node: %q", err)
 	}
+	// Kept by someone else who writes that node after it, it is still its.
+	d, _ := c.nodes.Read(parent, 0)
+	rewrite(t, c.core, parent, byBrain, d.Node.Text()+"\nMis à jour.\n")
+	if err := appendAs(t, c.core, task.ID, other); !strings.Contains(err, "you write where you work") {
+		t.Fatalf("its own link, kept by the brain, opened a node: %q", err)
+	}
 	// A link someone else adds, it may follow; once taken away, no more.
 	rewrite(t, c.core, parent, byUser, "Lire [[Guide de style]], [[Ancien]], [[Lointain]].\n")
 	if err := appendAs(t, c.core, task.ID, far); err != "" {
@@ -182,6 +188,15 @@ func TestTaskNotesAnItemWhereItWorks(t *testing.T) {
 	}
 	if _, err := callNodes(t, c.core, task.ID, "item_note", map[string]any{"id": parent, "source": "inbox", "item": "m1", "note": "x", "call": 3}); !strings.Contains(err, "own node") {
 		t.Fatalf("a call on another node: %q", err)
+	}
+	// Its page reworked: a block it leaves as it is keeps a source it is
+	// not lent; one it changes is checked as its own.
+	read := mustNodes(t, c.core, task.ID, "node_read", map[string]any{"id": parent})
+	mustNodes(t, c.core, task.ID, "node_write", map[string]any{"id": parent, "body": "Triés ce matin.\n" + block, "expect": read["hash"]})
+	read = mustNodes(t, c.core, task.ID, "node_read", map[string]any{"id": parent})
+	changed := strings.Replace(block, `"every": 5`, `"every": 10`, 1)
+	if _, err := callNodes(t, c.core, task.ID, "node_write", map[string]any{"id": parent, "body": "Triés.\n" + changed, "expect": read["hash"]}); !strings.Contains(err, "not one of the tools you are lent") {
+		t.Fatalf("a source it is not lent: %q", err)
 	}
 	other := mustNode(t, c.core, nodestore.New{Title: "Autres mails", Body: block, Author: byBrain})
 	if _, err := callNodes(t, c.core, task.ID, "item_note", map[string]any{"id": other, "source": "inbox", "item": "m1", "note": "x"}); !strings.Contains(err, "you write where you work") {

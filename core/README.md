@@ -1332,11 +1332,13 @@ decided), and a run or a step that ends, or the node archived, drops its progres
   node under it; the node it was launched for, its node's parent, when its node was opened for it
   (the brain's launches: a skill's run works in its home node, a step in its step node, and
   neither writes the node above); and the nodes linked to or from these, one hop. A link counts
-  only when someone else wrote it: a link from one of these nodes counts when that node's last
-  version by another author (not the task's, not code's `eriphe`) has it too, so a `[[link]]` the
-  task writes opens nothing; a link to one of them counts when that node was not opened by the
-  task's author, since a `[[Name]]` waiting anywhere resolves to a node the task opens with that
-  name. Elsewhere, and on an archived node, the write is refused with a hint: say it in its node,
+  only when someone else brought it: a link from one of these nodes counts when the version that
+  brought it (the first of the last run of versions that hold it) is not the task's author's, so
+  a `[[link]]` the task writes opens nothing, even kept by a later version of someone else's (a
+  node the task never wrote is not walked; else no further back than the version before its
+  first); a link to one of them counts when that node is the task's node, the node it works for,
+  or one not opened by the task's author, since a `[[Name]]` waiting anywhere resolves to a node
+  the task opens with that name. Elsewhere, and on an archived node, the write is refused with a hint: say it in its node,
   or ask for it in its final message. What holds for its own node holds wherever it writes:
   `expect`, the user's marks and code's values kept, its author, the guards below, external when
   it is tainted. Two writers of one node (the brain, another task) are kept apart by `expect`.

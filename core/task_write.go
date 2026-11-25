@@ -18,12 +18,13 @@ import (
 //
 // A link counts only when someone else wrote it: a task writes [[links]]
 // in the nodes it may write, and a link of its own would open it any
-// node. So a link from one of these nodes counts when the node's last
-// version by another author (the user, the brain, another task; not
-// code, whose versions carry what was there) has it too; a link to one
-// of them counts when that node was not opened by the task's author
-// itself, since a [[Name]] waiting anywhere resolves to a node the task
-// opens with that name.
+// node. So a link from one of these nodes counts when the version that
+// brought it, the first of the last run of versions that hold it, is
+// not the task's author's: a later version by someone else that keeps
+// the task's text keeps it the task's link. A link to one of them counts
+// when that node is its own node, the node it works for, or one not
+// opened by the task's author, since a [[Name]] waiting anywhere resolves
+// to a node the task opens with that name.
 //
 // What holds for its own node holds for every node it writes
 // (task_nodes.go): the version expected, the owner's marks and code's
@@ -75,7 +76,10 @@ func (c *core) writable(w nodeWriter, id string) (string, error) {
 	}
 	// Linked to one of them, not opened by the task's author.
 	for _, l := range sum.Links {
-		if base(l) && (l == launch || c.firstAuthor(l) != w.author) {
+		if !base(l) {
+			continue
+		}
+		if by := c.firstAuthor(l); l == launch || l == w.node || (by != "" && by != w.author) {
 			return id, nil
 		}
 	}
@@ -131,46 +135,59 @@ func (c *core) firstAuthor(id string) string {
 	return vs[0].Author
 }
 
-// linkedByOther tells whether node from's link to node to was written by
-// someone other than author: its last version by another author, code's
-// left out, links to it too.
+// linkedByOther tells whether node from's link to node to, which it holds
+// now, was brought by someone other than author: by the first version of
+// the last run of versions that hold it. A node author never wrote is
+// read no further; else no further back than the version before its
+// first.
 func (c *core) linkedByOther(from, to, author string) bool {
 	vs, err := c.nodes.Versions(from)
-	if err != nil {
+	if err != nil || len(vs) == 0 {
 		return false
 	}
-	for _, v := range slices.Backward(vs) {
-		if v.Author == author || v.Author == nodeByCode {
-			continue
-		}
-		n := v.N
-		if n == vs[len(vs)-1].N {
+	first := slices.IndexFunc(vs, func(v nodestore.Version) bool { return v.Author == author })
+	if first < 0 {
+		return true
+	}
+	by := ""
+	for i := len(vs) - 1; i >= max(first-1, 0); i-- {
+		n := vs[i].N
+		if i == len(vs)-1 {
 			n = 0 // the last: its file, not the repository
 		}
 		d, err := c.nodes.Read(from, n)
 		if err != nil {
 			return false
 		}
-		if slices.Contains(d.Node.Meta.Links, to) {
+		if !c.docLinks(d, to) {
+			break
+		}
+		by = vs[i].Author
+	}
+	return by != "" && by != author
+}
+
+// docLinks tells whether a node's version links node to: by its front
+// matter, or a [[link]] of its text resolved to it.
+func (c *core) docLinks(d *nodestore.Doc, to string) bool {
+	if slices.Contains(d.Node.Meta.Links, to) {
+		return true
+	}
+	var names []string
+	for _, l := range d.Node.WikiLinks() {
+		names = append(names, l.Name)
+	}
+	if len(names) == 0 {
+		return false
+	}
+	found, err := c.nodes.Resolve(d.Node.Meta.ID, names)
+	if err != nil {
+		return false
+	}
+	for _, x := range found {
+		if x.ID == to {
 			return true
 		}
-		var names []string
-		for _, l := range d.Node.WikiLinks() {
-			names = append(names, l.Name)
-		}
-		if len(names) == 0 {
-			return false
-		}
-		found, err := c.nodes.Resolve(from, names)
-		if err != nil {
-			return false
-		}
-		for _, x := range found {
-			if x.ID == to {
-				return true
-			}
-		}
-		return false
 	}
 	return false
 }
