@@ -111,7 +111,7 @@ func TestFormat1DropsLifetime(t *testing.T) {
 	if !bytes.Contains(old, []byte("\nlifetime: standing\n")) {
 		t.Fatal("testdata/format1.md says no lifetime")
 	}
-	out, err := Upgrade(old, Conversions())
+	out, err := Upgrade(old, Conversions()[:1])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestFormat1DropsLifetime(t *testing.T) {
 	if err != nil || n.Meta.Format != 2 || slices.ContainsFunc(n.Meta.Extra, func(f Field) bool { return f.Key == "lifetime" }) {
 		t.Fatalf("parsed: %v %+v", err, n.Meta)
 	}
-	if again, err := Upgrade(out, Conversions()); err != nil || !bytes.Equal(again, out) {
+	if again, err := Upgrade(out, Conversions()[:1]); err != nil || !bytes.Equal(again, out) {
 		t.Fatalf("converted again: %v", err)
 	}
 	if full, _ := os.ReadFile("testdata/full.md"); string(out) != string(full) {
@@ -146,7 +146,7 @@ func TestFormat1LifetimeLineOnly(t *testing.T) {
 			"---\r\nid: a1b2c3d4e5\r\ntitle: Plan\r\nlifetime: standing\r\ncreated: 2026-11-01T09:00:00Z\r\nupdated: 2026-11-01T09:00:00Z\r\n---\r\nLe plan.\r\n",
 			"---\r\nformat: 2\r\nid: a1b2c3d4e5\r\ntitle: Plan\r\ncreated: 2026-11-01T09:00:00Z\r\nupdated: 2026-11-01T09:00:00Z\r\n---\r\nLe plan.\r\n"},
 	} {
-		out, err := Upgrade([]byte(c.in), Conversions())
+		out, err := Upgrade([]byte(c.in), Conversions()[:1])
 		if err != nil || string(out) != c.want {
 			t.Errorf("%s: %v\n%q\nwant\n%q", c.name, err, out, c.want)
 		}

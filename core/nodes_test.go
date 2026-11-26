@@ -22,7 +22,7 @@ func nodeWrite(c *core, id, body, expect, author string) (*nodestore.Doc, error)
 // sources and links included.
 func TestNodesRefuseSecretsOnly(t *testing.T) {
 	cfg := &Config{DB: filepath.Join(t.TempDir(), "core.db")}
-	s, err := openNodes(cfg)
+	s, err := openNodes(cfg, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

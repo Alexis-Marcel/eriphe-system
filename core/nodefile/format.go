@@ -21,10 +21,10 @@ import (
 type Conversion func(raw []byte) ([]byte, error)
 
 // conversions are the format's changes, the oldest first: conversions[i]
-// turns format i+1 into format i+2.
-var conversions = []Conversion{
-	dropLifetime, // 1 → 2: no more lifetime: only nodes, none standing
-}
+// turns format i+1 into format i+2 (ConversionsWith, topage.go). Without
+// snapshots: a version of the history is converted without the values
+// code read when it was the last.
+var conversions = ConversionsWith(nil)
 
 // dropLifetime turns format 1 into format 2: the front matter's lifetime
 // (work or standing) goes, every other byte kept. A node a skill

@@ -1,0 +1,8 @@
+{"charge": {
+  "read": "2026-11-26T09:30:00Z",
+  "values": {
+    "cpu": {"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1764149400,"12.5"]}]}},
+    "mem": {"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1764149400,"3.2"]}]}},
+    "disque": {"name":"disque","value":71,"points":[{"at":"2026-11-26T09:00:00Z","v":70}],"past":false,"failing":false,"events":[]}
+  }
+}}

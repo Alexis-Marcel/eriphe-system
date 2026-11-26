@@ -1297,8 +1297,8 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   still pending make one version, author `readings` (`CommitReadings`), at most one a day. At start,
   a file as code wrote it is not one changed outside Eriphe; an index made again from the files
   knows none, and commits such a file as `outside`.
-- **File format:** each file says its format, the front matter's `format` (absent: 1; 2 today,
-  1 → 2 dropping `lifetime`; [Format version](../docs/node-format.md#format-version)). A change of the format
+- **File format:** each file says its format, the front matter's `format` (absent: 1; 3 today,
+  1 → 2 dropping `lifetime`, 2 → 3 writing the blocks as Markdown with what code had read for them; [Format version](../docs/node-format.md#format-version)). A change of the format
   adds its conversion to `nodefile` (from the format before, a pure function of the file's bytes)
   and a test that reads the old format. At start, a file of an older format is converted, all of
   them in one commit by `convert` (its words committed first as `outside` when changed by hand),

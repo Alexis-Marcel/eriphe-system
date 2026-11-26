@@ -127,7 +127,7 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 		sc.conv = sc.raw
 		sc.format, sc.formatErr = nodefile.FormatOf(sc.raw)
 		if sc.formatErr == nil && sc.format != s.format() {
-			if sc.conv, sc.convErr = s.upgrade(sc.raw); sc.convErr != nil {
+			if sc.conv, sc.convErr = nodefile.Upgrade(sc.raw, s.opts.atStart); sc.convErr != nil {
 				return
 			}
 		}

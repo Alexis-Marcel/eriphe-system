@@ -1,0 +1,7 @@
+{"changes": {
+  "read": "2026-11-26T06:00:00Z",
+  "values": {"changes": {"changes": [
+    {"key":"github/1","server":"github","what":"deux outils ajoutés"},
+    {"key":"meteo/2","server":"meteo","what":"un outil retiré"}
+  ]}}
+}}
