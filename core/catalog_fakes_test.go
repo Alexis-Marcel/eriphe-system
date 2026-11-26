@@ -20,19 +20,20 @@ import (
 // read-only tool), rollback (a tool that acts), and a resource,
 // monitor://received (the mail server's mail://received).
 type fakeMonitor struct {
-	mu       sync.Mutex
-	state    string
-	version  string
-	failing  bool
-	calls    int
-	rules    []map[string]any // alerts: Grafana-like alert rules, each uid, name, state
-	stamped  bool             // alerts: each rule comes with its evaluation, new at each call
-	cpu      float64          // status: data.cpu
-	got      []map[string]any // monitor://received: messages, each id, subject
-	silenced []string         // silence: the uids it was called on
-	invites  []map[string]any // monitor://invitations: invitations, each id, title
-	sent     []map[string]any // send and respond: what they were called with
-	opened   []string         // message and letter: tool:id of each call
+	mu        sync.Mutex
+	state     string
+	version   string
+	failing   bool
+	calls     int
+	rules     []map[string]any // alerts: Grafana-like alert rules, each uid, name, state
+	stamped   bool             // alerts: each rule comes with its evaluation, new at each call
+	cpu       float64          // status: data.cpu
+	got       []map[string]any // monitor://received: messages, each id, subject
+	silenced  []string         // silence: the uids it was called on
+	discarded []string         // discard: the ids it was called on
+	invites   []map[string]any // monitor://invitations: invitations, each id, title
+	sent      []map[string]any // send and respond: what they were called with
+	opened    []string         // message and letter: tool:id of each call
 	// moveFails: move answers with this error, moving nothing.
 	moveFails string
 }
@@ -155,6 +156,9 @@ func (m *fakeMonitor) server() *mcp.Server {
 		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 			IDs []string `json:"ids"`
 		}) (*mcp.CallToolResult, map[string]any, error) {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			m.discarded = append(m.discarded, in.IDs...)
 			return nil, map[string]any{"discarded": len(in.IDs)}, nil
 		})
 	// tag and flag declare a read for their card (card_context.go): tag the

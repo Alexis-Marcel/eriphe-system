@@ -27,6 +27,13 @@ var rowStrings = map[string]map[string]string{
 		"act.never":      "Cet outil n'est jamais permis (Réglages › Outils) : rien n'a été fait.",
 		"act.failed":     "L'outil a échoué : %s",
 
+		"act.do.place":   "Cette action n'est pas à sa place : seule sur sa ligne, la première sous un titre. Elle ne fait rien.",
+		"act.do.tool":    "Cet outil n'est pas là : cette action ne fait rien.",
+		"act.do.author":  "Qui a écrit cette action n'a pas cet outil : elle ne fait rien.",
+		"act.do.compose": "Cet outil ne prend pas que des identifiants : cette action ne peut pas être composée.",
+		"act.do.grid":    "Cet outil n'est pas permis ainsi (Réglages › Outils) : cette action ne fait rien.",
+		"act.do.none":    "Aucun des éléments cochés n'est encore sous ce titre : rien n'a été fait.",
+
 		"open.none":    "Cette liste n'ouvre pas ses éléments.",
 		"open.ref":     "Cette référence n'ouvre rien : son serveur ne dit pas lire un élément par son identifiant.",
 		"open.stale":   "Cet élément n'est plus dans la liste.",
@@ -75,6 +82,13 @@ var rowStrings = map[string]map[string]string{
 		"act.account":    "Its accounts do not have the same access: this action must name its account. Nothing was done.",
 		"act.never":      "This tool is never allowed (Settings › Tools): nothing was done.",
 		"act.failed":     "The tool failed: %s",
+
+		"act.do.place":   "This action is out of place: alone on its line, the first under a heading. It does nothing.",
+		"act.do.tool":    "This tool is not there: this action does nothing.",
+		"act.do.author":  "Whoever wrote this action does not have this tool: it does nothing.",
+		"act.do.compose": "This tool takes more than ids: this action cannot be composed.",
+		"act.do.grid":    "This tool is not allowed this way (Settings › Tools): this action does nothing.",
+		"act.do.none":    "None of the ticked items is still under this heading: nothing was done.",
 
 		"open.none":    "This list does not open its items.",
 		"open.ref":     "This reference opens nothing: its server does not say it reads one item by its id.",

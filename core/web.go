@@ -310,6 +310,7 @@ func (w *web) routes() http.Handler {
 	w.graphRoutes(mux)      // web_graph.go
 	w.gestureRoutes(mux)    // web_gestures.go
 	w.itemOpenRoutes(mux)   // item_open.go
+	w.actRoutes(mux)        // page_acts.go
 	for _, routes := range providerRoutes {
 		routes(w, mux)
 	}

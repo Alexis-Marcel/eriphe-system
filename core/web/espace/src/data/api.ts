@@ -91,6 +91,9 @@ export type Reads = {
   trace(id: string): Promise<TraceEntry[]>;
   file(id: string, version: number): Promise<NodeFile | null>;
   open(id: string, what: OpenWhat): Promise<Opened>;
+  // A page's do: and its yes (tests and samples).
+  act?(id: string, line: number, text: string): Promise<PageAct | null>;
+  actYes?(id: string, line: number, text: string, items: string[]): Promise<{ card?: string; error?: string }>;
 };
 
 let reads: Reads | null = null;
@@ -344,6 +347,50 @@ export async function ask(id: string, block: string, component: string): Promise
 // reads its words in the page.
 export async function askLine(id: string, line: number, n: number): Promise<boolean> {
   return (await sendJSON("POST", `${nodePath(id)}/ask`, { line, n })).status === 204;
+}
+
+// An action on a heading's items (do:, page_acts.go), as eriphe-core
+// composes it from the page as stored: the items it acts on now (each
+// with the row that carries its box, and as its server read it), what
+// Oui does and says for 1, 2… of them ticked, in code's words; refused
+// (why, in words) when it acts on nothing.
+export type ActItem = {
+  id: string;
+  label: string;
+  line: number;
+  row: number;
+  title?: string;
+  detail?: string;
+  external?: boolean;
+  misleading?: boolean;
+  unread?: boolean;
+};
+export type PageAct = {
+  line: number;
+  text: string;
+  tool: string;
+  refused?: string;
+  why?: string;
+  items: ActItem[];
+  acts?: string[];
+  verbs?: string[];
+  tainted?: boolean;
+};
+
+// composeAct is a do: of a page, its line as the page read it.
+export async function composeAct(id: string, line: number, text: string): Promise<PageAct | null> {
+  if (reads?.act) return reads.act(id, line, text);
+  const r = await sendJSON<PageAct>("POST", `${nodePath(id)}/do`, { line, text });
+  return r.status === 200 ? r.data : null;
+}
+
+// actYes is the user's yes on a do:, on the items ticked: the card it
+// made, or why it did not run.
+export async function actYes(id: string, line: number, text: string, items: string[]): Promise<{ card?: string; error?: string }> {
+  if (reads?.actYes) return reads.actYes(id, line, text, items);
+  const r = await sendJSON<{ card?: string; error?: string }>("POST", `${nodePath(id)}/do/yes`, { line, text, items });
+  if (r.status === 200 && r.data?.card) return { card: r.data.card };
+  return { error: r.data?.error ?? String(r.status) };
 }
 
 // tick writes a task's state into its line (text, the line as the page

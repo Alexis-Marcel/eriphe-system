@@ -1577,6 +1577,17 @@ a page: the brain composes each one from the catalog.
   sender): the page warns there, the item as read beside it; one not read is `unread` (« non
   vérifié »). `nodePageOf` sends `items` (each reference of an item where it is
   written, with its card and the item as kept) and `placed`; it reads no server.
+- **Actions on a heading's items** (`page_acts.go`): a `do:` link alone on the first line under a
+  heading acts on the references of its section to the tool's server's items (`nodefile.Page.Scope`),
+  but those ticked and those a call of the same tool already names in the node (`actedOn`). Its
+  calls are composed from the tool's input schema (`actArg`: the one required argument, else the
+  one named for ids; a list of strings in one call, a string in a call each); its author, whoever
+  wrote its line by the node's versions (`lineAuthor`), must have the tool (`authorHasTool`); the
+  grid applies (a tool never allowed acts on nothing; `catalogCall` at the run). Nothing is kept
+  before the yes: `POST /api/nodes/{id}/do` composes it from the stored page (its items read for
+  its words, `composeAct`); `POST /api/nodes/{id}/do/yes` with the ids ticked reads the page again
+  and runs those still under the heading as one calls card, kept on the node and said yes to at
+  once (`actYes`, `decideCardChosen`). ([The format](../docs/node-format.md#actions-on-a-headings-items).)
 - **Calls on an item** (`item_cards.go`): a skill run's call kept for the user that names exactly
   one item of a source of the run's node, on the call's own server, is kept on that item
   (`access_asks.node`, `source`, `item`): one card per item (kind `calls`), answered alone. A call
@@ -3768,6 +3779,15 @@ token in `X-CSRF-Token`:
   a version by `user`. The line is found by its text (`line` a hint): a line gone, or written
   twice, is `409` and nothing is written; an archived node `410`; a state that is not one of the
   four `400`. `200` `{version, hash}`. A skill triggered by `node.gesture` in that node is woken.
+- `POST /api/nodes/{id}/do` `{line, text}`: a `do:` of the page as code composes it from the
+  stored page (`page_acts.go`): `{line, text, tool, items: [{id, label, line, row, title, detail,
+  external, misleading, unread}], acts, verbs, tainted}`, its items read by their server for its
+  words, or `refused` (`place`, `tool`, `author`, `compose`, `grid`) and `why`. A line gone, there
+  twice, or no `do:` is `409`.
+- `POST /api/nodes/{id}/do/yes` `{line, text, items}`: the user's yes on it, on the ids ticked: the
+  page read again, the items still under the heading run as one calls card on the node, said yes to
+  at once; `200` `{card}`. `403` refused, `409` its line gone or none of the items still there,
+  `410` archived.
 - `POST /api/nodes/{id}/open` `{ref}`: an item a page references opened in place
   (`item_open.go`), the user's gesture: the reference is found by its label in the page as stored
   (`409` `open.ref` when there is none, or its server declares no read of one item by id: a tool
