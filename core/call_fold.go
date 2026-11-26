@@ -325,8 +325,8 @@ func (c *core) decideCardChosen(ctx context.Context, id int64, only, left []int6
 // card's Oui at the List's head): the calls named are refused, each as a
 // card's Non refuses it, and the card waits on with the others, its words
 // said again. Each must be a call of the card that waits, or nothing is
-// refused; naming them all is the card's Non. The rows' source is read
-// again: what it lists now.
+// refused; naming them all is the card's Non. The node's page follows
+// (cardsMovedOn).
 func (c *core) refuseCalls(ctx context.Context, id int64, left []int64, by string) error {
 	if len(left) == 0 {
 		return errNotOnCard
@@ -376,11 +376,8 @@ func (c *core) refuseCalls(ctx context.Context, id int64, left []int64, by strin
 	cardMu.Unlock()
 	c.proposalMoved(x.Ref)
 	log.Printf("cards: %s: %d of its calls refused by %s", x.Ref, len(named), by)
-	for _, a := range asks {
-		if a.Node != "" && a.Source != "" {
-			c.readNodeLater(context.Background(), a.Node, []string{a.Source})
-			break
-		}
+	if len(asks) > 0 {
+		c.cardsMovedOn(asks[0].Node)
 	}
 	return nil
 }

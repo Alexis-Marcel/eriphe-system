@@ -16,77 +16,7 @@
       "at": "0001-01-01T00:00:00Z"
     }
   ],
-  "body": "# Plan\n\nTrois titres.\n\n```eriphe:block titles\n{\"components\": [\n  {\"id\": \"root\", \"component\": \"Column\", \"children\": [\"h\", \"rows\", \"pic\", \"go\"]},\n  {\"id\": \"h\", \"component\": \"Text\", \"variant\": \"title\", \"text\": {\"@path\": \"/heading\"}},\n  {\"id\": \"rows\", \"component\": \"List\", \"children\": {\"componentId\": \"row\", \"path\": \"/ledger/accounts\"}},\n  {\"id\": \"row\", \"component\": \"Text\", \"text\": {\"@path\": \"name\"}},\n  {\"id\": \"pic\", \"component\": \"Image\", \"url\": \"https://img.example.org/a.png\", \"alt\": \"A\"},\n  {\"id\": \"go\", \"component\": \"Link\", \"label\": \"Site\", \"url\": \"https://site.example.org/\"}],\n \"data\": {\"heading\": \"Titres\"},\n \"sources\": {\"ledger\": {\"tool\": \"ledger/balances\"}}}\n```\n",
-  "parts": [
-    {
-      "text": "# Plan\n\nTrois titres.\n\n"
-    },
-    {
-      "block": {
-        "name": "titles",
-        "components": [
-          {
-            "id": "root",
-            "component": "Column",
-            "children": [
-              "h",
-              "rows",
-              "pic",
-              "go"
-            ]
-          },
-          {
-            "id": "h",
-            "component": "Text",
-            "text": {
-              "@path": "/heading"
-            },
-            "variant": "title"
-          },
-          {
-            "id": "rows",
-            "component": "List",
-            "children": {
-              "componentId": "row",
-              "path": "/ledger/accounts"
-            }
-          },
-          {
-            "id": "row",
-            "component": "Text",
-            "text": {
-              "@path": "name"
-            }
-          },
-          {
-            "id": "pic",
-            "component": "Image",
-            "alt": "A",
-            "url": "/espace/media?s=SIG\u0026u=https%3A%2F%2Fimg.example.org%2Fa.png"
-          },
-          {
-            "id": "go",
-            "component": "Link",
-            "label": "Site",
-            "url": "https://site.example.org/"
-          }
-        ],
-        "data": {
-          "heading": "Titres",
-          "ledger": {
-            "accounts": [
-              {
-                "name": "Titre 1"
-              },
-              {
-                "name": "Titre 2"
-              }
-            ]
-          }
-        }
-      }
-    }
-  ],
+  "body": "# Plan\n\nTrois titres.\n\n\u003e [!plan] Titres\n\u003e - Titre 1\n\u003e - [Site](https://site.example.org/)\n",
   "items": [],
   "placed": [],
   "cards": [],

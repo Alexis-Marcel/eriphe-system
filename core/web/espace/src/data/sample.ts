@@ -1,16 +1,15 @@
 import golden from "../doc/page.golden.json";
 import type { GraphNode, NodeFile, NodePage, TraceEntry } from "./api";
-import { bodyOf, samplePage, setViews } from "./samplecore";
-import { sampleDays } from "./sampledays";
+import { samplePage, setViews } from "./samplecore";
 import { sampleViews } from "./sampleviews";
 
 // The dev server's made-up graph, when no eriphe-core is behind: a few
 // subjects and their bubbles, each page the shape eriphe-core sends
-// (page.golden.json); the views (« Mes mails », « Alertes de la prod »)
-// written as Eriphe writes them and drawn by a make-believe core
+// (page.golden.json); the views (« Mes mails », « Alertes de la prod »…)
+// written as Eriphe writes them and read by a make-believe core
 // (samplecore.ts, sampleviews.ts). No real name, address or tool in it.
 
-setViews([...sampleViews, ...sampleDays]);
+setViews(sampleViews);
 
 const at = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
 
@@ -29,27 +28,27 @@ const nodes: GraphNode[] = [
   row("ext", "Virement urgent à valider", { parent: "mails", external: true, titleExternal: true }),
 ];
 
-// What each view was decided to be, what it reads, the skills that work in it.
+// What each view was decided to be, the monitors that wake it, the skills that work in it.
 const skill = (name: string) => [{ name, what: "note chaque élément, prépare ce qu'il propose, écrit le bilan" }];
-const ALIVE: Record<string, { decided: string; sources: { name: string; what: string }[]; skills: { name: string; what: string }[] }> = {
+const ALIVE: Record<string, { decided: string; monitors: { name: string; what: string }[]; skills: { name: string; what: string }[] }> = {
   mails: {
     decided: "Les deux comptes, perso et travail. Ne jamais rater Sam, l'école, la banque. Préparer les réponses en brouillon, jeter les pubs et les newsletters sur mon oui.",
-    sources: [{ name: "mails", what: "lit mail/search_messages toutes les 5 min" }],
+    monitors: [{ name: "mails", what: "regarde mail/search_messages toutes les 5 min" }],
     skills: skill("trier-mes-mails"),
   },
   prod: {
     decided: "Suivre la prod : ce qui casse d'abord, ce qui est résolu en lot.",
-    sources: [{ name: "prod", what: "lit alerts/list_alerts toutes les 5 min" }],
+    monitors: [{ name: "prod", what: "regarde alerts/list_alerts toutes les 5 min" }],
     skills: skill("suivre-la-prod"),
   },
   day: {
     decided: "Ma journée et la semaine qui vient : les invitations à répondre, les trous où caser ce qui traîne.",
-    sources: [{ name: "agenda", what: "lit calendar/list_events toutes les 15 min" }],
+    monitors: [{ name: "agenda", what: "regarde calendar/list_events toutes les 15 min" }],
     skills: skill("ma-journee"),
   },
   invest: {
     decided: "Le PEA et l'assurance-vie : la valeur, ce qui bouge, l'écart à la cible. Rien n'est acheté ni vendu sans mon oui.",
-    sources: [{ name: "pea", what: "lit bourse/portefeuille toutes les 60 min" }],
+    monitors: [{ name: "pea", what: "regarde bourse/portefeuille toutes les 60 min" }],
     skills: skill("suivre-mes-placements"),
   },
 };
@@ -68,19 +67,17 @@ const page = (id: string, n = nodes.find((x) => x.id === id)): NodePage | null =
       version: n.version,
       versions,
       body: view.body,
-      parts: view.parts,
+      items: view.items,
       cards: view.cards,
       settled: view.settled,
       alive: { ...(ALIVE[id] ?? ALIVE.prod), updated: at(4) },
     };
-  const block = base.parts.find((p) => p.block)!.block!;
   return {
     ...base,
     node: n,
     version: n.version,
     versions,
-    body: bodyOf([{ text: "Un exemple : ces données sont fictives.\n" }, { block }]),
-    parts: [{ text: "Un exemple : ces données sont fictives.\n" }, { block: { ...block, external: n.external } }],
+    body: "Un exemple : ces données sont fictives.\n\n" + base.body.replace(/^# .*\n\n/, ""),
     cards: [],
   };
 };

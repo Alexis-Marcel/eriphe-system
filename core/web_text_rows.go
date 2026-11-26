@@ -39,11 +39,7 @@ var rowStrings = map[string]map[string]string{
 		"open.stale":   "Cet élément n'est plus dans la liste.",
 		"open.notfree": "Le lire demande ton oui : demande-le à {{name}}, qui te le proposera sur une carte.",
 
-		"espace.open.show":       "Ouvrir « %s »",
 		"espace.open.loading":    "Lecture…",
-		"espace.open.close":      "Fermer",
-		"espace.open.group":      "Classé « %s »",
-		"espace.open.note":       "Note",
 		"espace.open.error":      "Impossible de joindre {{name}}.",
 		"espace.open.onyes":      "Si tu acceptes",
 		"espace.open.more":       "détails",
@@ -95,11 +91,7 @@ var rowStrings = map[string]map[string]string{
 		"open.stale":   "This item is no longer in the list.",
 		"open.notfree": "Reading it asks your yes: ask {{name}}, who will propose it on a card.",
 
-		"espace.open.show":       "Open “%s”",
 		"espace.open.loading":    "Reading…",
-		"espace.open.close":      "Close",
-		"espace.open.group":      "Filed under “%s”",
-		"espace.open.note":       "Note",
 		"espace.open.error":      "Cannot reach {{name}}.",
 		"espace.open.onyes":      "If you accept",
 		"espace.open.more":       "details",

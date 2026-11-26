@@ -17,7 +17,7 @@ import { Card } from "./Card";
 let el: HTMLDivElement;
 let root: Root;
 
-const quiet = { day: async () => [], follow: () => () => {} };
+const quiet = { follow: () => () => {} };
 
 async function draw(lang: Lang, ref: string, src: Partial<Proposals>) {
   root = createRoot(el);

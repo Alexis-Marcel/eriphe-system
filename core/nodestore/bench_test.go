@@ -25,7 +25,7 @@ func TestStoreBench(t *testing.T) {
 	e.opts.Now = time.Now
 	s, _ := e.open(t)
 	body := func(i, v int) string {
-		return fmt.Sprintf("Version %d of node %d.\n\n```eriphe:block status\n{\"components\": {\"component\": \"Text\", \"text\": \"Step %d\"}, \"data\": {\"n\": %d}}\n```\n", v, i, v, v)
+		return fmt.Sprintf("Version %d of node %d.\n\n> [!info]\n> Step %d of %d.\n", v, i, v, v)
 	}
 	var writes []time.Duration
 	last := map[string]string{}

@@ -88,7 +88,7 @@ func main() {
 		c.mem.mirrorSync()
 	}
 	// The graph's nodes, in their own repository (nodes.go).
-	if nodes, err := openNodes(cfg, blockSnapshots(store.db)); err != nil {
+	if nodes, err := openNodes(cfg, store.db); err != nil {
 		log.Printf("nodes: %v", err)
 	} else {
 		c.useNodes(nodes)
@@ -155,7 +155,6 @@ func main() {
 	go c.runAssistants(context.Background(), token)
 	go c.runMemory(context.Background())
 	go c.runNodes(context.Background())
-	go c.runNodeSources(context.Background())
 	go c.runEvents(context.Background())   // event_sources.go
 	go c.runSkills(context.Background())   // skill_runs.go
 	go c.runMonitors(context.Background()) // monitors.go

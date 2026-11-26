@@ -37,7 +37,6 @@ const pageOf = (): NodePage => ({
   version: 2,
   versions: [],
   body,
-  parts: [{ text: body }],
   items: [],
   placed: [],
   cards: [],
@@ -85,7 +84,7 @@ describe("a do: under a heading", () => {
   });
   const done: ProposalView = { ref: "calls:21", card: 21, kind: "calls", state: "approved", exec: "done", verb: "Jeter", text: "2 retirés" };
   const draw = async (latest = true) => {
-    const src: Proposals = { read: async (ref) => (ref === "calls:21" ? done : null), answer: async () => true, day: async () => [], follow: () => () => {} };
+    const src: Proposals = { read: async (ref) => (ref === "calls:21" ? done : null), answer: async () => true, follow: () => () => {} };
     await act(async () =>
       root.render(
         <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}>

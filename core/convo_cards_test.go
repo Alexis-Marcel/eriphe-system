@@ -293,7 +293,7 @@ func TestCardAnsweredInWords(t *testing.T) {
 		"a button of an external block": {func() int {
 			proposedRule(t, c, "h1", "")
 			brainSays(c, "Je propose ça ?")
-			c.addAsk("oui", "", "q", true) // said at the home, below the card
+			c.addAsk("oui", "", true) // said at the home, below the card
 			var seq int
 			c.store.db.QueryRow(`SELECT MAX(seq) FROM messages`).Scan(&seq)
 			return seq

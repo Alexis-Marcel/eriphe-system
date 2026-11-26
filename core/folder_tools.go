@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"maps"
 	"net/http"
 	"net/url"
 	"path"
@@ -453,8 +452,7 @@ func (c *core) foldersMCP() *mcp.Server {
 	return s
 }
 
-// folderOp is one operation of a tool, on the folder named; a write then
-// refreshes the blocks that read that folder.
+// folderOp is one operation of a tool, on the folder named.
 func (c *core) folderOp(ctx context.Context, name string, req folderFilesReq) (*Folder, *folderFilesResp, error) {
 	f, err := c.folderOf(name)
 	if err != nil {
@@ -466,34 +464,7 @@ func (c *core) folderOp(ctx context.Context, name string, req folderFilesReq) (*
 	if err != nil {
 		return nil, nil, err
 	}
-	if req.writes() {
-		go c.refreshFolderNodes(f)
-	}
 	return f, resp, nil
-}
-
-// refreshFolderNodes reads again, now, the sources of the nodes that
-// read the folder: a block bound to a file follows its changes made
-// through these tools.
-func (c *core) refreshFolderNodes(f *Folder) {
-	if c.nodes == nil {
-		return
-	}
-	srcs, err := c.nodes.Sources("")
-	if err != nil {
-		return
-	}
-	byNode := map[string][]string{}
-	for _, s := range srcs {
-		server, _, _ := strings.Cut(s.Source.Tool, "/")
-		if name, _ := s.Source.Args["folder"].(string); server == foldersServer && strings.EqualFold(strings.TrimSpace(name), f.Name) {
-			byNode[s.ID] = append(byNode[s.ID], s.Name)
-		}
-	}
-	for _, id := range slices.Sorted(maps.Keys(byNode)) {
-		sort.Strings(byNode[id])
-		c.readNode(context.Background(), id, byNode[id], time.Now())
-	}
 }
 
 // cleanFolderPath is a path as the user reads it: inside the folder, with /.

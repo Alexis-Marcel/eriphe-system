@@ -5,8 +5,6 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
 // What a card's yes button says: what the yes does, its verb first,
@@ -36,7 +34,7 @@ var kindVerbs = map[string]string{
 // when it has one that says something, else its kind's.
 func (p proposal) VerbIn(lang string) string {
 	if p.verb != nil {
-		if v := p.verb(lang); v != "" && !a2ui.BareYes(v) {
+		if v := p.verb(lang); v != "" && !bareYes(v) {
 			return v
 		}
 	}
@@ -81,4 +79,14 @@ func firstVerb(s string) string {
 		return ""
 	}
 	return w
+}
+
+// bareYesWords are the words that are only a yes or a no: a verb that
+// says only one of them asks nothing (a yes says its verb).
+var bareYesWords = map[string]bool{"oui": true, "non": true, "ok": true, "okay": true, "d'accord": true, "ouais": true, "vas-y": true, "go": true, "yes": true, "no": true, "sure": true}
+
+// bareYes tells whether a button's words are only a yes or a no.
+func bareYes(text string) bool {
+	t := strings.ToLower(strings.Trim(strings.TrimSpace(text), " .!?…✓"))
+	return t == "" || bareYesWords[strings.ReplaceAll(t, "’", "'")]
 }

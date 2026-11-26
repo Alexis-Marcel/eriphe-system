@@ -18,7 +18,7 @@
 //     write carries the hash of the version it was made on (expect): a
 //     stale one is refused (ErrConflict), never written over.
 //   - An author's write goes through nodefile's author API: code's fields
-//     (marks, snapshots, external, title_trusted) are kept, and a write that changes
+//     (marks, external, title_trusted) are kept, and a write that changes
 //     them is refused. Secrets are refused by the filter the store is
 //     given (Options.Refuse).
 //   - The title of an external node may be someone else's words, unless
@@ -67,10 +67,9 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
 
-// Limits of a node: its file's bytes and its blocks.
+// Limits of a node: its file's bytes, its trace.
 const (
-	MaxBytes  = 512 << 10
-	MaxBlocks = 32
+	MaxBytes = 512 << 10
 	// MaxTrace is the most bytes one append to a trace adds.
 	MaxTrace = 256 << 10
 	// MaxTraceFile is the most bytes of a trace's file: past it, the
@@ -399,9 +398,6 @@ func (s *Store) Check(nw New) error {
 	if err != nil {
 		return err
 	}
-	if len(n.Blocks()) > MaxBlocks {
-		return fmt.Errorf("a node holds %d blocks at most, this one would hold %d", MaxBlocks, len(n.Blocks()))
-	}
 	raw, err := n.Bytes()
 	if err != nil {
 		return err
@@ -446,11 +442,6 @@ func (s *Store) prepare(nw New) (*nodefile.Node, error) {
 	}
 	if err := n.AuthorBody(nw.Body); err != nil {
 		return nil, err
-	}
-	if nw.External {
-		for _, b := range n.Blocks() {
-			n.SetBlockExternal(b.Name, true)
-		}
 	}
 	if nw.TitleTrusted {
 		n.VouchTitle()
@@ -571,9 +562,6 @@ func short(hash string) string {
 func (s *Store) save(n *nodefile.Node, file string, prev *Doc, author, op string) (*Doc, error) {
 	if strings.TrimSpace(author) == "" {
 		return nil, errors.New("a write has an author")
-	}
-	if len(n.Blocks()) > MaxBlocks {
-		return nil, fmt.Errorf("a node holds %d blocks at most, this one would hold %d", MaxBlocks, len(n.Blocks()))
 	}
 	var was *nodefile.Node
 	if prev != nil {
@@ -827,7 +815,7 @@ func (s *Store) children(id string) ([]Summary, error) {
 	return s.summaries(`WHERE parent = ? ORDER BY created, id`, id)
 }
 
-// Find finds nodes by words of their title, goal, text or blocks, the
+// Find finds nodes by words of their title, goal or text, the
 // best first; archived ones only when asked.
 func (s *Store) Find(query string, archived bool, limit int) ([]Summary, error) {
 	match := ftsQuery(query)

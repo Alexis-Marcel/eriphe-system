@@ -74,7 +74,7 @@ func write(s *Store, id, body, expect, author string) (*Doc, error) {
 	return s.Change(id, expect, author, func(n *nodefile.Node) error { return n.AuthorBody(body) })
 }
 
-const statusBlock = "\n```eriphe:block status\n{\"components\": {\"component\": \"Text\", \"text\": \"Waiting for Sam.\"}}\n```\n"
+const statusBlock = "\n> [!info]\n> Waiting for Sam.\n"
 
 func TestCreateWriteAndVersions(t *testing.T) {
 	e := newEnv(t)
@@ -83,8 +83,8 @@ func TestCreateWriteAndVersions(t *testing.T) {
 	if d.File != "ecrire-a-sam-le-plan-n1.md" || d.Version.N != 1 || d.Version.Author != "brain" {
 		t.Fatalf("created %s v%d by %s", d.File, d.Version.N, d.Version.Author)
 	}
-	if d.Node.Block("status") == nil || !strings.Contains(string(d.Raw), `"id":"root"`) {
-		t.Fatalf("the short block is not completed:\n%s", d.Raw)
+	if !strings.HasSuffix(string(d.Raw), "First draft."+statusBlock) {
+		t.Fatalf("written:\n%s", d.Raw)
 	}
 	onDisk, _ := os.ReadFile(filepath.Join(e.dir, d.File))
 	if string(onDisk) != string(d.Raw) {
@@ -178,22 +178,15 @@ func TestStaleExpectRefused(t *testing.T) {
 func TestAuthorCannotWriteCodeFields(t *testing.T) {
 	e := newEnv(t)
 	s, _ := e.open(t)
-	_, err := s.Create(New{Title: "External", Author: "brain", Body: "```eriphe:block b\n{\"components\": {\"component\": \"Text\", \"text\": \"x\"}, \"external\": true}\n```\n"})
+	_, err := s.Create(New{Title: "External", Author: "brain", Body: "> [!figures|external]\n> - PEA : [18 €](on:monitor.changed/pea)\n"})
 	if !errors.Is(err, nodefile.ErrCodeField) {
-		t.Fatalf("a new block marked external by its author: %v", err)
+		t.Fatalf("a new callout marked external by its author: %v", err)
 	}
 }
 
 func TestLimits(t *testing.T) {
 	e := newEnv(t)
 	s, _ := e.open(t)
-	var b strings.Builder
-	for i := range MaxBlocks + 1 {
-		fmt.Fprintf(&b, "```eriphe:block b%d\n{\"components\": {\"component\": \"Text\", \"text\": \"x\"}}\n```\n", i)
-	}
-	if _, err := s.Create(New{Title: "Many", Author: "brain", Body: b.String()}); err == nil || !strings.Contains(err.Error(), "blocks at most") {
-		t.Fatalf("too many blocks: %v", err)
-	}
 	if _, err := s.Create(New{Title: "Big", Author: "brain", Body: strings.Repeat("words ", MaxBytes/5)}); err == nil {
 		t.Fatal("too big a node")
 	}
@@ -246,7 +239,7 @@ func TestFind(t *testing.T) {
 	s, _ := e.open(t)
 	mustCreate(t, s, New{Title: "Substack", Body: "The newsletter and its first article."})
 	mustCreate(t, s, New{Title: "Style", Parent: "n1", Goal: "Analyse the articles that work.", Body: "Short paragraphs."})
-	mustCreate(t, s, New{Title: "Prod errors", Body: "```eriphe:block errors\n{\"components\": {\"component\": \"Text\", \"text\": \"Spike of timeouts at night\"}}\n```\n"})
+	mustCreate(t, s, New{Title: "Prod errors", Body: "> [!warning]\n> Spike of timeouts at night\n"})
 	cases := map[string][]string{
 		"newsletter":        {"n1"},
 		"ARTICLE":           {"n1", "n2"},
@@ -371,8 +364,7 @@ func TestFileRemovedByHand(t *testing.T) {
 func TestIndexRebuiltFromFiles(t *testing.T) {
 	e := newEnv(t)
 	s, _ := e.open(t)
-	d := mustCreate(t, s, New{Title: "Substack", Body: "Newsletter." +
-		"\n```eriphe:block readers\n{\"components\": {\"component\": \"Text\", \"text\": \"Readers\"}, \"sources\": {\"subs\": {\"tool\": \"substack/stats\", \"every\": 60}}}\n```\n"})
+	d := mustCreate(t, s, New{Title: "Substack", Body: "Newsletter.\n\n- Readers : [120](on:monitor.changed/subs)\n"})
 	mustCreate(t, s, New{Title: "Style", Parent: "n1", Links: []string{"n1"}, Body: "Short."})
 	if _, err := write(s, "n1", "Newsletter, v2.", d.Version.Hash, "user"); err != nil {
 		t.Fatal(err)
@@ -406,27 +398,14 @@ func TestIndexRebuiltFromFiles(t *testing.T) {
 	if len(kids) != 1 {
 		t.Fatalf("children: %+v", kids)
 	}
-	var links, sources int
+	var links, listens int
 	s2.db.QueryRow(`SELECT COUNT(*) FROM node_links WHERE id = 'n2' AND target = 'n1'`).Scan(&links)
-	s2.db.QueryRow(`SELECT COUNT(*) FROM node_sources WHERE id = 'n1'`).Scan(&sources)
-	if links != 1 || sources != 0 { // v2 of n1 dropped its block
-		t.Fatalf("links %d, sources %d", links, sources)
+	s2.db.QueryRow(`SELECT COUNT(*) FROM node_listens WHERE id = 'n1'`).Scan(&listens)
+	if links != 1 || listens != 0 { // v2 of n1 dropped its line
+		t.Fatalf("links %d, listens %d", links, listens)
 	}
 	if got, _ := s2.Find("style", true, 0); len(got) != 1 {
 		t.Fatalf("find after rebuild: %+v", got)
-	}
-}
-
-func TestSourcesIndexed(t *testing.T) {
-	e := newEnv(t)
-	s, _ := e.open(t)
-	mustCreate(t, s, New{Title: "Prod", Body: "```eriphe:block errors\n{\"components\": {\"component\": \"Text\", \"text\": \"5xx\"}, \"sources\": {\"errors_5xx\": {\"tool\": \"grafana/query\", \"args\": {\"q\": \"errors_5xx\"}, \"every\": 1}}}\n```\n"})
-	var block, name, spec string
-	if err := s.db.QueryRow(`SELECT block, name, spec FROM node_sources WHERE id = 'n1'`).Scan(&block, &name, &spec); err != nil {
-		t.Fatal(err)
-	}
-	if block != "errors" || name != "errors_5xx" || !strings.Contains(spec, `"tool":"grafana/query"`) {
-		t.Fatalf("source: %s %s %s", block, name, spec)
 	}
 }
 

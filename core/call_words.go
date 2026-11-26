@@ -24,11 +24,10 @@ import (
 //     how many and of what kind (the kind as the tool declares it, else
 //     « élément »). The account it names is said apart, quietly
 //     (accountWords: « compte Gmail »).
-//   - The items are those its node's page references, or its sources
-//     list, that its input names by their id (a string, or a list of
-//     them), with their title and detail (a mail's subject and sender) as
-//     their server read them (page_items.go) or the source lists them,
-//     kept with the call when it is kept (the item may leave the page
+//   - The items are those its node's page references that its input
+//     names by their id (a string, or a list of them), with their title
+//     and detail (a mail's subject and sender) as their server read them
+//     (page_items.go), kept with the call when it is kept (the item may leave the page
 //     after); at most callLinesMax named, then « et N autres »; an id
 //     not read is counted, never guessed. Never the words a model wrote of them (an
 //     item's note). A title read from a server the user does not trust
@@ -36,14 +35,13 @@ import (
 //   - A call kept after reading external content stays « extérieur »:
 //     the badge says it.
 
-// itemLabel is an item a call acts on, as its node's source lists it.
+// itemLabel is an item a call acts on, as its node's page references it.
 type itemLabel struct {
 	ID     string `json:"id"`
 	Title  string `json:"title,omitempty"`
 	Detail string `json:"detail,omitempty"`
-	Source string `json:"source,omitempty"` // the node's source that lists it
 	// Server: the catalog server whose item the node's page references
-	// (page_items.go); "" for a source's
+	// (page_items.go)
 	Server string `json:"server,omitempty"`
 	// External: read from a server the user does not trust, its words
 	// someone else's: shown marked
@@ -57,47 +55,9 @@ const (
 	callLinesMax  = 5
 )
 
-// callItemLabels are the items a call's input names by their id, among
-// those the node's sources of the call's own server list.
-func (c *core) callItemLabels(node, tool string, input map[string]any) []itemLabel {
-	server, _, ok := splitToolName(tool)
-	if node == "" || c.nodes == nil || !ok {
-		return nil
-	}
-	values := map[string]bool{}
-	inputValues(input, values)
-	var out []itemLabel
-	seen := map[string]bool{}
-	for _, r := range c.nodeReads(node) {
-		if r.Source.Items == nil || r.Source.Monitor != "" || c.sourceServer(r.Source) != server {
-			continue
-		}
-		ext := !c.trustsServer(server)
-		for _, it := range sourceItems(r.Name, r.Source, r.Value, 0) {
-			id, _ := it["id"].(string)
-			if !values[id] || seen[id] {
-				continue
-			}
-			seen[id] = true
-			l := itemLabel{ID: id, Source: r.Name, External: ext}
-			if t, _ := it["title"].(string); t != id {
-				l.Title = t
-			}
-			l.Detail, _ = it["detail"].(string)
-			out = append(out, l)
-			if len(out) == callLabelsMax {
-				return out
-			}
-		}
-	}
-	return out
-}
-
-// callRows is the node whose page references the items a call names, or
-// whose sources list them, and those items: prefer's (the node the turn
-// is about), its page's references first (page_items.go); else any
-// node's, not archived, whose sources last read one of them; "" when
-// none lists any. A page's references are looked for in prefer only.
+// callRows is the node whose page references the items a call names,
+// and those items: prefer's (the node the turn is about), as its page
+// references them (page_items.go); "" when it references none.
 func (c *core) callRows(ctx context.Context, prefer, tool string, input map[string]any) (string, []itemLabel) {
 	if c.nodes == nil {
 		return "", nil
@@ -105,52 +65,11 @@ func (c *core) callRows(ctx context.Context, prefer, tool string, input map[stri
 	if ls := c.refItemLabels(ctx, prefer, tool, input); len(ls) > 0 {
 		return prefer, ls
 	}
-	if ls := c.callItemLabels(prefer, tool, input); len(ls) > 0 {
-		return prefer, ls
-	}
-	values := map[string]bool{}
-	inputValues(input, values)
-	var nodes []string
-	for v := range values {
-		if utf8.RuneCountInString(v) < 2 {
-			continue // too short to tell an id
-		}
-		raw, _ := json.Marshal(v)
-		rows, err := c.store.db.Query(`SELECT DISTINCT node FROM node_reads WHERE instr(value, ?) > 0`, string(raw))
-		if err != nil {
-			continue
-		}
-		for rows.Next() {
-			var n string
-			if rows.Scan(&n) == nil && n != prefer && !slices.Contains(nodes, n) {
-				nodes = append(nodes, n)
-			}
-		}
-		rows.Close()
-	}
-	slices.Sort(nodes)
-	for _, n := range nodes {
-		if sum, err := c.nodes.Get(n); err != nil || !sum.Archived.IsZero() {
-			continue
-		}
-		if ls := c.callItemLabels(n, tool, input); len(ls) > 0 {
-			return n, ls
-		}
-	}
 	return "", nil
 }
 
-// labelsOf are the items a kept call acts on: those kept with it, else
-// those its node lists now.
-func (c *core) labelsOf(a accessQuestion) []itemLabel {
-	if len(a.Labels) > 0 || a.Node == "" {
-		return a.Labels
-	}
-	name, _, _ := strings.Cut(a.Call, " ")
-	var input map[string]any
-	json.Unmarshal([]byte(a.Input), &input)
-	return c.callItemLabels(a.Node, name, input)
-}
+// labelsOf are the items a kept call acts on, as kept with it.
+func (c *core) labelsOf(a accessQuestion) []itemLabel { return a.Labels }
 
 // labelLine says an item in a line: its title quoted, and its detail;
 // marked when its words are someone else's.
@@ -251,8 +170,8 @@ func callPhrase(tool, title string, input map[string]any, labels []itemLabel, la
 	rest := maps.Clone(input)
 	delete(rest, key)
 	delete(rest, "account")
-	// One item it is bound to (an event made from a mail, item_note's
-	// call), or the only one it names: said by itself.
+	// One item it is bound to (an event made from a mail), or the only
+	// one it names: said by itself.
 	one := ""
 	if len(labels) == 1 && n <= 1 {
 		one = labelLine(labels[0], lang)

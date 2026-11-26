@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import type { ListRow } from "../data/api";
 import { useWords } from "../i18n";
 import { Icon as IconView } from "./icons";
 import { answerOne, chosen, useMoved, useProposals, type ProposalView } from "./proposals";
@@ -12,14 +11,14 @@ import { answerOne, chosen, useMoved, useProposals, type ProposalView } from "./
 // many share it; hovered, its sibling rows light up; a Oui on any of them
 // answers that one card. Decided, a short word of where it stands, until
 // the item leaves the list. The page draws it from what eriphe-core told
-// of the row (its card's ref, code's), never from a block's data: it is
-// answered even in a block someone else's words may have written.
+// of the row (its card's ref, code's), never from the page's words: it is
+// answered even on a line someone else's words may have written.
 
-// RowItem is the item a row of a List of a source's items draws, as
-// eriphe-core told of it (its id, its card), and how many rows of that
-// List share its card (shared): out of the block's data, so that no
-// author can write it.
-export type RowInfo = ListRow & { shared?: number };
+// RowItem is the item a page's row references, as eriphe-core told of it
+// (its line, its id, its card: page_items.go), and how many rows of the
+// page share its card (shared): never the page's words, so that no author
+// can write it.
+export type RowInfo = { n: number; id: string; card?: string; shared?: number };
 export const RowItem = createContext<RowInfo | undefined>(undefined);
 
 // inlineTitle is what a row's Oui says on hover: the card's sentence,
@@ -38,6 +37,9 @@ function siblings(ref: string, on: boolean) {
 // batch's rows unticked, whose calls its Oui leaves out; marked: the line
 // it sits on already carries the sign of someone else's words (an
 // invitation), which it does not repeat.
+// On a row that shares its card with others, ✕ refuses only that row's
+// own calls (those on its item alone), and the card waits on with the
+// others; a row with no call of its own refuses the card.
 export function InlineYes({ refText, where, say, left, marked }: { refText: string; where: { surfaceId: string; componentId: string; at?: string }; say?: boolean; left?: ReadonlySet<string>; marked?: boolean }) {
   const { t } = useWords();
   const src = useProposals();
@@ -47,11 +49,16 @@ export function InlineYes({ refText, where, say, left, marked }: { refText: stri
   const [failed, setFailed] = useState(false);
   useEffect(() => () => siblings(refText, false), [refText]);
   if (!refText || !p) return null;
+  const shared = row?.card === refText && (row.shared ?? 0) > 1 ? row.shared! : 0;
+  const mine = shared && row ? rowCalls(p, row.id) : [];
   const answer = async (yes: boolean) => {
     if (busy) return;
     setBusy(true);
     setFailed(false);
-    const { ok, again } = await answerOne(src, refText, p, yes, where, yes ? left : undefined);
+    const { ok, again } =
+      !yes && mine.length
+        ? { ok: await src.answer({ surfaceId: where.surfaceId, componentId: where.componentId, ref: p.ref, yes: false, left: mine }).catch(() => false), again: await src.read(refText).catch(() => null) }
+        : await answerOne(src, refText, p, yes, where, yes ? left : undefined);
     if (!ok) setFailed(true);
     setP(again ?? p);
     setBusy(false);
@@ -59,7 +66,6 @@ export function InlineYes({ refText, where, say, left, marked }: { refText: stri
   if (p.state !== "pending") return <InlineState p={p} />;
   const going = chosen(p, left).only.length;
   const yesWord = p.acts?.[0] && (p.choices?.length ?? 0) > 1 ? p.acts[Math.max(1, Math.min(going, p.acts.length)) - 1] : p.verb;
-  const shared = row?.card === refText && (row.shared ?? 0) > 1 ? row.shared! : 0;
   const title = inlineTitle(p);
   return (
     <span
@@ -85,7 +91,7 @@ export function InlineYes({ refText, where, say, left, marked }: { refText: stri
           <span className="sr-only">{t("espace.row.shared", shared)}</span>
         </span>
       )}
-      <button type="button" className="a2-inline-no" disabled={busy} title={t("espace.row.no")} aria-label={t("espace.row.no")} onClick={() => answer(false)}>
+      <button type="button" className="a2-inline-no" disabled={busy} title={t(mine.length ? "espace.row.drop" : "espace.row.no")} aria-label={t(mine.length ? "espace.row.drop" : "espace.row.no")} onClick={() => answer(false)}>
         <IconView name="close" />
       </button>
       <button type="button" className={`btn a2-button a2-button-primary a2-inline-yes${busy ? " is-busy" : ""}`} disabled={busy || ((p.choices?.length ?? 0) > 0 && going === 0)} title={title} aria-busy={busy} onClick={() => answer(true)}>
@@ -117,43 +123,6 @@ function InlineState({ p }: { p: ProposalView }) {
 // alone: what a row's ✕ may refuse without touching another row.
 export function rowCalls(p: ProposalView, item: string): number[] {
   return (p.choices ?? []).filter((c) => c.state === "proposed" && c.items?.length === 1 && c.items[0] === item).map((c) => c.id);
-}
-
-// InlineNo is a row's ✕ when the card its List's rows share is answered
-// once, at the List's head (lists.tsx): it refuses that row's own calls,
-// and the card waits on with the others. A row none of whose calls is its
-// own alone shows nothing: the head's ✕ refuses the card.
-export function InlineNo({ refText, item, where }: { refText: string; item: string; where: { surfaceId: string; componentId: string } }) {
-  const { t } = useWords();
-  const src = useProposals();
-  const [p, setP] = useProposal(refText);
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
-  if (!p) return null;
-  if (p.state !== "pending") return <InlineState p={p} />;
-  const mine = rowCalls(p, item);
-  if (!mine.length) return null;
-  const refuse = async () => {
-    if (busy) return;
-    setBusy(true);
-    setFailed(false);
-    const ok = await src.answer({ surfaceId: where.surfaceId, componentId: where.componentId, ref: p.ref, yes: false, left: mine }).catch(() => false);
-    if (!ok) setFailed(true);
-    setP((await src.read(refText).catch(() => null)) ?? p);
-    setBusy(false);
-  };
-  return (
-    <span className="a2-inline a2-inline-drop" data-row-card={refText}>
-      <button type="button" className="a2-inline-no" disabled={busy} title={t("espace.row.drop")} aria-label={t("espace.row.drop")} onClick={refuse}>
-        <IconView name="close" />
-      </button>
-      {failed && (
-        <span className="a2-proposal-failed" role="alert">
-          {t("espace.a2.proposal.failed")}
-        </span>
-      )}
-    </span>
-  );
 }
 
 // useProposal is a card's proposal, read and read again each time it

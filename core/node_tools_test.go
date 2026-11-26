@@ -59,12 +59,11 @@ func TestBrainNodeEditNeedsID(t *testing.T) {
 		t.Errorf("id says %q", d)
 	}
 	id := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Liste de courses", "body": "Du pain."})["id"].(string)
-	d, _ := c.nodes.Read(id, 0)
 	mustBrainNodes(t, c, "node_edit", map[string]any{"id": id, "old": "pain", "new": "lait"})
 	if d, _ := c.nodes.Read(id, 0); d.Node.Text() != "Du lait." {
 		t.Errorf("edited %q", d.Node.Text())
 	}
-	if _, msg := brainNodes(t, c, "node_edit", map[string]any{"expect": d.Version.Hash, "old": "lait", "new": "riz"}); msg == "" {
+	if _, msg := brainNodes(t, c, "node_edit", map[string]any{"old": "lait", "new": "riz"}); msg == "" {
 		t.Error("an edit without id")
 	}
 }
@@ -92,22 +91,16 @@ func TestBrainNodeTools(t *testing.T) {
 	}
 	// A line edit needs no version: made after an older read, it
 	// applies while its line is there, and is refused once it is gone.
-	mustBrainNodes(t, c, "node_edit", map[string]any{"id": id, "old": "Un devis", "new": "Deux devis", "expect": hash})
+	mustBrainNodes(t, c, "node_edit", map[string]any{"id": id, "old": "Un devis", "new": "Deux devis"})
 	if _, msg := brainNodes(t, c, "node_edit", map[string]any{"id": id, "old": "Un devis", "new": "Trois devis"}); !strings.Contains(msg, "read it again") {
 		t.Errorf("an edit of a line gone: %q", msg)
 	}
-	// A block still names its version.
-	if _, msg := brainNodes(t, c, "node_edit", map[string]any{"id": id, "block": "b", "value": map[string]any{"components": map[string]any{"component": "Text", "text": "x"}}}); !strings.Contains(msg, "expect") {
-		t.Errorf("a block without expect: %q", msg)
+	// A block is no edit.
+	if _, msg := brainNodes(t, c, "node_edit", map[string]any{"id": id, "block": "b", "value": map[string]any{"components": map[string]any{"component": "Text", "text": "x"}}}); msg == "" {
+		t.Error("a block's edit passed")
 	}
 	if d, _ := c.nodes.Read(id, 0); d.Node.Text() != "Deux devis reçus." && !strings.HasPrefix(d.Node.Text(), "Deux devis") {
 		t.Errorf("edited: %q", d.Node.Text())
-	}
-	// Marks are the user's: a block written with them is refused.
-	cur := mustBrainNodes(t, c, "node_read", map[string]any{"id": id})
-	marked := "Texte.\n\n```eriphe:block options\n{\"components\": [{\"id\": \"root\", \"component\": \"Text\", \"text\": \"x\"}], \"marks\": {\"options\": {\"a\": \"keep\"}}}\n```\n"
-	if _, msg := brainNodes(t, c, "node_write", map[string]any{"id": id, "body": marked, "expect": cur["hash"]}); !strings.Contains(msg, "marks") {
-		t.Errorf("marks from the brain: %q", msg)
 	}
 	// A node that is not there.
 	for name, args := range map[string]map[string]any{
@@ -124,7 +117,7 @@ func TestBrainNodeTools(t *testing.T) {
 	if err := c.archiveNode(context.Background(), id, byUser); err != nil {
 		t.Fatal(err)
 	}
-	cur = mustBrainNodes(t, c, "node_read", map[string]any{"id": id})
+	cur := mustBrainNodes(t, c, "node_read", map[string]any{"id": id})
 	if _, msg := brainNodes(t, c, "node_write", map[string]any{"id": id, "body": "Encore.", "expect": cur["hash"]}); !strings.Contains(msg, "archived") {
 		t.Errorf("a write to an archived node: %q", msg)
 	}
@@ -498,7 +491,7 @@ func TestTaintedWritesMarkExternal(t *testing.T) {
 			return map[string]any{"id": id, "body": "Lu dans un mail.", "expect": hash}
 		}},
 		{"node_edit", func(id, hash string) map[string]any {
-			return map[string]any{"id": id, "old": "Rien", "new": "Lu dans un mail", "expect": hash}
+			return map[string]any{"id": id, "old": "Rien", "new": "Lu dans un mail"}
 		}},
 		{"node_set", func(id, hash string) map[string]any { return map[string]any{"id": id, "title": "Titre du mail"} }},
 	} {

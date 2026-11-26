@@ -107,7 +107,7 @@ func (c *core) fileInTalked(id, answer string, tainted, doc bool) string {
 	if err != nil || !sum.Archived.IsZero() {
 		return ""
 	}
-	traceErr, docErr := c.fileText(id, byBrain, answer, tainted, doc, c.nodeSourceOK())
+	traceErr, docErr := c.fileText(id, byBrain, answer, tainted, doc)
 	if traceErr != nil {
 		log.Printf("node %s: the brain's answer not filed in its trace: %v", id, traceErr)
 		return ""
@@ -123,7 +123,7 @@ func (c *core) fileInTalked(id, answer string, tainted, doc bool) string {
 // takes, and as its doc when doc says so and it has none. Tainted,
 // the node is marked external first: never words without the mark. It
 // tells why the trace, or the doc, refused it.
-func (c *core) fileText(id, author, text string, tainted, doc bool, sourceOK func(nodefile.Source) error) (traceErr, docErr error) {
+func (c *core) fileText(id, author, text string, tainted, doc bool) (traceErr, docErr error) {
 	if tainted {
 		c.markNodeExternal(id, author)
 	}
@@ -136,10 +136,10 @@ func (c *core) fileText(id, author, text string, tainted, doc bool, sourceOK fun
 		return nil, nil
 	}
 	d, err := c.nodes.Read(id, 0)
-	if err != nil || strings.TrimSpace(d.Node.Text()) != "" || len(d.Node.Blocks()) > 0 {
+	if err != nil || strings.TrimSpace(d.Node.Text()) != "" {
 		return nil, nil
 	}
-	_, err = c.authorWrite(id, d.Version.Hash, author, tainted, sourceOK, func(n *nodefile.Node) error { return n.AuthorBody(text) })
+	_, err = c.authorWrite(id, d.Version.Hash, author, tainted, func(n *nodefile.Node) error { return n.AuthorBody(text) })
 	return nil, err
 }
 
@@ -164,9 +164,6 @@ func (c *core) fileInNew(title string, trusted bool, answer string, tainted bool
 	if err != nil {
 		log.Printf("nodes: the brain's answer not filed: %v", err)
 		return ""
-	}
-	if err := c.externalSources(d, byBrain); err != nil {
-		log.Printf("node %s: %v", d.Node.Meta.ID, err)
 	}
 	return d.Node.Meta.ID
 }

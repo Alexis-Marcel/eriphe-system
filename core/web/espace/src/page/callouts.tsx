@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Agenda as AgendaView, AGENDA_DAYS, addDays, type Listed } from "../a2ui/agenda";
-import { BlockTitle, FiguresView } from "../a2ui/blocks";
-import { AlertView, factLink, PersonView } from "../a2ui/catalog";
+import { BlockTitle, FiguresView } from "../a2ui/figures";
+import { AlertView, factLink, PersonView } from "../a2ui/views";
 import { Chart as ChartView, type Series } from "../a2ui/chart";
 import { Icon } from "../a2ui/icons";
 import { useNow } from "../a2ui/now";
@@ -317,7 +317,7 @@ function Agenda({ title, body }: { title: string; body: MdBlock[] }) {
       {first && (
         <>
           <BlockTitle text={title} />
-          <AgendaView date={first} days={Math.min(AGENDA_DAYS, span)} events={events} ghosts={[]} lang={lang} t={t} now={now} />
+          <AgendaView date={first} days={Math.min(AGENDA_DAYS, span)} events={events} lang={lang} t={t} now={now} />
         </>
       )}
       {!first && title && <BlockTitle text={title} />}

@@ -1,11 +1,11 @@
 import { signedOut, tab } from "./api";
 import {
-  applyDoc, applyMoved, applyNodes, applyNotes, applyOrb, applyProgress, applyShow, applySource, step, type Store,
+  applyDoc, applyMoved, applyNodes, applyNotes, applyOrb, applyProgress, applyShow, step, type Store,
 } from "./store";
 
 // The workspace's event stream, /events (web_sse.go): one per page, with
 // the page's tab id. Its events feed the store: "node", "doc",
-// "progress", "source", "show", "orb", "proposals" and "notice".
+// "progress", "show", "orb", "proposals" and "notice".
 
 export const streamURL = () => `/events?tab=${tab}`;
 
@@ -55,7 +55,6 @@ export function connect(store: Store): () => void {
     on("node", (v) => step(store, applyNodes, v));
     on("doc", (v) => step(store, applyDoc, v));
     on("progress", (v) => step(store, applyProgress, v));
-    on("source", (v) => step(store, applySource, v));
     on("show", (v) => step(store, applyShow, v, Date.now()));
     on("orb", (v) => step(store, applyOrb, v));
     on("proposals", (v) => step(store, applyMoved, v));

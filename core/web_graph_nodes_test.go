@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"reflect"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -40,37 +39,8 @@ func mustNode(t *testing.T, c *core, nw nodestore.New) string {
 	return d.Node.Meta.ID
 }
 
-// The plan's block: a title, a live source's rows, an image and a link
-// the author wrote.
-const planBlock = "```eriphe:block titles\n" + `{"components": [
-  {"id": "root", "component": "Column", "children": ["h", "rows", "pic", "go"]},
-  {"id": "h", "component": "Text", "variant": "title", "text": {"@path": "/heading"}},
-  {"id": "rows", "component": "List", "children": {"componentId": "row", "path": "/ledger/accounts"}},
-  {"id": "row", "component": "Text", "text": {"@path": "name"}},
-  {"id": "pic", "component": "Image", "url": "https://img.example.org/a.png", "alt": "A"},
-  {"id": "go", "component": "Link", "label": "Site", "url": "https://site.example.org/"}],
- "data": {"heading": "Titres"},
- "sources": {"ledger": {"tool": "ledger/balances"}}}` + "\n```\n"
-
-// readNodeValue keeps a read of a node's source, as the live blocks do.
-func readNodeValue(t *testing.T, c *core, id, block, name string, value any) {
-	t.Helper()
-	srcs, err := c.nodes.Sources(id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, s := range srcs {
-		if s.Block == block && s.Name == name {
-			raw, _ := json.Marshal(value)
-			if _, err := c.store.db.Exec(`INSERT INTO node_reads (node, block, name, spec, value, read) VALUES (?, ?, ?, ?, ?, ?)`,
-				id, block, name, sourceSpec(s.Source), string(raw), time.Now().Unix()); err != nil {
-				t.Fatal(err)
-			}
-			return
-		}
-	}
-	t.Fatalf("no source %s/%s", block, name)
-}
+// planPage is a plan's callout: its titles and a link the author wrote.
+const planPage = "> [!plan] Titres\n> - Titre 1\n> - [Site](https://site.example.org/)\n"
 
 // The graph's rows never carry a title that may be someone else's words,
 // nor a goal.
@@ -97,18 +67,15 @@ func TestGraphRows(t *testing.T) {
 	}
 }
 
-// A node's page: its text and its blocks in order, each block with its
-// data, the source's last value at /<name>, its media
-// through eriphe-core, its link as it is; its versions; the
-// cards it waits on. No goal.
+// A node's page: its body as its file holds it, its versions, the cards
+// it waits on. No goal.
 func TestNodePage(t *testing.T) {
 	tw, _ := graphWeb(t)
 	c := tw.c
-	id := mustNode(t, c, nodestore.New{Title: "Plan du 1er article", Goal: "Un plan validé", Body: "# Plan\n\nTrois titres.\n\n" + planBlock + "\nLa suite.\n"})
-	readNodeValue(t, c, id, "titles", "ledger", map[string]any{"accounts": []any{map[string]any{"name": "Titre 1"}}})
+	id := mustNode(t, c, nodestore.New{Title: "Plan du 1er article", Goal: "Un plan validé", Body: "# Plan\n\nTrois titres.\n\n" + planPage + "\nLa suite.\n"})
 	d, _ := c.nodes.Read(id, 0)
 	if _, err := c.nodes.Change(id, d.Version.Hash, byUser, func(n *nodefile.Node) error {
-		return n.AuthorBody("# Plan\n\nTrois titres.\n\n" + planBlock + "\nLa suite. Revue.\n")
+		return n.AuthorBody("# Plan\n\nTrois titres.\n\n" + planPage + "\nLa suite. Revue.\n")
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -129,26 +96,15 @@ func TestNodePage(t *testing.T) {
 	if p.Node.Title != "Plan du 1er article" || p.Version != 2 || len(p.Versions) != 2 || p.Versions[1].Author != byUser || p.Node.Status != nodeWaits {
 		t.Errorf("page %+v", p)
 	}
-	if len(p.Parts) != 3 || !strings.Contains(p.Parts[0].Text, "Trois titres.") || p.Parts[1].Block == nil || !strings.Contains(p.Parts[2].Text, "La suite.") {
-		t.Fatalf("parts %+v", p.Parts)
-	}
-	b := p.Parts[1].Block
-	data, _ := json.Marshal(b.Data)
-	if b.Name != "titles" || b.Error != "" || !strings.Contains(string(data), `"ledger":{"accounts":[{"name":"Titre 1"}]}`) ||
-		strings.Contains(string(data), `"marks"`) || !strings.Contains(string(data), `"heading":"Titres"`) {
-		t.Errorf("block %+v %s", b, data)
-	}
-	comps, _ := json.Marshal(b.Components)
-	if !strings.Contains(string(comps), `"url":"/espace/media?`) || !strings.Contains(string(comps), `"url":"https://site.example.org/"`) || strings.Contains(string(comps), "img.example.org/a.png\"") {
-		t.Errorf("components %s", comps)
+	if !strings.Contains(p.Body, "Trois titres.") || !strings.Contains(p.Body, planPage) || !strings.Contains(p.Body, "La suite. Revue.") {
+		t.Fatalf("body %q", p.Body)
 	}
 	if len(p.Cards) != 1 || p.Cards[0].State != cardPending || p.Cards[0].Card == 0 {
 		t.Errorf("cards %+v", p.Cards)
 	}
 
-	// An older version shows the last reads too: the sources' values are
-	// code's, never in a version; its text is its own.
-	if _, body, _ := tw.do("GET", "/api/nodes/"+id+"?version=1", nil, nil); !strings.Contains(body, `"version":1`) || !strings.Contains(body, "Titre 1") || strings.Contains(body, "Revue") {
+	// An older version: its text is its own.
+	if _, body, _ := tw.do("GET", "/api/nodes/"+id+"?version=1", nil, nil); !strings.Contains(body, `"version":1`) || strings.Contains(body, "Revue") {
 		t.Errorf("v1: %s", body)
 	}
 	if code, _, _ := tw.do("GET", "/api/nodes/zz9", nil, nil); code != http.StatusNotFound {
@@ -156,22 +112,6 @@ func TestNodePage(t *testing.T) {
 	}
 	if code, _, _ := tw.do("GET", "/api/nodes/..%2Fx", nil, nil); code != http.StatusNotFound {
 		t.Errorf("not an id: %d", code)
-	}
-}
-
-// An external block's media from its author are dropped: a model that
-// read someone else's words may have written them.
-func TestNodePageExternalMedia(t *testing.T) {
-	tw, _ := graphWeb(t)
-	c := tw.c
-	id := mustNode(t, c, nodestore.New{Title: "Mail", External: true, Body: planBlock})
-	p, err := tw.w.nodePageOf(id, 0, "fr")
-	if err != nil || len(p.Parts) != 1 {
-		t.Fatal(p, err)
-	}
-	comps, _ := json.Marshal(p.Parts[0].Block.Components)
-	if !p.Parts[0].Block.External || strings.Contains(string(comps), "media") || strings.Contains(string(comps), "img.example.org") {
-		t.Errorf("external block %s", comps)
 	}
 }
 
@@ -247,7 +187,7 @@ func next(t *testing.T, evs <-chan [2]string, kind string) string {
 
 // The stream sends the graph at once, then each change: a node's row, its
 // new version, a task's progress line (never one that may carry someone
-// else's words), a source's value, a node shown, a node archived.
+// else's words), a node shown, a node archived.
 func TestGraphStream(t *testing.T) {
 	tw, _ := graphWeb(t)
 	c := tw.c
@@ -262,7 +202,7 @@ func TestGraphStream(t *testing.T) {
 		t.Fatalf("first %+v", first)
 	}
 
-	id := mustNode(t, c, nodestore.New{Title: "Plan", Body: planBlock})
+	id := mustNode(t, c, nodestore.New{Title: "Plan", Body: planPage})
 	if got := next(t, evs, "node"); !strings.Contains(got, `"title":"Plan"`) || strings.Contains(got, "reset") {
 		t.Errorf("new node: %s", got)
 	}
@@ -282,12 +222,6 @@ func TestGraphStream(t *testing.T) {
 	}
 	if got := next(t, evs, "progress"); !strings.Contains(got, `"text":"Trois articles lus"`) {
 		t.Errorf("progress: %s", got)
-	}
-
-	readNodeValue(t, c, id, "titles", "ledger", map[string]any{"accounts": []any{}, "total": 3})
-	c.graphSaid(graphEvent{Kind: graphEvSource, Node: id, Block: "titles", Name: "ledger"})
-	if got := next(t, evs, "source"); got != `{"block":"titles","name":"ledger","node":"`+id+`","value":{"accounts":[],"total":3}}` {
-		t.Errorf("source: %s", got)
 	}
 
 	c.showNode(id, byBrain, false)
@@ -373,17 +307,13 @@ func TestProgressLineGoesWithItsRun(t *testing.T) {
 	}
 }
 
-// mediaSig is a media address's signature, new at each run.
-var mediaSig = regexp.MustCompile(`s=[A-Za-z0-9_-]+`)
-
 // The page's shape, as the app's tests read it (web/espace/src/doc): a
-// node with text and a live block. ERIPHE_UPDATE_ESPACE=1 go test -run
+// node with text and a callout. ERIPHE_UPDATE_ESPACE=1 go test -run
 // TestNodePageGolden writes it again.
 func TestNodePageGolden(t *testing.T) {
 	tw, _ := graphWeb(t)
 	c := tw.c
-	id := mustNode(t, c, nodestore.New{Title: "Plan du 1er article", Body: "# Plan\n\nTrois titres.\n\n" + planBlock})
-	readNodeValue(t, c, id, "titles", "ledger", map[string]any{"accounts": []any{map[string]any{"name": "Titre 1"}, map[string]any{"name": "Titre 2"}}})
+	id := mustNode(t, c, nodestore.New{Title: "Plan du 1er article", Body: "# Plan\n\nTrois titres.\n\n" + planPage})
 	p, err := tw.w.nodePageOf(id, 0, "fr")
 	if err != nil {
 		t.Fatal(err)
@@ -393,9 +323,6 @@ func TestNodePageGolden(t *testing.T) {
 	for i := range p.Versions {
 		p.Versions[i].At = time.Time{}
 	}
-	comps, _ := json.Marshal(p.Parts[1].Block.Components)
-	comps = mediaSig.ReplaceAll(comps, []byte("s=SIG"))
-	json.Unmarshal(comps, &p.Parts[1].Block.Components)
 	want, _ := json.MarshalIndent(p, "", "  ")
 	want = append(want, '\n')
 	const file = "web/espace/src/doc/page.golden.json"

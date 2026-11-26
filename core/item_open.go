@@ -12,7 +12,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -40,10 +39,6 @@ import (
 //     when the server is not trusted; misleading when the page's words for
 //     it do not say it (page_items.go). Nothing is kept: no version, no
 //     trace, nothing the brain reads. The page keeps it for its session.
-//
-// A legacy List bound to a block's source (until node format 3 converts
-// it) opens its rows the same way, by the tool its source's items
-// descriptor names (open), checked when written (openOK, from nodeGuard).
 //
 //	"eriphe/open": {"id": "id", "title": "subject", "from": "from", "date": "date", "body": "body"}
 
@@ -118,51 +113,10 @@ func (c *core) serverOpener(server string) *itemOpener {
 	return nil
 }
 
-// sourceServer is the server a source reads ("" for a monitor's).
-func sourceServer(src nodefile.Source) string {
-	if src.Tool != "" {
-		server, _, _ := strings.Cut(src.Tool, "/")
-		return server
-	}
-	return src.Resource
-}
-
-// openOK checks a source's open against the catalog.
-func (c *core) openOK(src nodefile.Source) error {
-	if src.Items == nil || src.Items.Open == nil {
-		return nil
-	}
-	o := src.Items.Open
-	server, _, _ := strings.Cut(o.Tool, "/")
-	if server != sourceServer(src) {
-		return fmt.Errorf("items' open: %s is not a tool of the source's own server %s", o.Tool, sourceServer(src))
-	}
-	u, t := c.catalogTool(o.Tool)
-	if u == nil || t == nil {
-		return fmt.Errorf("items' open: %s is not a tool of the catalog (list_tools)", o.Tool)
-	}
-	if err := c.readsByID(u, t, o.ID); err != nil {
-		return fmt.Errorf("items' open: %w", err)
-	}
-	return nil
-}
-
 // itemOpenIn is a click that opens an item: a reference of the page, by
-// its label; or a legacy List's row, by its block, its source and the
-// item's id.
+// its label.
 type itemOpenIn struct {
-	Ref    string `json:"ref,omitempty"`
-	Block  string `json:"block,omitempty"`
-	Source string `json:"source,omitempty"`
-	Item   string `json:"item,omitempty"`
-}
-
-// openNote is the item's note, as its row's: its group and note, and
-// whether the note may carry someone else's words.
-type openNote struct {
-	Group    string `json:"group,omitempty"`
-	Note     string `json:"note,omitempty"`
-	External bool   `json:"external,omitempty"`
+	Ref string `json:"ref"`
 }
 
 // openOut is what an open shows.
@@ -175,8 +129,7 @@ type openOut struct {
 	External bool   `json:"external,omitempty"`
 	// Misleading: the page's words for the reference do not say the item
 	// read (page_items.go): shown with a warning.
-	Misleading bool      `json:"misleading,omitempty"`
-	Note       *openNote `json:"note,omitempty"`
+	Misleading bool `json:"misleading,omitempty"`
 }
 
 func (w *web) itemOpenRoutes(mux *webMux) {
@@ -184,9 +137,8 @@ func (w *web) itemOpenRoutes(mux *webMux) {
 }
 
 // handleNodeOpen is POST /api/nodes/{id}/open: 200 with what the item
-// says; 400 for an item the source does not list; 403 for a read that is
-// not free; 404; 409 when the reference or the source opens no item; 502
-// when the tool failed. Every answer but 200 has error, the line to show.
+// says; 403 for a read that is not free; 404; 409 when the reference
+// opens no item; 502 when the tool failed. Every answer but 200 has error, the line to show.
 func (w *web) handleNodeOpen(rw http.ResponseWriter, r *http.Request, _ *session) {
 	sum, ok := w.gestureNode(rw, r)
 	if !ok {
@@ -196,16 +148,7 @@ func (w *web) handleNodeOpen(rw http.ResponseWriter, r *http.Request, _ *session
 	if !gestureBody(rw, r, 16<<10, &in) {
 		return
 	}
-	var (
-		out    openOut
-		status int
-		why    string
-	)
-	if in.Ref != "" {
-		out, status, why = w.c.openRef(r.Context(), sum.ID, in.Ref, w.lang(r))
-	} else {
-		out, status, why = w.c.openItem(r.Context(), sum.ID, in, w.lang(r))
-	}
+	out, status, why := w.c.openRef(r.Context(), sum.ID, in.Ref, w.lang(r))
 	if status != http.StatusOK {
 		writeJSON(rw, status, map[string]any{"error": why})
 		return
@@ -238,43 +181,6 @@ func (c *core) openRef(ctx context.Context, id, label, lang string) (openOut, in
 	out, status, why := c.readItem(ctx, o, r.ID, lang)
 	if status == http.StatusOK {
 		out.Misleading = pageMisleads(p, r.Label, itemLabel{Title: out.Title, Detail: out.From})
-	}
-	return out, status, why
-}
-
-// openItem reads an item of a node's source in full: a legacy List's row.
-func (c *core) openItem(ctx context.Context, id string, in itemOpenIn, lang string) (openOut, int, string) {
-	d, err := c.nodes.Read(id, 0)
-	if err != nil {
-		return openOut{}, http.StatusNotFound, errNoNode.Error()
-	}
-	b := d.Node.Block(in.Block)
-	if b == nil || b.Card != "" || b.Validate() != nil {
-		return openOut{}, http.StatusNotFound, tr(lang, "open.none")
-	}
-	src, ok := b.Sources[in.Source]
-	if !ok || src.Items == nil || src.Items.Open == nil {
-		return openOut{}, http.StatusConflict, tr(lang, "open.none")
-	}
-	listed, _ := itemIDs(src, c.sourceNow(id, b, in.Source), nil)
-	v, ok := listed[in.Item]
-	if !ok {
-		return openOut{}, http.StatusBadRequest, tr(lang, "open.stale")
-	}
-	if c.openOK(src) != nil {
-		return openOut{}, http.StatusGone, tr(lang, "act.gone")
-	}
-	u, t := c.catalogTool(src.Items.Open.Tool)
-	o := &itemOpener{u: u, t: t, id: src.Items.Open.ID}
-	metaValue(c.toolMeta(u, t), openMetaKey, &o.decl)
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), openTimeout)
-	defer cancel()
-	out, status, why := c.readItem(ctx, o, v.ID, lang)
-	if status != http.StatusOK {
-		return out, status, why
-	}
-	if n, ok := c.itemNotes(id, in.Source)[in.Item]; ok && (n.Group != "" || n.Note != "") {
-		out.Note = &openNote{Group: n.Group, Note: n.Note, External: n.Tainted != ""}
 	}
 	return out, status, why
 }
@@ -335,6 +241,72 @@ func openFields(v any, decl toolOpen) openOut {
 	out.Date = fieldText(m, decl.Date, 80)
 	out.Body = fieldText(m, decl.Body, openValueMax)
 	return out
+}
+
+// What an item says when its tool declares no field for it: the first of
+// these fields it has, at its top level, whatever the server (a mail's
+// subject and sender, an event's title and organizer, an issue's title
+// and author).
+var (
+	itemTitleFields  = []string{"subject", "title", "name", "summary", "label", "snippet", "text", "description"}
+	itemDetailFields = []string{"from", "sender", "author", "organizer", "owner", "creator", "user", "assignee"}
+)
+
+const itemTextMax = 160 // runes of an item's title or detail
+
+// itemField is the text at path in an item, else at the first of fields
+// it has; and the field it came from ("" for a path given).
+func itemField(it any, path string, fields []string, person bool) (string, string) {
+	if path != "" {
+		v, err := extract(it, path)
+		if err != nil {
+			return "", ""
+		}
+		return itemText(v, person), path
+	}
+	m, ok := it.(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	for _, k := range fields {
+		if text := itemText(m[k], person); text != "" {
+			return text, k
+		}
+	}
+	return "", ""
+}
+
+// itemText is a value as one line says it: an object by its name; for a
+// person, "Sam <sam@example.org>" by their name too.
+func itemText(v any, person bool) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case string:
+		s := strings.TrimSpace(x)
+		if name, _, ok := strings.Cut(s, " <"); ok && person && strings.HasSuffix(s, ">") {
+			if name = strings.Trim(strings.TrimSpace(name), `"`); name != "" {
+				s = name
+			}
+		}
+		return truncate(oneLine(s), itemTextMax)
+	case map[string]any:
+		for _, k := range []string{"name", "displayName", "display_name", "login", "email", "title"} {
+			if s, ok := x[k].(string); ok && strings.TrimSpace(s) != "" {
+				return itemText(s, person)
+			}
+		}
+		return ""
+	case []any:
+		var parts []string
+		for _, e := range x {
+			if s := itemText(e, person); s != "" {
+				parts = append(parts, s)
+			}
+		}
+		return truncate(strings.Join(parts, ", "), itemTextMax)
+	}
+	return truncate(oneLine(valueText(v)), itemTextMax)
 }
 
 // fieldText is an object's field as a text, n bytes at most; "" for none.

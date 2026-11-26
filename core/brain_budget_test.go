@@ -55,8 +55,7 @@ func TestBrainBudgetIsTheBrainsOnly(t *testing.T) {
 	task, _ := startInNode(t, c, runRequest{Title: "Tri", Prompt: "Trie.", Node: page})
 	c.turn.start(1, 1, 0)
 	for i := range brainNodeWrites + 3 {
-		read := mustNodes(t, c.core, task.ID, "node_read", map[string]any{"id": page})
-		if _, msg := callNodes(t, c.core, task.ID, "node_edit", map[string]any{"id": page, "expect": read["hash"],
+		if _, msg := callNodes(t, c.core, task.ID, "node_edit", map[string]any{"id": page,
 			"old": "v" + strconv.Itoa(i), "new": "v" + strconv.Itoa(i+1)}); msg != "" {
 			t.Fatalf("a task's edit %d: %s", i+1, msg)
 		}
@@ -100,10 +99,10 @@ func refusedFor(t *testing.T, why string) {
 }
 
 // The budget of one turn: reads never count; a whole page, a series of
-// node writes or item notes, a second skill and too many changes are
+// node writes, a second skill and too many changes are
 // refused, each with the hint; what routes and launches always passes.
 func TestTurnBudget(t *testing.T) {
-	page := strings.Repeat("Une ligne de la page, ses blocs et ses sources.\n", 20)
+	page := strings.Repeat("Une ligne de la page, ses titres et ses listes.\n", 20)
 	line := map[string]any{"id": "n1", "expect": "h", "body": "En cours : je m'en occupe."}
 
 	b := newTurnBudget(1)
@@ -117,7 +116,6 @@ func TestTurnBudget(t *testing.T) {
 	// A whole page: refused, by node_write, node_open or node_edit.
 	refusedFor(t, refusal(b.charge("node_write", map[string]any{"id": "n1", "expect": "h", "body": page})))
 	refusedFor(t, refusal(b.charge("node_open", map[string]any{"title": "Mes mails", "goal": "Un but.", "body": page})))
-	refusedFor(t, refusal(b.charge("node_edit", map[string]any{"id": "n1", "block": "b", "value": map[string]any{"components": page}})))
 	refusedFor(t, refusal(b.charge("node_edit", map[string]any{"id": "n1", "old": "x", "new": page})))
 	// A work cut in steps is orchestration: its steps are not page text.
 	steps := []any{map[string]any{"key": "style", "do": page}, map[string]any{"key": "plan", "do": page}}
@@ -132,15 +130,6 @@ func TestTurnBudget(t *testing.T) {
 		}
 	}
 	refusedFor(t, refusal(b.charge("node_edit", line)))
-
-	// Item notes: a few, not a burst.
-	b = newTurnBudget(1)
-	for i := range brainItemNotes {
-		if why := refusal(b.charge("item_note", map[string]any{"node": "n1", "item": "m1"})); why != "" {
-			t.Fatalf("note %d refused: %s", i+1, why)
-		}
-	}
-	refusedFor(t, refusal(b.charge("item_note", map[string]any{"node": "n1", "item": "m4"})))
 
 	// One skill a turn; a monitor tried and written are changes.
 	b = newTurnBudget(1)
@@ -246,7 +235,7 @@ func TestTurnBudgetCardFollowUp(t *testing.T) {
 	}{
 		{"node_read", map[string]any{"id": "n1"}},
 		{"node_edit", line},
-		{"node_edit", map[string]any{"id": "parent", "expect": "h", "old": "Reste à", "new": "Fait :"}},
+		{"node_edit", map[string]any{"id": "parent", "old": "Reste à", "new": "Fait :"}},
 		{"node_set", map[string]any{"id": "n1", "done": true}},
 		{"withdraw_proposal", map[string]any{"ref": "calls:2"}},
 		{"run_task", map[string]any{"node": "n1", "ask": "Fais avancer ce nœud."}},

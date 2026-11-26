@@ -118,7 +118,6 @@ describe("a page's [[links]]", () => {
     version: 3,
     versions: [],
     body: "## Les sujets liés\n\n- [[Recherche sur le télétravail|La recherche]]\n- [[Choisir l'angle]]\n- [[L'article]]\n",
-    parts: [{ text: "## Les sujets liés\n\n- [[Recherche sur le télétravail|La recherche]]\n- [[Choisir l'angle]]\n- [[L'article]]\n" }],
     cards: [],
     refs: {
       "Recherche sur le télétravail": { id: "n3", title: "Recherche sur le télétravail" },

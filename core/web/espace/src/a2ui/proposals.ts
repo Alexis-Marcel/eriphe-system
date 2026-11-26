@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { answerProposal, dayProposals, proposal, type Answer, type Moved, type ProposalView } from "../data/api";
+import { answerProposal, proposal, type Answer, type Moved, type ProposalView } from "../data/api";
 import { store } from "../data/store";
 
 // Where the Proposal and Agenda components read proposals, send an answer and
@@ -10,8 +10,6 @@ import { store } from "../data/store";
 export type Proposals = {
   read(ref: string): Promise<ProposalView | null>;
   answer(a: Answer): Promise<boolean>;
-  // day: the proposals that wait and take place on a day (YYYY-MM-DD).
-  day(date: string): Promise<ProposalView[]>;
   // follow calls back when proposals moved; it gives a function to stop.
   follow(on: (m: Moved) => void): () => void;
 };
@@ -22,7 +20,7 @@ export function followProposals(on: (m: Moved) => void): () => void {
   });
 }
 
-export const coreProposals: Proposals = { read: proposal, answer: answerProposal, day: dayProposals, follow: followProposals };
+export const coreProposals: Proposals = { read: proposal, answer: answerProposal, follow: followProposals };
 
 export const ProposalsContext = createContext<Proposals>(coreProposals);
 export const useProposals = () => useContext(ProposalsContext);

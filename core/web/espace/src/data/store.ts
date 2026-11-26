@@ -1,6 +1,6 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
-import type { GraphNode, Moved, Note, OrbClosed, OrbFeed, OrbWords, ListRow, Theme, View, Waiting } from "./api";
+import type { GraphNode, Moved, Note, OrbClosed, OrbFeed, OrbWords, Theme, View, Waiting } from "./api";
 import { DEFAULT_FORCES, forcesFrom, type Forces } from "../graph/layout";
 
 // The workspace's state: the graph as eriphe-core streams it (stream.ts),
@@ -25,12 +25,6 @@ export type State = {
   docs: Record<string, number>;
   traces: Record<string, number>;
   progress: Record<string, Progress>;
-  // the sources' last values, by node, block and name
-  sources: Record<string, unknown>;
-  // the rows of the Lists the page must know (those that filter a
-  // source's items, open them, a batch folds, a card waits on), by node, block and the
-  // List's component id (list_rows.go, list_sections.go)
-  rows: Record<string, ListRow[]>;
   open: string[];
   talk: string | null;
   shown: number; // the last show applied
@@ -51,8 +45,6 @@ export const empty = (): State => ({
   docs: {},
   traces: {},
   progress: {},
-  sources: {},
-  rows: {},
   open: [],
   talk: null,
   shown: 0,
@@ -124,8 +116,6 @@ export function setClosed(s: State, closed: OrbClosed): State {
   return closed === s.closed ? s : { ...s, closed };
 }
 
-export const sourceKey = (node: string, block: string, name: string) => `${node}\u0000${block}\u0000${name}`;
-
 // The "node" event: all the rows (reset), or those that changed and the
 // ids of those that left (gone: archived). A page open on a node that left
 // closes.
@@ -158,18 +148,6 @@ export type ProgressEvent = { node: string; text: string; at: string };
 export function applyProgress(s: State, ev: ProgressEvent): State {
   if (!ev || typeof ev.node !== "string" || typeof ev.text !== "string") return s;
   return { ...s, progress: { ...s.progress, [ev.node]: { text: ev.text, at: ev.at } } };
-}
-
-export type SourceEvent = { node: string; block: string; name: string; value: unknown; lists?: { component: string; items: ListRow[] }[] };
-
-export function applySource(s: State, ev: SourceEvent): State {
-  if (!ev || typeof ev.node !== "string" || typeof ev.block !== "string" || typeof ev.name !== "string") return s;
-  const key = sourceKey(ev.node, ev.block, ev.name);
-  let rows = s.rows;
-  for (const l of Array.isArray(ev.lists) ? ev.lists : []) {
-    if (l && typeof l.component === "string" && Array.isArray(l.items)) rows = { ...rows, [sourceKey(ev.node, ev.block, l.component)]: l.items };
-  }
-  return { ...s, sources: { ...s.sources, [key]: ev.value }, rows };
 }
 
 // SHOW_FRESH is how old a show may be and still open a page when the stream

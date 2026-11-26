@@ -384,7 +384,6 @@ func (c *core) lookMonitor(ctx context.Context, m *monitor, now time.Time) {
 		st.Checked = now.Unix()
 		raw, _ := json.Marshal(st)
 		c.store.db.Exec(`UPDATE monitors SET look = ?, next_at = ? WHERE id = ?`, string(raw), next.Unix(), m.ID)
-		c.monitorLooked(m.Name) // the blocks that read it (node_live.go)
 	}()
 	if why := c.monitorWhy(m.Spec); why != "" {
 		st.Waiting = why // its access changed: it waits, nothing is called
@@ -595,7 +594,6 @@ func (c *core) emitMonitor(m *monitor, kind string, p map[string]any) {
 	p["monitor"] = m.Name
 	c.emitLogged(journalEvent{Kind: kind, Key: m.Name, Source: "monitor:" + m.Name, Payload: p,
 		External: !c.trustsServer(m.Spec.Server)})
-	c.monitorRaise(m, kind, p) // the nodes that read it (node_live.go)
 }
 
 // resultValue is a tool's result as data: its structured content, else its
@@ -929,7 +927,6 @@ func (c *core) decideMonitor(id int64, approve bool) error {
 		raw, _ := json.Marshal(m.Pending)
 		_, err = c.store.db.Exec(`UPDATE monitors SET spec = ?, pending = '', look = '{}', next_at = 0, tainted = '', updated = ? WHERE id = ?`,
 			string(raw), now, id)
-		c.monitorLooked(m.Name) // a new baseline: the blocks that read it (node_live.go)
 	default:
 		_, err = c.store.db.Exec(`UPDATE monitors SET state = ?, look = '{}', next_at = 0, tainted = '', updated = ? WHERE id = ?`,
 			monitorOn, now, id)

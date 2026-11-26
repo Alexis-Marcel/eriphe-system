@@ -2,7 +2,6 @@ package nodestore
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -17,14 +16,14 @@ import (
 
 // The index, nodes.db: what must be fast, kept from the files. It is
 // rebuilt from them (and from the log, for the versions) when it is lost,
-// nothing lost: what code keeps beside a node (its items' notes, its
-// cards, its sources' reads) is in core.db. A node's status (running,
+// nothing lost: what code keeps beside a node (its
+// cards, its glances) is in core.db. A node's status (running,
 // waiting, done) is not kept at all: eriphe-core computes it.
 
 // schemaVersion is the schema nodes.db is at; meta.schema_version says
 // it. A file at an older version is made again from the files and the
 // log (openIndex); one at a newer version is refused, never changed.
-const schemaVersion = 8
+const schemaVersion = 9
 
 // refsSchema holds the [[links]] of the nodes' text: each name a node's
 // text links (its LinkKey) and the node it was resolved to, ” while no
@@ -61,10 +60,6 @@ const schema = `CREATE TABLE nodes (
 	  hash TEXT NOT NULL,                -- the commit that made it
 	  author TEXT NOT NULL, at INTEGER NOT NULL,
 	  PRIMARY KEY (id, n));
-	CREATE TABLE node_sources (
-	  id TEXT NOT NULL, block TEXT NOT NULL, name TEXT NOT NULL,
-	  spec TEXT NOT NULL,                -- the source as the block says it, JSON
-	  PRIMARY KEY (id, block, name));
 	CREATE TABLE node_listens (
 	  id TEXT NOT NULL, kind TEXT NOT NULL,
 	  key TEXT NOT NULL,                 -- '' for the events of any key
@@ -259,7 +254,7 @@ func indexNode(tx querier, n *nodefile.Node, file string, raw []byte, version in
 	if err := indexProps(tx, m); err != nil {
 		return err
 	}
-	for _, q := range []string{`DELETE FROM node_links WHERE id = ?`, `DELETE FROM node_sources WHERE id = ?`, `DELETE FROM node_listens WHERE id = ?`} {
+	for _, q := range []string{`DELETE FROM node_links WHERE id = ?`, `DELETE FROM node_listens WHERE id = ?`} {
 		if _, err := tx.Exec(q, m.ID); err != nil {
 			return err
 		}
@@ -274,14 +269,6 @@ func indexNode(tx querier, n *nodefile.Node, file string, raw []byte, version in
 			return err
 		}
 	}
-	for _, b := range n.Blocks() {
-		for name, src := range b.Sources {
-			spec, _ := json.Marshal(src)
-			if _, err := tx.Exec(`INSERT INTO node_sources (id, block, name, spec) VALUES (?, ?, ?, ?)`, m.ID, b.Name, name, string(spec)); err != nil {
-				return err
-			}
-		}
-	}
 	return nil
 }
 
@@ -290,7 +277,7 @@ func indexNode(tx querier, n *nodefile.Node, file string, raw []byte, version in
 func forget(tx execer, id string) error {
 	// Its words first, by their row, while its row says which.
 	for _, q := range []string{`DELETE FROM node_fts WHERE rowid = (SELECT fts FROM nodes WHERE id = ?)`,
-		`DELETE FROM nodes WHERE id = ?`, `DELETE FROM node_links WHERE id = ?`, `DELETE FROM node_sources WHERE id = ?`,
+		`DELETE FROM nodes WHERE id = ?`, `DELETE FROM node_links WHERE id = ?`,
 		`DELETE FROM node_listens WHERE id = ?`, `DELETE FROM node_pending WHERE id = ?`,
 		`DELETE FROM node_refs WHERE id = ?`, `DELETE FROM node_props WHERE id = ?`, `UPDATE node_refs SET target = '' WHERE target = ?`} {
 		if _, err := tx.Exec(q, id); err != nil {
@@ -314,47 +301,9 @@ func timeOr0(sec int64) time.Time {
 	return time.Unix(sec, 0)
 }
 
-// searchText is what a node is found by beside its title: its text, its
-// goal, and the words its blocks show (strings of their components and
-// data), not their JSON.
-func searchText(n *nodefile.Node) string {
-	var b strings.Builder
-	b.WriteString(n.Meta.Goal)
-	b.WriteString("\n")
-	b.WriteString(n.Text())
-	for _, bl := range n.Blocks() {
-		for _, raw := range []json.RawMessage{bl.Components, bl.Data} {
-			var v any
-			if json.Unmarshal(raw, &v) == nil {
-				words(&b, v)
-			}
-		}
-	}
-	return b.String()
-}
-
-// words writes the text of a JSON value's strings, but those of keys that
-// hold ids, paths and component names.
-func words(b *strings.Builder, v any) {
-	switch x := v.(type) {
-	case string:
-		b.WriteString("\n")
-		b.WriteString(x)
-	case []any:
-		for _, e := range x {
-			words(b, e)
-		}
-	case map[string]any:
-		for k, e := range x {
-			if !notWords[k] {
-				words(b, e)
-			}
-		}
-	}
-}
-
-var notWords = map[string]bool{"id": true, "component": true, "child": true, "children": true,
-	"path": true, "@path": true, "componentId": true, "list": true, "item": true, "kind": true}
+// searchText is what a node is found by beside its title: its goal and
+// its page.
+func searchText(n *nodefile.Node) string { return n.Meta.Goal + "\n" + n.Text() }
 
 // ftsQuery turns free text into an FTS5 query: its words of three letters
 // or more, each a prefix (the shorter ones only when there is no other),

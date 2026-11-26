@@ -37,6 +37,28 @@ func TestConvertedWordsStayWords(t *testing.T) {
 	}
 }
 
+// The full file of format 2 (testdata/format2.md, its blocks without
+// values) is today's full.md: the conversion keeps its front matter and
+// text, its blocks written as Markdown or kept as JSON.
+func TestFormat2FullFile(t *testing.T) {
+	old, err := os.ReadFile("testdata/format2.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := Upgrade(old, Conversions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *update {
+		if err := os.WriteFile("testdata/full.md", out, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if full, _ := os.ReadFile("testdata/full.md"); !bytes.Equal(out, full) {
+		t.Fatalf("converted:\n%s", out)
+	}
+}
+
 type snapFixture struct {
 	Read   time.Time                  `json:"read"`
 	Values map[string]json.RawMessage `json:"values"`
@@ -83,7 +105,7 @@ func TestToPageFixtures(t *testing.T) {
 			if n.Meta.Format != 3 || id != n.Meta.ID {
 				t.Fatalf("format %d, node %q", n.Meta.Format, id)
 			}
-			if bytes.Contains(out, []byte("eriphe:block")) || len(n.Blocks()) > 0 {
+			if bytes.Contains(out, []byte("eriphe:block")) {
 				t.Fatal("a block left")
 			}
 			body, _ := n.Body()

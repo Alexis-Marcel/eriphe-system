@@ -38,6 +38,7 @@ func openGraph(t *testing.T, c *core) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
+	t.Cleanup(c.reviewing.Wait) // before it closes
 	c.nodes = s
 }
 

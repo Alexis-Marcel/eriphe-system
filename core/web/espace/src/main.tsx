@@ -1,4 +1,4 @@
-import { StrictMode, type ReactNode } from "react";
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { boot, type Boot } from "./data/api";
@@ -16,22 +16,24 @@ import "./blocks.css";
 // with the way to try again; a page that throws while it draws shows it too.
 const root = document.getElementById("root")!;
 
-async function start(): Promise<{ b: Boot; dev?: Dev; Gallery?: () => ReactNode }> {
+async function start(): Promise<{ b: Boot; dev?: Dev }> {
   const url = root.dataset.boot;
   if (url) return { b: await boot(url) };
   if (!import.meta.env.DEV) throw new Error("no boot");
   const m = await import("./dev");
   const b = m.devBoot();
-  return { b, dev: m.dev(b.lang), Gallery: m.Gallery };
+  return { b, dev: m.dev(b.lang) };
 }
 
 start().then(
-  ({ b, dev, Gallery }) => {
+  ({ b, dev }) => {
     document.documentElement.lang = b.lang;
     createRoot(root).render(
       <StrictMode>
         <WordsContext.Provider value={{ t: makeT(b.strings), lang: b.lang }}>
-          <FailSafe>{dev?.gallery && Gallery ? <Gallery /> : <App boot={b} dev={dev} />}</FailSafe>
+          <FailSafe>
+            <App boot={b} dev={dev} />
+          </FailSafe>
         </WordsContext.Provider>
       </StrictMode>,
     );

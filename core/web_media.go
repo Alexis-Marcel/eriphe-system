@@ -8,37 +8,25 @@ import (
 	"errors"
 	"io"
 	"log"
-	"mime"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
-// The images and videos of a node's blocks never reach the page from
-// outside (A2UI #4045: an address the page loads can carry what a model
-// read out to whoever answers it, and it tells the sender the user
-// looked). The CSP already forbids it (img-src 'self'); eriphe-core
-// rewrites each media address of a block (blockView, web_graph.go) to its
-// own endpoint,
-//
-//	GET /espace/media?u=<address>&s=<signature>
-//
-// with a session, which fetches it itself: only an address eriphe-core
-// signed (not an open fetcher), http or https only, a public address only
-// (the same dialer as an access: never its own network, the cloud's
-// metadata or the LAN), 3 redirects at most, no cookie nor credential,
-// 8 MiB at most, an image (not SVG, which carries scripts) or a video, kept
-// 10 minutes by the browser.
-//
 // A node's media are its own files: a task's images, or a file the user
 // attached to a message that the brain kept with the node (node_set, a
-// property whose value is the attachment's id: node_attach.go).
+// property whose value is the attachment's id: node_attach.go). The page
+// gets each as an address of eriphe-core's own, signed for that node,
+//
+//	GET /espace/media?u=media:<node>/<name>&s=<signature>
+//
+// with a session: handleMedia reads it from that node's files only, an
+// image (not SVG, which carries scripts) shown inline, a PDF downloaded.
+// Nothing is ever fetched from outside.
 //
 // A task's images. Most sites refuse being framed:
 // to show a page, a task with a node captures it in its container
@@ -50,40 +38,12 @@ import (
 // for the task's own node only. A PNG or a JPEG, sniffed from its bytes,
 // 5 MiB at most, a few a node: it is kept in files/<id>/ of the graph's
 // repository, one commit (nodestore.PutFile), and its address answered,
-// media:<name>, which the task writes as an Image's url in a block of its
-// node. The bytes never go through a model. On the page, blockView signs
-// media:<node>/<name> for the node the block is in, and handleMedia reads
-// it from that node's files only.
+// media:<name>, which the task names as a property of its node.
 
 const (
-	mediaScheme    = "media:"
-	mediaMax       = 8 << 20
-	mediaTimeout   = 20 * time.Second
-	mediaRedirects = 3
-	mediaPath      = "/espace/media"
+	mediaScheme = "media:"
+	mediaPath   = "/espace/media"
 )
-
-// mediaClient fetches the media; tests replace it.
-var mediaClient = &http.Client{
-	Timeout: mediaTimeout,
-	Transport: &http.Transport{
-		Proxy:                 nil,
-		DialContext:           (&net.Dialer{Timeout: 10 * time.Second, Control: accessControl}).DialContext,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: mediaTimeout,
-		MaxIdleConnsPerHost:   2,
-		IdleConnTimeout:       time.Minute,
-	},
-	CheckRedirect: func(r *http.Request, via []*http.Request) error {
-		if len(via) >= mediaRedirects {
-			return errors.New("too many redirects")
-		}
-		if r.URL.Scheme != "http" && r.URL.Scheme != "https" {
-			return errors.New("not http")
-		}
-		return nil
-	},
-}
 
 // mediaKey signs the media addresses: made once a run, so an address
 // lasts as long as eriphe-core.
@@ -99,73 +59,33 @@ func (c *core) mediaSign(u string) string {
 	return base64.RawURLEncoding.EncodeToString(m.Sum(nil)[:18])
 }
 
-// mediaOrDrop is a media address of node id's block as the page gets it:
-// eriphe-core's own for one of the node's files (media:<name>) or an
-// http(s) address allowed, "" for anything else.
-func (c *core) mediaOrDrop(id, raw string, allowed bool) string {
-	raw = strings.TrimSpace(raw)
-	if name, ok := strings.CutPrefix(raw, mediaScheme); ok {
-		if id == "" || !nodestore.ValidFileName(name) {
-			return ""
-		}
-		at := mediaScheme + id + "/" + name
-		return mediaPath + "?" + url.Values{"u": {at}, "s": {c.mediaSign(at)}}.Encode()
-	}
-	if c.mediaSigned(raw) { // eriphe-core's own already (a node_find row's file: nodeFindMedia)
-		return raw
-	}
-	u, err := url.Parse(raw)
-	if !allowed || err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || len(raw) > 4096 {
-		return ""
-	}
-	return mediaPath + "?" + url.Values{"u": {raw}, "s": {c.mediaSign(raw)}}.Encode()
-}
-
 // nodeFileSrc is the address on eriphe-core of node id's own file a
 // value names (media:<name>), "" for a value that names none.
 func (c *core) nodeFileSrc(id, v string) string {
-	if name, ok := strings.CutPrefix(strings.TrimSpace(v), mediaScheme); !ok || !nodestore.ValidFileName(name) {
+	name, ok := strings.CutPrefix(strings.TrimSpace(v), mediaScheme)
+	if !ok || id == "" || !nodestore.ValidFileName(name) {
 		return ""
 	}
-	return c.mediaOrDrop(id, v, false)
-}
-
-// mediaSigned tells an address of eriphe-core's media endpoint it signed
-// itself.
-func (c *core) mediaSigned(raw string) bool {
-	q, ok := strings.CutPrefix(raw, mediaPath+"?")
-	if !ok {
-		return false
-	}
-	v, err := url.ParseQuery(q)
-	u, s := v.Get("u"), v.Get("s")
-	return err == nil && u != "" && hmac.Equal([]byte(s), []byte(c.mediaSign(u)))
+	at := mediaScheme + id + "/" + name
+	return mediaPath + "?" + url.Values{"u": {at}, "s": {c.mediaSign(at)}}.Encode()
 }
 
 // mediaIsImage tells a media:<name> of an image from a file's (a PDF).
 func mediaIsImage(v string) bool { return !strings.HasSuffix(strings.TrimSpace(v), ".pdf") }
 
-// handleMedia is GET /espace/media: a block's image or video, fetched by
-// eriphe-core, or read from its node's files. 403 for an address it did
-// not sign, 502 for one that is not a media it serves, 404 for a node's
-// file that is no more.
+// handleMedia is GET /espace/media: one of a node's files. 403 for an
+// address eriphe-core did not sign, 404 for a node's file that is no
+// more.
 func (w *web) handleMedia(rw http.ResponseWriter, r *http.Request, _ *session) {
 	raw, sig := r.URL.Query().Get("u"), r.URL.Query().Get("s")
 	if raw == "" || !hmac.Equal([]byte(sig), []byte(w.c.mediaSign(raw))) {
-		http.Error(rw, "not an address of a block", http.StatusForbidden)
+		http.Error(rw, "not an address of a node's file", http.StatusForbidden)
 		return
 	}
-	var body []byte
-	var kind string
-	var err error
-	if at, ok := strings.CutPrefix(raw, mediaScheme); ok {
-		body, kind, err = w.c.nodeMedia(at)
-		if err != nil {
-			http.Error(rw, err.Error(), http.StatusNotFound)
-			return
-		}
-	} else if body, kind, err = fetchMedia(r, raw); err != nil {
-		http.Error(rw, err.Error(), http.StatusBadGateway)
+	at, _ := strings.CutPrefix(raw, mediaScheme)
+	body, kind, err := w.c.nodeMedia(at)
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusNotFound)
 		return
 	}
 	h := rw.Header()
@@ -174,49 +94,12 @@ func (w *web) handleMedia(rw http.ResponseWriter, r *http.Request, _ *session) {
 	h.Set("Cache-Control", "private, max-age=600")
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
-	if strings.HasPrefix(kind, "image/") || strings.HasPrefix(kind, "video/") {
+	if strings.HasPrefix(kind, "image/") {
 		h.Set("Content-Disposition", "inline")
 	} else {
 		h.Set("Content-Disposition", "attachment") // a node's PDF: downloaded, never run in the page's origin
 	}
 	rw.Write(body)
-}
-
-// fetchMedia fetches an image or a video, within the limits.
-func fetchMedia(r *http.Request, raw string) ([]byte, string, error) {
-	u, err := url.Parse(raw)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return nil, "", errors.New("not an http address")
-	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, raw, nil)
-	if err != nil {
-		return nil, "", err
-	}
-	req.Header.Set("User-Agent", "eriphe-core")
-	req.Header.Set("Accept", "image/*, video/*")
-	res, err := mediaClient.Do(req)
-	if err != nil {
-		return nil, "", errors.New("the media could not be fetched")
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return nil, "", errors.New("the media's server answered " + strconv.Itoa(res.StatusCode))
-	}
-	kind, _, err := mime.ParseMediaType(res.Header.Get("Content-Type"))
-	if err != nil || !(strings.HasPrefix(kind, "image/") || strings.HasPrefix(kind, "video/")) || kind == "image/svg+xml" {
-		return nil, "", errors.New("not an image or a video")
-	}
-	if res.ContentLength > mediaMax {
-		return nil, "", errors.New("too large")
-	}
-	body, err := io.ReadAll(io.LimitReader(res.Body, mediaMax+1))
-	if err != nil {
-		return nil, "", errors.New("the media could not be read")
-	}
-	if len(body) > mediaMax {
-		return nil, "", errors.New("too large")
-	}
-	return body, kind, nil
 }
 
 // nodeMedia is one of a node's files, from <node>/<name>, with its type.

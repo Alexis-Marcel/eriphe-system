@@ -36,8 +36,7 @@ export function usePage(id: string, version: number): { page: api.NodePage | nul
 
 // concerns tells whether proposals that moved change the page of node id
 // (page: as it was last read): all of them, a card of its node's, or a
-// proposal it shows (at its foot, in its menu, in a card block, on a row,
-// on a line).
+// proposal it shows (at its foot, in its menu, on a row, on a line).
 export function concerns(m: State["moved"], id: string, page: api.NodePage | null): boolean {
   if (m.all || m.nodes?.includes(id)) return true;
   if (!page) return false;
@@ -45,10 +44,6 @@ export function concerns(m: State["moved"], id: string, page: api.NodePage | nul
   for (const c of [...page.cards, ...(page.settled ?? [])]) refs.add(c.ref);
   for (const r of page.placed ?? []) refs.add(r);
   for (const it of page.items ?? []) if (it.card) refs.add(it.card);
-  for (const p of page.parts) {
-    if (p.block?.card) refs.add(p.block.card);
-    for (const l of p.block?.lists ?? []) for (const r of l.items ?? []) if (r.card) refs.add(r.card);
-  }
   return m.refs.some((r) => refs.has(r));
 }
 

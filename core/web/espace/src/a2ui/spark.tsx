@@ -5,10 +5,6 @@
 
 const W = 120, H = 28, PAD = 2.5;
 
-export function cleanTrend(v: unknown): number[] {
-  return (Array.isArray(v) ? v : []).filter((n): n is number => typeof n === "number" && isFinite(n)).slice(-120);
-}
-
 export function sparkPoints(vals: number[]): [number, number][] {
   if (vals.length < 2) return [];
   const lo = Math.min(...vals), hi = Math.max(...vals);

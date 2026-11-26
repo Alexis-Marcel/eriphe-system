@@ -3,7 +3,7 @@ import { Code as CodeView } from "../a2ui/code";
 import { wall, when } from "../a2ui/format";
 import { Icon } from "../a2ui/icons";
 import { inline, safeHref, type Wiki } from "../a2ui/markdown";
-import { QuoteView } from "../a2ui/catalog";
+import { QuoteView } from "../a2ui/views";
 import { useWords } from "../i18n";
 import { Callout } from "./callouts";
 import { amount, dayOf, frNumber, pieces, split, type Piece } from "./line";
@@ -25,10 +25,6 @@ import { readPage, type MdBlock, type MdItem, type MdPage, type PageLink, type R
 // (link), a sign beside a reference's words (ref), and the original of
 // what a row references, opened below it (opens). Without them a do: or
 // card: link is drawn as its words, quiet.
-//
-// A legacy block, in its fence (```eriphe:block <name>), is drawn as it
-// was, by the page that knows its surface (legacy): until node format 3
-// converts it.
 
 export type Slots = {
   // The cards an item's line carries (its references'), drawn at the end
@@ -54,7 +50,6 @@ export type BodyProps = {
   tick?: (it: MdItem, line: string, to: Task) => Promise<boolean>;
   // ask sends the nth ask: link of a line; none where nothing is sent.
   ask?: (line: number, n: number) => void;
-  legacy?: (name: string) => ReactNode;
   slots?: Slots;
 };
 
@@ -67,14 +62,13 @@ type Ctx = {
   wiki?: Wiki;
   tick?: BodyProps["tick"];
   ask?: BodyProps["ask"];
-  legacy?: BodyProps["legacy"];
   slots: Slots;
 };
 
 const MdCtx = createContext<Ctx | null>(null);
 export const useMd = () => useContext(MdCtx)!;
 
-export function PageBody({ body, wiki, tick, ask, legacy, slots = {} }: BodyProps) {
+export function PageBody({ body, wiki, tick, ask, slots = {} }: BodyProps) {
   const { t } = useWords();
   const page = useMemo(() => readPage(body), [body]);
   const ctx = useMemo<Ctx>(() => {
@@ -82,8 +76,8 @@ export function PageBody({ body, wiki, tick, ask, legacy, slots = {} }: BodyProp
     for (const d of page.refs) if (!refs.has(d.label)) refs.set(d.label, d);
     // A day without its year takes the page's, from its « Écrit le … ».
     const year = Number(dayOf(page.written?.text ?? "")?.slice(0, 4)) || undefined;
-    return { page, lines: body.replace(/\r\n/g, "\n").split("\n"), refs, year, newTab: t("espace.a2.newtab"), wiki, tick, ask, legacy, slots };
-  }, [page, body, t, wiki, tick, ask, legacy, slots]);
+    return { page, lines: body.replace(/\r\n/g, "\n").split("\n"), refs, year, newTab: t("espace.a2.newtab"), wiki, tick, ask, slots };
+  }, [page, body, t, wiki, tick, ask, slots]);
   const aside = (b: MdBlock) => b.kind === "callout" && !!b.opts?.includes("aside");
   const main = page.blocks.filter((b) => !aside(b));
   const side = page.blocks.filter(aside);
@@ -137,11 +131,8 @@ function Block({ b, after }: { b: MdBlock; after?: MdBlock[] }) {
       return <List b={b} />;
     case "table":
       return <Table b={b} />;
-    case "code": {
-      const name = ctx.lines[b.line - 1]?.trim().split(/\s+/)[1];
-      if (b.lang === "eriphe:block" && name && ctx.legacy) return <>{ctx.legacy(name)}</>;
+    case "code":
       return <CodeView text={b.text ?? ""} language={b.lang ?? ""} mode={b.lang === "diff" ? "diff" : "code"} />;
-    }
     case "callout":
       return <Callout b={b} />;
     case "quote": {

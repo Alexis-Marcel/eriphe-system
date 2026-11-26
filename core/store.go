@@ -174,6 +174,16 @@ func addColumn(db *sql.DB, table, column, def string) error {
 	return err
 }
 
+// dropColumn takes a column out of a table that has it.
+func dropColumn(db *sql.DB, table, column string) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, table, column).Scan(&n); err != nil || n == 0 {
+		return err
+	}
+	_, err := db.Exec(`ALTER TABLE ` + table + ` DROP COLUMN ` + column)
+	return err
+}
+
 func openStore(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=temp_store(memory)")
 	if err != nil {

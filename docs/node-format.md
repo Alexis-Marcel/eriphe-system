@@ -124,6 +124,9 @@ unread.
   trusted). Code has no tool: no `do:` line is written. What cannot be written (an input field, a
   gallery, a computed value) stays whole in a ```` ```json ```` fence, readable. A version of the
   history is converted without the values (they are core.db's, kept for the last version only).
+  Blocks, the sources code read live for them and their items' notes are gone with this format:
+  once every node converted (no file left broken), the tables that kept the values and the notes
+  are dropped from core.db.
 - **At start**, a file of an older format is converted to today's, through each conversion in
   turn: all of them in one commit by `convert`, each node a version of its own, the old one kept in
   the history. A file changed by hand meanwhile is first committed as it is (`outside`). A file
@@ -162,8 +165,7 @@ A node's body is a **Markdown page**: everything the page shows is written in th
 reader without Eriphe (Obsidian, another agent, the search) finds it all. Eriphe draws it better,
 never otherwise, and reads nothing from elsewhere to draw it: when something changes, whoever keeps
 the page writes its line again, or a line follows the event journal
-([Lines that follow events](#lines-that-follow-events)). Files written before may still hold
-[legacy blocks](#legacy-blocks-converted-by-787), which the page reader reads as code.
+([Lines that follow events](#lines-that-follow-events)).
 
 [`core/nodefile`](../core/nodefile) reads a page (`ReadPage`, `md.go`) into a tree, checks it
 (`Check`, `check.go`) and changes one line of it (`lines.go`). Go's reading is the reference; the
@@ -240,8 +242,7 @@ an item's detail folds under it, a callout is drawn by the workspace's component
 (figures, a chart, steps, an agenda, a person, an alert), a reference shows its words with its
 target (with a warning when its words do not say the item: below), and a line of `ask:` links is a
 row of replies. A day without its year takes the year of
-the page's « Écrit le » line, else it is shown as written: never a guessed year. Blocks still in
-the body are drawn as before, at their place.
+the page's « Écrit le » line, else it is shown as written: never a guessed year.
 
 **Changing a line.** A page has several authors (a skill, code, the user's gestures), so an author
 changes a line, never the whole page. `node_edit` replaces a line, or a piece of text, found once
@@ -398,20 +399,8 @@ version, no trace, nothing the brain reads; the page keeps it for its session.
 ### Code's fields
 
 A callout's `external` option ([Lines that follow events](#lines-that-follow-events)), and the front
-matter's `external`, `title_trusted` and `opened_by`, are written by code only (and a legacy block's
-`external`):
+matter's `external`, `title_trusted` and `opened_by`, are written by code only:
 
 - An author (the brain, a task, the user in Eriphe's editor) may leave them out: code keeps them as
   the version written over has them.
 - Written alike, they are accepted. Written otherwise, the write is refused.
-
-## Legacy blocks (converted by #787)
-
-Pages written before the Markdown page may still hold **blocks**: a fenced section from a line
-`` ```eriphe:block <name> `` to the next line `` ``` ``, one JSON object (`components` of the A2UI
-catalog in `core/a2ui/catalog_v1.json`, `data`, `sources` read live by code, code's `external`), and
-a card block `{"card": "<ref>"}`. Their sources' values, their items' notes (`item_note`, kept in
-`core.db`), their `Sections`, setup buttons and source glances are not in the file. Authors are no
-longer taught them: nothing new is written with them. Code still reads, checks and draws them so
-that every node reads as it did, until the conversion to format 3 (#787) writes each one as the
-page's own Markdown and removes them, with live sources and item notes.

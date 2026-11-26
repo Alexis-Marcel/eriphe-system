@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -19,7 +20,7 @@ import (
 // run of the live bench (nodes_bench_live_test.go), recorded with what
 // each was given and what code answered, played again against the node
 // tools of the scenario's core without a model. Code's rules on what a
-// node may hold (the blocks' grammar, a card placed by its ref, an ask in
+// node may hold (the page's grammar, a card placed by its ref, an ask in
 // its author's own words) answer the same today, or the test says which
 // call changed.
 //
@@ -37,13 +38,16 @@ import (
 // no card: its Agenda showing the day, its choices adjustable after (ask
 // buttons, in a tainted turn too), no questionnaire. Until a run records
 // it, it is written by hand after a real case: the page written after a
-// recall that read a mail's fact, the turn tainted. Turn 13 writes the
+// recall that read a mail's fact, the turn tainted. The pages the run
+// wrote as blocks were converted by hand to Markdown, a refusal of the
+// blocks' grammar (an ask bound to read data) made one of the page's (a
+// callout marked external by its author). Turn 13 writes the
 // mails' page at once, then proposes the skill that maintains it, its
 // monitor on the same card (edited by hand too, from the views they were).
 
 // replayTools are the calls recorded: those that write a node, or propose
 // the skill that maintains one.
-var replayTools = []string{"node_open", "node_write", "node_edit", "node_set", "write_skill", "item_note"}
+var replayTools = []string{"node_open", "node_write", "node_edit", "node_set", "write_skill"}
 
 // replayCall is one recorded call.
 type replayCall struct {
@@ -213,7 +217,7 @@ func TestNodesReplay(t *testing.T) {
 		if exp, ok := args["expect"].(string); ok {
 			args["expect"] = "stale"
 			if exp == "$hash" {
-				args["expect"] = hashOf(t, c, names.from[args["id"].(string)])
+				args["expect"] = lastHash(t, c, names.from[args["id"].(string)])
 			}
 		}
 		args = swap(args, names.from).(map[string]any)
@@ -251,16 +255,17 @@ func TestNodesReplay(t *testing.T) {
 	if ran < 10 || refused == 0 {
 		t.Fatalf("%d calls played, %d refused: the recording should hold a run's writes, refusals among them", ran, refused)
 	}
-	// What the calls left holds to the rules whatever was played: a card
-	// block shows its card.
+	// What the calls left holds to the rules whatever was played: a card:
+	// link places a card of its node's.
 	for _, sum := range liveSummaries(t, c) {
 		d, err := c.nodes.Read(sum.ID, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, b := range d.Node.Blocks() {
-			if b.Card != "" && (b.External || !c.nodeHasCard(sum.ID, b.Card)) {
-				t.Errorf("%s: block %s places %s, which the page cannot draw", sum.Title, b.Name, b.Card)
+		p, _ := d.Node.Page()
+		for _, l := range p.Links {
+			if l.Kind == nodefile.LinkCard && !c.nodeHasCard(sum.ID, l.Target) {
+				t.Errorf("%s: line %d places %s, which the page cannot draw", sum.Title, l.Line, l.Target)
 			}
 		}
 	}
@@ -271,8 +276,8 @@ func TestNodesReplay(t *testing.T) {
 // replayDay checks the recording's last turn, the day asked to be
 // followed: its first call opens the subject, untainted; the page is
 // written in it in that very turn, no card, no questionnaire written
-// before it: its Agenda reads the calendar and its buttons offer the
-// changes, its taint marked. Nothing waits for a yes.
+// before it: its ask: links offer the changes, the node marked external
+// when the turn read someone else's words. Nothing waits for a yes.
 func replayDay(t *testing.T, c *core, calls []replayCall, names *replayNames) {
 	t.Helper()
 	last := calls[len(calls)-1].Turn
@@ -299,13 +304,11 @@ func replayDay(t *testing.T, c *core, calls []replayCall, names *replayNames) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agenda, asks := false, false
-	for _, b := range d.Node.Blocks() {
-		agenda = agenda || strings.Contains(string(b.Components), `"Agenda"`) && len(b.Sources) > 0
-		asks = asks || blockAsks(b.Components) && (b.External || !calls[len(calls)-1].Tainted) // marked when written after a read
-	}
-	if !agenda || !asks {
-		t.Errorf("the day's page: agenda %v, asks marked %v:\n%s", agenda, asks, d.Raw)
+	p, _ := d.Node.Page()
+	asks := slices.ContainsFunc(p.Links, func(l nodefile.PageLink) bool { return l.Kind == nodefile.LinkAsk })
+	marked := nodeExternal(d.Node) || !calls[len(calls)-1].Tainted
+	if !asks || !marked {
+		t.Errorf("the day's page: asks %v, marked %v:\n%s", asks, marked, d.Raw)
 	}
 	if cardWaitsOn(c, subject) {
 		t.Error("the day's page waits on a card")
@@ -316,9 +319,9 @@ func replayDay(t *testing.T, c *core, calls []replayCall, names *replayNames) {
 // TestNodesReplay plays it in memory, as a client that is not the brain,
 // for the rules on what a node may hold, which a task's writes keep too.
 // Played turn by turn through the budget, as the brain would make them
-// now: the pages it wrote whole (turn 12's mails page, turn 13's page
-// opened with its blocks) are refused with the hint to launch a task; its
-// other writes, short, pass.
+// now: the page it wrote whole (turn 12's mails page) is refused with the
+// hint to launch a task; its other writes, short, pass (turn 13's page,
+// opened with a block then, is a few lines of Markdown now).
 func TestNodesReplayBudget(t *testing.T) {
 	raw, err := os.ReadFile("testdata/nodes_replay.json")
 	if err != nil {
@@ -345,7 +348,7 @@ func TestNodesReplayBudget(t *testing.T) {
 			b.refund(took) // refused by code then: it changed nothing
 		}
 	}
-	want := map[string]bool{"12 node_write": true, "13 node_open": true}
+	want := map[string]bool{"12 node_write": true}
 	if !maps.Equal(refused, want) {
 		t.Errorf("refused by the budget: %v, want %v", refused, want)
 	}

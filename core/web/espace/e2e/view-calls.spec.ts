@@ -3,12 +3,12 @@ import { expect, test } from "./fixtures";
 import { rest } from "./rest";
 
 // A call to approve, asked in conversation, against the test core of
-// TestEspaceScenario: a view of the mailbox (a plain List, /e2e/courrier)
-// is open, alone; the user says « supprime ces 2 » in the bar; the
-// scripted brain calls mail/trash on two of its rows. The card says what it does to
+// TestEspaceScenario: a page of the mailbox (its mails as references,
+// /e2e/courrier) is open, alone; the user talks to it (a click in it)
+// and says « supprime ces 2 » in the bar; the scripted brain calls mail/trash on two of its mails. The card says what it does to
 // which items in plain words, on those two rows (one card: a Oui on
 // either answers it), not at the page's foot; its exact call is behind
-// one « détails ». Oui: the mails leave, Eriphe says it is done.
+// one « détails ». Oui: the rows say it is done, and so does Eriphe.
 
 
 test("a call to approve says what it does to which items, on their rows", async ({ page, request }) => {
@@ -24,10 +24,11 @@ test("a call to approve says what it does to which items, on their rows", async 
   expect(seeded.ok(), await seeded.text()).toBe(true);
   const pg = page.locator('article.pg[aria-label="Courrier"]');
   await expect(pg).toBeVisible();
-  const rows = pg.locator(".a2-list > li");
+  const rows = pg.locator(".md-item");
   await expect(rows).toHaveCount(4);
 
-  // Said in the bar: the brain calls trash on two rows of the view.
+  // Said in the bar to the page: the brain calls trash on two of its mails.
+  await pg.locator(".md-p").first().click();
   await input.fill("supprime ces 2");
   await input.press("Enter");
   const colis = rows.filter({ hasText: "Votre colis est arrivé" });
@@ -71,7 +72,7 @@ test("a call to approve says what it does to which items, on their rows", async 
   const card = await (await page.request.get(`/api/proposals/${ref}`)).json();
   expect(card.text).toBe("Mettre 2 mails à la corbeille");
   expect(card.context).toBe("compte perso");
-  expect(card.summary).toEqual(["« Votre colis est arrivé » · Relais ⚠", "« Colis en point relais » · Relais ⚠"]);
+  expect(card.summary).toEqual(["« Votre colis est arrivé » · Relais <relais@example.org> ⚠", "« Colis en point relais » · Relais <relais@example.org> ⚠"]);
   // Its Détails say no id nor account (the rows and the quiet account say
   // them): only its exact call, one click further.
   expect(card.fields).toEqual([{ name: "mail/trash", value: 'account : perso\nids : ["c2","c4"]', detail: true, raw: true }]);
@@ -80,7 +81,7 @@ test("a call to approve says what it does to which items, on their rows", async 
   // Oui on the second row answers the one card: the call runs once.
   await relais.locator(".a2-inline-yes").click();
   await expect.poll(async () => (await (await request.get("/e2e/tools")).json()).trashed).toContain("perso:c2,c4");
-  await expect(rows).toHaveCount(2);
+  await expect(pg.locator(".a2-inline-yes")).toHaveCount(0);
   // The yes is the user talking to Eriphe: what Eriphe says of it then
   // answers them, and the orb says it, beside the page.
   await expect(page.locator(".orb-say.on, .orb-line")).toContainText("C'est fait : les 2 mails sont à la corbeille.");

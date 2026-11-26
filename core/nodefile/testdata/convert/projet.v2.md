@@ -8,7 +8,7 @@ Les travaux de la terrasse, avec Sam.
 
 ```eriphe:block etapes
 {"components": [
-  {"id":"root","component":"Column","children":["h","tl","lien","sep","asks"]},
+  {"id":"root","component":"Column","children":["h","tl","lien","photo","sep","asks"]},
   {"id":"h","component":"Text","text":"Où on en est","variant":"subtitle"},
   {"id":"tl","component":"Timeline","items":[
     {"label":"Devis signé","state":"done","date":"2026-11-20"},
@@ -16,6 +16,7 @@ Les travaux de la terrasse, avec Sam.
     {"label":"Pose","state":"pending"}
   ]},
   {"id":"lien","component":"Link","label":"Le devis en ligne","url":"https://example.org/devis/terrasse"},
+  {"id":"photo","component":"Image","url":"media:med_0123456789abcdef0123456789abcdef.png","alt":"La terrasse avant les travaux"},
   {"id":"sep","component":"Divider"},
   {"id":"asks","component":"Asks","items":["Relance Sam pour le bois",{"text":"Branche l'agenda","until":{"tool":"agenda"}}]}
 ]}

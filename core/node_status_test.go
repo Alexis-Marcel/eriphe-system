@@ -259,16 +259,15 @@ func TestNodeFindAgreesWithGraph(t *testing.T) {
 }
 
 // graphRows reads the graph in a constant number of queries of core.db
-// (and of the index, Graph and Sources once each): as many for
-// a graph of 40 nodes, cards, tasks, steps and live sources as for one of
+// (and of the index's Graph once): as many for
+// a graph of 40 nodes, cards, tasks and steps as for one of
 // 4, the first time as later (its caches filled at once).
 func TestGraphRowsQueriesConstant(t *testing.T) {
 	count := func(n int) int64 {
 		c := graphCore(t)
 		c.useNodes(c.nodes)
 		for i := range n {
-			id := mustNode(t, c, nodestore.New{Title: fmt.Sprintf("Nœud %d", i), Body: planBlock})
-			readNodeValue(t, c, id, "titles", "ledger", map[string]any{"accounts": []any{}})
+			id := mustNode(t, c, nodestore.New{Title: fmt.Sprintf("Nœud %d", i), Body: planPage})
 			workIn(t, c, id, stateRunning)
 			ref := fmt.Sprintf("memory:%d", i+1)
 			c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, text, created) VALUES (?, 'memory', 'x', 1)`, ref)

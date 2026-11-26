@@ -48,9 +48,6 @@ const (
 	// message it answers: the node of the turn and its parent, a card
 	// placed. A series of edits is a rewrite: a task's.
 	brainNodeWrites = 3
-	// brainItemNotes is how many items a turn notes per message: a burst
-	// (a whole inbox) is a skill's run or a task's.
-	brainItemNotes = 3
 	// brainSkillWrites: one skill proposed per turn, never a series.
 	brainSkillWrites = 1
 	// brainGestures is how many counted calls (the writes above, a
@@ -69,7 +66,6 @@ const (
 	budgetRead   = "read"   // never counted
 	budgetRoute  = "route"  // routes or launches: never counted (node_open's size is held)
 	budgetWrite  = "write"  // a node written: size held, counted as a node write
-	budgetNote   = "note"   // item_note
 	budgetSkill  = "skill"  // write_skill
 	budgetCounts = "counts" // any other change
 )
@@ -86,7 +82,7 @@ var brainToolClass = map[string]string{
 	"run_task": budgetRoute, "answer_task": budgetRoute, "stop_task": budgetRoute, "node_open": budgetRoute,
 	"node_show": budgetRoute, "turn_home": budgetRoute, "node_settle": budgetRoute, "withdraw_proposal": budgetRoute,
 	// Writes.
-	"node_write": budgetWrite, "node_edit": budgetWrite, "item_note": budgetNote, "write_skill": budgetSkill,
+	"node_write": budgetWrite, "node_edit": budgetWrite, "write_skill": budgetSkill,
 	"node_set": budgetCounts, "remember": budgetCounts, "update_memory": budgetCounts, "forget": budgetCounts,
 	"intend": budgetCounts, "update_intention": budgetCounts, "unlearn": budgetCounts, "notify": budgetCounts,
 	"rule": budgetCounts, "setting": budgetCounts, "write_monitor": budgetCounts, "try_monitor": budgetCounts,
@@ -97,9 +93,9 @@ const launchHint = "launch a task on the node it is for: run_task with node, ski
 
 // turnBudget is what a turn of the brain's spent.
 type turnBudget struct {
-	scale                               int // the messages the delivery brought, 1 to brainBudgetScale
-	gestures, nodeWrites, notes, skills int
-	runes                               int // of text written in nodes (node_write, node_edit)
+	scale                        int // the messages the delivery brought, 1 to brainBudgetScale
+	gestures, nodeWrites, skills int
+	runes                        int // of text written in nodes (node_write, node_edit)
 }
 
 // spent is what one call took from the budget, given back if it fails
@@ -135,8 +131,6 @@ func (b *turnBudget) charge(name string, args map[string]any) (string, spent) {
 		return fmt.Sprintf("Refused: this turn already made %d changes, a gesture is one or two; more is work: %s", b.gestures, launchHint), spent{}
 	case class == budgetWrite && b.nodeWrites >= brainNodeWrites*b.scale:
 		return fmt.Sprintf("Refused: this turn already wrote nodes %d times; a series of writes is a rewrite: %s", b.nodeWrites, launchHint), spent{}
-	case class == budgetNote && b.notes >= brainItemNotes*b.scale:
-		return fmt.Sprintf("Refused: this turn already noted %d items; noting a whole source is a skill's run or a task's: %s", b.notes, launchHint), spent{}
 	case class == budgetSkill && b.skills >= brainSkillWrites:
 		return "Refused: one skill is proposed per turn; propose the next one in another turn, after the user's answer.", spent{}
 	}
@@ -146,8 +140,6 @@ func (b *turnBudget) charge(name string, args map[string]any) (string, spent) {
 		b.nodeWrites++
 		b.runes += n
 		s.runes = n
-	case budgetNote:
-		b.notes++
 	case budgetSkill:
 		b.skills++
 	}
@@ -176,8 +168,6 @@ func (b *turnBudget) refund(s spent) {
 	case budgetWrite:
 		back(&b.nodeWrites, 1)
 		back(&b.runes, s.runes)
-	case budgetNote:
-		back(&b.notes, 1)
 	case budgetSkill:
 		back(&b.skills, 1)
 	}
@@ -194,7 +184,7 @@ func writtenRunes(name string, args map[string]any) int {
 	case "node_write":
 		keys = []string{"body"}
 	case "node_edit":
-		keys = []string{"value", "new"}
+		keys = []string{"new"}
 	default:
 		return 0
 	}
@@ -206,7 +196,7 @@ func writtenRunes(name string, args map[string]any) int {
 }
 
 // textRunes counts the runes of a value: a string's, or an object's as
-// JSON (a block).
+// JSON.
 func textRunes(v any) int {
 	switch x := v.(type) {
 	case nil:

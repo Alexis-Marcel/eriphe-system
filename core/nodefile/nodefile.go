@@ -1,21 +1,15 @@
 // Package nodefile reads and writes a node of the graph as a file: YAML
-// front matter, a markdown body, and typed blocks in fences
-// ("```eriphe:block <name>"). The format is written down in
+// front matter and a Markdown page (md.go). The format is written down in
 // docs/node-format.md.
 //
-// Parsing is lossless: a node parsed then written gives the same bytes,
-// but for a block written in short form or saying an old snapshot, which
-// is written again in its canonical form.
-// What changes through this package's API is written again in its
-// canonical form; everything else keeps its bytes (front matter, text,
-// each block).
+// Parsing is lossless: a node parsed then written gives the same bytes.
+// A front matter changed through this package's API is written again in
+// its canonical form; the body keeps its bytes.
 //
-// Some fields are code's only: a block's external, and the node's
-// external. Code sets them with the methods of Node (SetBlockExternal,
-// Meta.External); an author's write goes through
-// AuthorBody or PutAuthorBlock, which
-// keep them when the author leaves them out and refuse a write that
-// changes them.
+// Some fields are code's only: the node's external, title_trusted and
+// opened_by, a callout's external mark. Code sets them (Meta, CodeBody);
+// an author's write goes through AuthorBody, which keeps them and refuses
+// a write that changes them.
 package nodefile
 
 import (
@@ -113,83 +107,18 @@ var known = []string{"format", "id", "title", "parent", "links", "goal", "create
 type Node struct {
 	Meta Meta
 
-	segs []segment // the body: text and blocks, in order
+	body string // the body: the page's Markdown, as written
 
 	rawFront   []byte // the front matter as read, fences included
 	canonFront []byte // its canonical form when read
 	vouched    bool   // its writer stands for the title it wrote (VouchTitle)
 }
 
-// segment is a piece of the body: text as it is, or a block.
-type segment struct {
-	text  string
-	block *Block
-}
+// Text is the node's body: its page's Markdown.
+func (n *Node) Text() string { return n.body }
 
-// Blocks are the node's blocks, in order.
-func (n *Node) Blocks() []*Block {
-	var out []*Block
-	for _, s := range n.segs {
-		if s.block != nil {
-			out = append(out, s.block)
-		}
-	}
-	return out
-}
-
-// Part is a piece of a node's body, in order: its markdown text, or one
-// of its blocks.
-type Part struct {
-	Text  string
-	Block *Block
-}
-
-// Parts are the node's body, piece by piece, in order: text and blocks.
-// Text that holds only blank lines is left out.
-func (n *Node) Parts() []Part {
-	var out []Part
-	for _, s := range n.segs {
-		switch {
-		case s.block != nil:
-			out = append(out, Part{Block: s.block})
-		case strings.TrimSpace(s.text) != "":
-			out = append(out, Part{Text: s.text})
-		}
-	}
-	return out
-}
-
-// Block is the block so named; nil when the node has none.
-func (n *Node) Block(name string) *Block {
-	for _, s := range n.segs {
-		if s.block != nil && s.block.Name == name {
-			return s.block
-		}
-	}
-	return nil
-}
-
-// Text is the node's body without its blocks: its markdown text.
-func (n *Node) Text() string {
-	var b strings.Builder
-	for _, s := range n.segs {
-		b.WriteString(s.text)
-	}
-	return b.String()
-}
-
-// Parse reads a node's file and checks it: its front matter and each of
-// its blocks. The file holds blocks in their full form.
+// Parse reads a node's file and checks its front matter.
 func Parse(raw []byte) (*Node, error) {
-	n, err := parse(raw)
-	if err != nil {
-		return nil, err
-	}
-	return n, n.Validate()
-}
-
-// parse reads a file, its blocks in their full form.
-func parse(raw []byte) (*Node, error) {
 	if !utf8.Valid(raw) {
 		return nil, errors.New("a node is UTF-8 text")
 	}
@@ -197,21 +126,18 @@ func parse(raw []byte) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	n := &Node{rawFront: front}
+	n := &Node{rawFront: front, body: string(body)}
 	if n.Meta, err = decodeMeta(yml); err != nil {
 		return nil, err
 	}
 	if n.canonFront, err = encodeMeta(n.Meta); err != nil {
 		return nil, err
 	}
-	if n.segs, err = parseBody(body, false); err != nil {
-		return nil, err
-	}
-	return n, nil
+	return n, n.Validate()
 }
 
-// Bytes writes the node: what was read as it was, what changed in its
-// canonical form.
+// Bytes writes the node: its front matter as read when unchanged, else in
+// its canonical form; its body as it is.
 func (n *Node) Bytes() ([]byte, error) {
 	var b bytes.Buffer
 	front, err := encodeMeta(n.Meta)
@@ -225,43 +151,18 @@ func (n *Node) Bytes() ([]byte, error) {
 		b.Write(front)
 		b.WriteString("---\n")
 	}
-	for _, s := range n.segs {
-		if s.block == nil {
-			b.WriteString(s.text)
-			continue
-		}
-		out, err := s.block.bytes()
-		if err != nil {
-			return nil, err
-		}
-		b.Write(out)
-	}
+	b.WriteString(n.body)
 	return b.Bytes(), nil
 }
 
-// New is a new node with its front matter and a markdown body (blocks
-// included, in their full form, with no code's field set).
+// New is a new node with its front matter and a Markdown body.
 func New(m Meta, body string) (*Node, error) {
-	segs, err := parseBody([]byte(body), false)
-	if err != nil {
-		return nil, err
-	}
-	n := &Node{Meta: m, segs: segs}
+	n := &Node{Meta: m, body: body}
 	return n, n.Validate()
 }
 
-// Validate checks the front matter and each block.
-func (n *Node) Validate() error {
-	if err := n.Meta.validate(); err != nil {
-		return err
-	}
-	for _, b := range n.Blocks() {
-		if err := b.Validate(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+// Validate checks the front matter.
+func (n *Node) Validate() error { return n.Meta.validate() }
 
 func (m Meta) validate() error {
 	switch {

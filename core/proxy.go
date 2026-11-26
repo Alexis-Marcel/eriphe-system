@@ -264,6 +264,13 @@ func objectSchema(schema any) bool {
 	return json.Unmarshal(raw, &m) == nil && m["type"] == "object"
 }
 
+// onlyReads tells a call of tool t (nil when unknown) that only reads: its
+// own annotations mark it read-only, or its access policy counts it in
+// Read (the user may file an unmarked tool there).
+func onlyReads(t *mcp.Tool, f catalogFacts) bool {
+	return f.read || t != nil && t.Annotations != nil && t.Annotations.ReadOnlyHint
+}
+
 // proxyCall forwards one call of a task upstream, once it is granted and
 // allowed. Failures come back as tool errors, which the agent reads.
 func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *upstream, tool string, args json.RawMessage) *mcp.CallToolResult {
@@ -313,12 +320,6 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 	}
 	if acting && brain {
 		c.traceBrainCall(u.name, tool)
-	}
-	// Its server's live sources read again (source_fresh.go); the pages
-	// whose items the conversation's call named wake their skill, never
-	// on a task's own call (a skill's run would wake itself).
-	if named := c.sourcesChanged(u.name, onlyReads(u.tool(tool), f), input); brain {
-		c.wakeViews(named)
 	}
 	return res
 }

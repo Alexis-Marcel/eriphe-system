@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
@@ -27,8 +28,8 @@ func postTaskMedia(t *testing.T, c *core, task, node, secret string, body []byte
 }
 
 // A task's capture is kept in its own node's files, never another's; a
-// block of that node shows it through eriphe-core, signed for that node
-// only, even when the block is external: it carries nothing out.
+// property of that node shows it through eriphe-core, signed for that
+// node only: it carries nothing out.
 func TestTaskMediaInItsNode(t *testing.T) {
 	tw, _ := graphWeb(t)
 	c := tw.c
@@ -71,47 +72,31 @@ func TestTaskMediaInItsNode(t *testing.T) {
 		t.Fatalf("not in its node: %v", err)
 	}
 
-	// The task writes it in a block of its node, as a task does (node_edit).
-	block := "```eriphe:block shot\n" + `{"components": [{"id": "root", "component": "Image", "url": "` + got.Src + `", "alt": "La prod"}]}` + "\n```\n"
-	read := mustNodes(t, c, "t-cap", "node_read", nil)
-	mustNodes(t, c, "t-cap", "node_edit", map[string]any{"expect": read["hash"], "block": "shot", "value": map[string]any{
-		"components": []any{map[string]any{"id": "root", "component": "Image", "url": got.Src, "alt": "La prod"}}}})
-	if _, err := c.nodes.Create(nodestore.New{Title: "Copie", External: true, Body: block, Author: byBrain}); err != nil {
-		t.Fatal(err)
+	// Named by a property of its node, the page shows it through
+	// eriphe-core.
+	nameIt := func(id string) string {
+		t.Helper()
+		d, _ := c.nodes.Read(id, 0)
+		if _, err := c.nodes.Change(id, d.Version.Hash, byBrain, func(n *nodefile.Node) error { return n.Meta.SetProp("capture", got.Src) }); err != nil {
+			t.Fatal(err)
+		}
+		p, err := tw.w.nodePageOf(id, 0, "fr")
+		if err != nil || len(p.Props) != 1 || len(p.Props[0].Media) != 1 {
+			t.Fatalf("page %+v %v", p, err)
+		}
+		return p.Props[0].Media[0].Src
 	}
-	p, err := tw.w.nodePageOf(mine, 0, "fr")
-	if err != nil || len(p.Parts) != 1 || p.Parts[0].Block == nil || p.Parts[0].Block.Error != "" {
-		t.Fatalf("page %+v %v", p, err)
-	}
-	addr := imageURL(t, p.Parts[0].Block.Components)
-	code, img, h := tw.do("GET", addr, nil, nil)
+	code, img, h := tw.do("GET", nameIt(mine), nil, nil)
 	if code != http.StatusOK || img != string(capturedPNG) || h.Get("Content-Type") != "image/png" || h.Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("served %d %q %v", code, img, h)
 	}
 	// Another node naming the same file shows nothing of it: it is
 	// signed for its own node, where there is no such file.
-	sums, _ := c.nodes.Find("Copie", false, 1)
-	cp, _ := tw.w.nodePageOf(sums[0].ID, 0, "fr")
-	if code, _, _ := tw.do("GET", imageURL(t, cp.Parts[0].Block.Components), nil, nil); code != http.StatusNotFound {
+	if code, _, _ := tw.do("GET", nameIt(other), nil, nil); code != http.StatusNotFound {
 		t.Errorf("another node's file served: %d", code)
 	}
 	// A signature is for its address only.
 	if code, _, _ := tw.do("GET", "/espace/media?u=media:"+other+"/"+name+"&s=x", nil, nil); code != http.StatusForbidden {
 		t.Errorf("unsigned: %d", code)
 	}
-}
-
-// imageURL is the url of the Image among a block's components.
-func imageURL(t *testing.T, comps any) string {
-	t.Helper()
-	raw, _ := json.Marshal(comps)
-	var list []map[string]any
-	json.Unmarshal(raw, &list)
-	for _, c := range list {
-		if u, ok := c["url"].(string); ok && c["component"] == "Image" && strings.HasPrefix(u, mediaPath+"?") {
-			return u
-		}
-	}
-	t.Fatalf("no image in %s", raw)
-	return ""
 }

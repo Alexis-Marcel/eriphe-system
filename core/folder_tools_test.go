@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -297,33 +296,6 @@ func TestFoldersToolNever(t *testing.T) {
 	if d, _ := c.decideBrainCall("mcp__eriphe-folders__write_file", map[string]any{"folder": "Clients", "path": "n.md", "content": "x"}, nil); d != decideAsk {
 		t.Errorf("a free write on a tainted turn: %s", d)
 	}
-}
-
-// A node's block bound to a file: its text in the block's data, read
-// again at once after a change through the tools.
-func TestFoldersNodeSource(t *testing.T) {
-	c, _ := folderFilesCore(t, withGraph(t))
-	block := "```eriphe:block note\n" + `{"components": [{"id": "root", "component": "Text", "text": {"@path": "/note/text"}}],
- "sources": {"note": {"tool": "` + foldersServer + `/read_file", "args": {"folder": "Clients", "path": "Projets/site.md"}}}}` + "\n```\n"
-	d, err := c.nodes.Create(nodestore.New{Title: "Site", Body: block, Author: byBrain})
-	if err != nil {
-		t.Fatal(err)
-	}
-	id := d.Node.Meta.ID
-	read := func() string {
-		r, _ := c.nodeValue(id, "note")
-		raw, _ := json.Marshal(r.Value)
-		return string(raw)
-	}
-	c.readNode(context.Background(), id, nil, time.Now())
-	if !strings.Contains(read(), "vendredi") {
-		t.Fatalf("read %s", read())
-	}
-	res := callFolders(t, c, "update_file", map[string]any{"folder": "Clients", "path": "Projets/site.md", "content": "# Site\nÉchéance : lundi\n"})
-	if res.IsError || !strings.Contains(resultText(res), `- Échéance : vendredi`) {
-		t.Fatalf("update_file: %s", resultText(res))
-	}
-	waitFor(t, func() bool { return strings.Contains(read(), "lundi") })
 }
 
 // No folder shared: nothing lent.

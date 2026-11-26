@@ -753,6 +753,13 @@ func esc(s string) string {
 // last mark is escaped.
 var leadRe = regexp.MustCompile(`^(#{1,6}|[-+]|\d+[.)])(?:\s|$)`)
 
+// Words are someone else's words as a line's text of a page, escaped as
+// the conversion writes them (esc).
+func Words(s string) string { return esc(s) }
+
+// LinkWords are someone else's words as a link's text: Words, no bracket.
+func LinkWords(s string) string { return label(esc(s)) }
+
 // linkIn tells whether words hold a link: a bracket not escaped.
 func linkIn(s string) bool {
 	for i := 0; i < len(s); i++ {
@@ -813,8 +820,10 @@ func (c *conv) render(id string, scope any, depth int) []mdBlock {
 		}
 		return []mdBlock{{lines: defang(strings.Split(md, "\n"))}}
 	case "Image":
+		// An address as written, or one of the node's own files (a page a
+		// task captured: media:med_….png), kept by its name.
 		u := textOf(c.value(scope, comp.get("url")))
-		if !httpURL(u) {
+		if !httpURL(u) && !mediaFile.MatchString(u) {
 			return nil
 		}
 		return para("![" + label(c.text(scope, comp.get("alt"))) + "](" + u + ")")
@@ -964,6 +973,9 @@ func defang(lines []string) []string {
 	}
 	return out
 }
+
+// mediaFile is one of the node's own files, by its name (nodestore's).
+var mediaFile = regexp.MustCompile(`^media:med_[0-9a-f]{32}\.(png|jpg|gif|webp)$`)
 
 func httpURL(u string) bool {
 	return (strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://")) && !strings.ContainsAny(u, " \t\r\n<>()[]")

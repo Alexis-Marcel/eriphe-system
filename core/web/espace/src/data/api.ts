@@ -7,8 +7,7 @@ import type { Lang } from "../i18n";
 //   and its blocks ready to draw, its versions, the cards it waits on
 //   (web_graph.go);
 // - GET /api/nodes/{id}/trace and /md: its trace, its file as it is;
-// - GET /api/proposals/{ref}, ?day=: a proposal a block shows, those of a
-//   day (web_proposals.go);
+// - GET /api/proposals/{ref}: a proposal's card (web_proposals.go);
 // - GET /api/archives: what the user archived;
 // and writes
 // - POST /messages: what the user says, to the node the bar talks to;
@@ -90,7 +89,7 @@ export type Reads = {
   page(id: string, version: number): Promise<NodePage | null>;
   trace(id: string): Promise<TraceEntry[]>;
   file(id: string, version: number): Promise<NodeFile | null>;
-  open(id: string, what: OpenWhat): Promise<Opened>;
+  open(id: string, ref: string): Promise<Opened>;
   // A page's do: and its yes (tests and samples).
   act?(id: string, line: number, text: string): Promise<PageAct | null>;
   actYes?(id: string, line: number, text: string, items: string[]): Promise<{ card?: string; error?: string }>;
@@ -179,8 +178,8 @@ export type Glance = {
   seen?: boolean;
 };
 
-// A node's page (nodePage, web_graph.go): the version shown, its text and
-// its blocks in order, its versions, the cards it waits on. shift: 1 when
+// A node's page (nodePage, web_graph.go): the version shown, its text,
+// its versions, the cards it waits on. shift: 1 when
 // its creation was empty, the user's v1 being its version 2 (label).
 export type NodePage = {
   node: GraphNode;
@@ -188,10 +187,8 @@ export type NodePage = {
   archived?: string;
   versions: PageVersion[];
   shift?: number;
-  // body: its Markdown as its file holds it, the page drawn (page/Body.tsx);
-  // parts: its legacy blocks, ready to draw where their fences are
+  // body: its Markdown as its file holds it, the page drawn (page/Body.tsx)
   body: string;
-  parts: PagePart[];
   // items: its references to catalog servers' items, each where it is
   // written, with the card that waits on it; placed: the cards its lines
   // carry (on an item's row, or a card: link), not at its foot
@@ -237,45 +234,18 @@ export type PageProp = { key: string; value: unknown; kind: "text" | "number" | 
 // One of a node's files: its address on eriphe-core, an image or a file to download (a PDF).
 export type PageMedia = { src: string; image: boolean };
 // What keeps a node a skill maintains alive (pageAlive, node_alive.go): its
-// sources, monitors and skills, each named, what it does in code's words.
+// monitors and skills, each named, what it does in code's words.
 export type AliveLine = { name: string; what: string };
 export type PageOrigin = { unasked?: boolean; text: string };
-export type PageAlive = { sources?: AliveLine[]; monitors?: AliveLine[]; skills?: AliveLine[]; updated: string };
+export type PageAlive = { monitors?: AliveLine[]; skills?: AliveLine[]; updated: string };
 // The node a [[link]] of a page's text opens, by the name as written
 // (pageRef, web_graph.go): its title, titleExternal when it may be someone
 // else's words (shown marked); archived, it opens nothing. A name no node
 // has is not there.
 export type PageRef = { id: string; title?: string; titleExternal?: boolean; external?: boolean; archived?: boolean };
 export type PageVersion = { n: number; author: string; at: string };
-export type PagePart = { text?: string; block?: PageBlock };
-// A block ready to draw: its components and its data, the sources' last
-// values at /<name>; or what is wrong with it.
-// A card block names one of the node's cards (card), with the card as
-// eriphe-core's records say it (proposal); none when it is not the node's.
-export type PageBlock = {
-  name: string;
-  external?: boolean;
-  components: unknown[] | null;
-  data: Record<string, unknown> | null;
-  error?: string;
-  card?: string;
-  proposal?: ProposalView;
-  // the Lists bound to a source's items the page must know: those that
-  // filter them, whose rows open, that a batch folds, or on whose rows a
-  // card waits (list_rows.go, list_sections.go)
-  lists?: SourceList[];
-};
-
-// A row of such a List: its place in its source's list (n), its id, what
-// it shows, and card, the ref of the card that waits on this item
-// (item_cards.go): its Oui is drawn on the row, by the page, never by the
-// block. A filtered List shows its rows only, never the source's others.
-export type ListRow = { n: number; id: string; title?: string; detail?: string; card?: string };
-export type SourceList = { component: string; source: string; filtered?: boolean; open?: boolean; items: ListRow[] };
-
 // What opening an item read (item_open.go): its common fields and the
-// whole as JSON, external when its server is not trusted, with the item's
-// note; or why not (error: a read that asks a yes is not opened).
+// whole as JSON, external when its server is not trusted; or why not (error: a read that asks a yes is not opened).
 export type Opened = {
   title?: string;
   from?: string;
@@ -285,20 +255,15 @@ export type Opened = {
   external?: boolean;
   // misleading: the page's words for it do not say it (page_items.go)
   misleading?: boolean;
-  note?: { group?: string; note?: string; external?: boolean };
   error?: string;
 };
 
-// What a click opens: a reference of the page, by its label; or a legacy
-// List's row, by its block, its source and the item's id.
-export type OpenWhat = { ref: string } | { block: string; source: string; item: string };
-
-// openItem reads in full an item the page references, or a block's
-// source lists: the user's gesture (never a yes). eriphe-core finds the
-// item in the page as stored.
-export async function openItem(id: string, what: OpenWhat): Promise<Opened> {
-  if (reads) return reads.open(id, what);
-  const r = await sendJSON<Opened>("POST", `${nodePath(id)}/open`, what);
+// openItem reads in full an item the page references, by its label: the
+// user's gesture (never a yes). eriphe-core finds the item in the page as
+// stored.
+export async function openItem(id: string, ref: string): Promise<Opened> {
+  if (reads) return reads.open(id, ref);
+  const r = await sendJSON<Opened>("POST", `${nodePath(id)}/open`, { ref });
   if (r.status === 200 && r.data) return r.data;
   return { error: r.data?.error ?? String(r.status) };
 }
@@ -325,7 +290,7 @@ export function nodeFile(id: string, version = 0): Promise<NodeFile | null> {
 
 // What a save of the .md tab came to: saved (its version and hash), a
 // conflict (a newer version came: its body and hash, nothing written),
-// archived, or refused (why: a block that does not read, a secret).
+// archived, or refused (why: a page that does not read, a secret).
 export type Saved =
   | { ok: true; version: number; hash: string }
   | { ok: false; conflict: { version: number; hash: string; body: string } }
@@ -336,11 +301,6 @@ export async function saveFile(id: string, body: string, expect: string): Promis
   if (status === 200 && data) return { ok: true, version: data.version, hash: data.hash };
   if (status === 409 && data) return { ok: false, conflict: { version: data.version, hash: data.hash, body: data.body } };
   return { ok: false, why: data?.error ?? String(status) };
-}
-
-// ask sends a block's button: eriphe-core reads its words in the block.
-export async function ask(id: string, block: string, component: string): Promise<boolean> {
-  return (await sendJSON("POST", `${nodePath(id)}/ask`, { block, component })).status === 204;
 }
 
 // askLine sends a page's ask: link, the nth of its line: eriphe-core
@@ -512,7 +472,6 @@ export type ProposalView = {
   from?: string;
   fromExternal?: boolean; // from quotes words that may be someone else's, marked
   yes?: string;
-  when?: Span[];
   exec?: "running" | "done" | "failed";
   execWhy?: string;
   // Failed: why, in the tool's own words (external: marked).
@@ -539,14 +498,8 @@ export function stillAsks(p: Pick<ProposalView, "state" | "exec">): boolean {
 // out the choices all of whose items they are (call_fold.go).
 export type Choice = { id: number; text: string; n: number; state: string; items?: string[] };
 
-export type Span = { start: string; end?: string; allDay?: boolean };
-
 export function proposal(ref: string): Promise<ProposalView | null> {
   return getJSON<ProposalView>(`/api/proposals/${encodeURIComponent(ref)}`);
-}
-
-export async function dayProposals(date: string): Promise<ProposalView[]> {
-  return (await getJSON<{ proposals: ProposalView[] }>(`/api/proposals?day=${encodeURIComponent(date)}`))?.proposals ?? [];
 }
 
 // What a Proposal component answers: the proposal it shows. Its card's

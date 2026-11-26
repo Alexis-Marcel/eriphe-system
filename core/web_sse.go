@@ -23,9 +23,6 @@ import (
 //   - "progress": a task's line of where its node's work is
 //     ({node, text, at});
 //
-//   - "source": a live block's new value ({node, block, name, value}), at
-//     /<name> of the block's data, as the page draws it;
-//
 //   - "show": the brain asks to open a node's page ({node, by, at, seq}),
 //     the last request at once, then each new one;
 //
@@ -230,7 +227,7 @@ func (w *web) sendGraphChanges(rw http.ResponseWriter, after int, seq int64) (in
 	said := map[string]bool{}
 	for _, ev := range evs {
 		var data any
-		key := ev.Kind + " " + ev.Node + " " + ev.Block + " " + ev.Name
+		key := ev.Kind + " " + ev.Node
 		switch ev.Kind {
 		case graphEvDoc:
 			sum, err := w.c.nodes.Get(ev.Node)
@@ -243,19 +240,6 @@ func (w *web) sendGraphChanges(rw http.ResponseWriter, after int, seq int64) (in
 		case graphEvProgress:
 			key += " " + strconv.FormatInt(ev.Seq, 10) // each line counts
 			data = map[string]any{"node": ev.Node, "text": ev.Text, "at": ev.At}
-		case graphEvSource:
-			// A source read again, or its items' notes changed (no block:
-			// each block that reads it): its value and the rows of its
-			// Lists (list_rows.go, list_sections.go).
-			if said[key] {
-				continue
-			}
-			said[key] = true
-			for _, m := range w.c.sourceEvents(ev.Node, ev.Block, ev.Name) {
-				raw, _ := json.Marshal(m)
-				writeEvent(rw, graphEvSource, after, string(raw))
-			}
-			continue
 		case graphEvShow:
 			x, ok := w.c.lastShown()
 			if !ok {

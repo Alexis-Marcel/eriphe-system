@@ -1,28 +1,24 @@
 package main
 
 import (
-	"cmp"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
 // What keeps a node alive: the skills that maintain it (node_home.go)
 // and what starts them, the monitors that watch for it (those its skills
-// run on and those its blocks read) and what each watches, the sources
-// its blocks read (a tool, every N minutes), and when it last changed.
+// run on and those its page's on: lines follow) and what each watches,
+// and when it last changed.
 // Its page's ⋯ menu lists it, from what code knows, never from a model's
 // words: names are the identifiers the user approved on their cards;
 // what each does is said by code from its spec.
 
 // pageAlive is what keeps a node alive, as its page says it.
 type pageAlive struct {
-	Sources  []aliveLine `json:"sources,omitempty"`
 	Monitors []aliveLine `json:"monitors,omitempty"`
 	Skills   []aliveLine `json:"skills,omitempty"`
 	Updated  time.Time   `json:"updated"`
@@ -48,14 +44,9 @@ func (c *core) nodeAlive(sum nodestore.Summary, lang string) *pageAlive {
 		}
 	}
 	if d, err := c.nodes.Read(sum.ID, 0); err == nil {
-		for _, b := range d.Node.Blocks() {
-			for _, name := range slices.Sorted(maps.Keys(b.Sources)) {
-				s := b.Sources[name]
-				if s.Monitor != "" {
-					watch(s.Monitor)
-					continue
-				}
-				a.Sources = append(a.Sources, aliveLine{Name: name, What: aliveSourceText(s, lang)})
+		for _, o := range d.Node.Ons() {
+			if strings.HasPrefix(o.Kind, "monitor.") {
+				watch(o.Key)
 			}
 		}
 	}
@@ -76,12 +67,6 @@ func (c *core) nodeAlive(sum nodestore.Summary, lang string) *pageAlive {
 		return nil
 	}
 	return a
-}
-
-// aliveSourceText says what a source reads and how often.
-func aliveSourceText(s nodefile.Source, lang string) string {
-	every := span(time.Duration(cmp.Or(s.Every, sourceEveryDef)) * time.Minute)
-	return fmt.Sprintf(tr(lang, "alive.source.every"), sourceText(s), every)
 }
 
 // skillMonitor is the monitor a skill's runs start on (its when keyed on

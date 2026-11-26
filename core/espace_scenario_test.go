@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -58,11 +57,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("GET /e2e/attachments", sc.handleAttachments)
 	mux.HandleFunc("POST /e2e/rows", sc.handleRows)
 	mux.HandleFunc("POST /e2e/review", sc.handleReview)
-	mux.HandleFunc("POST /e2e/sections", sc.handleSections)
-	mux.HandleFunc("POST /e2e/blocks", sc.handleBlocks)
-	mux.HandleFunc("POST /e2e/open", sc.handleOpen)
 	mux.HandleFunc("POST /e2e/bilan", sc.handleBilan)
-	mux.HandleFunc("POST /e2e/purge", sc.handlePurge)
 	mux.HandleFunc("POST /e2e/courrier", sc.handleCourrier)
 	mux.HandleFunc("POST /e2e/trash-fails", sc.handleTrashFails)
 	mux.HandleFunc("POST /e2e/proposals", sc.handleProposals)
@@ -111,7 +106,7 @@ type scenario struct {
 
 // mailOpen is what the scenario's reads of one mail declare of what they
 // say, as the mail server's read_message does (item_open.go).
-var mailOpen = mcp.Meta{openMetaKey: map[string]any{"title": "subject", "from": "from", "date": "date", "body": "body"}}
+var mailOpen = mcp.Meta{openMetaKey: map[string]any{"id": "id", "title": "subject", "from": "from", "date": "date", "body": "body"}}
 
 // mailSays is how a tool of the scenario's mail server says its call, as
 // the mail server's tools do (call_says.go): its sentence, the mails
@@ -217,7 +212,6 @@ func newScenarioWith(t *testing.T, ctx context.Context, live *liveBrain) *scenar
 	sc.seed()
 	go c.runAssistants(ctx, "tok")
 	go c.runNodes(ctx)
-	go c.runNodeSources(ctx)
 	go sc.device()
 	return sc
 }
@@ -267,13 +261,10 @@ type scenarioTools struct {
 	lit     []string
 	sent    []string
 	moved   [][]string       // move: the ids of each call (view-rows.spec.ts)
-	deleted [][]string       // supprimer: the ids of each call (sections.spec.ts)
-	thrown  [][]string       // jeter: the ids of each call (blocks.spec.ts)
-	read    []string         // lire: the id of each call (sources-open.spec.ts)
+	read    []string         // lire: the id of each call (view-rows.spec.ts)
 	trashed []string         // trash: "<account>:<ids>" of each call (view-bilan.spec.ts)
 	trashNo string           // trash: answers with this error, trashing nothing (view-failed.spec.ts)
 	replied []string         // repondre: the id of each call (view-bilan.spec.ts)
-	purged  []string         // purger: the ids it deleted (view-refresh.spec.ts)
 	arrived []map[string]any // recus: the mails that came after the received (the live bench)
 	// veille: the news watch's server, whose tool changes after it was
 	// added (tools.spec.ts).
@@ -289,8 +280,8 @@ func guetterRun(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolR
 	return nil, map[string]any{"news": []any{}}, nil
 }
 
-// bilan is the mailbox the view as a bilan shows (view-bilan.spec.ts), in two
-// accounts: what trash took and what repondre answered leave it.
+// bilan is the mailbox the page as a bilan references (view-bilan.spec.ts),
+// in two accounts, each mail read whole by lire.
 var bilan = []map[string]any{
 	{"id": "a1", "subject": "Devis terrasse", "from": "Sam <sam@example.org>", "account": "perso", "date": "2026-11-20T08:10:00Z",
 		"body": "Bonjour,\n\nVoici le devis pour la terrasse : 4 200 €, pose comprise. Peux-tu me dire avant vendredi si on lance la commande ?\n\nSam"},
@@ -312,8 +303,8 @@ var received = []map[string]any{
 		"body": "Bonjour,\n\nL'app de production renvoie des erreurs 500 depuis 10 h. Tu peux regarder ?\n\nSam"},
 }
 
-// courrier is the mailbox of the view a call to approve lands on
-// (view-calls.spec.ts): what trash took leaves it.
+// courrier is the mailbox of the page a call to approve lands on
+// (view-calls.spec.ts).
 var courrier = []map[string]any{
 	{"id": "c1", "subject": "Billets pour Disney", "from": "Parc <billets@example.org>"},
 	{"id": "c2", "subject": "Votre colis est arrivé", "from": "Relais <relais@example.org>"},
@@ -321,41 +312,10 @@ var courrier = []map[string]any{
 	{"id": "c4", "subject": "Colis en point relais", "from": "Relais <relais@example.org>"},
 }
 
-// bilanNotes are the bilan's items as its skill notes them: group, note.
-var bilanNotes = map[string][2]string{
-	"a1": {"À traiter", "Répondre à Sam — brouillon prêt, avant vendredi"},
-	"a2": {"À traiter", "À lire : l'avenant au bail, rien à signer"},
-	"j1": {"À jeter", "Publicité"},
-	"j2": {"À jeter", "Newsletter jamais ouverte"},
-	"j3": {"À jeter", "Hameçonnage : faux transporteur"},
-	"i1": {"Pour info", "62 €, prélevés le 5 décembre"},
-	"i2": {"Pour info", "Entraînement avancé à 9 h"},
-}
-
 // bilanReply is the reply the bilan's skill drafted for Sam.
 const bilanReply = "Bonjour Sam,\n\nMerci pour le devis, il me va : tu peux lancer la commande. Dis-moi quand la pose est possible.\n\nÀ bientôt"
 
-// tri is the mailbox the view in sections shows (sections.spec.ts),
-// noted into two groups: what supprimer deleted leaves it.
-var tri = []map[string]any{
-	{"id": "s1", "subject": "Soldes d'hiver", "from": "promo@example.org"},
-	{"id": "s2", "subject": "Compte rendu du comité", "from": "sam@example.org"},
-	{"id": "s3", "subject": "Votre colis est en route", "from": "colis@example.org"},
-	{"id": "s4", "subject": "Lettre du dimanche", "from": "news@example.org"},
-	{"id": "s5", "subject": "Planning de mars", "from": "lou@example.org"},
-}
-
-// promos is the mailbox the conversation cleans (view-refresh.spec.ts):
-// what purger deleted leaves it.
-var promos = []map[string]any{
-	{"id": "p1", "subject": "Soldes d'automne", "from": "promo@example.org"},
-	{"id": "p2", "subject": "Compte rendu de la réunion", "from": "sam@example.org"},
-	{"id": "p3", "subject": "Dernière chance : -70 %", "from": "promo@example.org"},
-	{"id": "p4", "subject": "Photos du week-end", "from": "lou@example.org"},
-}
-
-// boite is the mailbox whose rows each wait on a card (view-rows.spec.ts):
-// what move moved leaves it.
+// boite is the mailbox whose rows each wait on a card (view-rows.spec.ts).
 var boite = []map[string]any{
 	{"id": "b1", "subject": "Facture d'octobre", "from": "facturation@example.org"},
 	{"id": "b2", "subject": "Lettre d'information", "from": "news@example.org"},
@@ -391,119 +351,10 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				f.mu.Lock()
 				defer f.mu.Unlock()
 				msgs := []any{}
-				for _, m := range append(slices.Clone(received), f.arrived...) {
+				for _, m := range slices.Concat(received, f.arrived, bilan, courrier, boite) {
 					msgs = append(msgs, map[string]any{"id": m["id"], "subject": m["subject"], "from": m["from"], "date": m["date"]})
 				}
 				return nil, map[string]any{"messages": msgs}, nil
-			})
-		mcp.AddTool(s, &mcp.Tool{Name: "boite", Description: "La boîte de réception", Annotations: read},
-			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
-				f.mu.Lock()
-				defer f.mu.Unlock()
-				gone := map[string]bool{}
-				for _, ids := range f.moved {
-					for _, id := range ids {
-						gone[id] = true
-					}
-				}
-				msgs := []any{}
-				for _, m := range boite {
-					if !gone[m["id"].(string)] {
-						msgs = append(msgs, m)
-					}
-				}
-				return nil, map[string]any{"messages": msgs}, nil
-			})
-		mcp.AddTool(s, &mcp.Tool{Name: "tri", Description: "Les mails à trier", Annotations: read},
-			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
-				f.mu.Lock()
-				defer f.mu.Unlock()
-				gone := map[string]bool{}
-				for _, ids := range f.deleted {
-					for _, id := range ids {
-						gone[id] = true
-					}
-				}
-				msgs := []any{}
-				for _, m := range tri {
-					if !gone[m["id"].(string)] {
-						msgs = append(msgs, m)
-					}
-				}
-				return nil, map[string]any{"messages": msgs}, nil
-			})
-		// du_jour is tri's mailbox again, jeter what leaves it (blocks.spec.ts).
-		mcp.AddTool(s, &mcp.Tool{Name: "du_jour", Description: "Le courrier du jour", Annotations: read},
-			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
-				f.mu.Lock()
-				defer f.mu.Unlock()
-				gone := map[string]bool{}
-				for _, ids := range f.thrown {
-					for _, id := range ids {
-						gone[id] = true
-					}
-				}
-				msgs := []any{}
-				for _, m := range tri {
-					if !gone[m["id"].(string)] {
-						msgs = append(msgs, m)
-					}
-				}
-				return nil, map[string]any{"messages": msgs}, nil
-			})
-		mcp.AddTool(s, &mcp.Tool{Name: "jeter", Description: "Jette des mails", Meta: mailSays("Jeter {item}", "Throw away {item}", "jeté", "jetés", "thrown away")},
-			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
-				IDs []string `json:"ids"`
-			}) (*mcp.CallToolResult, map[string]any, error) {
-				f.mu.Lock()
-				defer f.mu.Unlock()
-				f.thrown = append(f.thrown, slices.Clone(in.IDs))
-				return nil, map[string]any{"thrown": len(in.IDs)}, nil
-			})
-		// lus lists two mails, lire reads one in full (sources-open.spec.ts).
-		mcp.AddTool(s, &mcp.Tool{Name: "lus", Description: "Les mails à lire", Annotations: read},
-			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
-				return nil, map[string]any{"messages": []any{
-					map[string]any{"id": "l1", "subject": "Ordre du jour", "from": "sam@example.org"},
-					map[string]any{"id": "l2", "subject": "Photos du week-end", "from": "lou@example.org"},
-				}}, nil
-			})
-		mcp.AddTool(s, &mcp.Tool{Name: "bilan", Description: "Les mails de la boîte, des deux comptes", Annotations: read},
-			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
-				f.mu.Lock()
-				defer f.mu.Unlock()
-				msgs := []any{}
-				for _, m := range bilan {
-					id := m["id"].(string)
-					if !slices.ContainsFunc(f.trashed, func(t string) bool { return slices.Contains(strings.Split(t[strings.Index(t, ":")+1:], ","), id) }) {
-						msgs = append(msgs, map[string]any{"id": id, "subject": m["subject"], "from": m["from"], "account": m["account"], "date": m["date"]})
-					}
-				}
-				return nil, map[string]any{"messages": msgs}, nil
-			})
-		mcp.AddTool(s, &mcp.Tool{Name: "courrier", Description: "Le courrier du compte perso", Annotations: read},
-			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
-				f.mu.Lock()
-				defer f.mu.Unlock()
-				msgs := []any{}
-				for _, m := range courrier {
-					id := m["id"].(string)
-					if !slices.ContainsFunc(f.trashed, func(t string) bool { return slices.Contains(strings.Split(t[strings.Index(t, ":")+1:], ","), id) }) {
-						msgs = append(msgs, m)
-					}
-				}
-				return nil, map[string]any{"messages": msgs}, nil
-			})
-		mcp.AddTool(s, &mcp.Tool{Name: "lettre", Description: "Lit un mail de la boîte en entier", Annotations: read, Meta: mailOpen},
-			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
-				ID string `json:"id"`
-			}) (*mcp.CallToolResult, map[string]any, error) {
-				for _, m := range bilan {
-					if m["id"] == in.ID {
-						return nil, map[string]any{"subject": m["subject"], "from": m["from"], "date": m["date"], "body": m["body"]}, nil
-					}
-				}
-				return nil, map[string]any{}, nil
 			})
 		mcp.AddTool(s, &mcp.Tool{Name: "trash", Description: "Met des mails d'un compte à la corbeille", Meta: mailSays("Mettre {item} à la corbeille", "Move {item} to the trash", "mis à la corbeille", "mis à la corbeille", "moved to the trash")},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
@@ -535,22 +386,13 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				f.mu.Lock()
 				defer f.mu.Unlock()
 				f.read = append(f.read, in.ID)
-				for _, m := range append(slices.Clone(received), f.arrived...) {
+				for _, m := range slices.Concat(received, f.arrived, bilan, courrier, boite) {
 					if m["id"] == in.ID {
 						return nil, m, nil
 					}
 				}
 				return nil, map[string]any{"subject": "Ordre du jour", "from": "Sam <sam@example.org>", "date": "2026-11-20T09:00:00Z",
 					"body": "Bonjour,\nvoici l'ordre du jour de " + in.ID + "."}, nil
-			})
-		mcp.AddTool(s, &mcp.Tool{Name: "delete", Description: "Supprime des mails", Meta: mailSays("Supprimer {item}", "Delete {item}", "supprimé", "supprimés", "deleted")},
-			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
-				IDs []string `json:"ids"`
-			}) (*mcp.CallToolResult, map[string]any, error) {
-				f.mu.Lock()
-				defer f.mu.Unlock()
-				f.deleted = append(f.deleted, slices.Clone(in.IDs))
-				return nil, map[string]any{"deleted": len(in.IDs)}, nil
 			})
 		mcp.AddTool(s, &mcp.Tool{Name: "move", Description: "Range des mails dans un dossier", Meta: moveSays},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
@@ -561,29 +403,6 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				defer f.mu.Unlock()
 				f.moved = append(f.moved, slices.Clone(in.IDs))
 				return nil, map[string]any{"moved": len(in.IDs)}, nil
-			})
-		// promos lists the mailbox the conversation cleans, purger deletes
-		// from it (view-refresh.spec.ts).
-		mcp.AddTool(s, &mcp.Tool{Name: "promos", Description: "Les mails de la boîte à nettoyer", Annotations: read},
-			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
-				f.mu.Lock()
-				defer f.mu.Unlock()
-				msgs := []any{}
-				for _, m := range promos {
-					if !slices.Contains(f.purged, m["id"].(string)) {
-						msgs = append(msgs, m)
-					}
-				}
-				return nil, map[string]any{"messages": msgs}, nil
-			})
-		mcp.AddTool(s, &mcp.Tool{Name: "purger", Description: "Supprime des mails pour de bon", Meta: mailSays("Supprimer {item} pour de bon", "Delete {item} for good", "supprimé", "supprimés", "deleted")},
-			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
-				IDs []string `json:"ids"`
-			}) (*mcp.CallToolResult, map[string]any, error) {
-				f.mu.Lock()
-				defer f.mu.Unlock()
-				f.purged = append(f.purged, in.IDs...)
-				return nil, map[string]any{"deleted": len(in.IDs)}, nil
 			})
 		mcp.AddTool(s, &mcp.Tool{Name: "envoyer", Description: "Envoie un mail"},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
@@ -963,32 +782,26 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		return "Je lance l'analyse du style, puis le plan."
 	case strings.Contains(said, "prévu aujourd'hui"):
 		b.catalog("agenda", "aujourdhui", map[string]any{}, true)
-		_, hash := b.read(day)
-		b.self("node_edit", map[string]any{"id": day, "expect": hash, "block": "agenda", "value": map[string]any{
-			"components": []any{
-				map[string]any{"id": "root", "component": "List", "children": map[string]any{"path": "/today/events", "componentId": "ev"}},
-				map[string]any{"id": "ev", "component": "Text", "text": map[string]any{"@call": "formatString", "args": map[string]any{"value": "${start} · ${title}"}}},
-			},
-			"sources": map[string]any{"today": map[string]any{"tool": "agenda/aujourdhui"}},
-		}})
+		body, hash := b.read(day)
+		b.self("node_write", map[string]any{"id": day, "expect": hash, "body": strings.TrimRight(body, "\n") + "\n\n## Aujourd'hui\n\n- 11:00 · Point produit\n- 14:30 · Dentiste\n"})
 		b.self("node_show", map[string]any{"id": day})
 		return "Deux rendez-vous : le point produit à 11 h et le dentiste à 14 h 30."
 	case strings.Contains(said, "Réponds que je regarde"):
 		// What reads nothing of the mail first: the mail is someone else's
 		// words, and what the turn writes after reading it is marked so.
-		// The prod has no view: a child of the mail, with a live block,
-		// shown beside it (the prompt's « Les vues »).
+		// The prod has no view: a child of the mail, with its figure as
+		// read, shown beside it.
 		mail := node
 		// A tall page: a long document with a table, as a real one is.
-		out := b.self("node_open", map[string]any{"goal": "Un but.", "title": "Production", "parent": mail, "body": "Les erreurs de l'app.\n\n" + prodNotes + "```eriphe:block errors\n" +
-			`{"components": [{"id": "root", "component": "Metric", "label": "Erreurs 5xx par minute", "value": {"@path": "/errors/rate"}}], "sources": {"errors": {"tool": "prod/erreurs"}}}` + "\n```\n"})
+		b.catalog("prod", "erreurs", map[string]any{}, true)
+		out := b.self("node_open", map[string]any{"goal": "Un but.", "title": "Production", "parent": mail, "body": "Les erreurs de l'app.\n\n" + prodNotes +
+			"> [!figures]\n> - Erreurs 5xx par minute : 42\n"})
 		if id, _ := out["id"].(string); id != "" {
 			keep("prod", id)
 			b.self("node_show", map[string]any{"id": id})
 		}
 		b.self("run_task", map[string]any{"title": "Recherche sur l'erreur", "ask": "Cherche d'où vient l'erreur 500 de la prod.", "node": mail})
-		_, hash := b.read(mail)
-		b.self("node_edit", map[string]any{"id": mail, "expect": hash, "old": "À écrire.", "new": "Je regarde dans l'heure."})
+		b.self("node_edit", map[string]any{"id": mail, "old": "À écrire.", "new": "Je regarde dans l'heure."})
 		b.catalog("mail", "envoyer", map[string]any{"to": "sam@example.org", "body": "Je regarde dans l'heure."}, false)
 		return "Le brouillon est prêt, à toi de l'envoyer. J'ouvre la prod et je lance la recherche."
 	case strings.Contains(said, "Plus court"):
@@ -1010,7 +823,7 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 			"body": "## Ce qu'on suit\n\nLes mails qui demandent quelque chose, triés pour toi.\n\n## À décider\n\n" +
 				"1. Quelles boîtes ? Par défaut, toutes.\n2. Qui ou quoi compte surtout ? Par défaut, ce qui demande une réponse.\n" +
 				"3. Je te préviens quand ? Par défaut au brief, jamais la nuit.\n4. Je prépare un brouillon pour ton oui, et je note le reste.\n\n" +
-				askBlock("reponses", "Fais comme tu proposes", "Toutes, et réveille-moi la nuit pour la prod")})
+				askLine("Fais comme tu proposes", "Toutes, et réveille-moi la nuit pour la prod")})
 		if id, _ := out["id"].(string); id != "" {
 			keep("watch", id)
 		}
@@ -1074,12 +887,6 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 			keep("conso", id)
 		}
 		return "Je garde un œil sur la consommation."
-	case strings.Contains(said, "Supprime les deux promos"):
-		// From the conversation, a call the user allowed for good: the view
-		// that lists the mailbox reads it again by itself
-		// (view-refresh.spec.ts).
-		b.catalog("mail", "purger", map[string]any{"ids": []string{"p1", "p3"}}, false)
-		return "Les deux promos sont supprimées."
 	case strings.Contains(said, "garde-robe"):
 		// A photo sent with the message, kept with the node of what it
 		// shows: the page shows it (attach-node.spec.ts).
@@ -1096,7 +903,7 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		// questions, their buttons below.
 		out := b.self("node_open", map[string]any{"title": "Écrire l'article", "goal": "Un article sur le télétravail, publié",
 			"body": articleDoc("## À décider\n\n1. Pour qui ? Par défaut, des salariés.\n2. Quelle longueur ? Par défaut, 1 000 mots.\n\n"+
-				askBlock("reponses", "Fais comme tu proposes", "Écris-le pour des managers"), "", "Tes réponses, puis une recherche.")})
+				askLine("Fais comme tu proposes", "Écris-le pour des managers"), "", "Tes réponses, puis une recherche.")})
 		if id, _ := out["id"].(string); id != "" {
 			keep("write", id)
 		}
@@ -1160,7 +967,7 @@ func (sc *scenario) event(b *brainPlay, turn string) string {
 	b.self("node_write", map[string]any{"id": write, "expect": hash, "body": articleDoc(articleDecided, articleResearch, "[[Choisir l'angle]].", articleLinked[:2]...)})
 	out := b.self("node_open", map[string]any{"goal": "Un but.", "title": "Choisir l'angle", "parent": write, "aside": true,
 		"body": "Deux angles tiennent, d'après la recherche.\n\n- Les managers : ce qui change pour eux.\n- Les salariés : comment s'organiser.\n\n" +
-			askBlock("angles", "L'angle des managers", "L'angle des salariés")})
+			askLine("L'angle des managers", "L'angle des salariés")})
 	if id, _ := out["id"].(string); id != "" {
 		sc.mu.Lock()
 		sc.nodes["angle"] = id
@@ -1196,11 +1003,14 @@ func articleDoc(decided, research, next string, linked ...string) string {
 	return strings.Join(out, "\n")
 }
 
-// askBlock is an Asks that answers a question: each ask sends Eriphe its
-// own words, as the user's message in the node.
-func askBlock(name string, answers ...string) string {
-	raw, _ := json.Marshal(map[string]any{"components": map[string]any{"component": "Asks", "items": answers}})
-	return "```eriphe:block " + name + "\n" + string(raw) + "\n```\n"
+// askLine is a line of asks that answer a question: each sends Eriphe
+// its own words, as the user's message in the node.
+func askLine(answers ...string) string {
+	var asks []string
+	for _, a := range answers {
+		asks = append(asks, "["+a+"](ask:)")
+	}
+	return strings.Join(asks, " · ") + "\n"
 }
 
 // The workers.
@@ -1276,7 +1086,7 @@ func (sc *scenario) handleTools(rw http.ResponseWriter, r *http.Request) {
 	f := sc.tools
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	writeJSON(rw, http.StatusOK, map[string]any{"lit": jsonList(f.lit), "sent": jsonList(f.sent), "moved": jsonList(f.moved), "deleted": jsonList(f.deleted), "thrown": jsonList(f.thrown), "read": jsonList(f.read), "trashed": jsonList(f.trashed), "replied": jsonList(f.replied), "purged": jsonList(f.purged)})
+	writeJSON(rw, http.StatusOK, map[string]any{"lit": jsonList(f.lit), "sent": jsonList(f.sent), "moved": jsonList(f.moved), "read": jsonList(f.read), "trashed": jsonList(f.trashed), "replied": jsonList(f.replied)})
 }
 
 // jsonList is a copy of s, empty rather than nil: a spec reads [] before the
@@ -1389,36 +1199,55 @@ func (sc *scenario) handleProposals(rw http.ResponseWriter, r *http.Request) {
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// handleRows is POST /e2e/rows: a node whose block lists the mailbox,
-// plain rows (view-rows.spec.ts), written by the brain as any author, read
-// once, and shown; the brain's three calls, each on one row, each a card
-// of its own (each moves to another folder: none folds with another).
+// mailLines are the rows of a page that references mails: each its
+// subject, as the page's words, and who sent it; then the references.
+func mailLines(mails []map[string]any, ids ...string) (rows, refs string) {
+	for _, id := range ids {
+		for _, m := range mails {
+			if m["id"] == id {
+				rows += fmt.Sprintf("- [%s][%s] · %s\n", m["subject"], id, m["from"])
+				refs += fmt.Sprintf("[%s]: mail:%s\n", id, id)
+			}
+		}
+	}
+	return rows, refs
+}
+
+// writeMails writes a page of mails in a new node, as the brain does
+// (tainted: after a read of someone else's words), and gives its id.
+func (sc *scenario) writeMails(title, body string, tainted bool) (string, error) {
+	c := sc.c
+	d, err := c.nodes.Create(nodestore.New{Title: title, Author: byBrain})
+	if err != nil {
+		return "", err
+	}
+	id := d.Node.Meta.ID
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, tainted, func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// handleRows is POST /e2e/rows: a page whose rows reference the mailbox
+// (view-rows.spec.ts), written by the brain, and shown; the brain's three
+// calls, each on one row, each a card of its own (each moves to another
+// folder: none folds with another).
 func (sc *scenario) handleRows(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
-	d, err := c.nodes.Create(nodestore.New{Title: "Tri de la boîte", Author: byBrain, Body: "La boîte, à trier.\n"})
+	rows, refs := mailLines(boite, "b1", "b2", "b3", "b4")
+	id, err := sc.writeMails("Tri de la boîte", "La boîte, à trier.\n\n"+rows+"\n"+refs, false)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	id := d.Node.Meta.ID
-	body := "La boîte, à trier.\n\n```eriphe:block boite\n" + `{"components": [
-  {"id": "root", "component": "List", "children": {"path": "/boite/messages", "componentId": "row"}},
-  {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
- "sources": {"boite": {"tool": "mail/boite", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	c.readNode(sc.ctx, id, nil, time.Now())
 	for _, m := range []struct{ to, item, title string }{{"archive", "b1", "Facture d'octobre"}, {"suivi", "b2", "Lettre d'information"}, {"factures", "b3", "Réunion de lundi"}} {
-		if err := sc.callOn(id, "boite", "mail", "move", map[string]any{"ids": []string{m.item}, "to": m.to}, itemLabel{ID: m.item, Title: m.title}); err != nil {
+		if err := sc.callOn(id, "mail", "move", map[string]any{"ids": []string{m.item}, "to": m.to}, itemLabel{ID: m.item, Server: "mail", Title: m.title}); err != nil {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 	sc.showCalls(id)
 	c.syncCards()
-	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)
 	c.bump()
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
@@ -1435,15 +1264,16 @@ func (sc *scenario) showCalls(node string) {
 	}
 }
 
-// callOn keeps a call of the brain's on items of a node's source, waiting
-// for the user's yes on a card of its own, as a call the brain made then
-// (item_cards.go): what the scenario's specs approve on their rows.
-func (sc *scenario) callOn(node, source, server, tool string, input map[string]any, items ...itemLabel) error {
+// callOn keeps a call of the brain's on items a node's page references,
+// waiting for the user's yes on a card of its own, as a call the brain
+// made then (item_cards.go): what the scenario's specs approve on their
+// rows.
+func (sc *scenario) callOn(node, server, tool string, input map[string]any, items ...itemLabel) error {
 	c := sc.c
 	raw, _ := json.Marshal(input)
 	labels, _ := json.Marshal(items)
-	res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, server, category, call, input, tainted, created, node, source, item, labels)
-		VALUES ('t-brain', ?, 'change', ?, ?, ?, ?, ?, ?, ?, ?)`, server, claudeToolName(server, tool)+" []", string(raw), "external:"+server, time.Now().Unix(), node, source, items[0].ID, string(labels))
+	res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, server, category, call, input, tainted, created, node, item, labels)
+		VALUES ('t-brain', ?, 'change', ?, ?, ?, ?, ?, ?, ?)`, server, claudeToolName(server, tool)+" []", string(raw), "external:"+server, time.Now().Unix(), node, items[0].ID, string(labels))
 	ask, err := rowsID(res, err)
 	if err != nil {
 		return err
@@ -1490,174 +1320,33 @@ func (sc *scenario) handleReview(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	c.live.wg.Wait()
-	c.readNode(sc.ctx, id, []string{reviewSource}, time.Now())
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
 }
 
-// handleSections is POST /e2e/sections: a view of the mails to sort in
-// two sections, its items noted into two groups as a skill would
-// (sections.spec.ts), written by the brain as any author, read once, and
-// shown; the brain's one call that deletes the first section's three
-// mails waits on their rows, one card.
-func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
-	c := sc.c
-	d, err := c.nodes.Create(nodestore.New{Title: "Mails en sections", Author: byBrain, Body: "Les mails, triés.\n"})
-	if err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	id := d.Node.Meta.ID
-	body := "Les mails, triés.\n\n```eriphe:block tri\n" + `{"components": [
-  {"id": "root", "component": "Column", "children": ["c1", "c2"]},
-  {"id": "c1", "component": "Card", "title": "À supprimer", "child": "drop"},
-  {"id": "drop", "component": "List", "children": {"path": "/tri/messages[_group=À supprimer]", "componentId": "row"}, "emptyText": "Rien à supprimer"},
-  {"id": "c2", "component": "Card", "title": "Pour info", "child": "info"},
-  {"id": "info", "component": "List", "children": {"path": "/tri/messages[_group=Pour info]", "componentId": "row"}},
-  {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
- "sources": {"tri": {"tool": "mail/tri", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	for item, group := range map[string]string{"s1": "À supprimer", "s2": "Pour info", "s3": "À supprimer", "s4": "À supprimer", "s5": "Pour info"} {
-		if err := c.noteItem(id, itemNote{Source: "tri", Item: item, Group: group, Author: byBrain}); err != nil {
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-	c.readNode(sc.ctx, id, nil, time.Now())
-	drop := []itemLabel{{ID: "s1", Title: "Soldes d'hiver"}, {ID: "s3", Title: "Votre colis est en route"}, {ID: "s4", Title: "Lettre du dimanche"}}
-	if err := sc.callOn(id, "tri", "mail", "delete", map[string]any{"ids": []string{"s1", "s3", "s4"}}, drop...); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	sc.showCalls(id)
-	c.syncCards()
-	c.readNode(sc.ctx, id, nil, time.Now())
-	c.showNode(id, byBrain, false)
-	c.bump()
-	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
-}
-
-// handleBlocks is POST /e2e/blocks: the same mails in one Sections that
-// names its source (blocks.spec.ts), noted as a skill would: s2 to act
-// on, s1, s3 and s4 to delete (the brain's one call on them, a batch),
-// s5 for information; and a band of Figures. Written by the brain as any
-// author, read once, and shown.
-func (sc *scenario) handleBlocks(rw http.ResponseWriter, r *http.Request) {
-	c := sc.c
-	d, err := c.nodes.Create(nodestore.New{Title: "Courrier du jour", Author: byBrain, Body: "Le courrier.\n"})
-	if err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	id := d.Node.Meta.ID
-	body := "Le courrier.\n\n```eriphe:block chiffres\n" + `{"components": {"component": "Figures", "items": [{"label": "Reçus", "value": 5}, {"label": "À jeter", "value": 3}]}}` + "\n```\n\n" +
-		"```eriphe:block courrier\n" + `{"components": {"component": "Sections", "title": "Courrier", "items": "courrier"},
- "sources": {"courrier": {"tool": "mail/du_jour", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	for item, note := range map[string]itemNote{
-		"s1": {Group: "À supprimer"}, "s3": {Group: "À supprimer"}, "s4": {Group: "À supprimer"},
-		"s2": {Group: "À traiter", Note: "Le comité attend ton avis", State: "act"},
-		"s5": {Group: "Pour info"},
-	} {
-		note.Source, note.Item, note.Author = "courrier", item, byBrain
-		if err := c.noteItem(id, note); err != nil {
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-	c.readNode(sc.ctx, id, nil, time.Now())
-	// A call on each, folded into one card (a run's end does so): the
-	// batch may leave one out.
-	for _, l := range []itemLabel{{ID: "s1", Title: "Soldes d'hiver"}, {ID: "s3", Title: "Votre colis est en route"}, {ID: "s4", Title: "Lettre du dimanche"}} {
-		if err := sc.callOn(id, "courrier", "mail", "jeter", map[string]any{"ids": []string{l.ID}}, l); err != nil {
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-	c.foldCalls()
-	c.syncCards()
-	c.readNode(sc.ctx, id, nil, time.Now())
-	c.showNode(id, byBrain, false)
-	c.bump()
-	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
-}
-
-// handleOpen is POST /e2e/open: a view of two mails whose rows open in
-// place, each read in full by mail/lire (sources-open.spec.ts), l1 noted in a
-// group; written by the brain as any author, read once, and shown.
-func (sc *scenario) handleOpen(rw http.ResponseWriter, r *http.Request) {
-	c := sc.c
-	d, err := c.nodes.Create(nodestore.New{Title: "Mails à lire", Author: byBrain, Body: "Les mails.\n"})
-	if err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	id := d.Node.Meta.ID
-	body := "Les mails.\n\n```eriphe:block lus\n" + `{"components": [
-  {"id": "root", "component": "List", "children": {"path": "/lus/messages", "componentId": "row"}},
-  {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
- "sources": {"lus": {"tool": "mail/lus", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from", "open": {"tool": "mail/lire", "id": "id"}}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := c.noteItem(id, itemNote{Source: "lus", Item: "l1", Group: "À traiter", Note: "Sam attend ton avis", Author: byBrain}); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	c.readNode(sc.ctx, id, nil, time.Now())
-	c.showNode(id, byBrain, false)
-	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
-}
-
-// handleBilan is POST /e2e/bilan: a view of the mailbox as a bilan
-// (view-bilan.spec.ts), as its skill leaves it: the bilan on top, one block
-// that reads the mails of two accounts once, « À traiter » with a reply
-// drafted for Sam waiting on its row, « À jeter » as a batch whose rows
-// share one card (a trash per mail, folded), « Pour info » folded. Written after an
-// external read, as a skill that read mails writes it.
+// handleBilan is POST /e2e/bilan: a page of the mailbox as a bilan
+// (view-bilan.spec.ts), as its skill leaves it: the bilan on top, then
+// « À traiter » with a reply drafted for Sam waiting on its row, « À
+// jeter » whose rows share one card (a trash per mail, folded), « Pour
+// info ». Written after an external read, as a skill that read mails
+// writes it; each mail opens in place, read by lire.
 func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
-	lead := "1 réponse attendue : Sam, avant vendredi. 1 hameçonnage dans le lot à jeter.\n\n**Pour info** · La facture d'électricité est arrivée (62 €, prélevés le 5 décembre). Le club avance l'entraînement de samedi à 9 h.\n"
-	d, err := c.nodes.Create(nodestore.New{Title: "Mes mails du jour", Author: byBrain, Body: lead})
+	todo, refs := mailLines(bilan, "a1", "a2")
+	trash, more := mailLines(bilan, "j1", "j2", "j3")
+	info, last := mailLines(bilan, "i1", "i2")
+	body := "1 réponse attendue : Sam, avant vendredi. 1 hameçonnage dans le lot à jeter.\n\n" +
+		"**Pour info** · La facture d'électricité est arrivée (62 €, prélevés le 5 décembre). Le club avance l'entraînement de samedi à 9 h.\n\n" +
+		"## À traiter\n\n" + todo + "\n## À jeter\n\n" + trash + "\n## Pour info\n\n" + info + "\n" + refs + more + last
+	id, err := sc.writeMails("Mes mails du jour", body, true)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
-	}
-	id := d.Node.Meta.ID
-	body := lead + "\n```eriphe:block boite\n" + `{"components": [
-  {"id": "root", "component": "Column", "children": ["todo_h", "todo", "trash", "info"]},
-  {"id": "todo_h", "component": "Text", "variant": "subtitle", "text": "À traiter"},
-  {"id": "todo", "component": "List", "children": {"path": "/mails/messages[_group=À traiter][_state!=done]", "componentId": "todo_item"}, "emptyText": "Rien ne t'attend."},
-  {"id": "todo_item", "component": "Item", "title": {"@path": "_note"}, "detail": {"@path": "from"}, "note": {"@path": "subject"}},
-  {"id": "trash", "component": "Fold", "list": "jeter", "label": "{n} mails inutiles à jeter", "child": "jeter"},
-  {"id": "jeter", "component": "List", "children": {"path": "/mails/messages[_group=À jeter][_state!=done]", "componentId": "jeter_row"}},
-  {"id": "jeter_row", "component": "Item", "level": "low", "title": {"@path": "subject"}, "detail": {"@path": "from"}, "note": {"@path": "_note"}},
-  {"id": "info", "component": "Fold", "list": "infos", "label": "Les {n} mails pour info", "child": "infos"},
-  {"id": "infos", "component": "List", "children": {"path": "/mails/messages[_group=Pour info]", "componentId": "info_row"}},
-  {"id": "info_row", "component": "Item", "level": "low", "title": {"@path": "subject"}, "detail": {"@path": "from"}, "note": {"@path": "_note"}}],
- "sources": {"mails": {"tool": "mail/bilan", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from", "open": {"tool": "mail/lettre", "id": "id"}}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, true, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	for item, n := range bilanNotes {
-		if err := c.noteItem(id, itemNote{Source: "mails", Item: item, Group: n[0], Note: n[1], State: "act", Author: byBrain}); err != nil {
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
-			return
-		}
 	}
 	// The reply its skill drafted for Sam: a card on the mail's row.
 	raw, _ := json.Marshal(map[string]any{"id": "a1", "body": bilanReply})
-	labels, _ := json.Marshal([]itemLabel{{ID: "a1", Title: "Devis terrasse", Detail: "Sam"}})
-	res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, server, category, call, input, tainted, created, node, source, item, labels)
-		VALUES ('t-brain', 'mail', 'send', 'mcp__mail__repondre []', ?, 'external:mail', ?, ?, 'mails', 'a1', ?)`, string(raw), time.Now().Unix(), id, string(labels))
+	labels, _ := json.Marshal([]itemLabel{{ID: "a1", Server: "mail", Title: "Devis terrasse", Detail: "Sam"}})
+	res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, server, category, call, input, tainted, created, node, item, labels)
+		VALUES ('t-brain', 'mail', 'send', 'mcp__mail__repondre []', ?, 'external:mail', ?, ?, 'a1', ?)`, string(raw), time.Now().Unix(), id, string(labels))
 	ask, err := rowsID(res, err)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
@@ -1667,14 +1356,14 @@ func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
 	c.cardNow(cardCalls, ask, "", refNode+":"+id)
 	// Its trash of each mail to throw away: three cards that fold into one.
 	for _, m := range []itemLabel{{ID: "j1", Title: "Soldes d'hiver"}, {ID: "j2", Title: "Lettre du dimanche"}, {ID: "j3", Title: "Votre colis est bloqué"}} {
-		if err := sc.callOn(id, "mails", "mail", "trash", map[string]any{"account": "perso", "ids": []string{m.ID}}, m); err != nil {
+		m.Server = "mail"
+		if err := sc.callOn(id, "mail", "trash", map[string]any{"account": "perso", "ids": []string{m.ID}}, m); err != nil {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 	sc.showCalls(id)
 	c.syncCards()
-	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)
 	c.bump()
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
@@ -1755,34 +1444,6 @@ func (sc *scenario) handleDo(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
 }
 
-// handlePurge is POST /e2e/purge: a view of a mailbox (mail/promos), read
-// once, every five minutes after, and shown; purger allowed for good, as
-// the user would have (view-refresh.spec.ts).
-func (sc *scenario) handlePurge(rw http.ResponseWriter, r *http.Request) {
-	c := sc.c
-	d, err := c.nodes.Create(nodestore.New{Title: "Boîte à nettoyer", Author: byBrain, Body: "La boîte.\n"})
-	if err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	id := d.Node.Meta.ID
-	body := "La boîte.\n\n```eriphe:block promos\n" + `{"components": [
-  {"id": "root", "component": "List", "children": {"path": "/promos/messages", "componentId": "row"}},
-  {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
- "sources": {"promos": {"tool": "mail/promos", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := c.store.allowAction("mail", claudeToolName("mail", "purger"), ""); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	c.readNode(sc.ctx, id, nil, time.Now())
-	c.showNode(id, byBrain, false)
-	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
-}
-
 // handleConso is POST /e2e/conso?kw=…: the house's consumption is now kw,
 // as the monitor conso writes it in the journal; the line of the node
 // that follows it is rewritten, and its glance with it
@@ -1804,26 +1465,17 @@ func (sc *scenario) handleConso(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, http.StatusOK, map[string]any{"id": id, "glance": sc.c.nodeGlance(id)})
 }
 
-// handleCourrier is POST /e2e/courrier: a view of the mailbox, a plain
-// List of its mails (view-calls.spec.ts), shown; the brain's call on two
-// of its rows waits on them.
+// handleCourrier is POST /e2e/courrier: a page of the mailbox, a row per
+// mail (view-calls.spec.ts), written after the mails were read, and
+// shown; the brain's call on two of its rows waits on them.
 func (sc *scenario) handleCourrier(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
-	d, err := c.nodes.Create(nodestore.New{Title: "Courrier", Author: byBrain, Body: "Le courrier du jour.\n"})
+	rows, refs := mailLines(courrier, "c1", "c2", "c3", "c4")
+	id, err := sc.writeMails("Courrier", "Le courrier du jour.\n\n"+rows+"\n"+refs, true)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	id := d.Node.Meta.ID
-	body := "Le courrier du jour.\n\n```eriphe:block courrier\n" + `{"components": [
-  {"id": "root", "component": "List", "children": {"path": "/mails/messages", "componentId": "row"}},
-  {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
- "sources": {"mails": {"tool": "mail/courrier", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, true, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)
 	c.bump()
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
@@ -1831,8 +1483,7 @@ func (sc *scenario) handleCourrier(rw http.ResponseWriter, r *http.Request) {
 
 // handleTrashFails is POST /e2e/trash-fails: the mail's trash answers
 // with an error from now on, its text the body (view-failed.spec.ts); an
-// empty body makes it work again. What it trashed before is back, so the
-// mailbox shows its four mails whatever ran before.
+// empty body makes it work again. What it trashed before is forgotten.
 func (sc *scenario) handleTrashFails(rw http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<10))
 	sc.tools.mu.Lock()
@@ -1892,24 +1543,6 @@ func (sc *scenario) mail() (string, error) {
 		return "", err
 	}
 	return d.Node.Meta.ID, nil
-}
-
-// blockAsks tells a block's components that hold a button's ask.
-func blockAsks(components json.RawMessage) bool {
-	var list []struct {
-		Action struct {
-			Event struct {
-				Name string `json:"name"`
-			} `json:"event"`
-		} `json:"action"`
-	}
-	json.Unmarshal(components, &list)
-	for _, comp := range list {
-		if comp.Action.Event.Name == a2ui.ActionAsk {
-			return true
-		}
-	}
-	return false
 }
 
 // liveSummaries are the graph's nodes now.

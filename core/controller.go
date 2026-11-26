@@ -78,10 +78,8 @@ type core struct {
 	out         channelOut             // what goes out through the channels the user added (channel_out.go)
 	routeMu     sync.Mutex             // one escalation pass at a time (route_send.go)
 	props       proposalFeed           // the proposals that moved, for the workspace (card_moves.go)
-	live        nodeLive               // the live blocks being read (node_live.go)
-	fresh       sourceFresh            // the sources to read again after a change (source_fresh.go)
-	findSources atomic.Bool            // a block reads node_find: a node's change reads it again (node_find.go)
 	yeses       sync.WaitGroup         // the calls a card's yes runs, under way (runApprovedCall)
+	reviewing   sync.WaitGroup         // « Outils à revoir » written again, under way (toolsMoved)
 	glances     sync.Map               // node id → its glance as the graph shows it, nil for none (node_glance.go)
 	actAuthors  sync.Map               // a node's do: line → who wrote it, as known through a version (page_acts.go)
 	actMu       sync.Mutex             // one yes on a do: at a time (page_acts.go)
@@ -135,7 +133,6 @@ func newCore(cfg *Config, store *Store) *core {
 	c.pool.connToken = c.connectionToken // a tool on a connection that mints its tokens
 	c.pool.connRefused = c.connectionRefused
 	c.pool.authHold = c.connectionHold // an account to connect again (connections.go)
-	c.pool.resourceUpdated = c.nodeResourceUpdated
 	c.pool.toolsListed = c.toolsMoved
 	c.pool.trusted = c.trustsServer
 	c.provideFolders() // the user's folders, a tool like any other (folder_tools.go)

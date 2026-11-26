@@ -109,7 +109,7 @@ func TestSameKindCallsWaitAsOneCard(t *testing.T) {
 		t.Errorf("calls cards %+v", xs)
 	}
 	// The one card is on each of its rows: a batch's.
-	if cards := c.itemCards(node, "mails"); cards["m1"] != ref || cards["m2"] != ref {
+	if cards := rowCards(c, node); cards["m1"] != ref || cards["m2"] != ref {
 		t.Errorf("the rows' cards %v, want %s on both", cards, ref)
 	}
 }
@@ -301,40 +301,4 @@ func TestCallFoldedInAfterDrawnWaitsOn(t *testing.T) {
 		t.Errorf("the new card is not the view's: %v", c.cardNodes(x.Ref))
 	}
 	waitTraced(t, c, node, 2)
-}
-
-// keepOn keeps a call on items of a node's source as a card of its own,
-// as a run's call on its items is kept. It gives the card's batch.
-func keepOn(t *testing.T, c *core, node, source string, input map[string]any, labels ...itemLabel) int64 {
-	t.Helper()
-	raw, _ := json.Marshal(input)
-	ls, _ := json.Marshal(labels)
-	res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, server, category, call, input, created, node, source, item, labels)
-		VALUES ('t-x', 'monitor', 'change', 'mcp__monitor__move []', ?, ?, ?, ?, ?, ?)`, string(raw), time.Now().Unix(), node, source, labels[0].ID, string(ls))
-	id, err := rowsID(res, err)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.store.db.Exec(`UPDATE access_asks SET batch = ? WHERE id = ?`, id, id)
-	return id
-}
-
-// One call on several rows is on each of them; an item two cards act on
-// shows the newest; a label of another source's item is not on these
-// rows.
-func TestItemCardsOnEveryRowTheyActOn(t *testing.T) {
-	c, node, _ := mailView(t)
-	both := keepOn(t, c, node, "mails", moveMail("sam@example.org", "archive", "m1", "m2"), itemLabel{ID: "m1"}, itemLabel{ID: "m2"}, itemLabel{ID: "x9", Source: "agenda"})
-	cards := c.itemCards(node, "mails")
-	if want := proposalRef(cardCalls, both); cards["m1"] != want || cards["m2"] != want {
-		t.Fatalf("one call on two rows: %v, want %s on both", cards, want)
-	}
-	if _, ok := cards["x9"]; ok {
-		t.Errorf("another source's item carries the card: %v", cards)
-	}
-	newer := keepOn(t, c, node, "mails", moveMail("sam@example.org", "later", "m2"), itemLabel{ID: "m2"})
-	cards = c.itemCards(node, "mails")
-	if cards["m2"] != proposalRef(cardCalls, newer) || cards["m1"] != proposalRef(cardCalls, both) {
-		t.Errorf("two cards on m2: %v, want the newest (%d)", cards, newer)
-	}
 }

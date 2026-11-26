@@ -65,7 +65,6 @@ describe("a card of several calls", () => {
         shown = decided;
         return true;
       },
-      day: async () => [],
       follow: () => () => {},
     };
     await act(async () =>

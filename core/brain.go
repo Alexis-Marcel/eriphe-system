@@ -267,7 +267,7 @@ func (c *core) messageRef(m Message) string {
 	case strings.HasPrefix(why, channelTaintPrefx):
 		ref += " · canal sans confiance" // maybe not the user's words (channels_added.go)
 	case strings.HasPrefix(why, askTaintPrefix):
-		ref += " · bouton d'un bloc extérieur" // its words may echo what was read (web_gestures.go)
+		ref += " · lien d'une page extérieure" // its words may echo what was read (web_gestures.go)
 	}
 	return ref
 }

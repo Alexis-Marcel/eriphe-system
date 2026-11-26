@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
@@ -27,9 +26,8 @@ import (
 //
 //   - the graph, its rows, by the stream (web_sse.go, graph_feed.go);
 //   - a node's page (GET /api/nodes/{id}): its row, its versions, its
-//     body as parts (markdown text, or a block ready for the A2UI
-//     renderer: its components and its data, the sources' last values in
-//     it), and the cards it waits on;
+//     body (its Markdown page), the items its references name, and the
+//     cards it waits on;
 //   - its trace (GET /api/nodes/{id}/trace), as entries;
 //   - its file (GET /api/nodes/{id}/md), as it is, and its body as the
 //     user edits it.
@@ -44,13 +42,11 @@ import (
 func (w *web) graphRoutes(mux *webMux) {
 	mux.Handle("GET /espace", w.auth(w.handleHome)) // web_pages.go: after the wizard
 	mux.Handle("GET /espace/boot", w.auth(w.handleEspaceBoot))
-	mux.Handle("GET /espace/catalog/v1.json", w.auth(w.handleEspaceCatalog))
 	mux.Handle("GET /espace/media", w.auth(w.handleMedia)) // web_media.go
 	mux.Handle("GET /api/nodes/{id}", w.auth(w.handleNodePage))
 	mux.Handle("GET /api/nodes/{id}/trace", w.auth(w.handleNodeTrace))
 	mux.Handle("GET /api/nodes/{id}/md", w.auth(w.handleNodeMD))
 	mux.Handle("GET /api/proposals/{ref}", w.auth(w.handleProposal)) // web_proposals.go
-	mux.Handle("GET /api/proposals", w.auth(w.handleDayProposals))   // web_proposals.go
 	mux.Handle("GET /api/report/turns", w.auth(w.handleTurnReport))  // turn_report.go
 }
 
@@ -101,16 +97,6 @@ func (w *web) setupState() string {
 		return "noai"
 	}
 	return ""
-}
-
-// handleEspaceCatalog is GET /espace/catalog/v1.json: the catalog of the
-// components a block is made of (core/a2ui), which the app's renderer
-// reads. The path carries the catalog's version: a v2 gets a path of its
-// own.
-func (w *web) handleEspaceCatalog(rw http.ResponseWriter, r *http.Request, _ *session) {
-	rw.Header().Set("Content-Type", "application/json")
-	rw.Header().Set("Cache-Control", "no-cache")
-	rw.Write(a2ui.CatalogJSON())
 }
 
 // graphNode is a node's row as the page gets it: what the graph draws.
@@ -182,11 +168,10 @@ func (c *core) graphRows() ([]graphNode, error) {
 }
 
 // nodePage is a node's page: its row, the version shown and the others,
-// its body in parts, and its cards: at its foot, those that still ask
-// something (pendingAsks) its document does not place (a card block
-// places one where its author wrote it) nor a row of its Lists shows (a
-// card on an item, its Oui on its row); the others, decided, are its
-// settled ones, the last first, for its ⋯ menu (« Déjà décidé »).
+// its body, and its cards: at its foot, those that still ask something
+// (pendingAsks) its lines do not place (a card: link, an item's row);
+// the others, decided, are its settled ones, the last first, for its ⋯
+// menu (« Déjà décidé »).
 type nodePage struct {
 	Node     graphNode     `json:"node"`
 	Version  int           `json:"version"` // the version shown
@@ -195,11 +180,8 @@ type nodePage struct {
 	Shift    int           `json:"shift,omitempty"` // 1 when its creation was empty: the user's v1 is its version 2
 	// Body is the node's body as its file holds it, the page the
 	// workspace reads and draws (web/espace, page/read.ts: the lines it
-	// ticks are this body's, as nodefile.ReadPage counts them). Parts
-	// are its legacy blocks ready to draw, each where its fence is, and
-	// the text between them.
-	Body  string     `json:"body"`
-	Parts []pagePart `json:"parts"`
+	// ticks are this body's, as nodefile.ReadPage counts them).
+	Body string `json:"body"`
 	// Items are the body's references to catalog servers' items, each
 	// where it is written, with the card that waits on it (page_items.go);
 	// Placed the cards its lines carry (on an item's row, or where a
@@ -214,7 +196,7 @@ type nodePage struct {
 	// Refs: the node each [[name]] of its text opens, by the name as
 	// written; a name no node has is not there (the page greys it).
 	Refs map[string]pageRef `json:"refs"`
-	// Alive: what keeps it alive: its skills, monitors and sources (node_alive.go).
+	// Alive: what keeps it alive: its skills and monitors (node_alive.go).
 	Alive *pageAlive `json:"alive,omitempty"`
 	// Origin: who wanted it, as code recorded it (node_origin.go).
 	Origin pageOrigin `json:"origin"`
@@ -285,33 +267,6 @@ type pageVersion struct {
 	At     time.Time `json:"at"`
 }
 
-// pagePart is a piece of a node's body: markdown text, or a block.
-type pagePart struct {
-	Text  string     `json:"text,omitempty"`
-	Block *pageBlock `json:"block,omitempty"`
-}
-
-// pageBlock is a block ready to draw: its components and its data, with
-// the sources' last values at /<name> and the user's marks at /marks; or,
-// when it does not read as a block, what is wrong (its raw JSON is the
-// file's, in the .md tab). A card block gives its card's ref, and the
-// card as code reads it from its records (Proposal: what it says, what
-// its yes does, where it stands), only when it is one of the node's own
-// cards and the block is not external: else none, and the page says the
-// card is not found, with no Oui or Non.
-type pageBlock struct {
-	Name       string           `json:"name"`
-	External   bool             `json:"external,omitempty"`
-	Components []a2ui.Component `json:"components"`
-	Data       map[string]any   `json:"data"`
-	Error      string           `json:"error,omitempty"`
-	Card       string           `json:"card,omitempty"`
-	Proposal   *proposalView    `json:"proposal,omitempty"`
-	// Lists: the Lists whose rows the page must know: what they show, the
-	// card that waits on each, how they open (list_rows.go).
-	Lists []pageList `json:"lists,omitempty"`
-}
-
 var errNoNode = errors.New("no such node")
 
 // nodePageOf is a node's page, at a version (0: the last).
@@ -328,7 +283,7 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 	if err != nil {
 		return nodePage{}, errNoNode
 	}
-	p := nodePage{Node: c.graphRow(sum), Version: d.Version.N, Versions: []pageVersion{}, Parts: []pagePart{}, Cards: []proposalView{}, Refs: map[string]pageRef{}}
+	p := nodePage{Node: c.graphRow(sum), Version: d.Version.N, Versions: []pageVersion{}, Cards: []proposalView{}, Refs: map[string]pageRef{}}
 	if !sum.Archived.IsZero() {
 		a := sum.Archived
 		p.Archived = &a
@@ -352,34 +307,15 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 			p.Versions = append(p.Versions, pageVersion{N: v.N, Author: v.Author, At: v.At})
 		}
 	}
-	// The sources' values are their last reads, whatever the version:
-	// they are code's, never in the file.
-	reads := c.keptReads(id)
-	for _, part := range d.Node.Parts() {
-		if part.Block == nil {
-			p.Parts = append(p.Parts, pagePart{Text: part.Text})
-			continue
-		}
-		b := c.blockView(id, part.Block, reads)
-		if b.Error == "" && b.Card == "" {
-			b.Lists = c.blockLists(part.Block, b.Data)
-		}
-		if b.Card != "" && b.Error == "" {
-			b.Proposal = w.placedCard(id, part.Block, lang)
-		}
-		p.Parts = append(p.Parts, pagePart{Block: &b})
-	}
 	// Every way the text writes a name is a key of its own, an embed's
 	// (![[Name]]) too.
 	var names []string
-	for _, part := range d.Node.Parts() {
-		for _, l := range nodefile.WikiLinks(part.Text) {
-			names = append(names, l.Name)
-		}
-	}
 	p.Items, p.Placed = []pageItem{}, []string{}
 	if body, err := d.Node.Body(); err == nil {
 		p.Body = body
+		for _, l := range nodefile.WikiLinks(body) {
+			names = append(names, l.Name)
+		}
 		pg := nodefile.ReadPage(body)
 		names = append(names, embedNames(pg.Blocks)...)
 		p.Items = c.pageItems(id, pg)
@@ -394,32 +330,6 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 	for _, ref := range p.Placed {
 		placed[ref] = true
 	}
-	// The days the page's Agendas draw: a card that waits with a time on
-	// one of them shows there, its Oui on its ghost, not at the foot.
-	loc := c.userZone()
-	var days []time.Time
-	for i, part := range d.Node.Parts() {
-		if part.Block != nil && p.Parts[i].Block != nil && p.Parts[i].Block.Error == "" {
-			days = append(days, shownDays(part.Block, time.Now().In(loc))...)
-		}
-	}
-	for _, part := range p.Parts {
-		if part.Block != nil && part.Block.Proposal != nil {
-			placed[part.Block.Proposal.Ref] = true
-		}
-		if part.Block != nil {
-			// A card on a row of a List the page draws: its Oui on that
-			// row (the row's own Proposal, or the one the page adds to
-			// it), or on the line of the batch its List is.
-			for _, l := range part.Block.Lists {
-				for _, it := range l.Items {
-					if it.Card != "" {
-						placed[it.Card] = true
-					}
-				}
-			}
-		}
-	}
 	p.Cards, p.Settled = []proposalView{}, []proposalView{}
 	for _, v := range w.nodeCards(id, lang) {
 		switch {
@@ -427,7 +337,7 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 			if len(p.Settled) < settledMax {
 				p.Settled = append(p.Settled, v)
 			}
-		case !placed[v.Ref] && !c.datedOn(v.Ref, days, loc):
+		case !placed[v.Ref]:
 			p.Cards = append(p.Cards, v)
 		}
 	}
@@ -463,148 +373,6 @@ func pendingAsks(v proposalView) bool {
 	return v.State == cardPending || v.State == cardApproved && v.Exec == callRunning
 }
 
-// placedCard is the card a card block of node id places, as its records
-// say it now: pending, decided, or gone (withdrawn with its node, #662).
-// None for a ref that is not one of the node's cards, nor from a block
-// someone else's words may have written: such a block forges nothing.
-func (w *web) placedCard(id string, b *nodefile.Block, lang string) *proposalView {
-	if b.External || !w.c.nodeHasCard(id, b.Card) {
-		return nil
-	}
-	xs, err := w.c.cardsWhere(`ref = ?`, b.Card)
-	if err != nil || len(xs) == 0 {
-		return nil
-	}
-	x, p := w.c.liveCard(xs[0])
-	v := w.proposalView(x, p, lang)
-	return &v
-}
-
-// blockView is a block of node id ready to draw. Its media addresses go
-// through eriphe-core's endpoint (web_media.go), never loaded from
-// outside: one a source gave, or one the author wrote when the block is
-// not external (then a model that read something from outside may have
-// written it, to carry what it read out in its address: A2UI #4045), else
-// it is dropped. A media:<name> address is one of node id's own files,
-// whoever wrote it: it carries nothing out.
-// A Link's address goes as it is, but one that is not an address a Link
-// may open goes as "".
-func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlock {
-	v := pageBlock{Name: b.Name, External: b.External, Components: []a2ui.Component{}, Data: map[string]any{}}
-	if err := b.Validate(); err != nil {
-		v.Error = err.Error()
-		return v
-	}
-	if b.Card != "" {
-		v.Card = b.Card // the card itself: placedCard, by the page
-		return v
-	}
-	if b.Data != nil {
-		json.Unmarshal(b.Data, &v.Data)
-		if v.Data == nil {
-			v.Data = map[string]any{}
-		}
-	}
-	for name, src := range b.Sources {
-		for _, r := range reads {
-			if r.Block == b.Name && r.Name == name && r.Value != nil {
-				v.Data[name] = r.Value
-				if src.Tool == nodeFindSource {
-					c.nodeFindMedia(r.Value)
-				}
-			}
-		}
-	}
-	// The items' notes on them (list_sections.go): the values are this
-	// node's own, read for it.
-	c.noteSources(id, b, v.Data)
-
-	var list []map[string]any
-	json.Unmarshal(b.Bound(), &list)
-	authorOK := !b.External
-	for _, comp := range list {
-		kind, _ := comp["component"].(string)
-		for prop, val := range comp {
-			if s, ok := val.(string); ok && a2ui.IsMedia(kind, prop) {
-				comp[prop] = c.mediaOrDrop(id, s, authorOK)
-			}
-			if s, ok := val.(string); ok && a2ui.IsLink(kind, prop) {
-				comp[prop] = linkOrDrop(s)
-			}
-		}
-	}
-	if done := c.setUpButtons(list); len(done) > 0 {
-		list = withoutComponents(withoutAsks(list, done), done) // what they set up is (setup_buttons.go)
-	}
-	c.galleryMedia(id, b, list, v.Data, authorOK)
-	unfilterLists(list) // code filters, the page shows the rows it gets (list_sections.go)
-	raw, _ := json.Marshal(list)
-	json.Unmarshal(raw, &v.Components)
-	if v.Components == nil {
-		v.Components = []a2ui.Component{}
-	}
-	for _, bound := range a2ui.Eriphe().BoundPaths(b.Bound()) {
-		at := tokens(bound.Path)
-		if _, ok := b.Sources[at0(at)]; ok {
-			at = unfiltered(at) // under a List that filters: each item of the source's
-		}
-		if bound.Link {
-			rewriteAt(v.Data, at, linkOrDrop)
-		}
-		if !bound.Media || len(at) == 0 {
-			continue
-		}
-		_, fromSource := b.Sources[at[0]]
-		ok := fromSource || authorOK
-		rewriteAt(v.Data, at, func(u string) string { return c.mediaOrDrop(id, u, ok) })
-	}
-	return v
-}
-
-// sourceEvents are what "source" events send of a block's source: its
-// node, block and name, its value at /<name> as the page draws it (its
-// items' notes on them), and the rows of the Lists the page must know
-// that show it (blockLists: those that filter it, those a batch folds,
-// those a card waits on). block "": each block of the node that reads a source so named (its
-// items' notes changed). None when the node or the source is no more.
-func (c *core) sourceEvents(id, block, name string) []map[string]any {
-	if c.nodes == nil {
-		return nil
-	}
-	d, err := c.nodes.Read(id, 0)
-	if err != nil {
-		return nil
-	}
-	var out []map[string]any
-	var reads []nodeRead
-	for _, b := range d.Node.Blocks() {
-		if block != "" && b.Name != block {
-			continue
-		}
-		if _, ok := b.Sources[name]; !ok {
-			continue
-		}
-		if reads == nil {
-			reads = c.keptReads(id)
-		}
-		v := c.blockView(id, b, reads)
-		val, ok := v.Data[name]
-		if !ok || v.Error != "" {
-			continue
-		}
-		ev := map[string]any{"node": id, "block": b.Name, "name": name, "value": val}
-		if lists := c.blockLists(b, v.Data, name); len(lists) > 0 {
-			rows := make([]map[string]any, 0, len(lists))
-			for _, l := range lists {
-				rows = append(rows, map[string]any{"component": l.Component, "items": l.Items})
-			}
-			ev["lists"] = rows
-		}
-		out = append(out, ev)
-	}
-	return out
-}
-
 // nodeCards are the cards a node waits on, or did: those linked to it
 // (node_turn.go), the last first.
 func (w *web) nodeCards(id, lang string) []proposalView {
@@ -634,11 +402,6 @@ func (w *web) handleNodePage(rw http.ResponseWriter, r *http.Request, _ *session
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	writeJSON(rw, http.StatusOK, p)
-	if version <= 0 {
-		// Opened: what changed elsewhere since its sources' last read
-		// comes in the stream (source_fresh.go).
-		w.c.readStale(r.PathValue("id"), time.Now())
-	}
 }
 
 // traceEntry is an entry of a node's trace: when, who, what.
@@ -711,9 +474,9 @@ func (w *web) handleNodeMD(rw http.ResponseWriter, r *http.Request, _ *session) 
 		return
 	}
 	rw.Header().Set("Cache-Control", "no-store")
-	// body is what the user edits: the author's view of the body, without
-	// the front matter and code's fields (web_gestures.go).
-	writeJSON(rw, http.StatusOK, map[string]any{"md": string(d.Raw), "body": authorBody(d), "version": d.Version.N, "hash": d.Version.Hash, "last": d.Last})
+	// body is what the user edits: the page, without the front matter
+	// (web_gestures.go).
+	writeJSON(rw, http.StatusOK, map[string]any{"md": string(d.Raw), "body": nodeBody(d.Raw), "version": d.Version.N, "hash": d.Version.Hash, "last": d.Last})
 }
 
 // espaceWords are the app's words in a language, with the assistant's name.

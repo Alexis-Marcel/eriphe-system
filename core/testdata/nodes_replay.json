@@ -58,7 +58,7 @@
     "talk": "$mail",
     "tool": "node_open",
     "args": {
-      "body": "Les erreurs 5xx par minute, relues en direct.\n\n```eriphe:block erreurs\n{\"sources\": {\"erreurs\": {\"tool\": \"prod/erreurs\", \"every\": 1}}, \"components\": [{\"id\": \"root\", \"component\": \"Column\", \"children\": [\"apercu\"]}, {\"id\": \"apercu\", \"component\": \"Code\", \"text\": \"Données : /erreurs\"}]}\n```\n",
+      "body": "Les erreurs 5xx par minute, relues en direct.\n\n> [!figures]\n> - Erreurs 5xx par minute : [0](on:monitor.changed/prod-erreurs)\n",
       "parent": "$mail",
       "goal": "Voir les erreurs 5xx de la prod en direct.",
       "title": "La prod : erreurs 5xx"
@@ -172,7 +172,7 @@
     "turn": 11,
     "tool": "node_open",
     "args": {
-      "body": "Consommation de la maison en direct. La bulle du nœud te le montre quand elle dépasse 10 kW.\n\n```eriphe:block conso\n{\"sources\": {\"conso\": {\"tool\": \"maison/conso\", \"every\": 1, \"glance\": {\"label\": \"Conso\", \"path\": \"kw\", \"threshold\": 10, \"unit\": \"amount\", \"compare\": \"fixed\", \"base\": 0}}}, \"components\": [{\"id\": \"root\", \"component\": \"Metric\", \"label\": \"Consommation\", \"value\": {\"@path\": \"/conso/kw\"}, \"unit\": \"kW\"}]}\n```\n",
+      "body": "Consommation de la maison en direct. La bulle du nœud te le montre quand elle dépasse 10 kW.\n\n> [!figures|glance 10]\n> - Consommation : [0 kW](on:monitor.changed/conso)\n",
       "goal": "Suivre la consommation de la maison et la voir quand elle dépasse 10 kW.",
       "title": "Consommation de la maison"
     },
@@ -187,7 +187,7 @@
     "about": "$mails",
     "tool": "node_write",
     "args": {
-      "body": "Les mails qui comptent. Tu veux que je garde un œil sur ta boîte, t'aide à la gérer et te propose des actions. Avant de mettre quoi que ce soit en place, trois choix :\n\n1. **Ce que je couvre** : tous tes comptes mail. *Sans réponse : tous les comptes.*\n2. **Ce que je fais pour toi** : je lis et trie chaque mail, je prépare un brouillon de réponse ou une action (ranger, supprimer) pour ce qui demande quelque chose ; rien ne part sans ton oui sur une carte. *Sans réponse : brouillons et propositions, jamais d'envoi seul.*\n3. **Te prévenir** : seulement ce qui est urgent, tout de suite ; le reste est dans la page et au brief. *Sans réponse : urgents seulement, pas la nuit.*\n\n```eriphe:block reponses\n{\"components\": [{\"id\": \"root\", \"component\": \"Row\", \"children\": [\"defaut\", \"tout\", \"rien\"]}, {\"id\": \"defaut\", \"component\": \"Button\", \"variant\": \"primary\", \"label\": \"Fais comme tu proposes\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Fais comme tu proposes\"}}}}, {\"id\": \"tout\", \"component\": \"Button\", \"label\": \"Prévenir même la nuit pour l'urgent\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Fais comme tu proposes, mais prévenir aussi la nuit pour l'urgent\"}}}}, {\"id\": \"rien\", \"component\": \"Button\", \"label\": \"Ne jamais me prévenir\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Fais comme tu proposes, mais ne me préviens jamais : je regarde la vue moi-même\"}}}}]}\n```\n",
+      "body": "Les mails qui comptent. Tu veux que je garde un œil sur ta boîte, t'aide à la gérer et te propose des actions. Avant de mettre quoi que ce soit en place, trois choix :\n\n1. **Ce que je couvre** : tous tes comptes mail. *Sans réponse : tous les comptes.*\n2. **Ce que je fais pour toi** : je lis et trie chaque mail, je prépare un brouillon de réponse ou une action (ranger, supprimer) pour ce qui demande quelque chose ; rien ne part sans ton oui sur une carte. *Sans réponse : brouillons et propositions, jamais d'envoi seul.*\n3. **Te prévenir** : seulement ce qui est urgent, tout de suite ; le reste est dans la page et au brief. *Sans réponse : urgents seulement, pas la nuit.*\n\n[Fais comme tu proposes](ask:) · [Fais comme tu proposes, mais prévenir aussi la nuit pour l'urgent](ask:) · [Fais comme tu proposes, mais ne me préviens jamais : je regarde la vue moi-même](ask:)\n",
       "expect": "$hash",
       "id": "$mails"
     },
@@ -215,7 +215,7 @@
     "args": {
       "title": "Garder un œil sur mes mails",
       "goal": "Suivre tous mes comptes mail : chaque mail est lu et trié, ce qui demande une réponse ou une action vient avec un brouillon ou une proposition, rien ne part sans mon oui. Me prévenir tout de suite seulement pour l'urgent, jamais la nuit ; le reste est dans la page et au brief.",
-      "body": "**Bilan** : en attente du premier passage.\n\n```eriphe:block mails\n{\"sources\": {\"mails\": {\"tool\": \"mail/recus\", \"every\": 5, \"items\": {\"path\": \"messages\", \"id\": \"id\", \"title\": \"subject\", \"detail\": \"from\", \"open\": {\"tool\": \"mail/lire\", \"id\": \"id\"}}}}, \"components\": [{\"id\": \"root\", \"component\": \"Column\", \"children\": [\"todo\", \"info\"]}, {\"id\": \"todo\", \"component\": \"List\", \"children\": {\"path\": \"/mails/messages[_group=À traiter][_state!=done]\", \"componentId\": \"row\"}, \"emptyText\": \"Rien à traiter\"}, {\"id\": \"info\", \"component\": \"Fold\", \"label\": \"Pour info\", \"child\": \"infolist\"}, {\"id\": \"infolist\", \"component\": \"List\", \"children\": {\"path\": \"/mails/messages[_group=Pour info][_state!=done]\", \"componentId\": \"row\"}, \"emptyText\": \"Rien\"}, {\"id\": \"row\", \"component\": \"Item\", \"title\": {\"@path\": \"subject\"}, \"detail\": {\"@path\": \"from\"}, \"note\": {\"@path\": \"_note\"}}]}\n```\n"
+      "body": "**Bilan** : en attente du premier passage.\n\n## À traiter\n\nRien à traiter.\n\n## Pour info\n\nRien.\n"
     },
     "ok": true,
     "gives": {
@@ -282,12 +282,12 @@
     "turn": 14,
     "tainted": true,
     "ok": false,
-    "error": "block changer: /components/1/action/event: an ask carries your own words only: literal text, never a value bound to the data",
+    "error": "a callout's |external is written by code only: leave it out",
     "about": "$n8",
     "talk": "$n8",
     "tool": "node_write",
     "args": {
-      "body": "Ta journée, tenue à jour : tes rendez-vous du jour. Je ne te préviens qu'au brief, jamais la nuit ; dis-le pour changer.\n\n```eriphe:block jour\n{\"sources\": {\"agenda\": {\"tool\": \"agenda/aujourdhui\", \"every\": 15}}, \"components\": [{\"id\": \"root\", \"component\": \"Agenda\", \"events\": {\"@path\": \"/agenda/events\"}}]}\n```\n```eriphe:block changer\n{\"components\": [{\"id\": \"root\", \"component\": \"Row\", \"children\": [\"mails\", \"matin\"]}, {\"id\": \"mails\", \"component\": \"Button\", \"label\": \"Ajouter mes mails\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": {\"@path\": \"/agenda/events/0/title\"}}}}}, {\"id\": \"matin\", \"component\": \"Button\", \"label\": \"Un point chaque matin\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Fais-moi un point chaque matin à 8 h\"}}}}]}\n```\n",
+      "body": "Ta journée, tenue à jour : tes rendez-vous du jour. Je ne te préviens qu'au brief, jamais la nuit ; dis-le pour changer.\n\n> [!info|external] Aujourd'hui\n> - 11:00 · Point produit\n\n[Ajoute aussi mes mails à traiter](ask:) · [Fais-moi un point chaque matin à 8 h](ask:)\n",
       "expect": "$hash",
       "id": "$n8"
     }
@@ -300,7 +300,7 @@
     "talk": "$n8",
     "tool": "node_write",
     "args": {
-      "body": "Ta journée, tenue à jour : tes rendez-vous du jour. Je ne te préviens qu'au brief, jamais la nuit ; dis-le pour changer.\n\n```eriphe:block jour\n{\"sources\": {\"agenda\": {\"tool\": \"agenda/aujourdhui\", \"every\": 15}}, \"components\": [{\"id\": \"root\", \"component\": \"Agenda\", \"events\": {\"@path\": \"/agenda/events\"}}]}\n```\n```eriphe:block changer\n{\"components\": [{\"id\": \"root\", \"component\": \"Row\", \"children\": [\"mails\", \"matin\"]}, {\"id\": \"mails\", \"component\": \"Button\", \"label\": \"Ajouter mes mails\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Ajoute aussi mes mails à traiter\"}}}}, {\"id\": \"matin\", \"component\": \"Button\", \"label\": \"Un point chaque matin\", \"action\": {\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Fais-moi un point chaque matin à 8 h\"}}}}]}\n```\n",
+      "body": "Ta journée, tenue à jour : tes rendez-vous du jour. Je ne te préviens qu'au brief, jamais la nuit ; dis-le pour changer.\n\n## Aujourd'hui\n\n- 11:00 · Point produit\n\n[Ajoute aussi mes mails à traiter](ask:) · [Fais-moi un point chaque matin à 8 h](ask:)\n",
       "expect": "$hash",
       "id": "$n8"
     }

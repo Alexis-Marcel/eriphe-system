@@ -34,20 +34,6 @@ const SLOTS = 4; // validated hues; a fifth series and on are grey
 
 const isDate = (x: unknown) => typeof x === "string" && wall(x) !== null;
 
-// cleanSeries keeps what has the catalog's shape: a name and points with a
-// finite y.
-export function cleanSeries(v: unknown): Series[] {
-  if (!Array.isArray(v)) return [];
-  return v.flatMap((s) => {
-    if (!s || typeof s !== "object") return [];
-    const { name, points } = s as { name?: unknown; points?: unknown };
-    const pts = (Array.isArray(points) ? points : []).filter(
-      (p): p is Point => !!p && typeof p === "object" && (typeof p.x === "string" || typeof p.x === "number") && typeof p.y === "number" && isFinite(p.y),
-    );
-    return [{ name: typeof name === "string" ? name : "", points: pts }];
-  });
-}
-
 // The x values in order: numbers and dates sorted, labels as they come.
 function categories(series: Series[]): (string | number)[] {
   const seen = new Map<string, string | number>();

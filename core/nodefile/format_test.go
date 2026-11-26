@@ -39,7 +39,7 @@ func TestFormatOf(t *testing.T) {
 	}
 }
 
-// Today's files say format 2 and keep their bytes; the format is written
+// Today's files say format 3 and keep their bytes; the format is written
 // only past 1, so a file of format 1 written again says none.
 func TestFormatRoundTrip(t *testing.T) {
 	for _, name := range []string{"testdata/full.md", "testdata/fenced.md"} {
@@ -51,7 +51,7 @@ func TestFormatRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if out, _ := n.Bytes(); n.Meta.Format != 2 || !bytes.Equal(out, raw) {
+		if out, _ := n.Bytes(); n.Meta.Format != 3 || !bytes.Equal(out, raw) {
 			t.Errorf("%s: format %d, bytes kept %v", name, n.Meta.Format, bytes.Equal(out, raw))
 		}
 	}
@@ -126,8 +126,8 @@ func TestFormat1DropsLifetime(t *testing.T) {
 	if again, err := Upgrade(out, Conversions()[:1]); err != nil || !bytes.Equal(again, out) {
 		t.Fatalf("converted again: %v", err)
 	}
-	if full, _ := os.ReadFile("testdata/full.md"); string(out) != string(full) {
-		t.Fatal("format 1's full.md converted is not today's full.md")
+	if two, _ := os.ReadFile("testdata/format2.md"); string(out) != string(two) {
+		t.Fatal("format 1's full file converted is not format2.md")
 	}
 }
 

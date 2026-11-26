@@ -732,29 +732,8 @@ func onlyLinks(s string, toks []token) bool {
 	return gap(s[at:])
 }
 
-// Body is the node's body as its file holds it: its text, and its
-// blocks in their fences.
-func (n *Node) Body() (string, error) {
-	var b strings.Builder
-	for _, s := range n.segs {
-		if s.block == nil {
-			b.WriteString(s.text)
-			continue
-		}
-		out, err := s.block.bytes()
-		if err != nil {
-			return "", err
-		}
-		b.Write(out)
-	}
-	return b.String(), nil
-}
+// Body is the node's body as its file holds it.
+func (n *Node) Body() (string, error) { return n.body, nil }
 
-// Page reads the node's body as a page: a block in its fence is code.
-func (n *Node) Page() (*Page, error) {
-	body, err := n.Body()
-	if err != nil {
-		return nil, err
-	}
-	return ReadPage(body), nil
-}
+// Page reads the node's body as a page.
+func (n *Node) Page() (*Page, error) { return ReadPage(n.body), nil }

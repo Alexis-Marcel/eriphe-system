@@ -24,19 +24,14 @@ type WikiLink struct {
 }
 
 // WikiLinks are the links of the node's text, in order, each name once
-// (by LinkKey). A block's words are not text: its links are not read.
+// (by LinkKey).
 func (n *Node) WikiLinks() []WikiLink {
 	var out []WikiLink
 	seen := map[string]bool{}
-	for _, s := range n.segs {
-		if s.block != nil {
-			continue
-		}
-		for _, l := range WikiLinks(s.text) {
-			if k := LinkKey(l.Name); !seen[k] {
-				seen[k] = true
-				out = append(out, l)
-			}
+	for _, l := range WikiLinks(n.body) {
+		if k := LinkKey(l.Name); !seen[k] {
+			seen[k] = true
+			out = append(out, l)
 		}
 	}
 	return out

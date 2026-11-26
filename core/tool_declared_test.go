@@ -2,8 +2,6 @@ package main
 
 import (
 	"maps"
-	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -35,18 +33,6 @@ func TestToolDeclaringOnlyAnnotations(t *testing.T) {
 	}
 	if fs := c.callContext(t.Context(), "mcp__monitor__discard", map[string]any{"ids": []any{"a"}}); fs != nil {
 		t.Errorf("a card read for a tool that declares no read: %+v", fs)
-	}
-}
-
-// An item opened by a read that declares only its annotations: its title
-// and sender as its row says them, the rest under Détails, no field
-// guessed by its name.
-func TestItemOpenOfAnnotationsOnly(t *testing.T) {
-	tw, csrf, _, id := openWeb(t, `{"tool": "monitor/memo", "id": "id"}`)
-	code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/open", itemOpenIn{Block: "inbox", Source: "received", Item: "m1"})
-	if code != http.StatusOK || out["title"] != "Facture" || out["from"] != "Sam <sam@example.org>" || out["date"] != nil || out["body"] != nil ||
-		!strings.Contains(out["raw"].(string), "Le texte de m1") {
-		t.Fatalf("open: %d %v", code, out)
 	}
 }
 

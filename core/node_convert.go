@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
@@ -11,7 +12,8 @@ import (
 // The conversion of the nodes to format 3 (nodefile's topage.go) writes
 // in each page what code kept outside its file for a block: its sources'
 // last values (node_reads) and its items' notes (node_items), from
-// core.db. A table that is not there (a new install) gives nothing.
+// core.db. A table that is not there (a new install) gives nothing. Once
+// every node is converted, the tables go (openNodes, dropBlockTables).
 
 // blockSnapshots gives a block's snapshot from core.db; nil when code
 // kept nothing for it.
@@ -49,4 +51,18 @@ func blockSnapshots(db *sql.DB) nodefile.Snapshots {
 		}
 		return sn
 	}
+}
+
+// blockTables are what core.db kept for the blocks.
+var blockTables = []string{"node_reads", "node_items"}
+
+// dropBlockTables drops what core.db kept for the blocks: called once
+// every node is converted, when nothing reads it again.
+func dropBlockTables(db *sql.DB) error {
+	for _, t := range blockTables {
+		if _, err := db.Exec(`DROP TABLE IF EXISTS ` + t); err != nil {
+			return fmt.Errorf("drop %s: %w", t, err)
+		}
+	}
+	return nil
 }

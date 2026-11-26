@@ -19,7 +19,7 @@ func nodeWrite(c *core, id, body, expect, author string) (*nodestore.Doc, error)
 
 // The graph opens next to core.db, refuses a secret with the memory's
 // filter, and lets a real node through: the format's own example, live
-// sources and links included.
+// links included.
 func TestNodesRefuseSecretsOnly(t *testing.T) {
 	cfg := &Config{DB: filepath.Join(t.TempDir(), "core.db")}
 	s, err := openNodes(cfg, nil)
@@ -48,10 +48,6 @@ func TestNodesRefuseSecretsOnly(t *testing.T) {
 	n, err := nodefile.Parse(example)
 	if err != nil {
 		t.Fatal(err)
-	}
-	// What an author writes: the body, code's fields left out.
-	for _, b := range n.Blocks() {
-		b.External = false
 	}
 	raw, _ := n.Bytes()
 	_, after, _ := strings.Cut(string(raw), "\n---\n")

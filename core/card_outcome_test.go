@@ -24,8 +24,8 @@ func TestFailedYesLeavesThePage(t *testing.T) {
 		t.Fatalf("cards %+v", c.pendingProposals())
 	}
 	ref := proposalRef(cardCalls, calls[0].ID)
-	if c.itemCards(node, "mails")["m2"] != ref {
-		t.Fatalf("the card is not on its row: %v", c.itemCards(node, "mails"))
+	if rowCards(c, node)["m2"] != ref {
+		t.Fatalf("the card is not on its row: %v", rowCards(c, node))
 	}
 
 	fm.mu.Lock()
@@ -50,11 +50,8 @@ func TestFailedYesLeavesThePage(t *testing.T) {
 	if v := p.Settled[i]; v.Exec != callFailed || v.ExecWhy != callWhyError || !strings.Contains(v.ExecError, "403 Forbidden") || !v.ExecErrorExt {
 		t.Errorf("settled %+v", v)
 	}
-	if card, ok := c.itemCards(node, "mails")["m2"]; ok {
+	if card, ok := rowCards(c, node)["m2"]; ok {
 		t.Errorf("the failed card stays on its row: %s", card)
-	}
-	if n := c.itemNotes(node, "mails")["m2"]; n.State == itemDone {
-		t.Error("a failed call marked its item done")
 	}
 	if raw, _ := c.nodes.Trace(node); !strings.Contains(string(raw), "Échec") || !strings.Contains(string(raw), "403 Forbidden") {
 		t.Errorf("the trace does not keep why:\n%s", raw)
@@ -77,7 +74,7 @@ func TestFailedYesLeavesThePage(t *testing.T) {
 		t.Errorf("told %d times", n)
 	}
 
-	// A yes that works: « C'est fait », and its item done.
+	// A yes that works: « C'est fait ».
 	fm.mu.Lock()
 	fm.moveFails = ""
 	fm.mu.Unlock()
