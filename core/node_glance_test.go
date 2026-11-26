@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -219,6 +220,12 @@ func TestNodeGlanceExternal(t *testing.T) {
 	body, _ := d.Node.Body()
 	if !strings.Contains(body, "> [!figures|glance 2%|external]\n") {
 		t.Fatalf("not marked:\n%s", body)
+	}
+	// Whoever reads it is tainted, the brain or a task.
+	sum, _ := c.nodes.Get(id)
+	var tainted []string
+	if _, err := c.readNodeFor(sum, 0, nodeReading{taint: func(ref string) { tainted = append(tainted, ref) }}); err != nil || !slices.Contains(tainted, nodeRef(id)) {
+		t.Errorf("a read of it tainted %v (%v)", tainted, err)
 	}
 	_, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(nodefile.Source) error { return nil }, func(n *nodefile.Node) error {
 		return n.AuthorBody(strings.Replace(body, "|external", "", 1))

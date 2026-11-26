@@ -471,7 +471,7 @@ func (s *Store) change(id, expect, author, op string, fn func(*nodefile.Node) er
 	if err := fn(n); err != nil {
 		return nil, err
 	}
-	if err := s.keepHeard(cur, n); err != nil {
+	if err := s.keepHeard(cur, expect, n); err != nil {
 		return nil, err
 	}
 	if err := n.Validate(); err != nil {

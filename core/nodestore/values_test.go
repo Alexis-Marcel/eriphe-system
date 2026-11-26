@@ -1,6 +1,7 @@
 package nodestore
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -151,6 +152,35 @@ func TestCommitReadings(t *testing.T) {
 	}
 	if ids, _ := s.CommitReadings(); ids != nil {
 		t.Errorf("a second time: %v", ids)
+	}
+}
+
+// An author's write made on the version read before a readings version
+// is not stale: the readings are code's, its values kept; and a second
+// readings version waits for the next day.
+func TestWriteOverReadings(t *testing.T) {
+	e := newEnv(t)
+	s, _ := e.open(t)
+	d := mustCreate(t, s, New{Title: "Placements", Body: pea})
+	id := d.Node.Meta.ID
+	hearPEA(t, s, id, 18412)
+	if ids, _ := s.CommitReadings(); len(ids) != 1 {
+		t.Fatalf("CommitReadings = %v", ids)
+	}
+	w, err := write(s, id, pea+"Une ligne.\n", d.Version.Hash, "brain")
+	if err != nil {
+		t.Fatalf("a write made before the readings: %v", err)
+	}
+	if b := bodyText(t, w); w.Version.N != 3 || !strings.Contains(b, "[18 412 €]") || !strings.Contains(b, "Une ligne.") {
+		t.Errorf("v%d:\n%s", w.Version.N, b)
+	}
+	hearPEA(t, s, id, 18500)
+	if ids, _ := s.CommitReadings(); ids != nil {
+		t.Errorf("a second readings version the same day: %v", ids)
+	}
+	// An author's own change made on the old version is still stale.
+	if _, err := write(s, id, "Autre chose.\n", d.Version.Hash, "brain"); !errors.Is(err, ErrConflict) {
+		t.Errorf("a stale write: %v", err)
 	}
 }
 

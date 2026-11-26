@@ -241,8 +241,9 @@ event, without a model:
 - **Someone else's events.** An event written by someone else (a monitor of a server not trusted)
   marks the callout that holds its line `external`: `> [!figures|external]`. The option is code's:
   an author's write that takes it off while the line stays in the page, or marks a callout code did
-  not, is refused. An event of a trusted source takes it off when it feeds every line of that
-  callout. Outside a callout, an event written by someone else only writes numbers.
+  not, is refused; no event takes it off (words around a number may still be someone else's). A
+  node with a callout so marked taints whoever reads it, as an external node does. Outside a
+  callout, an event written by someone else only writes numbers.
 
 ### A figure at a glance
 

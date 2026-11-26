@@ -609,9 +609,10 @@ func (c *core) untrustedSources(b *nodefile.Block) bool {
 }
 
 // nodeExternal tells whether a node may hold someone else's words: it,
-// or one of its blocks.
+// one of its blocks, or a callout of its page an event wrote in
+// (node_listen.go).
 func nodeExternal(n *nodefile.Node) bool {
-	return n.Meta.External || slices.ContainsFunc(n.Blocks(), func(b *nodefile.Block) bool { return b.External })
+	return n.Meta.External || slices.ContainsFunc(n.Blocks(), func(b *nodefile.Block) bool { return b.External }) || n.CalloutExternal()
 }
 
 // blockSig is what an author writes of a block, in one form: its

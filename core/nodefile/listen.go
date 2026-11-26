@@ -29,8 +29,9 @@ import (
 //     written again, added when there is none.
 //   - An event written by someone else (external) marks the callout that
 //     holds the line: its option external, code's only (AuthorBody refuses
-//     an author's write that changes it). Outside a callout, nothing could
-//     say whose words they are: only a number is written there.
+//     an author's write that changes it), never taken off by an event.
+//     Outside a callout, nothing could say whose words they are: only a
+//     number is written there.
 
 // EventKindRe is an event's kind: lowercase words joined by dots, two to
 // four of them.
@@ -180,54 +181,15 @@ func hear(body string, ev Heard) (string, int) {
 		}
 		lines[ln-1] = t
 	}
-	// The callouts fed: marked when the event is someone else's; the mark
-	// taken off by a trusted event only when it feeds every line of it.
-	for c := range fed {
-		switch {
-		case ev.External:
+	// The callouts fed by someone else's event are marked; no event takes
+	// the mark off (words around a number, a line it did not rewrite, may
+	// still be someone else's).
+	if ev.External {
+		for c := range fed {
 			lines[c-1] = calloutMark(lines[c-1], true)
-		case allHear(p, c, ev):
-			lines[c-1] = calloutMark(lines[c-1], false)
 		}
 	}
 	return join(lines), count
-}
-
-// allHear tells whether every on: link of the callout at line c follows ev.
-func allHear(p *Page, c int, ev Heard) bool {
-	for _, l := range p.Links {
-		if l.Kind != LinkOn || !within(p, l.Line, c) {
-			continue
-		}
-		if o, ok := ParseOn(l.Target); !ok || !o.Hears(ev.Kind, ev.Key) {
-			return false
-		}
-	}
-	return true
-}
-
-// within tells whether line ln is in the callout whose first line is c,
-// or in a callout inside it.
-func within(p *Page, ln, c int) bool {
-	var walk func(bs []PageBlock) (bool, bool)
-	walk = func(bs []PageBlock) (found, in bool) {
-		for _, b := range bs {
-			if b.Kind == KindCallout && b.Line == c {
-				return true, ln >= b.Line && ln <= b.End
-			}
-			if f, i := walk(b.Body); f {
-				return f, i
-			}
-			for _, it := range b.Items {
-				if f, i := walk(it.Detail); f {
-					return f, i
-				}
-			}
-		}
-		return false, false
-	}
-	_, in := walk(p.Blocks)
-	return in
 }
 
 // calloutHeadRe cuts a callout's first line: its >, [!type, its options,
@@ -420,13 +382,13 @@ func decimalsOf(v float64) int {
 
 // inertText is a text as a line's label holds it: one line, OnTextMax
 // runes at most, without what Markdown reads as a link, an image, code
-// or HTML, nor a table's bar.
+// or HTML, nor a table's bar or an item's date.
 func inertText(s string) string {
 	s = strings.Map(func(r rune) rune {
 		switch {
 		case unicode.IsControl(r), unicode.IsSpace(r):
 			return ' '
-		case strings.ContainsRune("[]()`<>|\\", r):
+		case strings.ContainsRune("[]()`<>|\\📅", r):
 			return -1
 		}
 		return r
@@ -438,9 +400,11 @@ func inertText(s string) string {
 	return s
 }
 
-// stampRe is the date after a line's link: « · relu le … » or « · read
-// on … », to the next · or link.
-var stampRe = regexp.MustCompile(`^\s*·\s*(?:relu le|read on)\b[^·\[]*`)
+// stampRe is the date after a line's link, as ReadStamp writes it (« ·
+// relu le 26/11 à 10 h 05 », « · read on Nov 26 at 10:05 »), its hour
+// left out or short (« à 10 h ») when an author wrote it so; nothing
+// after it.
+var stampRe = regexp.MustCompile(`^[ \t]*·[ \t]*(?:relu le \d{1,2}/\d{1,2}(?:/\d{2,4})?(?: à \d{1,2} h(?: \d{2})?)?|read on [A-Z][a-z]{2} \d{1,2}(?: at \d{1,2}:\d{2})?)`)
 
 // restamp is what follows a link, its date written again (or added).
 func restamp(rest, stamp string) string {
@@ -448,9 +412,7 @@ func restamp(rest, stamp string) string {
 		return rest
 	}
 	if loc := stampRe.FindStringIndex(rest); loc != nil {
-		m := rest[:loc[1]]
-		tail := m[len(strings.TrimRight(m, " \t")):]
-		return " · " + stamp + tail + rest[loc[1]:]
+		return " · " + stamp + rest[loc[1]:]
 	}
 	return " · " + stamp + rest
 }
@@ -501,7 +463,7 @@ func lineSpans(t string) []onSpan {
 		}
 		end := k.end
 		if loc := stampRe.FindStringIndex(t[end:]); loc != nil {
-			end += len(strings.TrimRight(t[end:end+loc[1]], " \t"))
+			end += loc[1]
 		}
 		out = append(out, onSpan{target: k.target, text: t[k.start:end]})
 	}
@@ -552,6 +514,36 @@ func KeepHeard(was, now, written string) string {
 	}
 	if !changed {
 		return written
+	}
+	return join(lines)
+}
+
+// CalloutExternal tells a page that holds a callout marked external:
+// someone else's words may be in it, and whoever reads it is tainted.
+func (n *Node) CalloutExternal() bool {
+	p, err := n.Page()
+	return err == nil && len(externalTargets(p)) > 0
+}
+
+// withoutValues is a page's text as its authors wrote it: the values and
+// dates code writes on its on: lines blanked, its callouts' external
+// marks taken off. Code's lines aside, two texts alike there are the same
+// authors' words.
+func withoutValues(text string) string {
+	p := ReadPage(text)
+	lines, join := splitBody(text)
+	for i, t := range lines {
+		if i >= len(p.info) || p.info[i].code {
+			continue
+		}
+		t = calloutMark(t, false)
+		spans := lineSpans(t)
+		for j := len(spans) - 1; j >= 0; j-- {
+			s := spans[j]
+			at := strings.LastIndex(t, s.text)
+			t = t[:at] + "[](" + LinkOn + ":" + s.target + ")" + t[at+len(s.text):]
+		}
+		lines[i] = t
 	}
 	return join(lines)
 }

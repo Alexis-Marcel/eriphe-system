@@ -1313,7 +1313,7 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   inflates, the checksum holds, every object of the branch is in it) and only then takes its name;
   older copies are dropped only once the night's are made. A failed backup is logged and leaves
   the repository and the earlier copies as they were, and is tried again at the next minute's
-  tick, not the next night. After it, when the repository holds 2,000 loose objects or more,
+  tick, not the next night. After it, when the repository holds 500 loose objects or more,
   `Pack` (`nodestore/pack.go`) packs it, writes waiting: every object the branch reaches into one
   pack, written aside and read back whole (every object inflates, the checksum holds, every object
   of the branch is in it) before it and its index take their names; the repository is opened again
@@ -1518,7 +1518,7 @@ a page: the brain composes each one from the catalog.
   event journal and, one event at a time in its order, rewrites the lines of every node not archived
   that follow it (`heard` → the store's `WriteValues`, no version): the label's number in the
   author's style, or a short inert text, and the date after it. An external event marks the line's
-  callout `external` (code's: `AuthorBody` refuses a write that takes it off); outside a callout it
+  callout `external` (code's: `AuthorBody` refuses a write that takes it off, no event does), and the node then taints whoever reads it (`nodeExternal`); outside a callout it
   writes numbers only. Events past 512 waiting are dropped, logged.
 - **A node's glance** (`node_glance.go`, `nodefile/glance.go`, table `node_glance` in `core.db`): a
   page's callout marked `glance <threshold>` (`glance 3%`, `glance 500`, `previous` after it), or

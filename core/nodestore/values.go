@@ -1,12 +1,14 @@
 package nodestore
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
@@ -139,17 +141,18 @@ func (s *Store) isPending(id string) bool {
 	return s.db.QueryRow(`SELECT blob FROM node_pending WHERE id = ?`, id).Scan(&blob) == nil
 }
 
-// keepHeard keeps in n, a write made on the node's last version, the
-// values code wrote since (nodefile.KeepHeard).
-func (s *Store) keepHeard(cur *Doc, n *nodefile.Node) error {
-	if !s.isPending(cur.Node.Meta.ID) {
+// keepHeard keeps in n, a write made on the version whose hash is
+// expect, the values code wrote since: in no version yet, or in versions
+// of code's since that one (readings) (nodefile.KeepHeard).
+func (s *Store) keepHeard(cur *Doc, expect string, n *nodefile.Node) error {
+	if expect == cur.Version.Hash && !s.isPending(cur.Node.Meta.ID) {
 		return nil
 	}
-	last, err := s.nodeAt(cur.Version.Hash, cur.File)
+	read, err := s.nodeAt(expect, cur.File)
 	if err != nil {
 		return err
 	}
-	was, err := last.Body()
+	was, err := read.Body()
 	if err != nil {
 		return err
 	}
@@ -183,11 +186,19 @@ func (s *Store) nodeAt(hash, file string) (*nodefile.Node, error) {
 func (s *Store) CommitReadings() ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := s.opts.Now()
+	// One a day at most, whoever calls it how often.
+	var last sql.NullInt64
+	if err := s.db.QueryRow(`SELECT MAX(at) FROM node_versions WHERE author = ?`, Readings).Scan(&last); err != nil {
+		return nil, err
+	}
+	if last.Valid && time.Unix(last.Int64, 0).In(now.Location()).Format(time.DateOnly) == now.Format(time.DateOnly) {
+		return nil, nil
+	}
 	pending, err := s.pendingBlobs()
 	if err != nil || len(pending) == 0 {
 		return nil, err
 	}
-	now := s.opts.Now()
 	var changes []change
 	var stamps []stamp
 	var xs []indexed

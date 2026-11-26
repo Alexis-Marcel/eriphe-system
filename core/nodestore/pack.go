@@ -2,7 +2,6 @@ package nodestore
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,19 +16,19 @@ import (
 )
 
 // Packing: each version stores its file as a loose object, compressed
-// alone. Pack puts every object the branch reaches into one pack, with
+// alone. Pack puts every object a reference reaches into one pack, with
 // deltas between a file's versions: git gc, without prune. go-git's own
 // repack removes the loose objects before its pack is written whole, so a
 // failure there loses the history; Pack does it in the order that loses
 // nothing:
 //
 //  1. the pack and its index are written aside, read back whole (every
-//     object inflates, the checksum holds, every object the branch reaches
+//     object inflates, the checksum holds, every object a reference reaches
 //     is in it), and only then take their names;
 //  2. the repository is opened again, and reads every object the branch
 //     reaches;
 //  3. only then are the loose copies of what the pack holds removed, and
-//     the packs before it (what they hold that the branch reaches, the new
+//     the packs before it (what they hold that a reference reaches, the new
 //     one holds too). An object no branch reaches (a write that stopped
 //     before its commit) stays loose.
 //
@@ -39,7 +38,7 @@ import (
 
 // PackLoose is how many loose objects the repository holds before Pack
 // packs them.
-const PackLoose = 2000
+const PackLoose = 500
 
 // Pack packs the repository when it holds PackLoose loose objects or more;
 // it tells whether it packed. Writes wait meanwhile.
@@ -63,16 +62,23 @@ func (s *Store) looseObjects() (map[plumbing.Hash]bool, error) {
 	return out, ls.ForEachObjectHash(func(h plumbing.Hash) error { out[h] = true; return nil })
 }
 
-// pack packs every object the branch reaches, the lock held.
+// pack packs every object a reference reaches, the lock held.
 func (s *Store) pack() error {
-	head, err := s.repo.Head()
-	if errors.Is(err, plumbing.ErrReferenceNotFound) {
-		return nil
-	}
+	refs, err := s.repo.References()
 	if err != nil {
 		return err
 	}
-	objs, err := revlist.Objects(s.repo.Storer, []plumbing.Hash{head.Hash()}, nil)
+	var tips []plumbing.Hash
+	err = refs.ForEach(func(ref *plumbing.Reference) error {
+		if ref.Type() == plumbing.HashReference {
+			tips = append(tips, ref.Hash())
+		}
+		return nil
+	})
+	if err != nil || len(tips) == 0 {
+		return err
+	}
+	objs, err := revlist.Objects(s.repo.Storer, tips, nil)
 	if err != nil {
 		return err
 	}
@@ -80,7 +86,7 @@ func (s *Store) pack() error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	name, err := writePack(s.repo, objs, append(objs, head.Hash()), dir)
+	name, err := writePack(s.repo, objs, append(objs, tips...), dir)
 	if err != nil {
 		return fmt.Errorf("pack: %w", err)
 	}
@@ -121,7 +127,7 @@ func (s *Store) pack() error {
 }
 
 // reopen opens the repository again (go-git keeps the packs it found) and
-// checks it reads every object the branch reaches.
+// checks it reads every object a reference reaches.
 func (s *Store) reopen() error {
 	r, err := git.PlainOpen(s.dir)
 	if err != nil {

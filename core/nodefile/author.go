@@ -172,7 +172,8 @@ func (n *Node) AuthorText() (string, error) {
 // AuthorBytes is the node as its authors wrote it: its front matter and
 // body in their canonical form, without code's fields (a block's
 // external, the node's external, title_trusted and
-// opened_by, done, links and format). Two versions alike
+// opened_by, done, links and format; the values and dates of the on:
+// lines and the callouts' external marks). Two versions alike
 // there differ only by what code wrote: an author's write made on one
 // applies on the other.
 func (n *Node) AuthorBytes() ([]byte, error) {
@@ -186,7 +187,7 @@ func (n *Node) AuthorBytes() ([]byte, error) {
 	b.Write(front)
 	for _, s := range n.segs {
 		if s.block == nil {
-			b.WriteString(s.text)
+			b.WriteString(withoutValues(s.text)) // the values on: lines follow are code's (listen.go)
 			continue
 		}
 		bare := *s.block

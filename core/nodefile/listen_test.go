@@ -96,6 +96,7 @@ func TestRelabel(t *testing.T) {
 		{"+2 %", 3.0, "+3 %", true},
 		{"ok", "en panne", "en panne", true},
 		{"ok", "a [link](do:mail/trash) `x` <b>|", "a linkdo:mail/trash x b", true},
+		{"ok", "rdv 📅 2026-12-01", "rdv 2026-12-01", true},
 		{"ok", strings.Repeat("a", 200), strings.Repeat("a", OnTextMax-1) + "…", true},
 		{"ok", "  \n ", "", false},
 		{"ok", []any{1.0}, "", false},
@@ -127,17 +128,49 @@ func TestHearMarksTheCalloutOfAnExternalEvent(t *testing.T) {
 			t.Errorf("body lacks %q:\n%s", want, b)
 		}
 	}
-	// A trusted event that feeds every line of it takes the mark off.
+	if !n.CalloutExternal() {
+		t.Error("CalloutExternal: false")
+	}
+	// A trusted event writes its text out of the callout, and leaves the
+	// mark: words around a number may still be someone else's.
 	ev.External = false
 	n.Hear(ev)
-	if b := bodyOf(t, n); !strings.Contains(b, "> [!figures|aside] Prod\n") || !strings.Contains(b, "- Ailleurs : [dégradé]") {
+	if b := bodyOf(t, n); !strings.Contains(b, "> [!figures|aside|external] Prod\n") || !strings.Contains(b, "- Ailleurs : [dégradé]") {
 		t.Errorf("body:\n%s", b)
 	}
-	// One that feeds a line of it only leaves the mark.
-	n = newPage(t, "> [!figures|external]\n> - A : [1](on:monitor.changed/a)\n> - B : [2](on:monitor.changed/b)\n")
-	n.Hear(Heard{Kind: "monitor.changed", Key: "a", Payload: map[string]any{"value": 3.0}})
-	if b := bodyOf(t, n); !strings.HasPrefix(b, "> [!figures|external]\n> - A : [3]") {
+}
+
+// The date after a link is its own: what follows it on the line (a
+// table's cells, words) stays, event after event.
+func TestHearKeepsWhatFollowsTheDate(t *testing.T) {
+	n := newPage(t, "| Compte | Valeur | Part |\n|---|---|---|\n| PEA | [18 385 €](on:monitor.changed/pea) | 3 % |\n\nLe PEA vaut [18 385 €](on:monitor.changed/pea) · relu le 25/11 à 9 h, à peu près.\n")
+	for i, v := range []float64{18412, 18500} {
+		n.Hear(Heard{Kind: "monitor.changed", Key: "pea", Payload: map[string]any{"value": v}, Stamp: ReadStamp(stampAt.Add(time.Duration(i)*time.Hour), "fr")})
+	}
+	want := "| Compte | Valeur | Part |\n|---|---|---|\n| PEA | [18 500 €](on:monitor.changed/pea) · relu le 26/11 à 11 h 05 | 3 % |\n\nLe PEA vaut [18 500 €](on:monitor.changed/pea) · relu le 26/11 à 11 h 05, à peu près.\n"
+	if b := bodyOf(t, n); b != want {
+		t.Errorf("body:\n%s\nwant:\n%s", b, want)
+	}
+	n = newPage(t, "[1](on:monitor.changed/a) · read on Nov 2 at 9:05 · [ok](on:monitor.changed/b)\n")
+	n.Hear(Heard{Kind: "monitor.changed", Key: "a", Payload: map[string]any{"value": 2.0}, Stamp: ReadStamp(stampAt, "en")})
+	if b := bodyOf(t, n); b != "[2](on:monitor.changed/a) · read on Nov 26 at 10:05 · [ok](on:monitor.changed/b)\n" {
 		t.Errorf("body:\n%s", b)
+	}
+}
+
+// What the authors wrote leaves out the values and the marks code
+// writes: two versions that differ by them only are the same authors'.
+func TestAuthorBytesLeaveTheValuesOut(t *testing.T) {
+	a := newPage(t, "> [!figures]\n> - PEA : [18 385 €](on:monitor.changed/pea)\n\n```\n[1](on:monitor.changed/pea) · relu le 1/1\n```\n")
+	b := newPage(t, "> [!figures|external]\n> - PEA : [18 412 €](on:monitor.changed/pea) · relu le 26/11 à 10 h 05\n\n```\n[1](on:monitor.changed/pea) · relu le 1/1\n```\n")
+	ra, _ := a.AuthorBytes()
+	rb, _ := b.AuthorBytes()
+	if string(ra) != string(rb) {
+		t.Errorf("AuthorBytes differ:\n%s\n%s", ra, rb)
+	}
+	c := newPage(t, "> [!figures]\n> - CTO : [18 385 €](on:monitor.changed/pea)\n\n```\n[1](on:monitor.changed/pea) · relu le 1/1\n```\n")
+	if rc, _ := c.AuthorBytes(); string(rc) == string(ra) {
+		t.Error("the author's words left out too")
 	}
 }
 
