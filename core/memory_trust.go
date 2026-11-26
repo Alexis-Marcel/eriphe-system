@@ -123,13 +123,19 @@ func scanMemoryText(parts ...string) scanResult {
 // scanSecrets tells why a text holds a secret: a credential, a long
 // random string, a link with a password or a token; "" when it holds
 // none. The memory and the graph's nodes (nodes.go) refuse such a text.
-func scanSecrets(text string) string {
+func scanSecrets(text string) string { return scanSecretsNamed(text, text) }
+
+// scanSecretsNamed is scanSecrets with the long random strings looked for
+// in named: text with what names an item left out (a node's item
+// references, refuseSecret). A credential's known shape and a link's
+// password or token are still looked for in the whole text.
+func scanSecretsNamed(text, named string) string {
 	for _, re := range secretRes {
 		if re.MatchString(text) {
 			return "it looks like a credential: secrets belong in the vault"
 		}
 	}
-	for _, m := range longTokenRe.FindAllString(withoutLinkPaths(text), -1) {
+	for _, m := range longTokenRe.FindAllString(withoutLinkPaths(named), -1) {
 		if looksRandom(m) {
 			return "it holds a long random string, which looks like a credential"
 		}
