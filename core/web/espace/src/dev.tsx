@@ -4,6 +4,7 @@ import { galleryFixtures, sampleOrb, sampleProposals } from "./a2ui/fixtures";
 import { ProposalsContext, type Proposals } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
 import { BlocksGallery } from "./dev-blocks";
+import { DevMarkdown } from "./devmd/DevMarkdown";
 import { physicsGraph, PhysicsPanel } from "./dev-physics";
 import { setReads, type Boot } from "./data/api";
 import { sample } from "./data/sample";
@@ -17,7 +18,8 @@ import strings from "./strings.json";
 // samplecore.ts, sampledays.ts), made-up proposals and orb; ?gallery, every
 // component of the catalog; ?blocks, the blocks a page is made of, a page
 // each (dev-blocks.tsx); ?physique, the graph's forces to tune by hand on
-// fixed graphs (dev-physics.tsx). main.tsx imports it only on the dev server: none
+// fixed graphs (dev-physics.tsx); ?markdown, the
+// prototype of pages written as plain Markdown (devmd/). main.tsx imports it only on the dev server: none
 // of it is in the built app (a test checks espace.js holds no sample's words).
 
 export type Dev = { proposals: Proposals; start(): () => void; gallery: boolean; Panel?: ComponentType };
@@ -40,7 +42,7 @@ export function dev(lang: Lang): Dev {
   });
   return {
     proposals: sampleProposals(lang),
-    gallery: ["gallery", "blocks"].some((k) => new URLSearchParams(location.search).has(k)),
+    gallery: ["gallery", "blocks", "markdown"].some((k) => new URLSearchParams(location.search).has(k)),
     Panel: physics ? PhysicsPanel : undefined,
     start() {
       if (physics) {
@@ -59,7 +61,9 @@ export function dev(lang: Lang): Dev {
 // the blocks gallery; ?gallery, every component of the catalog, one
 // surface under the other.
 export function Gallery() {
-  return new URLSearchParams(location.search).has("blocks") ? <BlocksGallery /> : <Catalog />;
+  const q = new URLSearchParams(location.search);
+  if (q.has("markdown")) return <DevMarkdown />;
+  return q.has("blocks") ? <BlocksGallery /> : <Catalog />;
 }
 
 function Catalog() {

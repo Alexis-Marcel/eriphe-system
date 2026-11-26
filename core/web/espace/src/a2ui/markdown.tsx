@@ -300,7 +300,7 @@ function render(items: Inline[], ctx: Ctx, key: string): ReactNode[] {
   });
 }
 
-function inline(text: string, ctx: Ctx, key = "i"): ReactNode[] {
+export function inline(text: string, ctx: { newTab: string; wiki?: Wiki }, key = "i"): ReactNode[] {
   return render(emphasis(scan(text)), ctx, key);
 }
 
