@@ -220,7 +220,9 @@ const projetToday = `L'app se ferme au lancement sur iOS 19 : une clé manquante
 - Pas de retour à la 3.1 : le correctif est plus rapide que le retour arrière.
 - La clé reste obligatoire : un test vérifie sa présence.
 
-\`\`\`eriphe:card calls:530\`\`\`
+\`\`\`eriphe:block publier
+{"card": "calls:530"}
+\`\`\`
 
 \`\`\`eriphe:block reponses
 {"components": [{"id":"root","component":"Asks","items":["Teste sur un vrai téléphone d'abord"]}]}

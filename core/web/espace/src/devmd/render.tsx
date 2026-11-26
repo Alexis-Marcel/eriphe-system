@@ -100,7 +100,6 @@ export function MdPage({ md, setMd, page, openNode, embed, onProblems }: { md: s
 }
 
 function MdBody({ md, setMd, page, openNode, embed, depth, onProblems, extra = [] }: { md: string; setMd(f: (s: string) => string): void; page: string; openNode(t: string): void; embed: Ctx["embed"]; depth: number; onProblems?(p: Problem[]): void; extra?: Problem[] }) {
-  const { t } = useWords();
   const parsed = useMemo(() => parse(md), [md]);
   const year = useMemo(() => Number((dayOf(parsed.written?.text ?? "", 0) ?? parsed.front?.date ?? "").slice(0, 4)) || new Date().getFullYear(), [parsed]);
   const [viewing, setViewing] = useState<{ target: string; label: string } | null>(null);
@@ -162,7 +161,7 @@ function MdBody({ md, setMd, page, openNode, embed, depth, onProblems, extra = [
           <div className="md-toast" role="status">
             <b>Envoyé à Eriphe, comme ton message :</b> « {said.text} »{said.line && <small>avec sa ligne : <code>{said.line.trim()}</code></small>}
             <button type="button" className="linkish" onClick={() => setSaid(null)}>
-              {t("espace.page.close")}
+              Fermer
             </button>
           </div>
         )}
@@ -193,10 +192,34 @@ export function check(p: Parsed): Problem[] {
             if (!p.refs.has(tk.id)) out.push({ ln: b.ln, what: `référence [${tk.id}] sans cible en bas de page` });
           }
           if (tk.t === "due" && !wall(tk.date)) out.push({ ln: b.ln, what: `date impossible ${tk.date}` });
+          if (tk.t === "act" && tk.scheme === "do" && !onlyActs(s)) out.push({ ln: b.ln, what: `[${tk.label}](do:${tk.target}) au milieu d'un texte : une carte de liste se pose sur sa propre ligne, sous un titre` });
         }
+      for (const s of texts) if (/📅(?!\s*\d{4}-\d{2}-\d{2})/u.test(s)) out.push({ ln: b.ln, what: "📅 sans date AAAA-MM-JJ : non lue" });
       if (b.k === "list") for (const it of b.items) walk(it.children);
       if (b.k === "callout") {
         if (!known.has(b.type)) out.push({ ln: b.ln, what: `encadré inconnu [!${b.type}] : dessiné comme une note` });
+        for (const x of leftovers(b)) out.push({ ln: x.ln, what: `[!${b.type}] ne lit pas ce ${x.k === "p" ? "paragraphe" : "bloc"} : dessiné sous l'encadré` });
+        if (b.type === "agenda") {
+          let day: string | undefined;
+          let seenDay = false;
+          const days: string[] = [];
+          for (const x of b.body) {
+            if (x.k === "h") {
+              seenDay = true;
+              day = dayOf(x.text, new Date().getFullYear());
+              if (!day) out.push({ ln: x.ln, what: `jour illisible « ${x.text} » : ses rendez-vous ne sont pas dessinés` });
+              else days.push(day);
+            }
+            if (x.k === "list") {
+              if (!seenDay) out.push({ ln: x.ln, what: "rendez-vous avant le premier ### jour : pas dessinés" });
+              for (const it of x.items) if (day && !/^\d{1,2}[:h]\d{2}/.test(it.text.trim())) out.push({ ln: it.ln, what: "rendez-vous sans heure : dessiné toute la journée" });
+              for (const it of x.items) if (it.children.length) out.push({ ln: it.ln, what: "le détail d'un rendez-vous n'est pas dessiné par l'agenda (seule sa carte l'est)" });
+            }
+          }
+          const sorted = [...days].sort();
+          if (sorted.length && (Date.parse(sorted[sorted.length - 1]) - Date.parse(sorted[0])) / 86400000 >= 7) out.push({ ln: b.ln, what: "agenda de plus de 7 jours : les derniers ne sont pas dessinés" });
+          if (sorted.length > 2) out.push({ ln: b.ln, what: "à partir du 3e jour, l'agenda dessine des petites colonnes sans le lieu" });
+        }
         if (b.type === "chart") {
           const tb = b.body.find((x) => x.k === "table");
           if (!tb) out.push({ ln: b.ln, what: "graphique sans tableau" });
@@ -658,7 +681,26 @@ function lines(bs: Block[]): Item[] {
   return bs.flatMap((x) => (x.k === "list" ? x.items : []));
 }
 
-function CalloutBody({ b }: { b: Extract<Block, { k: "callout" }>; all: Block[] }) {
+// What each typed callout reads of its body; anything else is drawn under
+// it, never dropped (and check() tells the author).
+const READS: Record<string, Block["k"][]> = { figures: ["list"], chart: ["table"], steps: ["list"], agenda: ["h", "list"], person: ["list", "p"] };
+export const leftovers = (b: Extract<Block, { k: "callout" }>) => (READS[b.type] ? b.body.filter((x) => !READS[b.type].includes(x.k)) : []);
+
+function CalloutBody({ b, all }: { b: Extract<Block, { k: "callout" }>; all: Block[] }) {
+  const rest = leftovers(b);
+  return (
+    <>
+      <TypedBody b={b} all={all} />
+      {rest.length > 0 && (
+        <div className="md-leftover">
+          <Blocks blocks={rest} all={rest} />
+        </div>
+      )}
+    </>
+  );
+}
+
+function TypedBody({ b }: { b: Extract<Block, { k: "callout" }>; all: Block[] }) {
   const title = b.title ? plain(b.title) : undefined;
   switch (b.type) {
     case "figures":
@@ -790,9 +832,9 @@ function Step({ it, st }: { it: Item; st: string; lang: string }) {
         {st === "done" ? <Icon name="check" /> : st === "failed" ? <Icon name="close" /> : null}
       </span>
       <span className="a2-step-body">
-        <span className={`a2-step-label${it.children.length ? " md-step-open" : ""}`} onClick={() => setOpen(!open)}>
+        <span className={`a2-step-label${it.children.length ? " md-step-open" : ""}`} onClick={() => setOpen(!open)} aria-expanded={it.children.length ? open : undefined}>
           <Toks toks={rest} ln={it.ln} />
-          {it.children.length > 0 && <span className="a2-sec-chev md-chev-s" aria-expanded={open} />}
+          {it.children.length > 0 && <span className="a2-sec-chev md-chev-s" />}
         </span>
         {due && (
           <span className="a2-step-date">

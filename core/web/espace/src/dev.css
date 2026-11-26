@@ -106,3 +106,4 @@
 .md-toast small { color: var(--fg3); }
 .md-toast button { align-self: flex-end; }
 .md-plainlist ul, .md-plainlist ol { margin: 0; }
+.md-leftover { margin-top: -6px; padding-left: 10px; border-left: 2px solid var(--line); }
