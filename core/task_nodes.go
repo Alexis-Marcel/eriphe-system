@@ -278,10 +278,8 @@ func written(d *nodestore.Doc, hasTool func(string) bool) map[string]any {
 }
 
 // writeTaskNode writes node id, one the task may write (writable): fn
-// changes it as the task's author write. The blocks it wrote, new or changed, however it wrote them (a
-// block, or a fence in its text), are checked (nodeGuard), and marked
-// external, with the node, when the task is tainted now, or for a source
-// of a server not trusted.
+// changes it as the task's author write. The node is marked external when
+// the task is tainted now.
 func (c *core) writeTaskNode(task, id string, on writeOn, fn func(*nodefile.Node) error) (*nodestore.Doc, error) {
 	if id == "" || c.nodes == nil {
 		return nil, errors.New("this task has no node")

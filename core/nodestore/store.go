@@ -18,7 +18,7 @@
 //     write carries the hash of the version it was made on (expect): a
 //     stale one is refused (ErrConflict), never written over.
 //   - An author's write goes through nodefile's author API: code's fields
-//     (marks, snapshots, external, title_trusted) are kept, and a write that changes
+//     (marks, external, title_trusted) are kept, and a write that changes
 //     them is refused. Secrets are refused by the filter the store is
 //     given (Options.Refuse).
 //   - The title of an external node may be someone else's words, unless
@@ -815,7 +815,7 @@ func (s *Store) children(id string) ([]Summary, error) {
 	return s.summaries(`WHERE parent = ? ORDER BY created, id`, id)
 }
 
-// Find finds nodes by words of their title, goal, text or blocks, the
+// Find finds nodes by words of their title, goal or text, the
 // best first; archived ones only when asked.
 func (s *Store) Find(query string, archived bool, limit int) ([]Summary, error) {
 	match := ftsQuery(query)

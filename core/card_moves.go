@@ -10,16 +10,11 @@ import (
 	"time"
 )
 
-// Proposals in the blocks they concern (#428).
+// Proposals in the pages they concern (#428).
 //
-//   - Embedded: an author places a Proposal component whose proposalId is
-//     a pending proposal's own ref (kind:id), written or bound to the
-//     block's data. Its Oui and Non go to that proposal's card
-//     (POST /cards/{id}/yes|no), as everywhere.
-//   - Dated: a pending proposal that has a time shows as a ghost in the
-//     Agendas that draw its day, with what it overlaps (GET
-//     /api/proposals?day=), its Oui on it; an Agenda of its own page is
-//     its place: not at the page's foot then (datedOn). Its time comes from
+//   - Dated: a pending proposal that has a time is told for its day, with
+//     what it overlaps (GET /api/proposals?day=), its Oui on it. Its time
+//     comes from
 //     what the proposal is, never from a tool's name: an intention's due
 //     date, or the arguments of a call it keeps that are a date or a
 //     date-time (callSpan). A run's card keeps several calls: each dated

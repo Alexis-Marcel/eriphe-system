@@ -10,15 +10,14 @@ import (
 )
 
 // Cards bound to a node's items (#575, #631, #782): an action on items a
-// node's page references (page_items.go), or a source of a node lists
-// (archive these mails, answer that invitation), is a card on their rows,
+// node's page references (page_items.go) (archive these mails, answer that invitation), is a card on their rows,
 // its Oui running exactly the calls it keeps.
 //
 //   - A kept call is an access_asks row, on a card (its batch): the brain's
 //     and the runs' (keepCall, demand.go), code's own (a tools review). It
 //     carries the node it belongs to and the items it acts on (its labels,
-//     each with the server whose item the page references, or the source
-//     that lists it; item when it is one): code's,
+//     each with the server whose item the page references; item when it
+//     is one): code's,
 //     never given: matched in its input.
 //   - A run's calls on one item are one card. Calls that do the same thing
 //     to other items of the node are one card (call_fold.go).

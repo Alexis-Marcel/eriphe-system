@@ -23,18 +23,15 @@ import (
 //
 // What code keeps, whatever the brain writes:
 //   - the author is code's: brain;
-//   - a whole body or a block names the version it was made on (expect:
+//   - a whole body names the version it was made on (expect:
 //     its hash), and a stale one is refused; a line edit names its line,
 //     refused once it is gone (node_page.go); an archived node is not
 //     written; a write says what is wrong in its page (problems);
 //   - the user's marks and external are code's: an author's write that
-//     changes them is refused; the values a block's sources read are
-//     code's too, kept outside the file and given by node_read;
-//   - a turn tainted now writes external: the node is marked so, and the
-//     blocks it writes; a block keeps to the actions' grammar (nodeGuard),
-//     and its sources are catalog servers or monitors the user approved;
+//     changes them is refused;
+//   - a turn tainted now writes external: the node is marked so;
 //   - reading a node that may hold someone else's words (an external
-//     node or block, a tainted item note) taints the turn;
+//     node) taints the turn;
 //   - only the user archives: there is no archive tool.
 
 // nodeTraceShown is the most bytes of a node's trace node_read gives:

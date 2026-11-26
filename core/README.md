@@ -719,14 +719,13 @@ whatever address it dials) and one client certificate per device.
 | `withdraw_proposal` | withdraw a card the brain made that still waits and the work made obsolete (`ref`): nothing of it runs, nothing is decided for the user; never a task's own ask or start ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
 | `page_format` | how a node's page is written, in French: the Markdown page and its conventions ([The page format tool](#the-page-format-tool-page_formatgo)) |
-| `node_open` | open a work node, for a new subject the brain's first call, before any read (a short title, a one-line « En cours : … » body, filled as the work goes): `title`, `parent` (a child of that node), `goal` (required: one line, what it is for, which guides what is written in it; `node_find` and the brain's node list give it), `body` (a Markdown page), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); its `title` a short name of what it is about, never the user's sentence; written in a tainted turn, the node is external and its title marked; asked for a page, the brain opens it here, no card, and launches the task that composes it (a skill may then maintain it: [Live pages](#live-pages-node_livego-node_homego)); its text held to 800 runes in a brain turn ([The brain's budget](#the-brains-budget-brain_budgetgo)); the same `openNode` as a task's `node_open`; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
-| `node_find` | find nodes by words of their title, goal, text or blocks (any word of three letters or more is enough, the nodes that hold the most first), each with its `status`, `goal` (one line; an external node's only with `include_external`, as its columns) and `maintained` (the skills that maintain it); and/or by their `tags` (each, or one below it) and properties (`where`: `{key, op, value}`, `op` one of `=`, `!=`, `<`, `<=`, `>`, `>=`, `exists`, `missing`; a number compares as a number, a date as a date, a text without case; `=` on a list holds when one value is equal), sorted (`sort` a property, `title`, `created` or `changed`; `desc`), the properties asked (`columns`) written beside each node's fields, `limit` (30, 200 at most); with neither words nor filters, those running or waiting, the heaviest first ([weight](#the-graph-workspace-the-home-page-)), then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does); an external node's columns are `withheld` the same way. A task calls the same on `eriphe-nodes` ([a task's node](#a-tasks-node-task_nodego-task_nodesgo)), which taints the task instead. |
-| `node_read` | a node's title, state, version and `hash`, body, goal, `maintained` (the skills that maintain it), parent, children, links, `backlinks` (the live nodes that link it, by their text or code), done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
-| `node_write`, `node_edit` | replace a node's body on the version read (`expect`); or, with no version, replace a line or a piece of text found once (`old`, `new`) or move an item with its detail (`move`, `after`), refused once the line is gone ([the page](../docs/node-format.md#the-page)); each write answers what is wrong in the page (`problems`, nodefile's check: references, callouts, dates, `do:` links); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying `external` (code's field); a `[its words](card:<ref>)` line places one of the node's cards ([the brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)). Until #787 converts them, `node_edit` still writes a legacy block (`block`, `value`, `before`, on `expect`) and the writes answer `page`, what each legacy block shows; authors are no longer taught them |
+| `node_open` | open a work node, for a new subject the brain's first call, before any read (a short title, a one-line « En cours : … » body, filled as the work goes): `title`, `parent` (a child of that node), `goal` (required: one line, what it is for, which guides what is written in it; `node_find` and the brain's node list give it), `body` (a Markdown page), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); its `title` a short name of what it is about, never the user's sentence; written in a tainted turn, the node is external and its title marked; asked for a page, the brain opens it here, no card, and launches the task that composes it (a skill may then maintain it: [Live pages](#live-pages-node_homego)); its text held to 800 runes in a brain turn ([The brain's budget](#the-brains-budget-brain_budgetgo)); the same `openNode` as a task's `node_open`; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
+| `node_find` | find nodes by words of their title, goal or text (any word of three letters or more is enough, the nodes that hold the most first), each with its `status`, `goal` (one line; an external node's only with `include_external`, as its columns) and `maintained` (the skills that maintain it); and/or by their `tags` (each, or one below it) and properties (`where`: `{key, op, value}`, `op` one of `=`, `!=`, `<`, `<=`, `>`, `>=`, `exists`, `missing`; a number compares as a number, a date as a date, a text without case; `=` on a list holds when one value is equal), sorted (`sort` a property, `title`, `created` or `changed`; `desc`), the properties asked (`columns`) written beside each node's fields, `limit` (30, 200 at most); with neither words nor filters, those running or waiting, the heaviest first ([weight](#the-graph-workspace-the-home-page-)), then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does); an external node's columns are `withheld` the same way. A task calls the same on `eriphe-nodes` ([a task's node](#a-tasks-node-task_nodego-task_nodesgo)), which taints the task instead. |
+| `node_read` | a node's title, state, version and `hash`, body, goal, `maintained` (the skills that maintain it), parent, children, links, `backlinks` (the live nodes that link it, by their text or code), done, archived and its trace's end; an external node taints the turn |
+| `node_write`, `node_edit` | replace a node's body on the version read (`expect`); or, with no version, replace a line or a piece of text found once (`old`, `new`) or move an item with its detail (`move`, `after`), refused once the line is gone ([the page](../docs/node-format.md#the-page)); each write answers what is wrong in the page (`problems`, nodefile's check: references, callouts, dates, `do:` links); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and one that changes code's fields (`external`: [node-format](../docs/node-format.md#codes-fields)); a `[its words](card:<ref>)` line places one of the node's cards ([the brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_set` | change a node's `title` or `goal`, its properties and tags (`props`: `{"tags": ["cuisine/recette"], "temps": 15, "source": null}`, `null` removes one; set in a tainted turn, they mark the node external: [node-format](../docs/node-format.md#front-matter); an attachment's id as a value keeps that file in the node: [A file the user sent](#a-file-the-user-sent-kept-with-a-node-node_attachgo)), move it under another node (`parent`, `""` for the top; never under itself or a node below it, never a step: `nodestore.SetParent`), or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a node a skill maintains is not set done |
 | `node_show` | open a node's page on the user's screen (kv `node_show`, read by the page): asked at the home, the turn and the bar move into it (`moveHomeTurn`), from a node it opens beside; writes nothing |
 | `turn_home` | the user's message, said in a node's bar, is not about that node: the turn is about no node from then on, as at the home (`turnHome`, node_turn.go). What it raises waits above the bar (a card it raised already is unlinked from that node), and nothing of it is filed there; its lines stay in that node's bar, where the user reads them. At the home, or on events only, it does nothing |
-| `item_note` | legacy, until #787 removes it with live sources: note an item of a legacy block's source (a note, a state, a group); authors are no longer taught it: a page's items are its lines |
 
 The brain has no archive tool: only the user archives a node (`archiveNode`, by `user` alone), which
 archives every node under it, stops their tasks and their steps' work, and withdraws their cards;
@@ -893,7 +892,7 @@ least that share of the values at or below it) and `max`.
 - `brain.output_tokens`: what a turn wrote; `brain.context_tokens`: its context
   (`usage.context_tokens`, else its input, cache reads and writes);
 - `brain.tools`: the brain's tool calls in the window, by name: heavy writes it did itself
-  (`node_write`, `write_skill`, `item_note`…) show here (its budget holds them since #770:
+  (`node_write`, `write_skill`…) show here (its budget holds them since #770:
   [The brain's budget](#the-brains-budget-brain_budgetgo));
 - `launches.turns`: the turns that called `run_task`, with their `duration_ms` and
   `output_tokens`; `launches.run_task_calls`: those calls (a call, not a started task: it may be
@@ -956,7 +955,7 @@ structured block rather than a prefix in its prose, in its receipt (`attentionIn
 
 `refs` name the objects it is about, `<kind>:<id>` with a kind among `node`, `card`, `task` and
 the keys' kinds (`project`, `alert`…); no kind is a tool's (no `mail:`, `agenda:`, `event:`): an
-item of a node's source is raised through its node. Only the form is checked, by `parseRef`. An
+item of a node's page is raised through its node. Only the form is checked, by `parseRef`. An
 entry whose refs are all nodes raises them on the graph and is not told in the run's message.
 `weight` is 5 interrupts, 4 needs the user now, 3 matters today, 2 a glance, 1 background; `why` is
 cut to 80 characters, `say` is optional. One block alone, or refs given as one string, are read as
@@ -987,43 +986,35 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   ([The brain's budget](#the-brains-budget-brain_budgetgo)).
 - **Tools.** The brain finds a node before it opens another (`node_find`), opens one at once, with
   no card (`node_open`: a piece of work, or a page the user follows; a skill may then maintain it,
-  [Live pages](#live-pages-node_livego-node_homego)), reads it (`node_read`: its version's `hash`), writes it on the version it read
+  [Live pages](#live-pages-node_homego)), reads it (`node_read`: its version's `hash`), writes it on the version it read
   (`node_write`, `node_edit`, refused when stale: `ErrConflict`), sets its title, goal, `parent` or `done`
   (`node_set`) and opens its page on the user's screen (`node_show`). It links nodes in their
   text, `[[Title]]` ([links between nodes](../docs/node-format.md#links-between-nodes)): there is no
   link tool; front-matter `links` are code's alone. Each
   checks the node exists (`no node <id>: node_find finds it`) and refuses an archived one
-  (`ErrArchived`); a body carrying a block's external is refused
+  (`ErrArchived`); a body that changes code's fields (a callout's `external`) is refused
   (`nodefile`'s author API: those are code's). There is **no archive tool**: archiving is the
   user's gesture (`archiveNode`, `by` `user` alone): it archives the node and every node under it
   (`nodestore.Below`), stops their tasks and their steps' work, and withdraws the cards that
   wait on them (`withdrawCards`: linked by `node_cards` or about `node:<id>`, unless a live node
   still holds one): each card is `gone`, its proposal waits no more (answered no), and reopening the node brings none back; `node_find` `archived` finds them
-  again. Its withdrawn cards stay linked to it, gone, so a card block of its document says
-  « Proposition retirée »; a card another live node still holds is unlinked from it
-  (`linkedNodeGone`).
-- **Card blocks** (#663). A block whose JSON is only `{"card": "<ref>"}` places one of the node's
-  cards in its document, where its author writes it (under « Ce qu'on a décidé », say).
-  `nodefile` reads it as a block of its own (`Block.Card`, `CardRe`: `kind:number`) and refuses
-  anything else in it (components, data, sources: `validateCard`); it is written back as
-  read. On a write, `nodeGuard` refuses a card that is not one of the node's (`nodeHasCard`: linked
-  by `node_cards`, waiting or not); a tainted turn places one too: the block is a ref alone, never
-  marked external (a card drawn from external content carries its own badge); a new node (`node_open`)
-  holds no card yet. The block never carries what the card says: the page
-  (`nodePageOf`, `placedCard`) draws the card from the records (pending, decided,
-  `gone`), only for the node's own card and a block not external; anything else is sent without
-  it and the page says « Carte introuvable », with no Oui or Non. A placed card leaves the page's
-  foot (`cards`); an unplaced one waits there. The propose tools return the card's ref (`card`:
-  `cardProposed`), and say how to place it (`cardNote`: a `card:` line). A demand (below) on items is on their rows;
-  on none, its keeper is told its ref and how to place it in a line of the page
-  (`[its words](card:<ref>)`, [the page](../docs/node-format.md#the-page)); one it does not
-  place waits at the foot, code writing nothing in the page. A `card:` link places one of the
-  node's own cards (`pagePlaced`, `page_items.go`): alone on its line the whole card, in a sentence
-  its Oui; another node's is drawn as its words.
+  again. Its withdrawn cards stay linked to it, gone; a card another live node still holds is
+  unlinked from it (`linkedNodeGone`).
+- **Cards in the page** (#663). A `[its words](card:<ref>)` link places one of the node's own
+  cards (`pagePlaced`, `page_items.go`, linked by `node_cards`, waiting or not: `nodeHasCard`)
+  where its author writes it (under « Ce qu'on a décidé », say): alone on its line the whole card,
+  in a sentence its Oui; another node's is drawn as its words, and none is placed in a folded
+  callout or a chart. The line never carries what the card says: the page draws the card from the
+  records (pending, decided, `gone`). A placed card leaves the page's foot (`cards`); an unplaced
+  one waits there. The propose tools return the card's ref (`card`: `cardProposed`), and say how
+  to place it (`cardNote`: a `card:` line). A demand (below) on items is on their rows; on none,
+  its keeper is told its ref and how to place it in a line of the page
+  ([the page](../docs/node-format.md#the-page)); one it does not place waits at the foot, code
+  writing nothing in the page.
 - **The page's foot only asks.** `nodePageOf` sends at the foot (`cards`) only the cards that still
   ask something (`pendingAsks`: pending, or approved with its call running) and that no
-  row or line answers (any card told on a List's row, on a referenced item's row, or placed by a
-  `card:` link: `placed`); the decided ones (done, failed, declined,
+  row or line answers (any card on a referenced item's row, or placed by a `card:` link:
+  `placed`); the decided ones (done, failed, declined,
   withdrawn) go to `settled` (20 at most, the last first), which the page lists in its « ⋯ » menu
   under « Déjà décidé » with each outcome, a failed one with why (`execWhy`, and `execError`: the
   tool's own words, `execErrorExternal` when its server is not trusted, shown marked). A placed
@@ -1054,37 +1045,12 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
 - **No message asks a card again.** A card the brain raises in its turn, its calls and releases
   included, goes with its message of the turn (`cardProposedBy`); a task's access card, with the
   queue's message, which says the card's line, not a question of its own.
-- **A row's own card.** There is no yes in a block (no actions, no marks, no Proposal component):
-  the page draws a row's card itself, on every row code told it waits on (a `Sections`' rows are
-  always told, a List's when it must know them: `lists[].items[].card`, out of band, never from the
-  block's data), even in a block written on a tainted turn: its ref is code's. A `Sections` group
-  whose rows share one card is a batch: its folded line carries that card. Pages written before
-  keep a `Fold` with `list` (a batch), which must name a List of the same block bound to a source's
-  items (`listsOK`), and a `Metric` with `list`, whose figure is that List's rows, told to the page
-  with them (`blockLists`), its filters applied.
 - **Every yes says its verb** (`card_verb.go`). A card's yes button, on the page, in a channel,
   on a row, never says a bare « Oui »: `proposal.VerbIn` gives the proposal's own verb, else its
   kind's (`kindVerbs`: « Garder », « Autoriser », « Lancer »…); a call's is the verb its tool
   declares in its `says` (`"verb": {"fr": "Jeter", "en": "Trash"}`), else the first word of its
   sentence, with the count for several items (« Jeter les 102 »). `proposalView.verb` carries it;
   `TestEveryCardHasItsVerb` checks every kind in both languages.
-- **Blocks that name a source** (`nodefile/rows.go`). `Sections`, `Gallery` and `Table` may name one
-  of the block's sources (`"items": "mails"`, the catalog's `x-source`); `Block.Bound` is the block
-  as code and the page read it, the name turned into the binding to its rows (`RowsPath`). The
-  components a model wrote before (`List`, `Item`, `Fold`, `Grid`, `Card`, `Button`, `Metric`,
-  `Progress`) are `x-legacy`: out of the prompt (`a2ui.Legacy`), still checked and drawn. A
-  `Gallery`'s images go through `mediaOrDrop` as an `Image`'s do (`gallery_media.go`).
-- **Setup buttons** (`setup_buttons.go`). An ask of an `Asks` with `until` (`tool`, `monitor` or
-  `skill`), or a `Button` with one, leaves the page once what it sets up holds: `blockView` blanks
-  the ask (the others keep their place, `<id>#<n>`) or drops the button and what only held it, each
-  time it draws the block, from code's records (the pool, `monitors`, the skills).
-- **The render report** (`page_report.go`). `node_open`, `node_write` and `node_edit` read the
-  node's sources at once (5 s at most, a read under way waited for, then « still reading ») and answer `page`: per block its
-  state (`ok`, `error`, `waiting`, `empty`), each source's (a failure's words, and what a
-  source holds in place of a missing field, only from a trusted server), the rows each list shows (filters applied), the bindings that lead nowhere in what a
-  source gave, the setup buttons and asks hidden and, on a page that lasts, the figures written by
-  hand (a `Metric`'s value, a `Figures` item's).
-  Code's words and numbers only: the report taints nothing.
 - **Done.** `node_set` `done` (`setNodeDone`) marks the front matter's `done` and the state
   `done` (`nodestore.SetDone`, a version of its own that never conflicts with an author's write),
   once: done again changes nothing. A node done now leaves one dated **decision memory** about it
@@ -1092,7 +1058,7 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   line; external when the node is; one of an earlier done superseded) and the journal's event
   `node.done` (key: its id), a breakpoint of the attention queue while the user is there. A
   node a skill maintains is never set done (`maintainers`).
-- **Taint.** Reading a node marked external, or an item note written in a tainted turn, taints
+- **Taint.** Reading a node marked external (or holding a callout marked `external`) taints
   the turn (`c.turn.taint`); a node written or opened in a tainted turn is marked external, so is
   a title or goal it sets. Words filed in a node's trace from a tainted turn or task mark it
   first (`markNodeExternal`, tried again when a write comes between its read and its own), then
@@ -1107,7 +1073,7 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   `callToBrain`, `[nœud <id> « title »] …`). The turn is **about** the last node it named (a node
   tool on it, a delivered message of it): what it raises meanwhile (an access card, a task's start,
   a proposal) is linked to it (`node_cards`), and the node waits for the user while one waits
-  (`cardRaisedFor`; its status, `node_status.go`). A decided card stays linked (a card block still
+  (`cardRaisedFor`; its status, `node_status.go`). A decided card stays linked (a `card:` link still
   places it, the page lists it as settled): the status reads only the cards still pending, in one
   query. A skill's version is such a proposal: its card waits in the node of the turn or task that
   wrote it (where the user decides), not on the page the skill maintains; its ref names the skill,
@@ -1177,23 +1143,20 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
 
 ## Node files (`nodefile/`)
 
-The graph workspace (epic #625) keeps each node as a markdown file: YAML front matter, a markdown
-body and typed blocks (`` ```eriphe:block <name> ``). The format is specified in
+The graph workspace (epic #625) keeps each node as a markdown file: YAML front matter and a
+Markdown page. The format is specified in
 [docs/node-format.md](../docs/node-format.md); the package `nodefile` parses, checks and writes it:
 
 - **Lossless:** a file parsed then written gives the same bytes; what changes through the API is
   written again in its canonical form, the rest keeps its bytes.
-- **Each block checked alone**: the catalog (`a2ui`), its links, and its
-  bindings against its own data and its sources (`/<name>`); `actions` and `marks` are unknown
-  fields. A bad block is a `BlockError` that names it.
-- **Code's fields** (a block's `external`, the node's `external`, `title_trusted` and
-  `opened_by`) are set by code (`SetBlockExternal`, `Meta.External`). An author's write
-  goes through `AuthorBody` or `PutAuthorBlock`: left out, they are kept from the version
-  written over; written otherwise, the write is refused (`ErrCodeField`). Authors may give a block
-  in its short form (one component, no root); it is completed. A block's sources' values are never
-  in the file (they are code's, in `core.db`): a block that says a `snapshot` (an old version,
-  an author copying one) still reads, the snapshot ignored, and is written again without it. An
-  old step's front matter `after` reads as a field this package does not know, kept as it was.
+- **Code's fields** (the node's `external`, `title_trusted` and `opened_by`, a callout's
+  `external` mark) are set by code (`Meta`, `CodeBody`). An author's write goes through
+  `AuthorBody`: left out, they are kept from the version written over; written otherwise, the
+  write is refused (`ErrCodeField`). An old step's front matter `after` reads as a field this
+  package does not know, kept as it was.
+- **Format conversions** (`format.go`, `topage.go`): `Upgrade` runs a file through each
+  conversion from its format to today's; `ConversionsWith` gives 2 → 3 the values code kept in
+  `core.db` for a format-2 file's blocks (`Snapshots`), written in its page.
 - **The page** ([the page](../docs/node-format.md#the-page)). `ReadPage` (`md.go`) reads
   a body as a Markdown page into a tree (`Page`: its blocks, list items with their detail, task
   state and `📅` date, callouts, the references and their targets, the `do:`, `card:`, `ask:` and
@@ -1205,8 +1168,8 @@ body and typed blocks (`` ```eriphe:block <name> ``). The format is specified in
   with its tree and problems as JSON) hold Go's reader and the workspace's to the same reading
   (`go test ./nodefile -run TestPageFixtures -update` writes the JSON again).
 
-The checks that need the core (offers, a card block's ref, a bound Link's value, taint) are the
-tools' that write nodes.
+The checks that need the core (a `do:` link's tool, a `card:` link's card, taint) are the tools'
+that write nodes.
 
 ## Node store (`nodestore/`, `nodes.go`)
 
@@ -1218,23 +1181,24 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   creation: a new title changes the front matter, never the file's name.
 - **Index:** `nodes.db` next to it, outside the repository: a pure index, made again from the files
   and the log when it is deleted, nothing lost: a node's status is not kept, it is computed
-  (`node_status.go`). SQLite, its schema version in `meta` (5); a file at an older version is
+  (`node_status.go`). SQLite, its schema version in `meta` (9); a file at an older version is
   never migrated: at start it is deleted (`nodes.db`, its `-wal` and `-shm`, nothing else) and
-  made again from the files and the log, and the log says so (`nodes: index at schema 4, an older
+  made again from the files and the log, and the log says so (`nodes: index at schema 8, an older
   one: made again from the files`); a file at a newer version is refused, left as it is. Tables: `nodes` (file, title, goal, parent,
   times, external, last version, the file's git hash, the title's link key, its words' row in
   `node_fts`, so a write replaces them without a scan), `node_links` (the front
   matter's), `node_refs` (each `[[name]]` of a node's text and the node it was resolved to, kept
   across renames; `''` while no node has it), `node_versions` (n → commit
-  hash, author, time), `node_sources` (each block's live sources), `node_props` (each value of a node's properties and tags, one row per value of a list, typed: a number's `num`, a date's ISO text, a lowercase `fold`; indexed on (key, fold) and (key, num): `nodestore.Select`, `Props`) and `node_fts` (FTS5 over the title,
-  the goal, the text and the words the blocks show). History is never asked of git by path: a
+  hash, author, time), `node_listens` (the events each node's `on:` lines follow),
+  `node_pending` (the nodes whose values make no version yet, below), `node_props` (each value of a node's properties and tags, one row per value of a list, typed: a number's `num`, a date's ISO text, a lowercase `fold`; indexed on (key, fold) and (key, num): `nodestore.Select`, `Props`) and `node_fts` (FTS5 over the title,
+  the goal and the text). History is never asked of git by path: a
   version's commit is in `node_versions`.
 - **Writes:** each is one commit by its author (`brain`, `task:<id>`, `user`…), whose message names
   the versions it makes (`Node: <id> <n>`). `Create` makes version 1; `Change(id, expect,
   author, fn)` writes the last version, an author's body through nodefile's author API (code's
   fields kept, a change to them refused); it is refused with `ErrConflict` when `expect` is not the
   last version's commit hash; a node alike makes no version. An archived node is not written (`ErrArchived`). A node is 512 KiB
-  and 32 blocks at most. Secrets are refused by the memory's filter (`scanSecrets` in
+  at most. Secrets are refused by the memory's filter (`scanSecrets` in
   `memory_trust.go`: credentials, long random strings, links with a password or a token); its
   injection rules are not applied, as a node may quote someone else's words. A link's path is not
   read as a random string (a pull request's `owner/repo/pull/640/files`, a document's id): a
@@ -1243,16 +1207,13 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
 - **Line edits:** `ChangeLast(id, author, fn)` is `Change` on the last version, whichever it is,
   for a change that checks what it changes itself (a line found by its text, refused when gone).
 - **Code's writes:** `Change(id, expect, author, fn)` lets code change what no author may (a
-  block's or the node's `external`, the title, the goal); the id, parent,
+  callout's or the node's `external`, the title, the goal); the id, parent,
   creation, done and archived never change this way, and the filter runs over the node written.
-  `Create` with `External` marks the node and each of its blocks; with `ID`, the node takes an id
+  `Create` with `External` marks the node; with `ID`, the node takes an id
   given beforehand (`NewID` gives a free one: a card shows the node before it exists).
 - **An author's write over code's:** `Change` made on an older version is not stale when every
-  version since changed code's fields only (`onlyCodeSince`: a mark, a block marked external): the
+  version since changed code's fields only (`onlyCodeSince`: a mark, a callout marked external): the
   write applies over them, code's fields kept.
-- **Live sources:** `Sources(id)` lists the sources of every block of the nodes not archived (or of
-  one node), from `node_sources`: what the live engine reads (`node_live.go`); `KeptSources(id)`
-  archived nodes' too, whose pages still show their last values.
 - **Reads:** `Read(id, n)` gives version `n` (0: the last), `Versions`, `Children` (archived ones
   included), `Find(query, archived, limit)` (all the words, prefixes from three letters; archived
   nodes only when asked), `Get`.
@@ -1303,7 +1264,9 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   and a test that reads the old format. At start, a file of an older format is converted, all of
   them in one commit by `convert` (its words committed first as `outside` when changed by hand),
   each node a version of its own, logged; an older version read from the history is converted
-  in memory. A file of a newer format stops the graph (the log names it), untouched: update
+  in memory. The 2 → 3 conversion at start writes in each page what `core.db` kept for its blocks
+  (`node_convert.go`: `node_reads`, `node_items`); once every node is converted without a broken
+  file, those tables are dropped (`dropBlockTables`). A file of a newer format stops the graph (the log names it), untouched: update
   Eriphe.
 - **Nightly**, at the memory's hour (`memory.extract_at`), into its backup folder
   (`memory.backup_dir`, `memory.backup_keep` days): `nodes-<day>.bundle` (a git bundle of `main`
@@ -1356,21 +1319,18 @@ decided), and a run or a step that ends, or the node archived, drops its progres
   (the name is reserved in the catalog): every worker with a node has it, its tools allowed in
   advance; it is not lent. **Its node is its work; the graph is its context** (#766): `node_read`
   reads any node of the graph, its own when it names none (as the brain's: a version, its hash,
-  its body, its sources' last values, its parent, children, links and backlinks, its item notes,
-  the end of its trace; 50 children and 50 backlinks at most, `children_more` and
+  its body, its parent, children, links and backlinks, the end of its trace; 50 children and 50 backlinks at most, `children_more` and
   `backlinks_more` counting the rest; an archived node, and archived children, only with
   `archived`), and `node_find` finds nodes as the
   brain's does (words, tags, properties, sort, columns; archived ones with `archived`; an external
   title or properties only with `include_external`). `node_write`
-  (the whole body), `node_edit` (one block, a line or a piece of text found once, or an item moved with its detail)
+  (the whole body), `node_edit` (a line or a piece of text found once, or an item moved with its detail)
   and `node_append` write its own node when they name none, else **a node where it works**
-  (below). A whole body and a block name the hash of the version they were made on (`expect`); a
+  (below). A whole body names the hash of the version they were made on (`expect`); a
   line edit and `node_append` are made on the last version (`ChangeLast`), a line edit refused
   once its line is gone. Each answers what is wrong in the page (`problems`), a `do:` link on a
   tool the task is not lent included. `node_open`
-  opens a child (title, goal, body) of its node, or of a node where it works (`parent`); with `steps`, its work cut in steps ([below](#work-in-steps-node_stepsgo)). `item_note` (legacy, until #787) notes an item
-  a legacy source of its node lists, or of a node where it works (`id`): there, an item the source lists
-  now, and no `call`. `page_format` gives how a page is written ([below](#the-page-format-tool-page_formatgo)). `progress` adds one line to its trace. A task that follows a skill has
+  opens a child (title, goal, body) of its node, or of a node where it works (`parent`); with `steps`, its work cut in steps ([below](#work-in-steps-node_stepsgo)). `page_format` gives how a page is written ([below](#the-page-format-tool-page_formatgo)). `progress` adds one line to its trace. A task that follows a skill has
   `skill_propose` too ([Skills improve with use](#skills)). It never starts a task, and never
   archives, approves or closes a node (no `node_set`).
 - **Where it writes** (#768, `writable` in `task_write.go`, read at each call): its node and every
@@ -1388,17 +1348,17 @@ decided), and a run or a step that ends, or the node archived, drops its progres
   or one not opened by the task's author, since a `[[Name]]` waiting anywhere resolves to a node
   the task opens with that name. Elsewhere, and on an archived node, the write is refused with a hint: say it in its node,
   or ask for it in its final message. What holds for its own node holds wherever it writes:
-  `expect`, the user's marks and code's values kept, its author, the guards below, external when
+  `expect`, the user's marks and code's values kept, its author, external when
   it is tainted. Two writers of one node (the brain, another task) are kept apart by `expect` for a whole body, and by the line itself for a line edit.
 - **Who writes** is code's: `skill:<name>` for a skill's run, `task:<id>` for another. Its calls
   to `eriphe-nodes` never taint it: what it reads there taints by its own record. A node whose
   title or goal the secret filter refuses is opened without the goal, then with a neutral title
   (« Tâche <id> »): the task still starts.
 - **Taint**: a task tainted at start or by what it read (`taskTaint`, read at each call) writes
-  external: code marks the node it writes and the blocks it writes, in the same version; a child it opens is
-  external; its item notes carry the taint. Reading what may be someone else's words taints the
+  external: code marks the node it writes, in the same version; a child it opens is
+  external. Reading what may be someone else's words taints the
   task before it is given (`taskRead`, the brain's turn by the same code, `readNodeFor`): any
-  external node, block or source value it reads (`node:<id>`), a tainted item note, a title
+  external node, or one holding a callout marked `external`, it reads (`node:<id>`), a title
   `node_find` quotes with `include_external` (`node_find.external`). A clean start keeps its Free
   writes whatever it reads since, as for any read (`lentByUserKey`).
 - **Its surroundings** (`task_surroundings.go`): code adds to the first prompt of every worker
@@ -1415,13 +1375,6 @@ decided), and a run or a step that ends, or the node archived, drops its progres
   (written after an external read) is named, not quoted, and an external node's goal is left out,
   as `node_find` gives them. It goes in the device's spec only, never in the task's kept prompt
   (its title, its node's goal and the [turn report](#usage-and-measures-task_statsgo) read that).
-- **Guards** nodefile does not hold, on every block a write adds or changes (a block, or a fence
-  written in its text): a Button or an `Asks` only asks, in its author's literal words, never a
-  bare « Oui » (`a2ui.CheckActions`),
-  tainted or not (written tainted, the block is external, and its click comes back marked: see
-  `POST /api/nodes/{id}/ask`); a `Link` never opens a
-  source's value; a block's source reads a tool or server the task is lent, or a monitor the user
-  approved, and one of a server not trusted marks the block external.
 - **Its report**: at the end of each turn, the task's last message (its receipt left out) is filed
   by code, whole: in its node's trace (in several entries past 256 KiB), and as its doc when the
   task wrote none. A turn held only for its receipt files its report then. The same report is
@@ -1490,7 +1443,7 @@ it borrows nothing the skill does not declare, and nothing external was handed t
 else (an external event, external content read, an undeclared repository) asks its start card as
 any task's.
 
-## Live pages (`node_live.go`, `node_home.go`)
+## Live pages (`node_home.go`)
 
 There are only nodes. A page the user follows continuously (their mails, the prod's alerts, the
 pull requests to review) is a node whose Markdown page holds all it shows
@@ -1522,7 +1475,7 @@ sheet (`page_format`).
   declaration changed starts afresh; one taken away, or its node archived, is forgotten. The node's
   row (`graphNode.glance`: label, `labelExternal` when its callout or node is external, unit, value,
   ref, delta, threshold, series, shown, seen) is sent again (`graphEvNode`) when it changes. The
-  workspace draws at most 3 tiles (graph/glance.ts). A source's `glance` is no longer read.
+  workspace draws at most 3 tiles (graph/glance.ts).
 - **Calls on a page's items** (`page_items.go`): a node's page references items of catalog
   servers (`[words][m1]`, `[m1]: mail:<id>`: the scheme a server's name, the id as its tool gave
   it). A call kept for the user (the brain's or a run's) whose server is a reference's, and whose
@@ -1550,7 +1503,7 @@ sheet (`page_format`).
 - **Same-kind calls wait as one card** (`call_fold.go`): calls cards that wait untouched in the
   same node, whose calls do the same thing to other items (same server and tool, same arguments
   but one list whose values are ids of the items the call acts on, as its node's page references
-  them or its sources list them), fold into the oldest: one card, not five. A different account or
+  them), fold into the oldest: one card, not five. A different account or
   destination, another tool, a card decided or one whose call runs never folds. Folded when a run
   ends and at each card sync (cards made before fold there; the folded cards go, from their node
   too). The card keeps each call as kept, its own `access_asks` row: Oui runs each exactly as
@@ -1584,57 +1537,6 @@ sheet (`page_format`).
   brings none), shown first on the skill's card (« Moniteur <name> »), and made on by the same yes,
   on the card (`decideSkill`) or in Settings (`approveSkill`), through `skillMonitorMade`; an
   approval that then fails takes the monitor back, and the card waits still. No makes neither.
-- **Legacy blocks, until #787 converts them.** A body written before may still hold blocks whose
-  machinery stays until the conversion to format 3 removes it; no author is taught it any more:
-  - **Live blocks** (`node_live.go`, table `node_reads` in `core.db`): a block's `sources` are read by
-    code, without a model, as the brain's free reads are (`sourceWhy`): a tool with fixed arguments,
-    a server's resource, or a monitor the user approved. `eriphe-core/node_find` is read by code from
-    the graph itself (`node_find.go`), with node_find's arguments and trust: once a block reads it,
-    any node's change reads these blocks again a second later (`nodesChanged`, `readServerSoon`); a
-    block whose source says `include_external` is external (`untrustedSources`). A task may name it
-    too (`lentSource`): it reads the whole graph, and the same `include_external` rule marks its block. A source new or changed is read at once,
-    then every `every` minutes (5 by default), at a resource's update, and a monitor's at each of its
-    looks (`monitorLooked`). A read that fails or waits keeps the last good value, with why. The
-    values stay in `node_reads`, never in the node's file: a read makes no version, however often it
-    runs. The page draws the block from them, whatever the version shown; an archived node's reads
-    are kept (`KeptSources`, `keptReads`) and its page shows them, read no more; they go with their
-    source. What code acts on (attention, cards, skills, freshness) is a live node's reads only
-    (`nodeReads`).
-    `node_read` gives them (`values`, by block then source, one past 16 KiB said to be so), tainting
-    the turn when a block reads a server not trusted. A block that reads a server not trusted is marked `external`, checked at each read:
-    code marks it, never unmarks it. A monitor's value is its latest number, its last points, whether
-    it is past its limit or failing, and its last events (kind and time, numbers only).
-  - **Read again after a change** (`source_fresh.go`): a call that ran well and may change something
-    (its tool is not marked `readOnlyHint`) is followed by a read of every live source of its server,
-    every node's: those of the account it names (its `account` argument) and those that name none;
-    all of them when it names none. Every path counts: the brain's own calls and its tasks' (a skill
-    run's too, `proxyCall`), a card's yes, an item's Oui and a page's action (`catalogCall`). The calls
-    of a moment are gathered into one read, a second after the last (three at most after the first);
-    the new values reach the open pages as `source` events. Until then, the items whose ids the call
-    named show `_state: done` at once (a List that keeps what is not done lets them go); the next
-    read of their source that began after the call says them as they are, an item it still lists
-    comes back (in memory only, two minutes at most). A conversation's call on a page's items wakes
-    its skill (`node.gesture`, as a user's gesture does); a task's own call never does. A server that
-    says one of its resources changed (`notifications/resources/updated`) has its sources read again
-    the same way, once every 15 seconds at most (one said meanwhile is read at the end): eriphe-core follows every resource of a server whose tools a node reads, as well
-    as the resources nodes read (`eriphe-mail`'s `mail://changes` tells each change its cache sees,
-    wherever it was made; `eriphe-calendar` tells nothing yet, its pages wait for the period). What
-    changes elsewhere and no server tells: a node's sources read more than a minute ago are read again
-    when its page is opened (`GET /api/nodes/{id}`), and every node's when the user comes back
-    (`user.returned`), once a minute per node at most. Monitors keep their own looks.
-  - **A monitor raises its nodes**: crossed and holding, or failing, it puts each node whose blocks
-    read it in the attention queue (`node:<id>`, in code's words), tainted when its server is not
-    trusted.
-  - **Item notes** (`node_items.go`, `item_notes.go`): a listing source's `items` (`path`, `id`,
-    `title`, `detail`) give its items; a task notes one (`item_note`: note, state `act`, `look`,
-    `info`, `none` or `done`, group) in `node_items` in `core.db` (`noteItem`, `nodeItems`: never a
-    version, nothing a rebuilt `nodes.db` loses), with its author and taint; no note, state nor group
-    takes it away; an archived node is noted no more. A note that changes sends the source again to the pages that show it ([legacy blocks](../docs/node-format.md#legacy-blocks-converted-by-787)).
-  - **Calls on an item** (`item_cards.go`): a skill run's call kept for the user that names exactly
-    one item of a source of the run's node, on the call's own server, is kept on that item
-    (`access_asks.node`, `source`, `item`): one card per item (kind `calls`), answered alone. A call
-    on no item stays on the run's card. The card names its node, unless the node is external.
-    (A block's source, until node format 3 converts it.)
 
 ## Permission policy
 
@@ -1740,38 +1642,36 @@ not sorted by the grid, refused if called by name, until the user accepts it. A 
 definition it was made of, so a change shows what was before.
 
 The changes wait like any other item, in **« Outils à revoir »**, a node code makes at
-start when there is none (again if it was archived; `tool_review.go`). Its block lists
-`eriphe-catalog/catalog_changes` (each change: `id`, server, tool, kind `new`, `changed` or
-`removed` — a pinned tool its connected server no longer lists —, `what` changed in a few words,
-its `line`, `risky` and its mark, and its `detail`: only what changed, never both texts whole).
-The list is one line per change, by server (its name over its first row, `group`):
-« search_issues — description modifiée · lecture ». What changed is the category (« lecture →
-modification »), parameters added or removed, the description (opened: the words added and taken
-out), a new tool, a dropped one, or « définition modifiée » when only another part of the
-definition changed (a parameter's description). A pin made before pins kept their definition has
-only its hash: its change says « ancienne version non conservée » and is judged as a new tool. A
-change that gives the tool more power — its category goes up (read, then change, then delete or
-send), it takes new parameters, or it is new (or not kept) and does more than read — is `risky`:
-its server first, it first in its server, marked « plus de pouvoir »; a reworded description stays
-quiet. Each change waiting is a call of its own on its row, made by code at each read of the list
-(`reviewCards`: one `catalog_accept` call on that id, its label the change), all folded into one
-card (`call_fold.go`); a card holding a change that no longer waits is withdrawn (`gone`), never
-read as a no, and the changes it held get a card again. The page draws the card its rows share
-once, at the list's head (« Accepter les 3 »): its Oui accepts them all, each tool pinned with
-exactly the definition listed (a change's id carries its hash; a tool changed again is a new
-change, and an id no longer waiting does nothing); a dropped tool's pin is forgotten. Each row has
-a ✕ that refuses that change alone (`POST /cards/{id}/no` with `left`, `refuseCalls`; recorded by
-`settleChanges` at the next read): the change no longer waits, the tool stays held (or its pin
-stays), the card waits on with the others; a later definition is a new change. The card's own ✕
-refuses them all. The node waits for the user while a card does, as any node. It is read again
-whenever what a server lists changes, after each card, and every 5 minutes; a node made by an
-older Eriphe gets its text and block written again at start (`refreshToolReview`). The block reads
-a server not trusted: it is external. No message tells the brain.
+start when there is none (again if it was archived; `tool_review.go`). Its page is Markdown code
+writes (`reviewPage`), again each time the changes move: one row per change (new, changed, or
+removed — a pinned tool its connected server no longer lists —) under its server's heading, each
+row a reference `[words][cN]` with its target `[cN]: eriphe-catalog:<change id>`, only what changed
+under it, never both texts whole: « search_issues — description modifiée · lecture ». What changed
+is the category (« lecture → modification »), parameters added or removed, the description (the
+words added and taken out), a new tool, a dropped one, or « définition modifiée » when only another
+part of the definition changed (a parameter's description). A pin made before pins kept their
+definition has only its hash: its change says « ancienne version non conservée » and is judged as
+a new tool. A change that gives the tool more power — its category goes up (read, then change, then
+delete or send), it takes new parameters, or it is new (or not kept) and does more than read — is
+risky: its server first, it first in its server, marked « plus de pouvoir »; a reworded description
+stays quiet. The servers' words are escaped (never a link of their own) and the node is external.
+`eriphe-catalog`, the server Eriphe provides, counts as an item server for the page's references
+(`refItems` accepts `providedServers`): each change waiting is a call of its own on its row
+(`reviewCards`: one `catalog_accept` call on that id), all folded into one card (`call_fold.go`)
+whose Oui sits on their rows; a card holding a change that no longer waits is withdrawn (`gone`),
+never read as a no, and the changes it held get a card again. Its Oui accepts them all, each tool
+pinned with exactly the definition listed (a change's id carries its hash; a tool changed again is
+a new change, and an id no longer waiting does nothing); a dropped tool's pin is forgotten. Each
+row has a ✕ that refuses that change alone (`POST /cards/{id}/no` with `left`, `refuseCalls`;
+recorded by `settleChanges` when the page is written again): the change no longer waits, the tool
+stays held (or its pin stays), the card waits on with the others; a later definition is a new
+change. The card's own ✕ refuses them all. The node waits for the user while a card does, as any
+node. The page is written again whenever what a server lists changes and after each card
+(`toolsMoved`, `refreshToolReview`), and at start. No message tells the brain.
 
 `eriphe-catalog` is a server Eriphe provides in the pool, lent to no agent (no grant may name it,
-and no catalog server take its name: `providedServers`, `reserved`):
-`catalog_changes` is a free read that only code calls (a block's source); `catalog_accept` is
-`never` to every agent, the brain, a task or a skill, whatever was allowed before, and runs only
+and no catalog server take its name: `providedServers`, `reserved`); its one tool,
+`catalog_accept`, is `never` to every agent, the brain, a task or a skill, whatever was allowed before, and runs only
 on the user's yes on the card code made (`catalogCall`: a gesture tool runs on a card's yes, logged
 in the journal as the user's). There is no refuse tool: a no is the card's ✕. The server's page in Réglages keeps "Accepter ces outils"
 (`POST /settings/tools/{name}/approve`): it accepts all the server's held tools at once, refused
@@ -1798,9 +1698,9 @@ words: « Mettre 2 mails à la corbeille ». Core has no word of its own for a t
 sentence is the one the tool declares (below), else its title (`Title` or `annotations.title`; our
 servers give every tool one) with its items counted (« Ranger · 2 éléments »), else « Utiliser
 « tool » »; the items are of the kind the tool declares (`items`), else « élément(s) ». The
-items it acts on follow by their title and detail as the node's sources list them (`callRows`,
-`itemLabel`, kept with the call), at most 5 then « et N autres »; a title from a source that is not
-a trusted server's keeps its « ⚠ ». Where it acts goes apart, quietly (`context`: « compte
+items it acts on follow by their title and detail as their server read them (`callRows`,
+`refItemLabels`, `itemLabel`, kept with the call), at most 5 then « et N autres »; a title from a
+server that is not trusted keeps its « ⚠ ». Where it acts goes apart, quietly (`context`: « compte
 Gmail », the account by its provider when it is the only one, « le dossier Clients »). Under
 « détails », its parameters by their meaning (`callDetails`: named by the input schema's title,
 else `card.param.*`, else their own name; valued by the tool's declared words, a date in words),
@@ -1825,7 +1725,7 @@ language. Our mail, calendar and files servers declare theirs; core's own `catal
 ```
 
 `text` is the sentence by language (English, else any, when the user's is missing). `{item}` is
-what the call acts on: one item by its label as its node's source listed it (title, detail, ⚠ when
+what the call acts on: one item by its label as its server read it (title, detail, ⚠ when
 someone else's words; the label bound to the call counts whatever id it names, an invitation's
 event), several counted by `items` (one, then many with `{n}`; their lines below), else the
 declared `item` words, else counted as « éléments ». `{count}` is how many it acts on, counted the
@@ -1849,34 +1749,27 @@ lists with their reason, and when a text table keeps a word for a tool's name (`
 **One demand** (`demand.go`). What Eriphe asks the user's yes for, a call it may not make alone,
 is kept one way (`keepCall`), the brain's in its turn (`askBrainAccess`) as a skill run's
 (`askRunCall`): what differs is only who keeps it (`keeper`: where its answer goes, its node, its
-taint, its run). Every kept call is on a card of kind `calls` (`access_asks.batch`), in a node:
-the one whose sources list the items it names, else its keeper's (the turn's, the run's). The same
+taint, its run). Every kept call is on a card of kind `calls` (`access_asks.batch`), in its
+keeper's node (the turn's, the run's). The same
 call waiting in the same node is the same card. Its keeper is told it did not run, the card's ref,
-and where it waits (`keptSay`): on its items' rows, or a `card:` line to place where it reads best (a
-run may instead bind it to a legacy source's item, `item_note`'s `call`, until #787). A read of a node's source takes out of
-its demands the items it no longer lists (`staleDemands`: a list of ids narrowed, its card's
-words and exact call with it; a call left with none withdrawn; a card left with none withdrawn by
-code, not a no). At start, the demands an older Eriphe kept (the brain's `access` cards of calls,
-a run's `runcalls` card) become `calls` cards, fold, lose what is gone, and are placed
-(`migrateDemands`); nothing runs. A page read or a search the brain asks stays an `access` card (its
+and where it waits (`keptSay`): on its items' rows, or a `card:` line to place where it reads best. A page read or a search the brain asks stays an `access` card (its
 yes lets it read), and so does what a task in a container asks for itself (a grant, a release).
 
-**On its rows.** A kept call whose ids are those of rows a node's source shows (the node the
-turn or run is about first, else any live node that read them: `node_reads`) is kept on that node and
-those items (`access_asks.node`, `source`, `labels`): `itemCards` gives each row the card's ref,
-so the page draws its Oui on every row it names (one card on several rows: a Oui on any answers
-it, a mark says how many share it, and hovering lights the others; one card on every row of a
-List, two or more: its Oui once at the List's head, and on each row only a ✕ that refuses that
-row's own calls, `refuseCalls`, the card waiting on with the others), on a folded batch's line, and
-never in the page's foot (`placed`: any told row's card). A calls card is on every item its
-calls act on (one call on several items, or several calls folded: `call_fold.go`), an item two
-cards act on showing the newest. A call on no row is a block of its node (above), in the same
-words. Decided, its rows settle; once run, its items are noted `done`
-(`itemDoneByCode`: an item is done only by its note) and its sources are read again
-(`readNodeLater`, `sourcesChanged`); the brain is
-told. Such a card, like a task's access, start or memory card, is linked to
-the node its run or task works in (`cardNodeOf`, `node_cards`) and is about it: it waits on that
-node's page, which stays waiting while it does, never above the bar.
+**On its rows.** A kept call whose ids are items its keeper's node page references
+(`callRows`, `refItemLabels`: the references to the call's server whose id the input names) is
+kept on that node and those items (`access_asks.node`, `item`, `labels`): `nodePageOf` gives each
+row the card's ref (`items`, [Cards on referenced items](../docs/node-format.md#cards-on-referenced-items)),
+so the page draws its Oui on every row it names (one card on several rows: a Oui on any answers it,
+a mark says how many share it, and hovering lights the others; on a row sharing a card, a ✕ that
+refuses only that row's own calls, `refuseCalls`, the card waiting on with the others), and never
+in the page's foot (`placed`). A calls card is on every item its calls act on (one call on several
+items, or several calls folded: `call_fold.go`), an item two cards act on showing the newest. A
+call on no row waits at its node's foot, or on the `card:` line its keeper writes, in the same
+words. Decided and run, its rows settle and the node's skills are woken to write the page again
+(`itemCardMoved`, `wakeNodeSkills`): code writes no line of what a yes did; the brain is told.
+Such a card, like a task's access, start or memory card, is linked to the node its run or task
+works in (`cardNodeOf`, `node_cards`) and is about it: it waits on that node's page, which stays
+waiting while it does, never above the bar.
 
 An access card and a start's card read alone (`card_origin.go`): wherever they are shown (the
 conversation, a page, a channel) they say where they come from and what their Oui does,
@@ -1884,7 +1777,7 @@ facts of eriphe-core's only, never words of the model's next to Oui and Non. The
 a calls card's calls belong to (the node whose item it acts on, else the node of the run that kept
 them, never one a model names), linked to its page (`/espace?open=node-<id>`); its title always
 shows: one that may be someone else's words (`TitleExternal`: an external node's title not `title_trusted`, i.e. not written before outside content reached it nor vouched for by the user or a clean author) is followed by « ⚠ (écrit après une lecture extérieure) » and the card's `fromExternal` draws its line in amber: shown, never replaced, never passing for a trusted one. The task that asks is named when the
-card's text does not (a call of a task, a start), marked the same way when it was started on a tainted turn; a calls card names its item and source, marked when the source is not a trusted server's or the calls were kept on a tainted turn.
+card's text does not (a call of a task, a start), marked the same way when it was started on a tainted turn; a calls card names its item and server, marked when the server is not trusted or the calls were kept on a tainted turn.
 What Oui does follows the answer's code: a grant lets the task act until it ends, a release gives
 it its held tools, a call runs once as shown (a step's, then its node's work goes on), a page or a search
 is allowed once, a start starts the task. A task's card is shown:
@@ -2243,7 +2136,7 @@ turn is not tainted. Its front matter:
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise. Any skill's, with or without `when` ([Skills](#skills)) |
 | `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid. Any skill's |
 | `repos` | its repositories, `owner/name`, by commas or a list (10 at most): its runs' steps may borrow them, a clean run's step on them starting without a card ([Work in steps](#work-in-steps-node_stepsgo)); a run itself is not lent them. Any skill's |
-| `node` | with `when`: the id of its home, any node, which it maintains ([Live pages](#live-pages-node_livego-node_homego)): each run's task is that node's, reads and writes it, notes its items and opens its children, and may act on other nodes; the node is never given a run's report, nor set done while the skill is approved and on. A node that is gone or archived refuses the run. Without it, each run works in a node of its own |
+| `node` | with `when`: the id of its home, any node, which it maintains ([Live pages](#live-pages-node_homego)): each run's task is that node's, reads and writes it, opens its children, and may act on other nodes; the node is never given a run's report, nor set done while the skill is approved and on. A node that is gone or archived refuses the run. Without it, each run works in a node of its own |
 | `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run weighs something 5 |
 
 The keys are checked when a version is added: a bad trigger refuses it. A trigger is approved with
@@ -2259,7 +2152,7 @@ version, read with its diff.
   ([a task's node](#a-tasks-node-task_nodego-task_nodesgo)): it writes there what it found and
   keeps its items as lines of the page, with the user's preferences about what they see
   in its prompt (`seePreferences`), and `page_format` beside its node's tools. A skill with `node` works in its home
-  ([live pages](#live-pages-node_livego-node_homego)).
+  ([live pages](#live-pages-node_homego)).
 - **Its last message** is optional, the run's report, weighed by its receipt's
   [attention signal](#attention-signals-attention_signalgo) (`tellRun`), the same 1-to-5 scale
   as everywhere; a skill's instructions write no prefix. Entries whose refs are all nodes
@@ -2283,7 +2176,8 @@ version, read with its diff.
   it did not run, its card's ref and where it waits, and goes on. They wait until the run ends;
   then they fold with what does the same in the node and show, each on its card (kind `calls`),
   with its taint: on the rows of the items they name (a value of its input equal to an item's id,
-  of the call's own server; code matches it, the run never says it), else a block of its node.
+  of the call's own server; code matches it, the run never says it), else its node's foot (or a `card:` line the run
+  writes).
   A run's calls on one item are one card. No message of the run's says them. Their words are
   code's; Oui runs each call once as kept; their results go to the run's note, never to the brain.
 - **Its about**: its runs are about their events' key when it names a thing (a monitor's,
@@ -2317,7 +2211,7 @@ keys and the runs' outcomes, but not their text: what a run read stays on its pa
 **Written by Eriphe.** The brain's `write_skill` (name, description, instructions, `when`,
 `every`, `model`, `tools`, `urgent`, `repos`, `node`, `monitor`) writes a `SKILL.md` and adds it as a version waiting for
 approval (source `eriphe`), checked as an upload is (its model an agent, its tools catalog
-servers). Its card (kind `skill`) says the monitor it brings (`monitor`: made on by the same yes, [Live pages](#live-pages-node_livego-node_homego)), the trigger in words, the tools, repositories and model it uses, the node it maintains and the instructions; the yes approves
+servers). Its card (kind `skill`) says the monitor it brings (`monitor`: made on by the same yes, [Live pages](#live-pages-node_homego)), the trigger in words, the tools, repositories and model it uses, the node it maintains and the instructions; the yes approves
 exactly that version (and its monitor), the no drops it. Written on a tainted turn, the card says so. A task
 has no such tool: one that follows a skill proposes a version of that one only, its instructions
 (`skill_propose`, [Skills](#skills)).
@@ -2401,8 +2295,7 @@ item, so a skill follows the mail with `when: monitor.new key=mails`. The calend
   of the open web (`openWorldHint` not `false`: Sentry's, a fetch) is one too. A Never is never
   lifted, and a tool that changes, deletes or sends is never a monitor's. Checked when it is written
   and before every look: otherwise it waits, with why (the tool set to Never since, say), and
-  nothing is called. A live block's source, which no one approves, must be a free read that does not
-  reach the open web (`sourceWhy`).
+  nothing is called.
 - **The user approves it.** The brain proposes one with `write_monitor` (name, server, tool or
   resource, args, every, cond, path, id, above, below): a card (kind `monitor`) says it in words; the yes turns it on from a new
   baseline, the no drops it. The card shows the arguments in full, what each look sends. A change
@@ -2573,9 +2466,8 @@ server (a receiving middleware of `newMCPServer`) and on its catalog calls (the 
 
 | Constant | Value | Refused in a turn of the brain's |
 |---|---|---|
-| `brainWriteRunes` | 800 | a node write carrying more text (`node_open`'s title, goal and body; `node_write`'s body; `node_edit`'s block or new text): a whole page; and the turn's `node_write` and `node_edit` together past it, so a page split in pieces is one. A work's `steps` are not counted |
+| `brainWriteRunes` | 800 | a node write carrying more text (`node_open`'s title, goal and body; `node_write`'s body; `node_edit`'s new text): a whole page; and the turn's `node_write` and `node_edit` together past it, so a page split in pieces is one. A work's `steps` are not counted |
 | `brainNodeWrites` | 3 | a fourth `node_write` or `node_edit` |
-| `brainItemNotes` | 3 | a fourth `item_note` |
 | `brainSkillWrites` | 1 | a second `write_skill` |
 | `brainGestures` | 6 | a seventh change of any kind: the writes above, `node_set`, a memory, an intention, `notify`, a rule, a setting, `write_monitor`, `try_monitor`, a catalog call that is not a read |
 
@@ -3148,11 +3040,6 @@ in-memory session), so every path a catalog call takes applies to it unchanged:
 - **Who has it.** The brain, by default, once a folder is shared (`assistantGrant` lends it every
   lent tool); a skill through its `tools`; a task as
   `{kind: tool, ref: eriphe-folders}`. Lending the folder itself to a task stays for heavy work.
-- **Legacy blocks** (until #787). Its reads are read-only by their annotations: a
-  node's legacy block may read a file live (`{tool: eriphe-folders/read_file, args: {folder, path}}`, bound
-  to `/…/text`). The devices reach a folder through short-lived helpers too, which cannot watch it:
-  such a block is read again on its own schedule, and at once after a write through these
-  tools (`refreshFolderNodes`).
 
 ### Places
 
@@ -3410,7 +3297,7 @@ intention, a notification rule, a setting, a presence mapping, the start of a ta
 needs something of theirs: [asked at launch](#github-in-a-task)) is a card bound by the code
 to that one proposal, filed with the brain's message of the turn that made it (or its last message of
 the turn), with Oui and Non (the proposal's own approve and reject), shown in the workspace
-[in the blocks it concerns](#proposals-in-the-blocks-they-concern-card_movesgo); to change one, the
+[in the pages it concerns](#proposals-in-the-pages-they-concern-card_movesgo); to change one, the
 user tells the brain, which proposes again. The kinds of proposals are one table
 (`proposal_kinds.go`, `kindsOf`): each row says how its proposal is read, which wait, how a yes or
 a no applies, how it is withdrawn, which node it belongs to and whom a decision tells; reading,
@@ -3671,14 +3558,15 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
 **What the page reads** (`web_graph.go`), with a session:
 
 - `GET /api/nodes/{id}[?version=n]`: a node's page (`nodePage`): its row (below), the version
-  shown, its versions (`n`, `author`, `at`; code's own versions, a source's new values, are not
+  shown, its versions (`n`, `author`, `at`; code's own versions are not
   listed but the last; nor an empty creation, a step opened for its task to write: `shift` 1, the
-  page numbering the versions from the first with something in it), its body as written (`body`, the Markdown the page draws, held to `nodefile.ReadPage` by `web/espace/src/page/read.ts`) and as parts in order (`parts`: Markdown `text`, or a `block`, which the page draws where its fence is), and
-  the cards it waits on (`cards`, as the [proposals](#proposals-in-the-blocks-they-concern-card_movesgo)
-  show them). A maintained node's page ([Live pages](#live-pages-node_livego-node_homego)) says what keeps it alive (`alive`, `node_alive.go`), from
-  what code knows, never a model's words: the `sources` its blocks read (`name`, `what`: the tool
-  or resource and how often), the `monitors` that watch for it (those its blocks read and those its
-  skills run on, `what` from their spec), the `skills` that work in it (`what`: what starts them, at
+  page numbering the versions from the first with something in it), its body as written (`body`, the Markdown the page draws, held to `nodefile.ReadPage` by `web/espace/src/page/read.ts`),
+  its references to items (`items`) and the cards its lines place (`placed`:
+  [Cards on referenced items](../docs/node-format.md#cards-on-referenced-items)), the cards it waits on at its foot
+  (`cards`, as the [proposals](#proposals-in-the-pages-they-concern-card_movesgo) show them) and
+  the decided ones (`settled`). A maintained node's page ([Live pages](#live-pages-node_homego)) says what keeps it alive (`alive`, `node_alive.go`), from
+  what code knows, never a model's words: the `monitors` that watch for it (those its `on:` lines
+  follow and those its skills run on, `what` from their spec), the `skills` that work in it (`what`: what starts them, at
   most how often) and when it last changed (`updated`). The workspace shows it in the page's ⋯
   menu, « Ce qui le fait vivre »; a maintained node (`maintained`) has one sign, a small ∞ by its title (« Entretenu
   par <skills> », in its page's head and its row on a phone), a satellite slowly orbiting its bubble
@@ -3691,26 +3579,14 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   (« Ouvert à ta demande : « <the first line of their message> » », « Ouvert par le skill X, après
   ce qu'a vu la surveillance « m », sans demande de ta part », « Ouvert après un événement, sans
   demande de ta part », « Origine inconnue » for a node made before); `origin.unasked` tells a node
-  a skill or an event opened. A block (`pageBlock`) is ready to draw: its `name`, its A2UI `components`, its
-  `data` with each source's last value at `/<name>` (its latest read, whatever version
-  shows: the values are code's, never in the file); or its `error`
-  when it does not read as a block. Its media go through eriphe-core (`/espace/media`, signed),
-  those an external block's author wrote dropped unless a source gave them; a Link keeps to the
-  addresses a Link may open. Each item of a source with `items` carries its note's fields
-  (`_note`, `_state`, `_group`, `_external` when the note may carry someone else's words;
-  `list_sections.go`). `lists` (`list_rows.go`): each List bound as a whole to the items of a
-  source that filters them (`filtered`: the page shows only its rows, code filters), whose source
-  opens its items (`open`, `item_open.go`), that a batch folds, or one of whose rows a card waits
-  on (`component`, `source`), its rows (`items`: `n`, its place in the source's list, `id`,
-  `title`, `detail`, `card` the ref of the card that waits on it); a filtered List's template
-  path reaches the page without its filter. The node's
+  a skill or an event opened. The node's
   goal is never sent (it is in its file). `refs`: the node
   each `[[name]]` of its text opens, by the name as written (`id`, `title`, none when it may be
   someone else's words, `external`, `archived`); a name no node has is not there.
 - `GET /api/nodes/{id}/trace`: the trace's entries, oldest first (`at`, `author`: brain, user,
   `task:<id>`, eriphe, outside; `text`).
 - `GET /api/nodes/{id}/md[?version=n]`: the file as it is (`md`), its body as the user edits it
-  (`body`: its text and blocks, without code's fields), its `version`, its `hash` and the last
+  (`body`: its text, without code's fields), its `version`, its `hash` and the last
   version (`last`).
 - `GET /api/archives`: what the user archived, the latest first (`nodestore.Archives`): each node
   archived with no parent archived with it, a row as below with `archived` (when) and `with` (how
@@ -3753,10 +3629,6 @@ with their new weight. Computed when a row is sent: a node that ages shows it wi
   reads it again;
 - `progress`: a task's line (`{node, text, at}`), from its `progress` tool, only when the task read
   nothing external (a tainted line stays in the trace, never under the bubble);
-- `source`: a live block's new value (`{node, block, name, value}`, its items' notes on them),
-  sent when its read changed or the notes on its items did (to each block that reads it), with the
-  rows of its Lists the page knows (`lists`: `{component, items}`, as the page's `lists` gives
-  them);
 - `show`: Eriphe asks to open a node's page (`{node, by, at, seq}`), the last one at once, then each
   new one; the page opens it beside what is open, once (an old one, over a minute, is not news);
 - `orb` (below), `proposals` and `notice`.
@@ -3768,15 +3640,14 @@ token in `X-CSRF-Token`:
   (`authorWrite` as `user`, the node's guard and the secrets filter as for any author), made on
   the version whose hash is `expect`. A newer version gives `409` with its `version`, `hash` and
   `body`, and writes nothing; an archived node `410`; a body that does not read `400`.
-- `POST /api/nodes/{id}/ask` `{block, component}` or `{line, n}`: a block's button, or a page's
-  probable reply (the `n`-th `ask:` link of that body line). Its words are read again in the stored
-  block (`a2ui.AskText`) or the stored page (`nodefile.ReadPage`), never taken from the page, and
-  become the user's message to that node. A block marked external, or a node written after reading
-  external content, asks too, but its words may echo what was read: the message is stored tainted
-  (`ask:<node>/<block>`, `ask:<node>` for a page's line), so the turn it starts is tainted as the one that wrote
-  it, and it is never taken for the user's own words (`fromUntrusted`: no owner memory cited from
-  it, no text « oui » on a card, no lending, the extraction reads it as external). It acts on
-  nothing: no route marks a block's items or acts on them; a yes is a card's.
+- `POST /api/nodes/{id}/ask` `{line, n}`: a page's probable reply (the `n`-th `ask:` link of that
+  body line). Its words are read again in the stored page (`nodefile.ReadPage`), never taken from
+  the request, and become the user's message to that node. A node that may hold someone else's
+  words (marked external, or holding a callout an event wrote in) asks too, but its words may echo
+  what was read: the message is stored tainted (`ask:<node>`), so the turn it starts is tainted as
+  the one that wrote it, and it is never taken for the user's own words (`fromUntrusted`: no owner
+  memory cited from it, no text « oui » on a card, no lending, the extraction reads it as
+  external). It acts on nothing: a yes is a card's.
 - `POST /api/nodes/{id}/task` `{line, text, state}`: the user's tick on a page's task
   (`nodefile.SetTask`: `[ ]`, `[x]`, `[/]` or `[-]`), made on the last version (`nodes.ChangeLast`),
   a version by `user`. The line is found by its text (`line` a hint): a line gone, or written
@@ -3796,12 +3667,8 @@ token in `X-CSRF-Token`:
   (`409` `open.ref` when there is none, or its server declares no read of one item by id: a tool
   whose `_meta` `eriphe/open` names its `id` parameter, a read needing nothing else, the first by
   name), the tool called with the id as the page writes it, under the rules below; `misleading`
-  when the page's words for it do not say it. `{block, source, item}`: a legacy List's row. The source's `items.open` is read again in the stored block
-  (`409` when it has none); the item must be one the source lists now (`400`). The tool (a read of
-  the source's own server, checked at write) is called with the item's id as the source gave it,
-  under its policy: a free read that does not reach the open web runs; any other is `403`
-  (`open.notfree`: ask Eriphe, who proposes it on a card); the click is never a yes. `200` `{title, from, date, body, raw, external, note: {group, note,
-  external}}`: its fields as the read tool declares them (`_meta` `eriphe/open`), else a title and a sender as a row finds them (`from` as written, « Sam <sam@example.org> »: the page splits name and address), the whole as JSON, `external` for a server not
+  when the page's words for it do not say it. The tool is called under its policy: a free read that does not reach the open web runs; any other is `403`
+  (`open.notfree`: ask Eriphe, who proposes it on a card); the click is never a yes. `200` `{title, from, date, body, raw, external, misleading}`: its fields as the read tool declares them (`_meta` `eriphe/open`), else a title and a sender as a row finds them (`from` as written, « Sam <sam@example.org> »: the page splits name and address), the whole as JSON, `external` for a server not
   trusted; `502` when the tool failed. Nothing is kept: no version, no trace, no journal of what it
   said.
 - `POST /api/nodes/{id}/archive` and `.../reopen`: the user's alone (`archiveNode`: what runs
@@ -3884,13 +3751,12 @@ token in `X-CSRF-Token`:
   element, which the CSP refuses, and a shadow root with a constructed stylesheet; its look is
   the page's variables). It saves on the version it was read at (`page/edit.ts`): a newer version
   that came meanwhile shows with its text, nothing written, and the user takes it or keeps theirs.
-- `doc/`: the page's parts: text as Markdown by the page's own renderer, which makes no HTML of it;
-  each block an A2UI surface (`<node>--<block>`) of the page's own adapter, a source's new value put
-  at its place in the block's data. A block marked external is a tainted surface. A button's `ask` goes to eriphe-core (`.../ask`)
-  from the last version of a block, an external one's too (eriphe-core marks its words); a row's card is drawn by the page from
-  the out-of-band `lists`, never from the block; anything else stays in the page. A card block is
-  the card it places (`Cards`, read from eriphe-core), or « Carte introuvable » when the page sent
-  no card for it.
+- `doc/`: the page's body (`Doc.tsx`), drawn from its Markdown by `page/Body.tsx` (with
+  `callouts.tsx`, `items.tsx`, `acts.tsx`), the page's own renderer, which makes no HTML of it: a
+  task's box ticks, an `ask:` link asks (eriphe-core reads its words again in the stored page), a
+  `[[link]]` opens the node eriphe-core resolved it to; its lines carry what eriphe-core places there
+  (the cards on the rows of the items it references, a `card:` link's card, an item opened below
+  its row). On an older version nothing is sent.
 - `orb/`: Eriphe in the graph, a small blue orb (`Orb.tsx`), and the bar under it (`Bar.tsx`). The
   bar is the one input, and only a bar: it talks to the page the store's talk names (the last one
   opened or clicked), else to the home (`POST /messages` with `node`). No history, no buttons:
@@ -3983,8 +3849,8 @@ its `run_task` under the turn's node), the reply sent on its card, a child reuse
 below its subject without being shown, `node_set parent`, `[[links]]` written and resolved, a
 glance, a mail watch shown first (its subject opened before any read, with how long it took to
 appear, the skill that maintains its page proposed in the turn it is asked (`write_skill` with `node`), no questionnaire, the
-changes offered by ask buttons), approved and valid (its bilan lead, items in sections; its batch
-reported), the page's skill noting the new mail (`item_note`) and the cards on its rows, and, last,
+changes offered by ask buttons), approved and valid (its bilan lead, items as references under headings; a `do:` line on a
+heading's items reported), the page written by its skill and the cards on its rows, and, last,
 « Tu peux suivre et gérer mes journées ? » asked at the home (the seed's day page archived): its
 subject first, the page written and the skill that maintains it proposed in that turn, no questionnaire, no title made
 of the sentence. A quick question at the home (« Il est quelle heure à Tokyo ? ») opens no node. The test fails on a lost
@@ -4001,14 +3867,14 @@ command, `ERIPHE_LIVE_NODES_RECORD` a file the first run's node writes are recor
 
 **The replay** (`nodes_replay_test.go`). The node writes a live run recorded
 (`testdata/nodes_replay.json`: `node_open`, `node_write`, `node_edit`, `node_set`, `write_skill`,
-`item_note`, each with whether its turn was tainted and what code answered) are played again on the
+each with whether its turn was tainted and what code answered) are played again on the
 scenario's core without a model, in CI: ids, hashes and card refs as placeholders, a call on a node
 code opened and a piece of text replaced (which depend on what workers wrote) left out. Each call
-must be taken or refused as it was, and what they leave must hold to the rules: a card block draws
+must be taken or refused as it was, and what they leave must hold to the rules: a `card:` line places
 its card. Its last turn, « tu peux suivre et gérer mes journées ? » (written by hand after a real
 case until a run records it: the page written after a recall read a mail's fact), must open its
 subject first, untainted, then write the page in it in that turn, no card, no questionnaire: its
-`Agenda` reads the calendar and its buttons, written in the tainted turn, ask and are marked.
+agenda shows the day and its `ask:` links, written in the tainted turn, ask and are marked.
 Turn 13 writes the mails' page, then proposes the skill that maintains it, its monitor on the same
 card. Record it again with `ERIPHE_LIVE_NODES_RECORD=testdata/nodes_replay.json`
 when the rules change on purpose.
@@ -4097,7 +3963,7 @@ queue: every message of the conversation belongs to a node or to the home, in it
   The message is a turn like any other, the node named: the brain reads
   `[Sam 10:02 #12 · nœud <id>]` (its id only: a title may carry someone else's words, and the
   node's card gives the rest), and the turn is about it (`nodesDelivered`). A channel's, the CLI's,
-  the API's messages belong to the home; a block's `ask` button, to the block's node
+  the API's messages belong to the home; a page's `ask:` link, to the page's node
   (`handleNodeAsk`), as the user's message there, which never decides a card.
 - **The brain's answer belongs to the node of what it answers**, fixed at delivery (`talkOf`, kept
   in the turn as `talk`): the last message of the user's in the delivery, else the last event of a
@@ -4112,10 +3978,10 @@ queue: every message of the conversation belongs to a node or to the home, in it
   the `orb` event says, for each of Eriphe's words, the node they belong to, and the orb goes
   there. A plain "oui" decides the card just above in its own node only (`resolveByText`).
 - **Questions and their answers.** The brain writes its questions in the subject's document, each
-  with its default, and below them a block of `ask` buttons for the likely answers, one taking
-  every default (« Fais comme tu proposes »); a click sends the button's words, read again from
-  the block, as the user's message in that node. On a tainted turn no button is written
-  (`nodeGuard`). Each exchange rewrites the document: answered questions go, the choices are
+  with its default, and below them a line of `ask:` links for the likely answers, one taking
+  every default (« Fais comme tu proposes »); a click sends the link's words, read again from
+  the stored page, as the user's message in that node; on a page that may hold someone else's
+  words, marked as not the user's own. Each exchange rewrites the document: answered questions go, the choices are
   written under « Ce qu'on a décidé », the next step shows; a child that moves on updates the
   main subject too (the prompt's « Chaque échange réécrit le document »).
 
@@ -4145,71 +4011,38 @@ to Eriphe.
 A 401 sends the page to the sign-in. `web/espace/src/data/` is the one place that talks to
 eriphe-core.
 
-**A2UI surfaces** (`web/espace/src/a2ui/`, epic #415). The page renders [A2UI v1.0](https://github.com/a2ui-project/a2ui) surfaces with the workspace catalog's
-components, ours, written in React. The engine is the official one: `@a2ui/web_core` keeps each
-surface (components upserted by id, the data model, JSON Pointer bindings, child-list templates,
-actions, validation) and `@a2ui/react`'s `createComponentImplementation` gives each component its
-props, resolved and kept fresh. The tree is walked by the page (`Surfaces.tsx`), not by
-`@a2ui/react`'s `A2uiSurface`, which wraps every component in a custom element whose style it sets,
-and the library's basic catalog (Lit custom elements) is never imported: the DOM is our markup,
-with classes only. `adapter.ts` is all the rest of the page knows: `applyMessages(msgs)` feeds it
-the messages core sends (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`);
-`onAction(cb)` and `onError(cb)` hand back A2UI v1.0 `action` and `error` messages, ready to send.
-`catalog.tsx` names the catalog once (`CATALOG`: its id and where core serves it, `/espace/catalog/v1.json`)
-and implements all 23 of its components, each with exactly the catalog's properties;
-`catalog.test.ts` checks both ways against `a2ui/catalog_v1.json` (every component, its
-properties and their allowed values, the icon names, the four functions). A node's page
-makes a surface of each block (`doc/`, above). With no core behind, the dev server shows a
-made-up graph (`data/sample.ts`), or with
-`?gallery` the gallery (`a2ui/gallery.json`: surfaces using every component, in French and
-English, which the component tests render and a Go test, `TestEspaceGalleryIsValid`, runs
-through `a2ui.Validate`).
+**The page's views** (`web/espace/src/a2ui/`). Plain React views the Markdown page draws its
+callouts and rows with (`page/Body.tsx`, `page/callouts.tsx`), shapes any tool's data can fill, never
+tied to one; the DOM is our markup, with classes only:
 
-**The components** are shapes any tool's data can fill, never tied to one:
-
-- *Layout*: Row, Column, List (a template over a list, `emptyText`), Card (the block's own
-  frame at the root, a quiet box inside), Tabs (the WAI-ARIA pattern: one tab stop, arrows,
-  Home, End; hidden panels stay bound), Divider.
-- *Content*: Text (a `title` is a heading), Markdown (a small reader in `markdown.tsx` that
-  makes React elements, along CommonMark and GFM: GitHub tables, in a box that scrolls when
-  wider than the page; code spans literal, an underscore inside a word never emphasis, a lone
-  backtick only a backtick; raw HTML stays text, images show their alt text, links only to
-  http(s) or mailto, `rel="noopener noreferrer"`, in a new tab on the user's click), Image
-  (loaded only from `/espace/media?…`, the proxy of core; any other address shows its alt
-  text: a model's URL is never fetched by the page), Icon (a fixed set of inline SVG,
-  `icons.tsx`, no font), Link (a page outside, opened in a new tab on the user's click only,
-  `rel="noopener noreferrer"`, `referrerpolicy="no-referrer"`; its host shows beside the label,
-  the whole address when it has none or the surface shows external content; an address the
-  page's own parse does not take as http(s) with a host and no credentials shows as text: see
-  [links](#surfaces-in-a2ui-a2ui)), Code (`code.tsx`: text as it is in a
-  fixed-width font, an optional language label; `mode: "diff"` reads a unified diff, its
-  files' headers, hunks, added, removed and kept lines each a class, a hunk's counts telling a
-  removed `-- x` line from a header. One block per line, every line shown, long lines
-  wrapped).
-- *Input*: Button (with its icon), Choice, TextField, DateField; the fields write what the
-  user enters to the bound data path, as A2UI does. A Button's action keeps to the
-  actions' grammar (`a2ui/actions.go`: a Button sends `ask`, its author's words only, never the
-  fields; nothing else); in a node's page eriphe-core reads the ask again in the
-  stored block (`POST /api/nodes/{id}/ask`).
-- *Data*: Metric (value, unit, a signed delta in ink with ▲ or ▼, a trend as a sparkline), Chart (lines or bars in
-  SVG, `chart.tsx`: one axis, a palette checked for colour blindness, a legend from two
-  series, a tooltip on each mark, the numbers in a table for screen readers), Table (columns
-  `text`, `number`, `date`, `change`: a signed gap in ink, + or −), Timeline (`done`, `current`,
-  `pending`, `failed`), Progress (a word in ink, a bar of steps whose done part takes the tone,
-  the current step named), Message (short: the excerpt; full: the body, opened in place),
-  Agenda (`agenda.tsx`, up to 7 days from `date`: the first by the hour on half-hour rows with
-  the now line when it is today, a clash of events side by side, stacked when the block is narrow
-  (a phone); the next day as lines, the days after as a strip; a `days: 1` Agenda of another
-  date is by the hour too. Its events are in the shape servers/calendar returns — `title`,
-  `start`, `end`, `place`, `allDay`, `status` — and an invitation to answer carries the amber
-  sign of what comes from outside. With its day's
-  [dated proposals as ghosts](#proposals-in-the-blocks-they-concern-card_movesgo), each with
-  its Oui), Person (initials, what they are to the user, a note, facts as lines: a fact that is
-  wholly a phone number or an e-mail address is a `tel:` or `mailto:` link, no other scheme),
-  Quote (someone else's words as written, who and when, the page in clear), Alert (four
-  levels), Placeholder (« En préparation », a slow shimmer). Changes are told in ink and a
-  sign; colour says a state, never good or bad news.
-- *Cards* (`page/Cards.tsx`, not a catalog component: no author writes a yes) draw a proposal of
+- `markdown.tsx`: a small Markdown reader that makes React elements, along CommonMark and GFM:
+  GitHub tables, in a box that scrolls when wider than the page; code spans literal, an underscore
+  inside a word never emphasis, a lone backtick only a backtick; raw HTML stays text, images show
+  their alt text, links only to http(s) or mailto, `rel="noopener noreferrer"`, in a new tab on the
+  user's click; `[[links]]` as the page resolves them.
+- `views.tsx`: `PersonView` (initials, what they are to the user, a note, facts as lines: a fact
+  that is wholly a phone number or an e-mail address is a `tel:` or `mailto:` link, `factLink`, no
+  other scheme), `QuoteView` (someone else's words as written, who and when), `AlertView` (four
+  levels), `linkTo` (an address the page takes as http(s) with a host and no credentials, else
+  text). `figures.tsx`: `FiguresView` (a band of figures: value, unit, a signed delta in ink with ▲
+  or ▼, a trend as a sparkline, `spark.tsx`) and `BlockTitle`.
+- `chart.tsx`: lines, bars or a stack (one bar per x, the series its parts) in SVG: one axis, a
+  palette checked for colour blindness, a legend from two series, a tooltip on each mark, the
+  numbers in a table for screen readers.
+- `agenda.tsx`: up to 7 days from its first: the first by the hour on half-hour rows with the now
+  line when it is today, a clash of events side by side, stacked when the block is narrow (a
+  phone); the next day as lines, the days after as a strip. An invitation to answer carries the
+  amber sign of what comes from outside.
+- `code.tsx`: text as it is in a fixed-width font, an optional language label; a `diff` fence reads
+  a unified diff, its files' headers, hunks, added, removed and kept lines each a class, a hunk's
+  counts telling a removed `-- x` line from a header. One block per line, every line shown, long
+  lines wrapped.
+- `inline.tsx`: a card's Oui on a row (on a row sharing a card, its ✕ refuses only that row's own
+  calls); `opener.tsx`: an item opened below its row ([Opening an item](../docs/node-format.md#opening-an-item));
+  `proposals.ts`: how the views read, answer and follow proposals; `icons.tsx` (a fixed set of
+  inline SVG, no font), `format.ts` (numbers and dates in the user's language; a date as its
+  writer wrote it, its wall-clock time), `now.ts`.
+- *Cards* (`page/Cards.tsx`: no author writes a yes) draw a proposal of
   Eriphe's by its own ref (`kind:id`, the `proposal` of a
   card): `GET /api/proposals/{ref}` (`web_proposals.go`) gives its kind, text, why, fields
   and state in the user's language, where it comes from (`node`, `from`) and what its Oui does
@@ -4228,34 +4061,22 @@ through `a2ui.Validate`).
 
 Placement is classes only (the day's rows and lanes are `.a2-r-N`, `.a2-span-N`,
 `.a2-lane-N`), never a `style` attribute. Fixed words are the app's (`espace.a2.*` in
-`web_text_espace.go`), and numbers and dates follow the user's language: the adapter is made
-for it (`createAdapter(lang)`), and so are the catalog's functions (`format.ts`:
-formatString, formatNumber, formatDate, formatRelative, written here rather than taken from
-the engine's basic catalog, which would bring its whole module along). A date is written as
-its source wrote it (its wall-clock time).
+`web_text_espace.go`). With no core behind, the dev server shows a made-up graph whose pages are
+Markdown (`data/sample.ts`, `samplecore.ts`, `sampleviews.ts`, `sampleproposals.ts`).
 
-**Upgrading `@a2ui/*`.** The packages are pinned to an exact version (`package.json`, no `^`) and
-change often, with breaking changes in minor versions. Bump them only on purpose, in a pull request
-of their own: read their CHANGELOG from the pinned version up, bump `@a2ui/react` and
-`@a2ui/web_core` together, diff `A2uiSurface` and `NodeContent` in the new `@a2ui/react` against the
-old (`Surfaces.tsx` mirrors them: `NodeResolver`, `ComponentNode`, an implementation's `view`), run `npm test` (the surface tests check rendering, data updates,
-templates, actions, errors, and that no `style` attribute, `<style>` element, adopted stylesheet or
-custom element appears), rebuild, and open the built page under the workspace's CSP to check the
-console for violations.
-
-**Building.** The app is React, Vite, Motion and the A2UI engine. Its built files are committed under
+**Building.** The app is React, Vite and Motion. Its built files are committed under
 `web/static/espace/` and embedded with the other static files, so `go build` needs no Node:
 
 ```sh
 cd core/web/espace
 npm ci
-npm test            # the layout's, the store's, the pages' and the A2UI components' tests (vitest)
+npm test            # the layout's, the store's, the pages' and the views' tests (vitest)
 npm run build       # type checks, then writes ../static/espace/espace.js, espace.css and the editor's chunk
 npm run dev         # http://localhost:5300, on a made-up graph, no eriphe-core needed
 ```
 
 The built app is what the user's workspace needs, nothing more: the dev server's made-up
-workspace (`dev.tsx`: the samples, `?gallery`) is imported on the dev server only
+workspace (`dev.tsx`: the samples, `?physique`) is imported on the dev server only
 (`import.meta.env.DEV`), and CodeMirror (`page/cm.ts`) is a chunk of its own, named by its
 content (`espace-cm-<hash>.js`), loaded with the first .md tab; it imports nothing of the
 entry's, which it would load again without its `?v=`. A Go test (`TestEspaceBundle`) checks both.
@@ -4277,98 +4098,9 @@ layout place things by setting the element's style object from script (CSSOM), w
 not govern; `AnimatePresence`'s `popLayout` mode is
 not used, since it injects a `<style>` element.
 
-### Surfaces in A2UI (`a2ui/`)
-
-A block of a node's page is written by a model in
-[A2UI v1.0](https://github.com/a2ui-project/a2ui): a flat list of components, each with an `id`
-and a `component` type, one of them the `root`; children named by id (`child`, `children`),
-or a list template `{"path": "/mails", "componentId": "row"}` repeated for each item; values
-literal, bound to the surface's data (`{"@path": "/sales/total"}`, relative to the item inside a
-template) or computed by a function (`{"@call": "formatDate", "args": {…}}`). The package
-`core/a2ui` speaks it and owns the catalog of shapes a surface is made of:
-
-- **The catalog** (`a2ui/catalog_v1.json`, id `urn:eriphe:a2ui:workspace:v1`): a JSON Schema
-  2020-12 document by A2UI's catalog rules. Shapes only, never tools, none named after a
-  subject. A model writes a block as one component that says what it shows, and the page
-  supplies the rest (groups, counts, units, columns, the layout on a phone, the empty and reading
-  states): Sections (a source's items grouped by Eriphe's notes, a batch folded with its card's
-  yes), Figures (a band of figures), Gallery (images in tiles, a filter by a field), Table (its
-  columns inferred, `units` per column), Chart (`line`, `bar`, or `stack`: one bar per x, the
-  series its parts, an allocation now against its target), Timeline (it says its own progress),
-  Asks (likely answers: each sends its words, none acts), Agenda, Person, Quote, Alert, Message,
-  Text, Markdown, Image, Icon, Link, Code, Row, Column, Tabs, Divider, Choice, TextField,
-  DateField, Placeholder. No component says yes: a yes is a card, which code draws, and says its
-  verb. The components a model wrote before (List, Item, Fold, Grid, Card, Button, Metric,
-  Progress, and Table's `emptyText`) are marked `"x-legacy": true`: left out of the prompt
-  (`a2ui.Legacy`, `IsLegacy`), still validated and drawn, so that no node written with them
-  breaks. The functions: formatString, formatNumber, formatDate, formatRelative. A property that
-  carries data takes a binding (Figures' `items`, Chart's `series`, Table's `rows`, Agenda's
-  `events`…). Its descriptions and `instructions` are for the models, in French. Keywords of its
-  own on a component's schema tell eriphe-core what it needs without naming a component
-  (`a2ui/days.go`, `prompt.go`): `x-source` names the property that may name one of the block's
-  sources instead of a binding (`a2ui.SourceProp`: Sections' and Gallery's `items`, Table's
-  `rows`); `x-rows` names the property that, bound to a source's items, makes them rows (their
-  cards are drawn there, not at the page's foot: the Agenda's `events`, a Sections' `items`), and
-  `x-days` says the component draws the dated proposals of its days (`a2ui.DaysShown`). Served to the app, with a session, at
-  `GET /espace/catalog/v1.json`; a new version gets a new path.
-- **Validation**: `a2ui.Validate(raw)` takes one agent message or an array of them (the whole
-  life of their surfaces), `a2ui.ValidateSurface(a2ui.Surface{ID, Components, DataModel})` what
-  an author writes of one surface, `Catalog.ValidateEvent(raw)` what the page sends back
-  (`action`, `error`). First the published v1.0 schemas, embedded unchanged in `a2ui/spec/`
-  with the catalog put in place of `catalog.json`; then what a schema cannot say: exactly one
-  `root`, every child and template naming a component that exists, no cycle, ids that are
-  identifiers (UAX #31) and unique in a list, the catalog's `allowedParents` /
-  `allowedChildren`, relative paths and `@index` only inside a list template, well-formed JSON
-  pointers, the surface's `catalogId`. Errors have A2UI's shape (`code` `VALIDATION_FAILED`,
-  `UNALLOWED_PARENT` or `UNALLOWED_CHILD`, `surfaceId`, `path`, `message`; `.Event()` wraps one
-  in the renderer's `error` message): the path points at the field, and a value that may take
-  several forms gets one error about the form it was meant to be (the one whose `component` or
-  `@call` it names), not one per form.
-- **No prompt**: no model is taught the catalog any more (#786): authors write Markdown pages
-  ([The page format tool](#the-page-format-tool-page_formatgo)); the catalog draws the legacy
-  blocks until #787 converts them.
-- **Loading a catalog** (`a2ui.LoadCatalog`) applies A2UI's catalog rules: the definition
-  schema, identifiers, each component's `component` const equal to its key, `$ref` only to the
-  catalog itself and the allowed common types, everything listed in `anyComponent` /
-  `anyFunction`. Nothing is ever fetched: a reference outside the embedded schemas fails.
-
-The JSON Schema validator is
-[santhosh-tekuri/jsonschema](https://github.com/santhosh-tekuri/jsonschema) v6: 2020-12 in full
-(`unevaluatedProperties`, `$dynamicRef`), the official test suite passed, no dependency beyond
-`golang.org/x/text`, structured errors with instance locations. Go's `regexp` knows no
-`\p{XID_Start}`: the schemas' identifier pattern is compiled with the Unicode categories it is
-made of. The conformance cases of the A2UI repository (`specification/v1_0/test`) run as Go
-tests (`a2ui/testdata/conformance`, with their notice), as their runner runs them with ajv.
-To move to a newer A2UI release, copy its `specification/v1_0/json` and test cases over these
-and update the commit in the two `NOTICE` files.
-
-### What a block may show (`web_graph.go`, `a2ui/`)
-
-A block is drawn as its author wrote it, its data kept fresh by its [live sources](#live-pages-node_livego-node_homego); what it shows goes through code first:
-
-- **Links** (`a2ui/links.go`): a Link's address is never built, so that it cannot carry out
-  what its author read (A2UI #4045): `url` is a literal or a binding (`@path`), never a function
-  call (the schema has no such form: no `formatString`). A literal must be http(s) with a host,
-  no user or password, no space, control character or backslash, 2 KiB at most
-  (`a2ui.CheckLinks`, `a2ui.LinkURLOK`); a binding must hold such an address as a whole, in a
-  source (a page's address a tool gives) or in the author's data (checked like a literal, in
-  `checkBindings`); and every bound value goes to the page as it is or as `""`, no link
-  (`blockView`: a source may later give anything). An external block may show links: unlike
-  an image, nothing leaves without the user's click, and the page then shows the whole address,
-  not only its host. Markdown links can still be built with `formatString`: not covered here.
-- **Media**: the page never loads an address from outside (A2UI #4045; the CSP forbids it
-  anyway). Each media address (an `Image`'s `url`, `a2ui.IsMedia`) is rewritten to
-  `GET /espace/media?u=<address>&s=<signature>` (`web_media.go`, with a session): one a
-  source gave, and one the author wrote unless the block is external (a model that read something
-  from outside could carry it out in an address: dropped); anything but http(s) is dropped. The
-  endpoint serves only an address eriphe-core signed (a key per process), fetches it on a public
-  address only (the accesses' dialer: never its own network, the LAN or the cloud's metadata),
-  without proxy, cookie or credential, 3 redirects, 8 MiB, an image (not SVG) or a video, with
-  `nosniff`, a sandbox CSP and 10 minutes of private cache.
-
 ### Captured pages (`web_media.go`)
 
-Most sites refuse being framed, and a block never loads an address from outside: to show a page, a
+Most sites refuse being framed, and the page never loads an address from outside: to show a page, a
 task with a node of its own captures it in its container (`eriphe-capture`, worker/base) and posts
 the image to its device (`ERIPHE_MEDIA_URL`, the task's secret, for a task with `eriphe-nodes`
 only), which relays it here with its own secret and the task's id:
@@ -4379,13 +4111,13 @@ only), which relays it here with its own secret and the task's id:
 - **What is kept.** A PNG or a JPEG, sniffed from its bytes (anything else 415), 5 MiB at most
   (413), 20 files a node at most: in `files/<id>/med_<32 hex>.<ext>` of the graph's repository, one
   commit by the task's author (`nodestore.PutFile`). It is not a version of the node; it stays
-  with it when it is archived. The answer is `{"src": "media:<name>", "type", "size"}`: a legacy
-  block of its node shows it as an `Image`'s `url`. A Markdown page draws no image yet, so tasks are
-  no longer told to capture (#786; #787 converts the blocks). The bytes never go through a model.
-- **Shown.** `blockView` signs `media:<node>/<name>` for the node the block is in (whoever wrote
-  the block, external or not: the file is the node's own and the address carries nothing out), and
-  `GET /espace/media` reads it from that node's files only, with the session: a block of another
-  node naming the same file gets 404.
+  with it when it is archived. The answer is `{"src": "media:<name>", "type", "size"}`, which the
+  task names as a property of its node. A Markdown page draws no image yet, so tasks are not told
+  to capture (#786). The bytes never go through a model.
+- **Shown.** `nodeFileSrc` signs `media:<node>/<name>` for the node that names it (external or
+  not: the file is the node's own and the address carries nothing out), and `GET /espace/media`
+  reads it from that node's files only, with the session: an address eriphe-core did not sign gets
+  403, a file that is no more 404. Nothing is ever fetched from outside.
 
 ### A file the user sent, kept with a node (`node_attach.go`)
 
@@ -4404,36 +4136,29 @@ node's media, as a task's image (`nodestore.PutFile`, by `brain`), and writes th
   the user did not trust taints it, and the node is marked external.
 - **Shown.** The node's page gives each property that names one of its files with its signed address
   (`pageProp.media`: an image shows as the node's picture, a PDF as a link that downloads it:
-  `GET /espace/media` serves a node's non-image file as `Content-Disposition: attachment`). A
-  block whose source is `eriphe-core/node_find` with such a column (`columns: ["photo"]`) shows
-  each node's file: a `Table` as a thumbnail, an `Image` of a `List` as itself (`nodeFindMedia`
-  signs `media:<name>` for the row's own node, and `mediaOrDrop` keeps an address it signed; an
-  external node's columns stay withheld). The brain's `node_find` gives `media:<name>` as written.
+  `GET /espace/media` serves a node's non-image file as `Content-Disposition: attachment`). The
+  brain's `node_find` gives `media:<name>` as written.
 
-### Proposals in the blocks they concern (`card_moves.go`)
+### Proposals in the pages they concern (`card_moves.go`)
 
 A proposal shows where it matters (#428), with no code for any tool:
 
-- **Placed.** An author places a card in a node's page with a `card:` link (or a legacy card
-  block, `{"card": "kind:id"}`), or code draws it on the rows of the items it acts on. Its Oui and ✕ answer that
+- **Placed.** An author places a card in a node's page with a `card:` link, or code draws it on
+  the rows of the items it acts on. Its Oui and ✕ answer that
   proposal and no other (its card, `POST /cards/{id}/yes\|no`). One drawn from external content
   carries a small badge (« extérieur »), its whole sentence on hover and for a screen reader.
-- **Dated.** A proposal that has a time shows as a ghost in every Agenda that draws its day
-  (unless the Agenda says `"proposals": false`, for days that are not the user's), with its Oui,
-  answered through the same `decideCardWith`, whichever node the card belongs to. The Agenda is
-  then the card's place: a node's page leaves it out of its foot when one of its blocks is an
-  Agenda whose days eriphe-core can tell (a written or absent `date`, `card_moves.go`
-  `datedOn`) and the card's span is on one of them. A ghost is drawn apart (« Proposé », « Proposé ·
-  contenu extérieur » for one drawn from external content), placed by the hour with the events, saying which events it overlaps, which are marked too. A
-  ghost only shows: the card answers. The time is generic: an intention's due
+- **Dated.** A proposal may have a time, generic: an intention's due
   date, or, for a call a card keeps (a held write, a run's calls), its arguments that are a date
   or a date-time, by the tool's input schema (`format` `date-time` or `date`), or, the schema
   saying no format, enum or pattern, by the whole value (RFC 3339, `YYYY-MM-DDTHH:MM[:SS]` in
   the user's zone, `YYYY-MM-DD` for a whole day); the earliest starts it, the latest ends it. No
-  name of a tool or of an argument is read. A run's card keeps several calls: each dated one is a
-  ghost, all answering the one card. `GET /api/proposals?day=YYYY-MM-DD` gives the day's
+  name of a tool or of an argument is read. A run's card keeps several calls: each dated one has
+  its own span, all answering the one card. `GET /api/proposals?day=YYYY-MM-DD` gives the day's
   (`{"day", "proposals": [<proposal view with when>]}`, the times with the user's offset; 400
-  without a day); `GET /api/proposals/{ref}` gives `when` too.
+  without a day); `GET /api/proposals/{ref}` gives `when` too. The limits of a time read from
+  values: an unrelated date argument (a recurrence's end, say) stretches the span, and a call
+  with a start and a duration but no end gets half an hour. A page's agenda callout draws no
+  proposal (`page/callouts.tsx`).
 - **Moved.** A card made (`cardProposed`, `cardNow`, `cardQueued`), decided (`decideCardWith`, the
   one way any answer goes: its buttons, a channel, a plain "oui", or a page through
   `answerProposal`, `TestOneWayToSayYes`) or settled when its proposal moved elsewhere
@@ -4441,11 +4166,8 @@ A proposal shows where it matters (#428), with no code for any tool:
   workspace's stream sends them as a `proposals` event, `{"refs": [...], "nodes": [...]}` (`nodes`:
   the nodes their cards are linked to; `{"all": true}` for a stream further behind), at once
   (`watchProposals`); the page reads again each card of those refs, a node's page only when one
-  of its node's cards or a proposal it shows moved, and every Agenda's ghosts. The first `proposals` event of a connection, after the
+  of its node's cards or a proposal it shows moved. The first `proposals` event of a connection, after the
   snapshot, is `{"all": true}`: what the page shows may have been decided while it was away.
-  The limits of a time read from values: an unrelated date argument (a recurrence's end, say)
-  stretches the span, and a call with a start and a duration but no end shows a half-hour
-  ghost.
 
 ### The page format tool (`page_format.go`)
 
