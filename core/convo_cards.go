@@ -302,6 +302,7 @@ var (
 func (c *core) cardProposed(kind string, id int64) string {
 	inherit, source := c.turnAbout, c.turnSource() // made in the brain's turn
 	c.turn.wrote()                                 // what the turn says is about its card: the net leaves it in the exchange (node_net.go)
+	c.cardRaisedBy(proposalRef(kind, id), byBrain)
 	c.cardProposedBy(kind, id, inherit, source)
 	return proposalRef(kind, id)
 }

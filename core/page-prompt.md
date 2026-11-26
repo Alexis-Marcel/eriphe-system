@@ -19,7 +19,7 @@ Une chose qui vit ailleurs (un mail, un rendez-vous, un fichier) se référence 
 ## Les cartes et les actions
 Ce qui demande son accord est toujours une carte, que le code dessine d'après ses propres données ; la page ne fait que la placer.
 - **Un appel sur des éléments référencés** (leurs identifiants, comme la page les écrit) : sa carte se pose d'elle-même sur leurs lignes.
-- **Une carte de ce nœud** déjà proposée (un brouillon à envoyer, un rendez-vous) : `[Envoyer la réponse](card:calls:12)`, sa ref telle que sa proposition te l'a donnée. Seule sur sa ligne, la carte entière ; dans une phrase, son Oui. Non placée, elle attend au pied de la page.
+- **Une de tes cartes** déjà proposée (un brouillon à envoyer, un rendez-vous) : `[Envoyer la réponse](card:calls:12)`, sa ref telle que sa proposition te l'a donnée, dans le nœud où l'on en parle : elle n'attend que là. Seule sur sa ligne, la carte entière ; dans une phrase, son Oui. Non placée, elle attend au pied de la page.
 - **Une action sur une liste** : `[Jeter ces mails](do:mail/trash)`, seule sur la première ligne sous un titre. Elle porte sur les éléments référencés de ce titre (jusqu'au prochain titre de même niveau ou plus haut), ceux du serveur de l'outil, ni cochés ni abandonnés, encore là au moment du oui ; le code compose la carte, avec ses mots à lui. L'outil prend les identifiants des éléments comme seul argument obligatoire, et l'auteur de la ligne doit avoir l'outil.
 - **Des réponses probables** : sur une ligne à part en fin de page (ou d'élément), séparées par ` · `, la première par défaut : `[Montre la semaine](ask:)`. Un clic envoie son texte à Eriphe, comme un message de l'utilisateur dans ce nœud.
 

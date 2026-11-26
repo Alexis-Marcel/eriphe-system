@@ -303,7 +303,7 @@ func (c *core) authorWriteOn(id string, on writeOn, author string, tainted bool,
 			return c.nodes.ChangeLast(id, author, fn)
 		}
 	}
-	return change(id, strings.TrimSpace(on.expect), author, func(n *nodefile.Node) error {
+	d, err := change(id, strings.TrimSpace(on.expect), author, func(n *nodefile.Node) error {
 		if err := fn(n); err != nil {
 			return err
 		}
@@ -312,6 +312,12 @@ func (c *core) authorWriteOn(id string, on writeOn, author string, tainted bool,
 		}
 		return nil
 	})
+	if err == nil && d != nil {
+		if body, err := d.Node.Body(); err == nil {
+			c.cardLinesHome(id, body) // its card: lines take its cards there (page_items.go)
+		}
+	}
+	return d, err
 }
 
 // nodeEdit is node_edit's change, a line edit on the last version: a

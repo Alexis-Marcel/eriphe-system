@@ -227,6 +227,74 @@ func TestSkillCardWaitsWhereProposed(t *testing.T) {
 	}
 }
 
+// TestCardWaitsWhereItsAuthorWritesIt: the brain read « Mes mails »
+// before it wrote the skill's new version, so the card is that node's;
+// its card: line in the node where the owner asked for it takes the card
+// there, and only there, even once eriphe-core starts again. A task's
+// line never takes the brain's card, nor a line no reader sees.
+func TestCardWaitsWhereItsAuthorWritesIt(t *testing.T) {
+	c, _, _ := viewCore(t)
+	home, first := mailPage(t, c, "Note chaque mail.")
+	if err := c.decideProposal(context.Background(), cardSkill, first.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	ref := proposalRef(cardSkill, first.ID)
+	out, isErr := callBrainTool(t, c, "node_open", map[string]any{"title": "Améliorer Mes mails",
+		"goal": "Décider avec l'utilisateur comment trier mieux ses mails.", "body": "Ce qu'on change dans le tri.\n"})
+	if isErr {
+		t.Fatalf("node_open: %v", out)
+	}
+	talk := out["id"].(string)
+	c.turn.about(home) // it reads « Mes mails » first
+	sk := mailSkill("Note chaque mail ; propose d'archiver ce qui ne compte pas.")
+	sk["node"] = home
+	delete(sk, "monitor")
+	if out, isErr := callBrainTool(t, c, "write_skill", sk); isErr {
+		t.Fatalf("write_skill: %v", out)
+	}
+	if got := c.cardNodes(ref); !slices.Equal(got, []string{home}) {
+		t.Fatalf("linked to %v before its line, want %s", got, home)
+	}
+
+	// A task working for the discussion writes the brain's card there: no.
+	task, _ := launched(t, c, map[string]any{"ask": "Résume le tri.", "node": talk})
+	mustNodes(t, c, task.ID, "node_append", map[string]any{"id": talk, "text": "[Oui](card:" + ref + ")"})
+	if got := c.cardNodes(ref); !slices.Equal(got, []string{home}) {
+		t.Fatalf("a task's line took the brain's card: linked to %v", got)
+	}
+	// The brain's line in a folded callout: no one sees it there.
+	if out, isErr := callBrainTool(t, c, "node_edit", map[string]any{"id": talk, "old": "Ce qu'on change dans le tri.",
+		"new": "Ce qu'on change dans le tri.\n\n> [!note]- Plus tard\n> [La nouvelle version](card:" + ref + ")"}); isErr {
+		t.Fatalf("node_edit: %v", out)
+	}
+	if got := c.cardNodes(ref); !slices.Equal(got, []string{home}) {
+		t.Fatalf("a folded line took the card: linked to %v", got)
+	}
+
+	// The brain's line in the discussion: the card waits there only.
+	if out, isErr := callBrainTool(t, c, "node_edit", map[string]any{"id": talk, "old": "Ce qu'on change dans le tri.",
+		"new": "Ce qu'on change dans le tri.\n\n[La nouvelle version du tri](card:" + ref + ")"}); isErr {
+		t.Fatalf("node_edit: %v", out)
+	}
+	if got := c.cardNodes(ref); !slices.Equal(got, []string{talk}) {
+		t.Fatalf("linked to %v, want only the discussion %s", got, talk)
+	}
+	if !cardWaitsOn(c, talk) || cardWaitsOn(c, home) {
+		t.Errorf("waits in the discussion %v, in « Mes mails » %v", cardWaitsOn(c, talk), cardWaitsOn(c, home))
+	}
+	w := &web{c: c}
+	if pg, _ := w.nodePageOf(talk, 0, "fr"); !slices.Contains(pg.Placed, ref) {
+		t.Errorf("the discussion places %v, want %s", pg.Placed, ref)
+	}
+	if pg, _ := w.nodePageOf(home, 0, "fr"); slices.ContainsFunc(pg.Cards, func(v proposalView) bool { return v.Ref == ref }) {
+		t.Errorf("« Mes mails » still shows %s at its foot", ref)
+	}
+	c.syncCards() // eriphe-core starts again
+	if got := c.cardNodes(ref); !slices.Equal(got, []string{talk}) {
+		t.Fatalf("after a start, linked to %v", got)
+	}
+}
+
 // A run in a home node that may hold someone else's words starts
 // external, even on clean events; a clean run that reads its node's
 // external block is tainted by the read, and writes external after it.

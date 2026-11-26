@@ -206,9 +206,10 @@ problems as JSON). Lines are counted from 1 in the body, what follows the front 
     the references of that heading's section, down to the next heading of its level or a higher
     one. Its author must have the tool. Anywhere else it acts on nothing
     ([Actions on a heading's items](#actions-on-a-headings-items)).
-  - `[Envoyer la réponse](card:<ref>)` places a card already proposed on that line, one of the
-    node's own (another node's is drawn as its words): alone on its line, the whole card; in a
-    sentence, its Oui. Not in a folded callout or a chart, which no reader sees as written. A card
+  - `[Envoyer la réponse](card:<ref>)` places a card already proposed on that line: one of the
+    node's own, or one the line's author proposed, which then waits in this node only (the node
+    where its subject is discussed, say). Never one someone else proposed in another node (drawn
+    as its words). Alone on its line, the whole card; in a sentence, its Oui. Not in a folded callout or a chart, which no reader sees as written. A card
     no line places waits at the foot of the page; code writes nothing in
     the page for it.
   - `[Montre la semaine](ask:)` is a probable reply: on a line of its own at the end of the page

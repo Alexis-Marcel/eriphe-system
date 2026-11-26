@@ -22,9 +22,10 @@ import (
 //     sources list (by their ids in its input), it waits on their lines
 //     (item_cards.go); calls that do the same thing to other items of the
 //     node fold into one card (call_fold.go), whoever kept them, each item
-//     once. On no item, its keeper may place it in a line of its node's
-//     page where it reads best ([its words](card:ref)); one never placed
-//     waits at the foot of the page. The same call waiting in the same
+//     once. On no item, its keeper may place it in a line of a page
+//     where it reads best ([its words](card:ref)), its node's or the one
+//     where it is discussed, where it then waits (cardLinesHome); one
+//     never placed waits at the foot of its node's page. The same call waiting in the same
 //     node is the same demand.
 //   - Its items leave the source: they leave the demand; one left with no
 //     item is withdrawn by code (staleDemands), never the user's no.
@@ -59,6 +60,11 @@ func (c *core) keepCall(ctx context.Context, k keeper, tool string, input map[st
 	if a.ID == 0 {
 		return a
 	}
+	raiser := byBrain
+	if !k.turn {
+		raiser = c.taskAuthor(k.task) // a run's: its skill's
+	}
+	c.cardRaisedBy(proposalRef(cardCalls, a.Batch), raiser)
 	if k.turn {
 		c.foldCalls() // into the card of the node that does the same (call_fold.go)
 		a, _ = c.accessAskOf(a.ID)

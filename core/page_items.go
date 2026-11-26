@@ -286,7 +286,8 @@ func (c *core) pageItems(id string, p *nodefile.Page) []pageItem {
 // an item's row, and those a card: link places (one of the node's own
 // cards, never another's: a page forges nothing; not in a folded callout
 // or a chart, where no reader sees it). Their place is there, not the
-// foot of the page.
+// foot of the page. A card's raiser makes it the node's by writing its
+// card: line (cardLinesHome).
 func (c *core) pagePlaced(id string, p *nodefile.Page, items []pageItem) []string {
 	out := []string{}
 	add := func(ref string) {
@@ -305,4 +306,44 @@ func (c *core) pagePlaced(id string, p *nodefile.Page, items []pageItem) []strin
 		}
 	}
 	return out
+}
+
+// cardLinesHome makes node id the home of the cards its page places with
+// a card: line written by the card's raiser (cardRaiser; the line's
+// author, lineAuthor): a card waits where its author chose to write it,
+// in that node only (cardHome), most often the node where its subject is
+// discussed. Never a card someone else raised: a page does not pull
+// another's card out of its node. Not from a folded callout or a chart.
+// Run after every author write.
+func (c *core) cardLinesHome(id, body string) {
+	p := nodefile.ReadPage(body)
+	lines := strings.Split(body, "\n")
+	for _, l := range p.Links {
+		if l.Kind != nodefile.LinkCard || l.Target == "" || p.Unseen(l.Line) || l.Line > len(lines) {
+			continue
+		}
+		if slices.Equal(c.cardNodes(l.Target), []string{id}) {
+			continue // home already
+		}
+		raiser := c.cardRaiser(l.Target)
+		if raiser == "" {
+			continue
+		}
+		text := strings.TrimSpace(lines[l.Line-1])
+		if c.lineAuthor(id, "\x00\x00"+text, cardLineIn(text)) == raiser {
+			c.cardHome(id, l.Target)
+		}
+	}
+}
+
+// cardLineIn tells whether a body holds the line text (trimmed).
+func cardLineIn(text string) func(string) bool {
+	return func(body string) bool {
+		for _, l := range strings.Split(body, "\n") {
+			if strings.TrimSpace(l) == text {
+				return true
+			}
+		}
+		return false
+	}
 }

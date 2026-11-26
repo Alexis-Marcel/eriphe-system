@@ -1004,7 +1004,13 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   cards (`pagePlaced`, `page_items.go`, linked by `node_cards`, waiting or not: `nodeHasCard`)
   where its author writes it (under « Ce qu'on a décidé », say): alone on its line the whole card,
   in a sentence its Oui; another node's is drawn as its words, and none is placed in a folded
-  callout or a chart. The line never carries what the card says: the page draws the card from the
+  callout or a chart. A card waits where its author chooses: after each author write
+  (`authorWriteOn`), a `card:` line whose author (`lineAuthor`, by versions) raised the card
+  (`card_raisers`: `byBrain`, `task:<id>`, `skill:<name>`, recorded where it is proposed or kept)
+  makes that node its only one (`cardLinesHome`, `cardHome`: `node_cards` relinked, a kept call's
+  or access's `node` too, so a start does not bring it back); the old node no longer waits for
+  it. Never a card someone else raised, never a call on an item's row, never from a folded callout
+  or a chart. The line never carries what the card says: the page draws the card from the
   records (pending, decided, `gone`). A placed card leaves the page's foot (`cards`); an unplaced
   one waits there. The propose tools return the card's ref (`card`: `cardProposed`), and say how
   to place it (`cardNote`: a `card:` line). A demand (below) on items is on their rows; on none,
@@ -1073,7 +1079,8 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   `callToBrain`, `[nœud <id> « title »] …`). The turn is **about** the last node it named (a node
   tool on it, a delivered message of it): what it raises meanwhile (an access card, a task's start,
   a proposal) is linked to it (`node_cards`), and the node waits for the user while one waits
-  (`cardRaisedFor`; its status, `node_status.go`). A decided card stays linked (a `card:` link still
+  (`cardRaisedFor`; its status, `node_status.go`), until the brain's `card:` line places it in
+  another node (cards in the page, above). A decided card stays linked (a `card:` link still
   places it, the page lists it as settled): the status reads only the cards still pending, in one
   query. A skill's version is such a proposal: its card waits in the node of the turn or task that
   wrote it (where the user decides), not on the page the skill maintains; its ref names the skill,
@@ -1765,7 +1772,7 @@ refuses only that row's own calls, `refuseCalls`, the card waiting on with the o
 in the page's foot (`placed`). A calls card is on every item its calls act on (one call on several
 items, or several calls folded: `call_fold.go`), an item two cards act on showing the newest. A
 call on no row waits at its node's foot, or on the `card:` line its keeper writes, in the same
-words. Decided and run, its rows settle and the node's skills are woken to write the page again
+words (in another node, it waits there instead). Decided and run, its rows settle and the node's skills are woken to write the page again
 (`itemCardMoved`, `wakeNodeSkills`): code writes no line of what a yes did; the brain is told.
 Such a card, like a task's access, start or memory card, is linked to the node its run or task
 works in (`cardNodeOf`, `node_cards`) and is about it: it waits on that node's page, which stays

@@ -117,6 +117,7 @@ func (c *core) proposeTaskSkill(task string, in skillProposeIn) (map[string]any,
 	c.store.set(skillByKey(name, nk.Pending), string(raw))
 	id := c.skillRowID(name)
 	ref := proposalRef(cardSkill, id)
+	c.cardRaisedBy(ref, c.taskAuthor(task))
 	c.cardNow(cardSkill, id, "", "task:"+task)
 	// Code's words only: the task's are on the card.
 	c.nodeEvent(c.taskNode(task), fmt.Sprintf("La tâche qui suit le skill « %s » en propose une nouvelle version (carte %s) : elle attend le oui de l'utilisateur sur sa carte, la version approuvée reste en place d'ici là.", name, ref), false)
