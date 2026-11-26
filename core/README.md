@@ -1014,13 +1014,16 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   `gone`), only for the node's own card and a block not external; anything else is sent without
   it and the page says « Carte introuvable », with no Oui or Non. A placed card leaves the page's
   foot (`cards`); an unplaced one waits there. The propose tools return the card's ref (`card`:
-  `cardProposed`), and say how to place it (`cardPlaceNote`). A demand (below) never waits at the
-  foot: on items it is on their rows; on none, its keeper is told its ref and where to place it,
-  and code appends `{"card": ref}` at the end of the document when it did not (`placeDemands`, at
-  the end of the brain's turn and of a run).
+  `cardProposed`), and say how to place it (`cardPlaceNote`). A demand (below) on items is on their rows;
+  on none, its keeper is told its ref and how to place it in a line of the page
+  (`[its words](card:<ref>)`, [the page](../docs/node-format.md#the-page-format-3)); one it does not
+  place waits at the foot, code writing nothing in the page. A `card:` link places one of the
+  node's own cards (`pagePlaced`, `page_items.go`): alone on its line the whole card, in a sentence
+  its Oui; another node's is drawn as its words.
 - **The page's foot only asks.** `nodePageOf` sends at the foot (`cards`) only the cards that still
   ask something (`pendingAsks`: pending, or approved with its call running) and that no
-  row answers (any card told on a List's row, `placed`); the decided ones (done, failed, declined,
+  row or line answers (any card told on a List's row, on a referenced item's row, or placed by a
+  `card:` link: `placed`); the decided ones (done, failed, declined,
   withdrawn) go to `settled` (20 at most, the last first), which the page lists in its « ⋯ » menu
   under « Déjà décidé » with each outcome, a failed one with why (`execWhy`, and `execError`: the
   tool's own words, `execErrorExternal` when its server is not trusted, shown marked). A placed
@@ -1561,14 +1564,28 @@ a page: the brain composes each one from the catalog.
   `info`, `none` or `done`, group) in `node_items` in `core.db` (`noteItem`, `nodeItems`: never a
   version, nothing a rebuilt `nodes.db` loses), with its author and taint; no note, state nor group
   takes it away; an archived node is noted no more. A note that changes sends the source again to the pages that show it ([sections](../docs/node-format.md#sections)).
+- **Calls on a page's items** (`page_items.go`): a node's page references items of catalog
+  servers (`[words][m1]`, `[m1]: mail:<id>`: the scheme a server's name, the id as its tool gave
+  it). A call kept for the user (the brain's or a run's) whose server is a reference's, and whose
+  input names its id, is kept on that item, in the keeper's node (`access_asks.labels`, each with
+  its `server`): its card waits on the row that references it (the outermost item holding the
+  line, `nodefile.Page.Row`), never on another server's reference of the same id; one in a
+  paragraph, a folded callout or one drawn its own way (figures, agenda…) waits at the foot. Its words are the item as its server reads it (`itemWords`: the
+  server's declared read, `eriphe/open`, a free read only, at the moment the call is kept), never
+  the link's; one not read is counted. A reference whose words say nothing of the item read is
+  `misleading` (`misleading`: none of its words of three letters or more in the item's title or
+  sender): the page warns there, the item as read beside it; one not read is `unread` (« non
+  vérifié »). `nodePageOf` sends `items` (each reference of an item where it is
+  written, with its card and the item as kept) and `placed`; it reads no server.
 - **Calls on an item** (`item_cards.go`): a skill run's call kept for the user that names exactly
   one item of a source of the run's node, on the call's own server, is kept on that item
   (`access_asks.node`, `source`, `item`): one card per item (kind `calls`), answered alone. A call
   on no item stays on the run's card. The card names its node, unless the node is external.
+  (A block's source, until node format 3 converts it.)
 - **Same-kind calls wait as one card** (`call_fold.go`): calls cards that wait untouched in the
   same node, whose calls do the same thing to other items (same server and tool, same arguments
-  but one list whose values are ids of the items the call acts on, as its node's sources list
-  them), fold into the oldest: one card, not five. A different account or
+  but one list whose values are ids of the items the call acts on, as its node's page references
+  them or its sources list them), fold into the oldest: one card, not five. A different account or
   destination, another tool, a card decided or one whose call runs never folds. Folded when a run
   ends and at each card sync (cards made before fold there; the folded cards go, from their node
   too). The card keeps each call as kept, its own `access_asks` row: Oui runs each exactly as
@@ -3751,8 +3768,12 @@ token in `X-CSRF-Token`:
   a version by `user`. The line is found by its text (`line` a hint): a line gone, or written
   twice, is `409` and nothing is written; an archived node `410`; a state that is not one of the
   four `400`. `200` `{version, hash}`. A skill triggered by `node.gesture` in that node is woken.
-- `POST /api/nodes/{id}/open` `{block, source, item}`: an item opened in place
-  (`item_open.go`), the user's gesture. The source's `items.open` is read again in the stored block
+- `POST /api/nodes/{id}/open` `{ref}`: an item a page references opened in place
+  (`item_open.go`), the user's gesture: the reference is found by its label in the page as stored
+  (`409` `open.ref` when there is none, or its server declares no read of one item by id: a tool
+  whose `_meta` `eriphe/open` names its `id` parameter, a read needing nothing else, the first by
+  name), the tool called with the id as the page writes it, under the rules below; `misleading`
+  when the page's words for it do not say it. `{block, source, item}`: a legacy List's row. The source's `items.open` is read again in the stored block
   (`409` when it has none); the item must be one the source lists now (`400`). The tool (a read of
   the source's own server, checked at write) is called with the item's id as the source gave it,
   under its policy: a free read that does not reach the open web runs; any other is `403`
@@ -4371,8 +4392,8 @@ node's media, as a task's image (`nodestore.PutFile`, by `brain`), and writes th
 
 A proposal shows where it matters (#428), with no code for any tool:
 
-- **Placed.** An author places a card in a node's document with a card block (`{"card":
-  "kind:id"}`), or code draws it on the rows of the items it acts on. Its Oui and ✕ answer that
+- **Placed.** An author places a card in a node's page with a `card:` link (or a legacy card
+  block, `{"card": "kind:id"}`), or code draws it on the rows of the items it acts on. Its Oui and ✕ answer that
   proposal and no other (its card, `POST /cards/{id}/yes\|no`). One drawn from external content
   carries a small badge (« extérieur »), its whole sentence on hover and for a screen reader.
 - **Dated.** A proposal that has a time shows as a ghost in every Agenda that draws its day

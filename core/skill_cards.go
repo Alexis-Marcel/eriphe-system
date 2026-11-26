@@ -53,7 +53,7 @@ func (c *core) itemCall(task, node, source, item string, call int64) error {
 	raw, _ := json.Marshal([]itemLabel{*label})
 	// On the card its other calls on that item are on, else its own.
 	batch := a.Batch
-	if b := c.runItemBatch(r.ID, node, source, item); b != 0 && b != a.Batch {
+	if b := c.runItemBatch(r.ID, node, source, "", item); b != 0 && b != a.Batch {
 		batch = b
 	}
 	c.store.db.Exec(`UPDATE access_asks SET node = ?, source = ?, item = ?, labels = ?, batch = ? WHERE id = ?`, node, source, item, string(raw), batch, call)

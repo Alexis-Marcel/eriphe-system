@@ -198,8 +198,17 @@ type nodePage struct {
 	// ticks are this body's, as nodefile.ReadPage counts them). Parts
 	// are its legacy blocks ready to draw, each where its fence is, and
 	// the text between them.
-	Body    string         `json:"body"`
-	Parts   []pagePart     `json:"parts"`
+	Body  string     `json:"body"`
+	Parts []pagePart `json:"parts"`
+	// Items are the body's references to catalog servers' items, each
+	// where it is written, with the card that waits on it (page_items.go);
+	// Placed the cards its lines carry (on an item's row, or where a
+	// card: link places one): their place, not the foot. Go places
+	// them; the page draws them there.
+	Items  []pageItem `json:"items"`
+	Placed []string   `json:"placed"`
+	// Cards: those that still ask, at its foot (but those placed);
+	// Settled: those decided, for the « ⋯ » menu.
 	Cards   []proposalView `json:"cards"`
 	Settled []proposalView `json:"settled"`
 	// Refs: the node each [[name]] of its text opens, by the name as
@@ -368,9 +377,13 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 			names = append(names, l.Name)
 		}
 	}
+	p.Items, p.Placed = []pageItem{}, []string{}
 	if body, err := d.Node.Body(); err == nil {
 		p.Body = body
-		names = append(names, embedNames(nodefile.ReadPage(body).Blocks)...)
+		pg := nodefile.ReadPage(body)
+		names = append(names, embedNames(pg.Blocks)...)
+		p.Items = c.pageItems(id, pg)
+		p.Placed = c.pagePlaced(id, pg, p.Items)
 	}
 	if found, err := c.nodes.Resolve(id, names); err == nil {
 		for name, x := range found {
@@ -378,6 +391,9 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 		}
 	}
 	placed := map[string]bool{}
+	for _, ref := range p.Placed {
+		placed[ref] = true
+	}
 	// The days the page's Agendas draw: a card that waits with a time on
 	// one of them shows there, its Oui on its ghost, not at the foot.
 	loc := c.userZone()

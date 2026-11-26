@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"fmt"
@@ -9,14 +10,16 @@ import (
 	"time"
 )
 
-// Cards bound to a node's items (#575, #631): an action on items a source
-// of a node lists (archive these mails, answer that invitation) is a card
-// on their rows, its Oui running exactly the calls it keeps.
+// Cards bound to a node's items (#575, #631, #782): an action on items a
+// node's page references (page_items.go), or a source of a node lists
+// (archive these mails, answer that invitation), is a card on their rows,
+// its Oui running exactly the calls it keeps.
 //
 //   - A kept call is an access_asks row, on a card (its batch): the brain's
 //     and the runs' (keepCall, demand.go), code's own (a tools review). It
 //     carries the node it belongs to and the items it acts on (its labels,
-//     each with the source that lists it; item when it is one): code's,
+//     each with the server whose item the page references, or the source
+//     that lists it; item when it is one): code's,
 //     never given: matched in its input.
 //   - A run's calls on one item are one card. Calls that do the same thing
 //     to other items of the node are one card (call_fold.go).
@@ -25,7 +28,8 @@ import (
 //     brain's to the brain, code's to the node's trace; once all ran, the
 //     brain is told how the yes went, the orb's words (card_outcome.go).
 //   - Its words are code's: the action in a sentence, the items by their
-//     title and detail as their source lists them (call_words.go), its
+//     title and detail as their server read them, or their source lists
+//     them (call_words.go), its
 //     exact calls, as kept, under Détails. It waits in its node
 //     (cardNodeOf), about it. A call kept after
 //     reading external content keeps that taint: « extérieur », buttons
@@ -240,18 +244,23 @@ func (c *core) callsOrigin(first accessQuestion, items []itemLabel, lang string)
 		o.title, o.titleExt = c.titleOfNode(o.node)
 	}
 	from, ext := o.from(lang)
-	// The item by its id and its source, always: marked when either may
-	// be someone else's words (not a source of a trusted server, or calls
-	// kept on a tainted turn).
-	source := ""
+	// The item by its id and where it is from (its source, or the server
+	// a page's reference names), always: marked when either may be
+	// someone else's words (not a trusted server's, or calls kept on a
+	// tainted turn).
+	source, server := "", ""
 	for i, l := range items {
 		if i == 0 {
-			source = l.Source
-		} else if l.Source != source {
+			source, server = cmp.Or(l.Source, l.Server), l.Server
+		} else if cmp.Or(l.Source, l.Server) != source {
 			source = ""
 		}
 	}
-	itemExt := first.Tainted != "" || source != "" && !c.trustedItemSource(first.Node, source)
+	trusted := server != "" && c.trustsServer(server)
+	if server == "" {
+		trusted = c.trustedItemSource(first.Node, source)
+	}
+	itemExt := first.Tainted != "" || source != "" && !trusted
 	var item string
 	switch {
 	case len(items) > 1 && source != "":
@@ -327,32 +336,19 @@ func callEnded(state, _ string) bool { return state == callDone || state == call
 const itemCardsKept = 7 * 24 * time.Hour
 
 // itemCards are the cards on a node's items of one of its sources that
-// still ask something (callsAsk), by item: its newest. Each item of the
-// source carries it (_card, list_sections.go) and the page's List tells
-// it (pageList's items' card): code's, never the block's data. A card
-// whose calls act on several items (call_fold.go) is on all its rows: one
-// Oui at the head of the List, a ✕ on each row.
+// still ask something (itemWaits, page_items.go), by item: its newest.
+// Each item of the source carries it (_card, list_sections.go) and the
+// page's List tells it (pageList's items' card): code's, never the block's
+// data. A card whose calls act on several items (call_fold.go) is on all
+// its rows: one Oui at the head of the List, a ✕ on each row.
 func (c *core) itemCards(node, source string) map[string]string {
 	out := map[string]string{}
-	if node == "" || source == "" {
+	if source == "" {
 		return out
 	}
-	asks := c.asksWhere(`node = ? AND batch != 0 AND (item != '' OR labels != '')
-		AND (state = ? OR state = ? AND decided >= ?) ORDER BY batch DESC, id`, node, startProposed, startApproved, time.Now().Add(-itemCardsKept).Unix())
-	asking := map[int64]bool{}
-	for _, a := range asks {
-		yes, ok := asking[a.Batch]
-		if !ok {
-			yes = c.callsAsk(a.Batch)
-			asking[a.Batch] = yes
-		}
-		if !yes {
-			continue
-		}
-		for _, l := range askItems(a) {
-			if _, ok := out[l.ID]; !ok && l.Source == source {
-				out[l.ID] = proposalRef(cardCalls, a.Batch)
-			}
+	for _, w := range c.itemWaits(node) {
+		if _, ok := out[w.item.ID]; !ok && w.item.Source == source {
+			out[w.item.ID] = w.card
 		}
 	}
 	return out
@@ -405,7 +401,11 @@ func (c *core) itemCardMoved(batch int64) {
 			}
 		}
 	}
-	c.readNodeLater(context.Background(), node, sources) // what it settled, as its sources say it now
+	if len(sources) > 0 {
+		c.readNodeLater(context.Background(), node, sources) // what it settled, as its sources say it now
+	}
+	// A page's references are its skill's to write again: code writes no
+	// line of what a yes did (page_items.go).
 	c.wakeNodeSkills(node, "card")
 }
 
@@ -472,11 +472,13 @@ func inputValues(v any, out map[string]bool) {
 }
 
 // runItemBatch is the card a run's call on an item goes on: the one its
-// other calls on that item are on, else its own.
-func (c *core) runItemBatch(run int64, node, source, item string) int64 {
+// other calls on that item are on, else its own. An item a page
+// references (no source) is its server's: another server's of the same id
+// is another item.
+func (c *core) runItemBatch(run int64, node, source, server, item string) int64 {
 	var batch int64
-	c.store.db.QueryRow(`SELECT batch FROM access_asks WHERE run = ? AND node = ? AND source = ? AND item = ? AND batch != 0 ORDER BY id LIMIT 1`,
-		run, node, source, item).Scan(&batch)
+	c.store.db.QueryRow(`SELECT batch FROM access_asks WHERE run = ? AND node = ? AND source = ? AND item = ? AND (source != '' OR server = ?) AND batch != 0 ORDER BY id LIMIT 1`,
+		run, node, source, item, server).Scan(&batch)
 	return batch
 }
 

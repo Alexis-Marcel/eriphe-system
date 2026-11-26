@@ -175,12 +175,16 @@ problems as JSON). Lines are counted from 1 in the body, what follows the front 
   on a line of its own, at the bottom: `[m1]: mail:<id>`. The target's scheme is a catalog server's
   name (or `https:` for a page), its id everything after the first colon, as the tool gave it: never
   made up. A label is unique in the page, matched without case. The link's words are the author's;
-  what Eriphe shows of the thing comes from the thing.
+  what Eriphe shows of the thing comes from the thing ([Cards on referenced items](#cards-on-referenced-items)).
 - **Eriphe's links**, valid Markdown links whose scheme is one of four:
   - `[Jeter ces mails](do:mail/trash)`, on its own line, the first under a heading: an action on
     the references of that heading's section, down to the next heading of its level or a higher
     one. Its author must have the tool. Anywhere else it acts on nothing.
-  - `[Envoyer la réponse](card:<ref>)` places a card already proposed on that line.
+  - `[Envoyer la réponse](card:<ref>)` places a card already proposed on that line, one of the
+    node's own (another node's is drawn as its words): alone on its line, the whole card; in a
+    sentence, its Oui. Not in a folded callout or a chart, which no reader sees as written. A card
+    no line places waits at the foot of the page; code writes nothing in
+    the page for it.
   - `[Montre la semaine](ask:)` is a probable reply, sent to Eriphe as a message.
   - `[18 385 €](on:monitor.changed/pea)` is a value an event of the journal rewrites
     ([Lines that follow events](#lines-that-follow-events)).
@@ -207,7 +211,8 @@ problems as JSON). Lines are counted from 1 in the body, what follows the front 
 a task is a row whose box the user ticks (one line rewritten by eriphe-core, a version of theirs),
 an item's detail folds under it, a callout is drawn by the workspace's component of its type
 (figures, a chart, steps, an agenda, a person, an alert), a reference shows its words with its
-target, and a line of `ask:` links is a row of replies. A day without its year takes the year of
+target (with a warning when its words do not say the item: below), and a line of `ask:` links is a
+row of replies. A day without its year takes the year of
 the page's « Écrit le » line, else it is shown as written: never a guessed year. Blocks still in
 the body are drawn as before, at their place.
 
@@ -218,6 +223,33 @@ section's first item, under its `do:` line; after another item, it goes after th
 at its indent and in its callout). A line edit needs no version: it is made on the last one, and is
 refused once its line is gone (the author reads the page again). A whole body (`node_write`) and a
 block still name the version they were made on (`expect`).
+
+### Cards on referenced items
+
+A reference whose target's scheme is a catalog server's name names an **item** of that server
+(`[m1]: mail:<id>`; core/page_items.go). A call kept for the user's yes whose server is the
+reference's, and whose input names the reference's id (as a value, or in a list of them), acts on
+that item: its card waits on the line that references it, on the item's row the reader sees (the
+outermost item holding the line: a reference in a detail puts the card on its row; in a callout,
+only an open one drawing its lists as rows, a note or an alert). A reference to
+another server's id is not the item, whatever its id. Calls that do the same thing to other items of
+the node fold into one card, shown on each of their rows. A reference in a paragraph, a table, a folded
+callout or one drawn its own way (figures, steps, agenda, person, chart) carries no card: it waits
+at the page's foot.
+
+The card's words come from the item as its server reads it, never from the link's words: when the
+call is kept, code reads each item with the tool the server declares (below), a free read only, and
+keeps its title and sender with the call. An item it cannot read freely is counted, never named.
+Where a reference's words say nothing of the item read (none of their words of three letters or
+more is in its title or sender), the page shows them with a warning and the item as read beside
+them: a line « Pub Maison Lune » pointing at a mail of Sam's shows « Les clés pour samedi » · Sam.
+A reference whose item could not be read (no free read, a failure) says « non vérifié »: its words
+are not checked.
+
+The page's JSON (`GET /api/nodes/{id}`) carries this beside its body: `items` (each reference of an
+item where it is written: its line, label, words, row, id, whether it opens, the card that waits on
+it and the item as read, `misleading`, `unread`) and `placed` (the cards its lines carry), Go's placement,
+which the workspace draws where it says.
 
 ### Lines that follow events
 
@@ -445,14 +477,23 @@ and its place (`root#1`), so a hidden ask leaves its place empty; an `Asks` left
 empty, a `Card` or `Fold` whose child it was).
 
 A skill's run whose call acts on an item without naming it (an event made from a mail) puts it on
-that item with `item_note`'s `call` (the reference the run was told when the call was kept): its
-card then waits on the item's row, its words naming the item.
+that item with `item_note`'s `call`: its card then waits on the item's row, its words naming the
+item. (A page places it with a `card:` link on the item's line.)
 
 A group is one line of 40 characters at most, without `[ ] / = !`.
 
 ### Reading an item
 
-A source's `items` may say how one item is read in full: `"open": {"tool": "<server>/<tool>", "id":
+A server declares, in the `_meta` of one of its read tools, that the tool reads one of its items by
+id: `"eriphe/open": {"id": "id", "title": "subject", "from": "from", "date": "date", "body":
+"body"}` (the parameter that takes the id, nothing else required, and which field of what it says is
+the title, the sender, the date, the body; the mail and calendar servers declare theirs). A row of
+a page that references an item of that server opens it below itself on a click: code finds the
+reference in the page as stored, by its label (`POST /api/nodes/{id}/open` with `{"ref": "m1"}`),
+never an id from the click, calls the tool with the id as the page writes it, under the rules
+below, and says when the page's words for it are misleading. Only on the page's last version.
+
+A legacy source's `items` (until format 3 converts it) may say how one item is read in full: `"open": {"tool": "<server>/<tool>", "id":
 "<param>"}`, a read tool of the source's own server and its parameter that takes an item's id
 (nothing else required). Code checks it against the catalog when an author writes it.
 

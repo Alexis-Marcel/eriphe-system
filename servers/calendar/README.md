@@ -11,10 +11,11 @@ theirs in French and English, for eriphe-core's cards (`says.go`, the tool's
 `_meta: {"eriphe/says": …}`, core/README.md « A tool that says its own call »): `create_event`
 « Créer « Dentiste », mardi 24 novembre, 14 h 10 », `update_event` « Modifier « Point » … »,
 `delete_event` « Supprimer « Point » », `respond_event` « Accepter « Picnic » » (« Refuser »,
-« Répondre « peut-être » à »), the event by its title as eriphe-core's source lists it, never its id;
+« Répondre « peut-être » à »), the event by its title as eriphe-core read it, never its id;
 `update_event` and `delete_event` count events (`items`), `delete_event` says what it did (`done`).
-`get_event` declares the fields of what it reads (`_meta: {"eriphe/open": …}`: title, start,
-description), for an item eriphe-core opens in place.
+`get_event` declares that it reads one event by its `id`, and the fields of what it reads
+(`_meta: {"eriphe/open": …}`: id, title, start, description): eriphe-core reads with it an event a
+node's page references (`[e1]: calendar:<id>`), for a card's words and to open it in place.
 
 | Tool | What | Hints |
 |---|---|---|

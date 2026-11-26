@@ -20,9 +20,11 @@ import { readPage, type MdBlock, type MdItem, type MdPage, type PageLink, type R
 // tooltip; an ask: line as buttons that ask Eriphe (ask, which
 // eriphe-core reads again in the stored page).
 //
-// Where the page will carry cards and actions (Slots): a line's cards at
-// the end of its row (item), and a do: or card: link where it is written
-// (link): until then a do: or card: link is drawn as its words, quiet.
+// Where the page carries what eriphe-core places (Slots, doc/Doc.tsx): a
+// row's cards at its end (item), a do: or card: link where it is written
+// (link), a sign beside a reference's words (ref), and the original of
+// what a row references, opened below it (opens). Without them a do: or
+// card: link is drawn as its words, quiet.
 //
 // A legacy block, in its fence (```eriphe:block <name>), is drawn as it
 // was, by the page that knows its surface (legacy): until node format 3
@@ -35,6 +37,13 @@ export type Slots = {
   // A do: (an action on its heading's references) or card: link (a card
   // placed), drawn where it is written; undefined: drawn as its words.
   link?: (l: PageLink) => ReactNode | undefined;
+  // A sign drawn after a reference's words on line ln (its words do not
+  // say the item its server read: a warning).
+  ref?: (label: string, ln: number) => ReactNode;
+  // What an item's row opens below it besides its detail (the original
+  // of the item it references); undefined: nothing. A row that opens
+  // something opens on a click.
+  opens?: (it: MdItem) => ReactNode | undefined;
 };
 
 export type BodyProps = {
@@ -203,7 +212,7 @@ export function Pieces({ ps, ln }: { ps: Piece[]; ln: number }) {
             );
           }
           case "ref":
-            return <Ref key={i} text={p.text} label={p.label} />;
+            return <Ref key={i} text={p.text} label={p.label} ln={ln} />;
           case "link":
             if (p.kind === "ask")
               return (
@@ -220,10 +229,11 @@ export function Pieces({ ps, ln }: { ps: Piece[]; ln: number }) {
 }
 
 // Ref is a reference's words: a web address opens in a new tab; any other
-// target (a mail, an event, as its tool gave it) is the thing a card will
-// act on, its target in its tooltip; a reference with no target is
-// greyed, as a link to no node is.
-function Ref({ text, label }: { text: string; label: string }) {
+// target (a mail, an event, as its tool gave it) is the thing a card acts
+// on, its target in its tooltip, followed by what the page's slots say of
+// it (a warning when its words do not say it); a reference with no target
+// is greyed, as a link to no node is.
+function Ref({ text, label, ln }: { text: string; label: string; ln: number }) {
   const ctx = useMd();
   const { t } = useWords();
   const d = ctx.refs.get(label);
@@ -243,9 +253,12 @@ function Ref({ text, label }: { text: string; label: string }) {
       </a>
     );
   return (
-    <span className="md-ref" data-ref={d.label} title={d.target}>
-      {words}
-    </span>
+    <>
+      <span className="md-ref" data-ref={d.label} title={d.target}>
+        {words}
+      </span>
+      {ctx.slots.ref?.(d.label, ln)}
+    </>
   );
 }
 
@@ -374,7 +387,8 @@ function Item({ it }: { it: MdItem }) {
   const ps = pieces(it.text);
   const due = ps.find((p) => p.t === "due");
   const { title, comment } = split(ps.filter((p) => p.t !== "due"));
-  const openable = !!it.detail;
+  const opens = ctx.slots.opens?.(it);
+  const openable = !!it.detail || opens !== undefined;
   const done = task === "x" || task === "-";
   const tick = ctx.tick;
   const flip = () => {
@@ -419,6 +433,7 @@ function Item({ it }: { it: MdItem }) {
         {ctx.slots.item?.(it)}
         {openable && <span className="a2-sec-chev" aria-hidden="true" />}
       </div>
+      {open && opens !== undefined && <div className="md-opened">{opens}</div>}
       {open && it.detail && (
         <div className="md-detail">
           <Blocks blocks={it.detail} />

@@ -8,6 +8,7 @@ import { sourceKey, store, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { PageBody, type BodyProps } from "../page/Body";
 import { Cards } from "../page/Cards";
+import { usePageSlots } from "../page/items";
 import { Props } from "./Props";
 import { blockOf, messages, pieces, sourceLists, sourceMessage, surfaceOf, toGesture } from "./blocks";
 
@@ -25,6 +26,9 @@ import { blockOf, messages, pieces, sourceLists, sourceMessage, surfaceOf, toGes
 // from a block someone else's words may have written, nothing is sent.
 // A [[link]] of its text opens the node eriphe-core resolved it to
 // (page.refs) beside the page (onOpen), named as the graph names it now.
+// Its lines carry what eriphe-core places there (page/items.tsx): the
+// cards on the rows of the items it references, a card: link's card, an
+// item opened below its row.
 // A List that filters a source's items shows the rows eriphe-core kept
 // (list_sections.go); a row a card waits on carries its Oui (a2ui/lists.tsx),
 // its rows following the source's on the last version.
@@ -101,7 +105,7 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
     return {
       list: (surface, component) => told.get(surface)?.find((l) => l.component === component),
       // Only on the last version: an older one shows its rows.
-      open: latest ? (surface, list, item) => openItem(page.node.id, surface.slice(page.node.id.length + 2), list.source, item) : undefined,
+      open: latest ? (surface, list, item) => openItem(page.node.id, { block: surface.slice(page.node.id.length + 2), source: list.source, item }) : undefined,
       opened,
       marked: (surface) => page.parts.some((p) => !!p.block?.external && surfaceOf(page.node.id, p.block.name) === surface),
       node: (id) => nodes[id],
@@ -149,6 +153,10 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
   const acts = latest && live;
   const onTick = useMemo<BodyProps["tick"]>(() => (acts ? (it, line, to) => tick(id, it.line, line, to).catch(() => false) : undefined), [acts, id]);
   const onAsk = useMemo<BodyProps["ask"]>(() => (acts ? (line, n) => void askLine(id, line, n).catch(() => undefined) : undefined), [acts, id]);
+  // What eriphe-core places on its lines: cards on the rows of the items
+  // it references, cards placed by card: links, the original of an item
+  // opened below its row (page/items.tsx).
+  const slots = usePageSlots(page, latest);
   if (!page.body.trim())
     return (
       <>
@@ -159,7 +167,7 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
   return (
     <ListsContext.Provider value={lists}>
       <Props page={page} />
-      <PageBody body={page.body} wiki={wiki} tick={onTick} ask={onAsk} legacy={legacy} />
+      <PageBody body={page.body} wiki={wiki} tick={onTick} ask={onAsk} legacy={legacy} slots={slots} />
     </ListsContext.Provider>
   );
 }

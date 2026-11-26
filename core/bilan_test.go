@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -232,7 +231,8 @@ func TestItemCardSaidNo(t *testing.T) {
 // A run puts on an item a call that acts on it without naming it (an
 // event made from a mail): item_note's call, a call of that very run
 // only, still waiting; its card then waits on the item's row, its words
-// naming the item. The run is told the call's reference.
+// naming the item (a source's item: until node format 3 converts it; a
+// page places such a card with a card: link on the item's line).
 func TestItemNoteBindsACall(t *testing.T) {
 	c, _, node, r := mailViewOf(t)
 	keep(c, r.Task, "p1", "mcp__monitor__rollback", map[string]any{"version": "1.0"})
@@ -240,10 +240,6 @@ func TestItemNoteBindsACall(t *testing.T) {
 	c.store.db.QueryRow(`SELECT id FROM access_asks WHERE run = ? AND batch = id`, r.ID).Scan(&call)
 	if call == 0 {
 		t.Fatal("no call kept")
-	}
-	items, _ := c.store.inbox(r.Task)
-	if len(items) == 0 || !strings.Contains(fmt.Sprint(items[len(items)-1].Data), fmt.Sprintf("sa référence %d", call)) {
-		t.Errorf("the run is not told its call's reference: %+v", items)
 	}
 	if _, msg := callNodes(t, c, r.Task, "item_note", map[string]any{"source": "mails", "item": "m9", "note": "x", "call": call}); !strings.Contains(msg, "not an item") {
 		t.Errorf("an item not listed: %q", msg)

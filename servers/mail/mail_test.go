@@ -532,7 +532,7 @@ func TestToolAnnotations(t *testing.T) {
 				t.Errorf("%s counts no mails: %v", tool.Name, tool.Meta)
 			}
 		}
-		if open, _ := tool.Meta["eriphe/open"].(map[string]any); tool.Name == "read_message" && (open["body"] != "body" || open["title"] != "subject") {
+		if open, _ := tool.Meta["eriphe/open"].(map[string]any); tool.Name == "read_message" && (open["id"] != "id" || open["body"] != "body" || open["title"] != "subject") {
 			t.Errorf("read_message declares no fields: %v", tool.Meta)
 		}
 		if want[tool.Name] != "read" && !saysBoth(tool.Meta) {

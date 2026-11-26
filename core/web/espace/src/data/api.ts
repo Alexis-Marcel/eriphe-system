@@ -90,7 +90,7 @@ export type Reads = {
   page(id: string, version: number): Promise<NodePage | null>;
   trace(id: string): Promise<TraceEntry[]>;
   file(id: string, version: number): Promise<NodeFile | null>;
-  open(id: string, block: string, source: string, item: string): Promise<Opened>;
+  open(id: string, what: OpenWhat): Promise<Opened>;
 };
 
 let reads: Reads | null = null;
@@ -189,6 +189,12 @@ export type NodePage = {
   // parts: its legacy blocks, ready to draw where their fences are
   body: string;
   parts: PagePart[];
+  // items: its references to catalog servers' items, each where it is
+  // written, with the card that waits on it; placed: the cards its lines
+  // carry (on an item's row, or a card: link), not at its foot
+  // (page_items.go)
+  items?: PageItem[];
+  placed?: string[];
   // cards: those that still ask, at its foot; settled: those decided, for the « ⋯ » menu
   cards: ProposalView[];
   settled?: ProposalView[];
@@ -199,6 +205,27 @@ export type NodePage = {
   // tags and props: its tags and its other properties, as its version says them
   tags?: string[];
   props?: PageProp[];
+};
+// A reference of a page to a catalog server's item ([text][m1], with
+// [m1]: mail:<id>), on its line (pageItem, page_items.go): the item's row
+// that carries its card and opens it (0: none, its card at the page's
+// foot), its id as written, whether its server opens it; the card that
+// waits on it, the item as its server read it (external: someone else's
+// words), misleading when the line's words do not say it, unread when it
+// could not be read (the line's words not checked).
+export type PageItem = {
+  line: number;
+  label: string;
+  text: string;
+  row?: number;
+  id: string;
+  open?: boolean;
+  card?: string;
+  title?: string;
+  detail?: string;
+  external?: boolean;
+  misleading?: boolean;
+  unread?: boolean;
 };
 // A property of a node (pageProp, web_graph.go): its name, its value or
 // list of them, and its kind (text, number, date); media: the node's own
@@ -253,15 +280,22 @@ export type Opened = {
   body?: string;
   raw?: string;
   external?: boolean;
+  // misleading: the page's words for it do not say it (page_items.go)
+  misleading?: boolean;
   note?: { group?: string; note?: string; external?: boolean };
   error?: string;
 };
 
-// openItem reads an item of a block's source in full, the user's gesture
-// (never a yes).
-export async function openItem(id: string, block: string, source: string, item: string): Promise<Opened> {
-  if (reads) return reads.open(id, block, source, item);
-  const r = await sendJSON<Opened>("POST", `${nodePath(id)}/open`, { block, source, item });
+// What a click opens: a reference of the page, by its label; or a legacy
+// List's row, by its block, its source and the item's id.
+export type OpenWhat = { ref: string } | { block: string; source: string; item: string };
+
+// openItem reads in full an item the page references, or a block's
+// source lists: the user's gesture (never a yes). eriphe-core finds the
+// item in the page as stored.
+export async function openItem(id: string, what: OpenWhat): Promise<Opened> {
+  if (reads) return reads.open(id, what);
+  const r = await sendJSON<Opened>("POST", `${nodePath(id)}/open`, what);
   if (r.status === 200 && r.data) return r.data;
   return { error: r.data?.error ?? String(r.status) };
 }

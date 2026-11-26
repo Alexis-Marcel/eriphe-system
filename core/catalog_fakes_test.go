@@ -216,7 +216,7 @@ func (m *fakeMonitor) server() *mcp.Server {
 		}
 	}
 	mcp.AddTool(s, &mcp.Tool{Name: "message", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: closedWorld},
-		Meta: mcp.Meta{openMetaKey: map[string]any{"title": "subject", "from": "from", "date": "date", "body": "body"}}}, readOne("message"))
+		Meta: mcp.Meta{openMetaKey: map[string]any{"id": "id", "title": "subject", "from": "from", "date": "date", "body": "body"}}}, readOne("message"))
 	// memo is message declaring only its annotations: no field of what it
 	// says is declared (item_open.go).
 	mcp.AddTool(s, &mcp.Tool{Name: "memo", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: closedWorld}}, readOne("memo"))
