@@ -192,32 +192,32 @@
     {
       "line": 1,
       "code": "do-place",
-      "what": "[Jeter tout](do:mail/trash) acts on the references of a heading: on its own line, right under the heading"
+      "what": "a do: link acts on the references of a heading: on its own line, the first under the heading"
     },
     {
       "line": 5,
       "code": "do-place",
-      "what": "[Jeter ces mails](do:mail/trash) acts on the references of a heading: on its own line, right under the heading"
+      "what": "a do: link acts on the references of a heading: on its own line, the first under the heading"
     },
     {
       "line": 6,
       "code": "do-place",
-      "what": "[Jeter](do:mail/trash) acts on the references of a heading: on its own line, right under the heading"
+      "what": "a do: link acts on the references of a heading: on its own line, the first under the heading"
     },
     {
       "line": 9,
       "code": "do-tool",
-      "what": "mail/mark_read is not a tool you have: its card could not be composed"
+      "what": "a do: link on a tool you do not have: its card could not be composed"
     },
     {
       "line": 13,
       "code": "do-target",
-      "what": "do: names a tool as server/tool (do:mail/trash), not \"trash\""
+      "what": "a do: link names a tool as server/tool (do:mail/trash)"
     },
     {
       "line": 14,
       "code": "link-target",
-      "what": "card: names what it places (card:<ref>)"
+      "what": "a card: or on: link names what it places (card:<ref>)"
     }
   ]
 }

@@ -99,12 +99,12 @@
     {
       "line": 1,
       "code": "callout-type",
-      "what": "[!tip] is not a callout Eriphe draws (agenda, chart, figures, info, note, person, steps, success, warning): it is drawn as a note"
+      "what": "a callout Eriphe does not draw (it draws agenda, chart, figures, info, note, person, steps, success, warning): drawn as a note"
     },
     {
       "line": 4,
       "code": "callout-option",
-      "what": "[!figures] takes no option \"line\""
+      "what": "an option this callout does not take (any takes aside; chart takes line, bar or stack)"
     },
     {
       "line": 7,
@@ -114,12 +114,12 @@
     {
       "line": 10,
       "code": "callout-option",
-      "what": "[!chart] takes no option \"pie\""
+      "what": "an option this callout does not take (any takes aside; chart takes line, bar or stack)"
     },
     {
       "line": 14,
       "code": "chart",
-      "what": "\"beaucoup\" is not a number: a series' cells are numbers, the unit in the header"
+      "what": "a series' cell that is not a number: the unit goes in the header"
     }
   ]
 }

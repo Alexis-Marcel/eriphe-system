@@ -65,7 +65,8 @@ func TestChangeLast(t *testing.T) {
 	}
 	// Made after reading version 1: it applies on version 2.
 	d3, err := s.ChangeLast("n1", "task:t1", func(n *nodefile.Node) error {
-		body, err := nodefile.SetTask(n.Body(), nodefile.LineRef{Text: "Lait"}, nodefile.TaskDone)
+		b, _ := n.Body()
+		body, err := nodefile.SetTask(b, nodefile.LineRef{Text: "Lait"}, nodefile.TaskDone)
 		if err != nil {
 			return err
 		}
@@ -74,7 +75,7 @@ func TestChangeLast(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d3.Version.N != 3 || d3.Node.Body() != "- [ ] Pain\n- [x] Lait\n- [ ] Beurre\n" || d3.Version.Author != "task:t1" {
+	if body, _ := d3.Node.Body(); d3.Version.N != 3 || body != "- [ ] Pain\n- [x] Lait\n- [ ] Beurre\n" || d3.Version.Author != "task:t1" {
 		t.Fatalf("v%d\n%s", d3.Version.N, d3.Raw)
 	}
 	if _, err := s.ChangeLast("n1", "brain", func(n *nodefile.Node) error { n.Meta.Parent = "n9"; return nil }); err == nil {

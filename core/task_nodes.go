@@ -210,7 +210,7 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			if err != nil {
 				return nil, err
 			}
-			d, err := c.writeTaskNode(w.task, id, in.Expect, w.grant, func(n *nodefile.Node) error { return n.AuthorBody(in.Body) })
+			d, err := c.writeTaskNode(w.task, id, writeOn{expect: in.Expect}, w.grant, func(n *nodefile.Node) error { return n.AuthorBody(in.Body) })
 			return written(d, c.lentTool(w.grant)), err
 		})
 	tool(s, "node_edit", "Edit your node, or another where you work (id, as node_write): replace a line, or a piece of its text, found once (old, new), or move an item with its detail (move, after), on its last version, refused when the line is gone; or write one block (block and value, before to place it) on the version whose hash is expect.",
@@ -219,11 +219,11 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			if err != nil {
 				return nil, err
 			}
-			fn, expect, err := nodeEdit(in.nodeEdits)
+			fn, on, err := nodeEdit(in.nodeEdits)
 			if err != nil {
 				return nil, err
 			}
-			d, err := c.writeTaskNode(w.task, id, expect, w.grant, fn)
+			d, err := c.writeTaskNode(w.task, id, on, w.grant, fn)
 			return written(d, c.lentTool(w.grant)), err
 		})
 	tool(s, "node_append", "Add markdown text at the end of your node, or of another where you work (id, as node_write): no expect needed, it writes over nothing.",
@@ -236,7 +236,7 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			if text == "" {
 				return nil, errors.New("text is empty")
 			}
-			d, err := c.writeTaskNode(w.task, id, onLastVersion, w.grant, nodeAppend(text))
+			d, err := c.writeTaskNode(w.task, id, onLast, w.grant, nodeAppend(text))
 			return written(d, c.lentTool(w.grant)), err
 		})
 	tool(s, "node_open", "Open a child of your node, or of another where you work (parent, as node_write's id), for a part of the work: its title, its goal, and its first body; with steps, its work cut in steps, each a child of it that an agent runs, accepted by Eriphe on its proof. A child of your node is under it: you write it too; the steps are the user's and Eriphe's to follow, and you never start a task yourself.",
@@ -338,28 +338,33 @@ func written(d *nodestore.Doc, hasTool func(string) bool) map[string]any {
 // block, or a fence in its text), are checked (nodeGuard), and marked
 // external, with the node, when the task is tainted now, or for a source
 // of a server not trusted.
-func (c *core) writeTaskNode(task, id, expect string, grant []string, fn func(*nodefile.Node) error) (*nodestore.Doc, error) {
+func (c *core) writeTaskNode(task, id string, on writeOn, grant []string, fn func(*nodefile.Node) error) (*nodestore.Doc, error) {
 	if id == "" || c.nodes == nil {
 		return nil, errors.New("this task has no node")
 	}
-	return c.authorWrite(id, expect, c.taskAuthor(task), c.writeTaint(task) != "", c.lentTo(grant), fn)
+	return c.authorWriteOn(id, on, c.taskAuthor(task), c.writeTaint(task) != "", c.lentTo(grant), fn)
 }
 
 // authorWrite writes a node as an author (the brain, a task): fn changes
-// its last version, which expect names (onLastVersion: a line edit,
-// made on whichever is last). The blocks it wrote, new or
+// its last version, which expect names. The blocks it wrote, new or
 // changed, however it wrote them (a block, or a fence in its text), are
 // checked (nodeGuard, sourceOK for their sources), and marked external,
 // with the node, when the author is tainted now, or for a source of a
 // server not trusted.
 func (c *core) authorWrite(id, expect, author string, tainted bool, sourceOK func(nodefile.Source) error, fn func(*nodefile.Node) error) (*nodestore.Doc, error) {
+	return c.authorWriteOn(id, writeOn{expect: expect}, author, tainted, sourceOK, fn)
+}
+
+// authorWriteOn is authorWrite on a version: the one expect names, or
+// the last one, for a line edit.
+func (c *core) authorWriteOn(id string, on writeOn, author string, tainted bool, sourceOK func(nodefile.Source) error, fn func(*nodefile.Node) error) (*nodestore.Doc, error) {
 	change := c.nodes.Change
-	if expect == onLastVersion {
+	if on.last {
 		change = func(id, _, author string, fn func(*nodefile.Node) error) (*nodestore.Doc, error) {
 			return c.nodes.ChangeLast(id, author, fn)
 		}
 	}
-	return change(id, strings.TrimSpace(expect), author, func(n *nodefile.Node) error {
+	return change(id, strings.TrimSpace(on.expect), author, func(n *nodefile.Node) error {
 		was := map[string]string{}
 		for _, b := range n.Blocks() {
 			was[b.Name] = blockSig(b)
@@ -391,13 +396,13 @@ func (c *core) authorWrite(id, expect, author string, tainted bool, sourceOK fun
 
 // nodeEdit is node_edit's change, and the version it is made on: one
 // block written (on the version expect names), or a line edit on the
-// last version (onLastVersion): a piece of the text replaced, an item
-// moved with its detail.
-func nodeEdit(in nodeEdits) (func(*nodefile.Node) error, string, error) {
+// last version: a piece of the text replaced, an item moved with its
+// detail.
+func nodeEdit(in nodeEdits) (func(*nodefile.Node) error, writeOn, error) {
 	switch {
 	case in.Block != "" && in.Old == "" && in.Move == "":
 		if strings.TrimSpace(in.Expect) == "" {
-			return nil, "", errors.New("expect is needed to write a block: the hash of the version you read (node_read)")
+			return nil, writeOn{}, errors.New("expect is needed to write a block: the hash of the version you read (node_read)")
 		}
 		return func(n *nodefile.Node) error {
 			raw, err := json.Marshal(in.Value)
@@ -405,10 +410,13 @@ func nodeEdit(in nodeEdits) (func(*nodefile.Node) error, string, error) {
 				return err
 			}
 			return n.PutAuthorBlock(in.Block, raw, in.Before)
-		}, in.Expect, nil
+		}, writeOn{expect: in.Expect}, nil
 	case in.Old != "" && in.Block == "" && in.Move == "":
 		return func(n *nodefile.Node) error {
-			body := n.Body()
+			body, err := n.Body()
+			if err != nil {
+				return err
+			}
 			if strings.Count(body, in.Old) == 1 && strings.Count(n.Text(), in.Old) != 1 {
 				return errors.New("old is in a block: write the block with block")
 			}
@@ -417,17 +425,21 @@ func nodeEdit(in nodeEdits) (func(*nodefile.Node) error, string, error) {
 				return fmt.Errorf("old: %w", err)
 			}
 			return n.AuthorBody(out)
-		}, onLastVersion, nil
+		}, onLast, nil
 	case in.Move != "" && in.After != "" && in.Block == "" && in.Old == "":
 		return func(n *nodefile.Node) error {
-			out, err := nodefile.MoveItem(n.Body(), nodefile.LineRef{Text: in.Move}, nodefile.LineRef{Text: in.After})
+			body, err := n.Body()
+			if err != nil {
+				return err
+			}
+			out, err := nodefile.MoveItem(body, nodefile.LineRef{Text: in.Move}, nodefile.LineRef{Text: in.After})
 			if err != nil {
 				return err
 			}
 			return n.AuthorBody(out)
-		}, onLastVersion, nil
+		}, onLast, nil
 	}
-	return nil, "", errors.New("block and value, old and new, or move and after")
+	return nil, writeOn{}, errors.New("block and value, old and new, or move and after")
 }
 
 // nodeAppend is node_append's change: text added at the node's end.

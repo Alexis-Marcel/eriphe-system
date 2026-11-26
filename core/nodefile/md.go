@@ -179,7 +179,7 @@ var (
 	pageHeadRe  = regexp.MustCompile(`^(#{1,6})\s+(.*)$`)
 	pageEmbedRe = regexp.MustCompile(`^!\[\[([^\]]+)\]\]$`)
 	pageRuleRe  = regexp.MustCompile(`^(-{3,}|\*{3,}|_{3,})$`)
-	writtenRe   = regexp.MustCompile(`(?i)^(Écrit|Ecrit|Mis à jour|Written|Updated)( le| on)?\b`)
+	writtenRe   = regexp.MustCompile(`(?i)^(Écrit le|Ecrit le|Mis à jour le|Written on|Updated on)\b`)
 	dueRe       = regexp.MustCompile(`📅\s*(\d{4}-\d{2}-\d{2})`)
 	quoteByRe   = regexp.MustCompile(`^\s*[—–]\s*(.+?)(?:,\s*([^,]+))?\s*$`)
 )
@@ -669,19 +669,27 @@ func onlyLinks(s string, toks []token) bool {
 
 // Body is the node's body as its file holds it: its text, and its
 // blocks in their fences.
-func (n *Node) Body() string {
+func (n *Node) Body() (string, error) {
 	var b strings.Builder
 	for _, s := range n.segs {
 		if s.block == nil {
 			b.WriteString(s.text)
 			continue
 		}
-		if out, err := s.block.bytes(); err == nil {
-			b.Write(out)
+		out, err := s.block.bytes()
+		if err != nil {
+			return "", err
 		}
+		b.Write(out)
 	}
-	return b.String()
+	return b.String(), nil
 }
 
 // Page reads the node's body as a page: a block in its fence is code.
-func (n *Node) Page() *Page { return ReadPage(n.Body()) }
+func (n *Node) Page() (*Page, error) {
+	body, err := n.Body()
+	if err != nil {
+		return nil, err
+	}
+	return ReadPage(body), nil
+}

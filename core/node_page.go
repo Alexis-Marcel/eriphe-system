@@ -14,9 +14,17 @@ import (
 // it holds, so it needs no version: it is made on the last one, and
 // refused when its line is gone.
 
-// onLastVersion is the expect of a line edit: made on the node's last
-// version, whichever it is (nodestore's ChangeLast). Only code gives it.
-const onLastVersion = "\x00last"
+// writeOn is the version an author's write is made on: the one whose
+// hash it read (expect), or the last one, whichever it is, for a line
+// edit (nodestore's ChangeLast). Only code says last: an author's expect
+// never does.
+type writeOn struct {
+	expect string
+	last   bool
+}
+
+// onLast is a line edit's version.
+var onLast = writeOn{last: true}
 
 // pageProblems is what is wrong in the page a write made, as its author
 // reads it: nil when nothing is. hasTool tells the tools the author has,
@@ -25,11 +33,14 @@ func pageProblems(d *nodestore.Doc, hasTool func(string) bool) []nodefile.Proble
 	if d == nil {
 		return nil
 	}
-	pr := d.Node.Page().Check(hasTool)
-	if len(pr) == 0 {
+	p, err := d.Node.Page()
+	if err != nil {
 		return nil
 	}
-	return pr
+	if pr := p.Check(hasTool); len(pr) > 0 {
+		return pr
+	}
+	return nil
 }
 
 // brainHasTool tells whether the brain has a tool (server/tool): one of

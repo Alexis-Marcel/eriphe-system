@@ -84,17 +84,17 @@
     {
       "line": 3,
       "code": "ref-undefined",
-      "what": "[Facture][m2] has no target: write [m2]: <scheme>:<id> at the bottom, the id as the tool gave it"
+      "what": "a reference with no target: write [label]: <server>:<id> at the bottom, the id as the tool gave it"
     },
     {
       "line": 7,
       "code": "ref-unused",
-      "what": "no reference uses [m3]: remove its target with its line"
+      "what": "no reference uses this target: remove it with its reference"
     },
     {
       "line": 8,
       "code": "ref-duplicate",
-      "what": "the label [m1] is defined twice: each reference has a label of its own"
+      "what": "this label is defined twice: each reference has a label of its own"
     }
   ]
 }

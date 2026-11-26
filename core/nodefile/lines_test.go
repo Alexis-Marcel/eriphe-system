@@ -136,19 +136,32 @@ func TestMoveItem(t *testing.T) {
 		t.Errorf("its detail did not go with it:\n%s", got)
 	}
 
+	// An item named by its label: its reference's target is no item.
+	if _, err := MoveItem(string(mails), LineRef{Text: "[m2]"}, LineRef{Text: "[m4]"}); err != nil {
+		t.Errorf("by its label: %v", err)
+	}
 	for _, c := range []struct {
 		why         string
 		item, after string
+		err         error
+		words       string
 	}{
-		{"an item gone", "Beurre", "## À archiver"},
-		{"a heading gone", "[m2]", "## Ailleurs"},
-		{"not an item", "## À traiter", "## À archiver"},
-		{"into itself", "[m2]", "Brouillon prêt"},
-		{"after a paragraph", "[m2]", "[Jeter ces mails](do:mail/trash)"},
+		{"an item gone", "Beurre", "## À archiver", ErrLineGone, "move:"},
+		{"a heading gone", "[m2]", "## Ailleurs", ErrLineGone, "after:"},
+		{"not an item", "## À traiter", "## À archiver", ErrLineGone, "move:"},
+		{"into itself", "[m2]", "Brouillon prêt", nil, "into itself"},
+		{"after a paragraph", "[m2]", "[Jeter ces mails](do:mail/trash)", ErrLineGone, "after:"},
+		{"after a line twice", "[m2]", "- [", ErrLineTwice, "after:"},
 	} {
-		if _, err := MoveItem(string(mails), LineRef{Text: c.item}, LineRef{Text: c.after}); err == nil {
-			t.Errorf("%s: moved", c.why)
+		_, err := MoveItem(string(mails), LineRef{Text: c.item}, LineRef{Text: c.after})
+		if err == nil || (c.err != nil && !errors.Is(err, c.err)) || !strings.Contains(err.Error(), c.words) {
+			t.Errorf("%s: %v", c.why, err)
 		}
+	}
+	// A line in code is no item.
+	code := "```\n- [ ] Pain\n```\n- [ ] Pain\n"
+	if got, err := SetTask(code, LineRef{Text: "Pain"}, TaskDone); err != nil || got != "```\n- [ ] Pain\n```\n- [x] Pain\n" {
+		t.Errorf("code: %q %v", got, err)
 	}
 }
 
@@ -225,6 +238,23 @@ func TestNumber(t *testing.T) {
 	for _, s := range []string{"beaucoup", "12 €", "1,2,3", "", "--1"} {
 		if Number(s) {
 			t.Errorf("%q is no number", s)
+		}
+	}
+}
+
+// A problem's words are code's: never the page's, which may be someone
+// else's words its author has not read.
+func TestProblemsQuoteNothing(t *testing.T) {
+	page := "[zorglub](do:zorglub)\n- [Zorglub][zorglub] 📅 zorglub\n- [z][zorglubb] 📅 2026-02-31\n\n" +
+		"> [!zorglub|zorglub] Zorglub\n\n> [!chart|zorglub]\n> | x | y |\n> |---|---|\n> | a | zorglub |\n\n" +
+		"[a](card:) [b](do:zorglub/zorglub)\n\n[zorglubc]: mail:zorglub\n[zorglubc]: mail:zorglub\n"
+	pr := ReadPage(page).Check(func(string) bool { return false })
+	if len(pr) < 10 {
+		t.Fatalf("%d problems: %v", len(pr), pr)
+	}
+	for _, p := range pr {
+		if strings.Contains(strings.ToLower(p.What), "zorglub") {
+			t.Errorf("%s quotes the page: %s", p.Code, p.What)
 		}
 	}
 }

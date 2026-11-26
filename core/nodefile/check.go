@@ -1,7 +1,6 @@
 package nodefile
 
 import (
-	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
@@ -14,7 +13,9 @@ import (
 // refused for it (nothing is lost): its author is told and fixes it.
 
 // Problem is a thing wrong in a page: its line, a stable code, and what
-// it is, in words for its author.
+// it is, in words for its author. Its words are code's, never the page's
+// (the page may hold someone else's words, and its author may not have
+// read them): its line says where.
 type Problem struct {
 	Line int    `json:"line"`
 	Code string `json:"code"`
@@ -74,8 +75,8 @@ var (
 // author has a tool (server/tool) a do: link names; nil checks none.
 func (p *Page) Check(hasTool func(tool string) bool) []Problem {
 	out := []Problem{}
-	add := func(ln int, code, what string, args ...any) {
-		out = append(out, Problem{Line: ln, Code: code, What: fmt.Sprintf(what, args...)})
+	add := func(ln int, code, what string) {
+		out = append(out, Problem{Line: ln, Code: code, What: what})
 	}
 	// References.
 	defined := map[string]bool{}
@@ -85,17 +86,17 @@ func (p *Page) Check(hasTool func(tool string) bool) []Problem {
 	}
 	for _, d := range p.Refs {
 		if defined[d.Label] {
-			add(d.Line, ProblemRefDuplicate, "the label [%s] is defined twice: each reference has a label of its own", d.Label)
+			add(d.Line, ProblemRefDuplicate, "this label is defined twice: each reference has a label of its own")
 			continue
 		}
 		defined[d.Label] = true
 		if !used[d.Label] {
-			add(d.Line, ProblemRefUnused, "no reference uses [%s]: remove its target with its line", d.Label)
+			add(d.Line, ProblemRefUnused, "no reference uses this target: remove it with its reference")
 		}
 	}
 	for _, u := range p.Uses {
 		if !defined[u.Label] {
-			add(u.Line, ProblemRefUndefined, "[%s][%s] has no target: write [%s]: <scheme>:<id> at the bottom, the id as the tool gave it", u.Text, u.Label, u.Label)
+			add(u.Line, ProblemRefUndefined, "a reference with no target: write [label]: <server>:<id> at the bottom, the id as the tool gave it")
 		}
 	}
 	// Dates, outside code.
@@ -110,7 +111,7 @@ func (p *Page) Check(hasTool func(tool string) bool) []Problem {
 			case m == nil:
 				add(i+1, ProblemDateMalformed, "a date after 📅 is written YYYY-MM-DD (📅 2026-11-27)")
 			case !realDate(m[1]):
-				add(i+1, ProblemDateImpossible, "%s is not a date", m[1])
+				add(i+1, ProblemDateImpossible, "a date after 📅 that is no day of the calendar")
 			}
 		}
 	}
@@ -122,11 +123,11 @@ func (p *Page) Check(hasTool func(tool string) bool) []Problem {
 			case KindCallout:
 				opts, known := calloutOpts[b.Type]
 				if !known {
-					add(b.Line, ProblemCalloutType, "[!%s] is not a callout Eriphe draws (%s): it is drawn as a note", b.Type, strings.Join(CalloutTypes(), ", "))
+					add(b.Line, ProblemCalloutType, "a callout Eriphe does not draw (it draws "+strings.Join(CalloutTypes(), ", ")+"): drawn as a note")
 				}
 				for _, o := range b.Opts {
 					if o != OptAside && !slices.Contains(opts, o) {
-						add(b.Line, ProblemCalloutOption, "[!%s] takes no option %q", b.Type, o)
+						add(b.Line, ProblemCalloutOption, "an option this callout does not take (any takes aside; chart takes line, bar or stack)")
 					}
 				}
 				if b.Type == "chart" {
@@ -146,18 +147,18 @@ func (p *Page) Check(hasTool func(tool string) bool) []Problem {
 		switch l.Kind {
 		case LinkDo:
 			if _, ok := p.Scope(l); !ok {
-				add(l.Line, ProblemDoPlace, "[%s](do:%s) acts on the references of a heading: on its own line, right under the heading", l.Label, l.Target)
+				add(l.Line, ProblemDoPlace, "a do: link acts on the references of a heading: on its own line, the first under the heading")
 			}
 			server, tool, _ := strings.Cut(l.Target, "/")
 			switch {
 			case server == "" || tool == "":
-				add(l.Line, ProblemDoTarget, "do: names a tool as server/tool (do:mail/trash), not %q", l.Target)
+				add(l.Line, ProblemDoTarget, "a do: link names a tool as server/tool (do:mail/trash)")
 			case hasTool != nil && !hasTool(l.Target):
-				add(l.Line, ProblemDoTool, "%s is not a tool you have: its card could not be composed", l.Target)
+				add(l.Line, ProblemDoTool, "a do: link on a tool you do not have: its card could not be composed")
 			}
 		case LinkCard, LinkOn:
 			if strings.TrimSpace(l.Target) == "" {
-				add(l.Line, ProblemLinkTarget, "%s: names what it places (%s:<ref>)", l.Kind, l.Kind)
+				add(l.Line, ProblemLinkTarget, "a card: or on: link names what it places (card:<ref>)")
 			}
 		}
 	}
@@ -203,7 +204,7 @@ func realDate(s string) bool {
 
 // checkChart checks a [!chart]'s table: first column the x, a column per
 // series, every series cell a number (or empty).
-func (p *Page) checkChart(b PageBlock, add func(int, string, string, ...any)) {
+func (p *Page) checkChart(b PageBlock, add func(int, string, string)) {
 	var table *PageBlock
 	for i := range b.Body {
 		if b.Body[i].Kind == KindTable {
@@ -225,7 +226,7 @@ func (p *Page) checkChart(b PageBlock, add func(int, string, string, ...any)) {
 	for r, row := range table.Rows {
 		for _, c := range row[1:] {
 			if c != "" && !Number(c) {
-				add(table.Line+2+r, ProblemChart, "%q is not a number: a series' cells are numbers, the unit in the header", c)
+				add(table.Line+2+r, ProblemChart, "a series' cell that is not a number: the unit goes in the header")
 			}
 		}
 	}

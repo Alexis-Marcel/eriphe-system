@@ -1188,6 +1188,16 @@ body and typed blocks (`` ```eriphe:block <name> ``). The format is specified in
   in the file (they are code's, in `core.db`): a block that says a `snapshot` (an old version,
   an author copying one) still reads, the snapshot ignored, and is written again without it. An
   old step's front matter `after` reads as a field this package does not know, kept as it was.
+- **The page** ([format 3](../docs/node-format.md#the-page-format-3)). `ReadPage` (`md.go`) reads
+  a body as a Markdown page into a tree (`Page`: its blocks, list items with their detail, task
+  state and `📅` date, callouts, the references and their targets, the `do:`, `card:`, `ask:` and
+  `on:` links with their line, item, callout and heading), lines counted from 1 in the body;
+  `Scope` is the section a `do:` link acts on. `Check` (`check.go`) says what is wrong in it
+  (`Problem`: a line, a stable code, words of code's, never the page's). `lines.go` changes one
+  line, named by its text: `ReplaceOnce`, `SetTask`, `MoveItem` (an item with its detail),
+  `ErrLineGone` when the line is not there any more. The fixture pages in `testdata/pages` (each
+  with its tree and problems as JSON) hold Go's reader and the workspace's to the same reading
+  (`go test ./nodefile -run TestPageFixtures -update` writes the JSON again).
 
 The checks that need the core (offers, a card block's ref, a bound Link's value, taint) are the
 tools' that write nodes.

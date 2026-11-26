@@ -63,7 +63,7 @@ func TestTaskWritesAMarkdownPage(t *testing.T) {
 	mustNodes(t, c.core, task.ID, "node_edit", map[string]any{"id": parent, "move": "[Facture de novembre]", "after": "## À supprimer"})
 	d, _ := c.nodes.Read(parent, 0)
 	want := "## À archiver\n[Archiver ces mails](do:docs/archive)\n\n## À supprimer\n[Jeter ces mails](do:mail/trash)\n- [Facture de novembre][m1] : payée\n  - Prélevée le 28/11.\n- [Newsletter][m3]"
-	if body := d.Node.Body(); !strings.HasPrefix(body, want) {
+	if body, _ := d.Node.Body(); !strings.HasPrefix(body, want) {
 		t.Errorf("moved:\n%s", body)
 	}
 	if _, err := callNodes(t, c.core, task.ID, "node_edit", map[string]any{"id": parent, "move": "[Facture de novembre]", "after": "## Ailleurs"}); !strings.Contains(err, "read it again") {

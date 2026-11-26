@@ -71,20 +71,29 @@ func splitBody(body string) ([]string, func([]string) string) {
 	}
 }
 
-// locate finds the line r names (its index): the line at r.Line when it
-// still holds r's text, else the only line that holds it whole, else the
-// only line that holds it in part.
-func locate(lines []string, r LineRef) (int, error) {
+// locate finds the line r names (its index) among the lines of body
+// that are role's (a task, an item, a heading), outside code and the
+// references' targets: the line at r.Line when it still holds r's text,
+// else the only line that holds it whole, else the only line that holds
+// it in part.
+func locate(body string, lines []string, r LineRef, role func(string) bool) (int, error) {
 	want := lineCore(r.Text)
 	if want == "" {
 		return 0, errors.New("a line is named by its text")
 	}
-	if r.Line >= 1 && r.Line <= len(lines) && lineCore(lines[r.Line-1]) == want {
+	info := ReadPage(body).info
+	cand := func(i int) bool {
+		return i < len(info) && !info[i].code && !info[i].def && role(lines[i])
+	}
+	if r.Line >= 1 && r.Line <= len(lines) && cand(r.Line-1) && lineCore(lines[r.Line-1]) == want {
 		return r.Line - 1, nil
 	}
 	for _, part := range []bool{false, true} {
 		at := -1
 		for i, l := range lines {
+			if !cand(i) {
+				continue
+			}
 			c := lineCore(l)
 			if c == want || (part && strings.Contains(c, want)) {
 				if at >= 0 {
@@ -104,6 +113,13 @@ func locate(lines []string, r LineRef) (int, error) {
 // rest.
 var taskBoxRe = regexp.MustCompile(`^((?:[ \t]*>[ ]?)*[ \t]*(?:[-*+]|\d+[.)])[ \t]+)\[([ xX/-])\](.*)$`)
 
+// The roles of the lines an operation names.
+var (
+	isTask  = taskBoxRe.MatchString
+	isItem  = itemLineRe.MatchString
+	isPlace = func(l string) bool { return isItem(l) || pageHeadRe.MatchString(strings.TrimSpace(l)) }
+)
+
 // SetTask writes a task's state (TaskOpen, TaskDone, TaskDoing,
 // TaskDropped) into its line, every other byte kept.
 func SetTask(body string, task LineRef, state string) (string, error) {
@@ -111,14 +127,11 @@ func SetTask(body string, task LineRef, state string) (string, error) {
 		return "", fmt.Errorf("a task's state is %q, %q, %q or %q", TaskOpen, TaskDone, TaskDoing, TaskDropped)
 	}
 	lines, join := splitBody(body)
-	i, err := locate(lines, task)
+	i, err := locate(body, lines, task, isTask)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("no task (- [ ] …) holds it: %w", err)
 	}
 	m := taskBoxRe.FindStringSubmatch(lines[i])
-	if m == nil {
-		return "", fmt.Errorf("line %d is not a task (- [ ] …)", i+1)
-	}
 	lines[i] = m[1] + "[" + state + "]" + m[3]
 	return join(lines), nil
 }
@@ -168,17 +181,14 @@ func itemSpan(lines []string, i int) (end int, prefix, ind string, ok bool) {
 // its indent and in its callout.
 func MoveItem(body string, item, after LineRef) (string, error) {
 	lines, join := splitBody(body)
-	i, err := locate(lines, item)
+	i, err := locate(body, lines, item, isItem)
 	if err != nil {
-		return "", fmt.Errorf("move: %w", err)
+		return "", fmt.Errorf("move: no item of a list holds it: %w", err)
 	}
-	end, _, ind, ok := itemSpan(lines, i)
-	if !ok {
-		return "", fmt.Errorf("line %d is not an item of a list", i+1)
-	}
-	t, err := locate(lines, after)
+	end, _, ind, _ := itemSpan(lines, i)
+	t, err := locate(body, lines, after, isPlace)
 	if err != nil {
-		return "", fmt.Errorf("after: %w", err)
+		return "", fmt.Errorf("after: no heading nor item holds it: %w", err)
 	}
 	if t >= i && t < end {
 		return "", errors.New("an item is not moved into itself")

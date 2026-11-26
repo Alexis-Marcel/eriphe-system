@@ -43,7 +43,7 @@
     {
       "line": 1,
       "code": "date-impossible",
-      "what": "2026-02-30 is not a date"
+      "what": "a date after 📅 that is no day of the calendar"
     },
     {
       "line": 2,
