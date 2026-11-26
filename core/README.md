@@ -3737,13 +3737,20 @@ token in `X-CSRF-Token`:
   (`authorWrite` as `user`, the node's guard and the secrets filter as for any author), made on
   the version whose hash is `expect`. A newer version gives `409` with its `version`, `hash` and
   `body`, and writes nothing; an archived node `410`; a body that does not read `400`.
-- `POST /api/nodes/{id}/ask` `{block, component}`: a block's button. Its words are read again in
-  the stored block (`a2ui.AskText`), never taken from the page, and become the user's message to
-  that node. A block marked external asks too, but its words may echo what was read: the message
-  is stored tainted (`ask:<node>/<block>`), so the turn it starts is tainted as the one that wrote
+- `POST /api/nodes/{id}/ask` `{block, component}` or `{line, n}`: a block's button, or a page's
+  probable reply (the `n`-th `ask:` link of that body line). Its words are read again in the stored
+  block (`a2ui.AskText`) or the stored page (`nodefile.ReadPage`), never taken from the page, and
+  become the user's message to that node. A block marked external, or a node written after reading
+  external content, asks too, but its words may echo what was read: the message is stored tainted
+  (`ask:<node>/<block>`, `ask:<node>` for a page's line), so the turn it starts is tainted as the one that wrote
   it, and it is never taken for the user's own words (`fromUntrusted`: no owner memory cited from
   it, no text « oui » on a card, no lending, the extraction reads it as external). It acts on
   nothing: no route marks a block's items or acts on them; a yes is a card's.
+- `POST /api/nodes/{id}/task` `{line, text, state}`: the user's tick on a page's task
+  (`nodefile.SetTask`: `[ ]`, `[x]`, `[/]` or `[-]`), made on the last version (`nodes.ChangeLast`),
+  a version by `user`. The line is found by its text (`line` a hint): a line gone, or written
+  twice, is `409` and nothing is written; an archived node `410`; a state that is not one of the
+  four `400`. `200` `{version, hash}`. A skill triggered by `node.gesture` in that node is woken.
 - `POST /api/nodes/{id}/open` `{block, source, item}`: an item opened in place
   (`item_open.go`), the user's gesture. The source's `items.open` is read again in the stored block
   (`409` when it has none); the item must be one the source lists now (`400`). The tool (a read of

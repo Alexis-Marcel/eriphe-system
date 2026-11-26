@@ -35,7 +35,8 @@ async function fake(page: Page, asked: number[]) {
     p.version = n;
     p.shift = 0;
     p.versions = Array.from({ length: 17 }, (_, i) => ({ n: i + 1, author: i % 3 ? "brain" : "user", at: new Date(Date.now() - (17 - i) * 3_600_000).toISOString() }));
-    p.parts = [{ text: `Le texte de la version ${n}.` }];
+    p.body = `Le texte de la version ${n}.\n`;
+    p.parts = [{ text: p.body }];
     await route.fulfill({ response: r, json: p });
   });
   await page.route("**/api/espace/view", (route) => route.fulfill({ status: 204 }));
