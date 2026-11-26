@@ -18,9 +18,12 @@ import (
 
 // What the user does on the graph workspace (#633), kept by eriphe-core:
 //
-//   - a block's button that asks Eriphe: the ask its author wrote, read
-//     again from the stored block, sent as the user's message to its node;
-//     it acts on nothing (a yes is a card's, web_convo_cards.go);
+//   - a block's button that asks Eriphe, or a page's ask: link: the ask its
+//     author wrote, read again from the stored block or page, sent as the
+//     user's message to its node; it acts on nothing (a yes is a card's,
+//     web_convo_cards.go);
+//   - a task of a node's page ticked (- [x]): its line written, on the
+//     last version, by the user;
 //   - the archive of a node and what is under it, and its reopening, the
 //     user's alone (archiveNode, reopenNode);
 //   - an edit of a node's text in its .md tab, made on the version it was
@@ -34,6 +37,7 @@ import (
 func (w *web) gestureRoutes(mux *webMux) {
 	mux.Handle("PUT /api/nodes/{id}/md", w.auth(w.handleNodeSave))
 	mux.Handle("POST /api/nodes/{id}/ask", w.auth(w.handleNodeAsk))
+	mux.Handle("POST /api/nodes/{id}/task", w.auth(w.handleNodeTask))
 	mux.Handle("POST /api/nodes/{id}/archive", w.auth(w.handleNodeArchive))
 	mux.Handle("POST /api/nodes/{id}/reopen", w.auth(w.handleNodeReopen))
 	mux.Handle("GET /api/archives", w.auth(w.handleArchives))
@@ -123,20 +127,25 @@ func authorBody(d *nodestore.Doc) string {
 	return text
 }
 
-// A block's gestures.
+// A block's gestures, and a page's.
 
 // nodeAskIn names the button clicked: its block and its component, or
-// for an ask of an Asks, the component and the ask's place ("root#1").
+// for an ask of an Asks, the component and the ask's place ("root#1");
+// or, on the page, the line of an ask: link and which of that line's
+// ask: links it is (N, from 0).
 type nodeAskIn struct {
 	Block     string `json:"block"`
 	Component string `json:"component"`
+	Line      int    `json:"line"`
+	N         int    `json:"n"`
 }
 
-// handleNodeAsk is POST /api/nodes/{id}/ask: a block's button that asks
-// Eriphe. Its words are read again from the block as stored, never taken
-// from the page; they go as the user's message to the block's node (it
-// never decides a card). A block marked external (written after an
-// outside read, or reading a server not trusted) asks too, but its words
+// handleNodeAsk is POST /api/nodes/{id}/ask: a block's button, or a
+// page's ask: link, that asks Eriphe. Its words are read again from the
+// block or the page as stored, never taken from the request; they go as
+// the user's message to the node (it never decides a card). A block
+// marked external (written after an outside read, or reading a server
+// not trusted), or a page of a node marked so, asks too, but its words
 // may echo what was read: the message carries the taint (addAsk), so the
 // turn it starts is tainted as the one that wrote it, and they never pass
 // for the user's own. 404 for no such button; 410 archived.
@@ -159,17 +168,21 @@ func (w *web) handleNodeAsk(rw http.ResponseWriter, r *http.Request, _ *session)
 		writeJSON(rw, http.StatusNotFound, map[string]string{"error": errNoNode.Error()})
 		return
 	}
-	b := last.Node.Block(in.Block)
-	if b == nil {
-		writeJSON(rw, http.StatusNotFound, map[string]string{"error": "no such block"})
-		return
+	var text, block string
+	var external bool
+	ok = false
+	if in.Block == "" {
+		text, ok = pageAsk(last.Node, in.Line, in.N)
+		external = last.Node.Meta.External
+	} else if b := last.Node.Block(in.Block); b != nil {
+		text, ok = a2ui.AskText(b.Components, in.Component)
+		block, external = b.Name, b.External
 	}
-	text, ok := a2ui.AskText(b.Components, in.Component)
 	if !ok || strings.TrimSpace(text) == "" {
 		writeJSON(rw, http.StatusNotFound, map[string]string{"error": "no such button"})
 		return
 	}
-	if err := c.addAsk(text, sum.ID, b.Name, b.External); err != nil {
+	if err := c.addAsk(text, sum.ID, block, external); err != nil {
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -178,22 +191,104 @@ func (w *web) handleNodeAsk(rw http.ResponseWriter, r *http.Request, _ *session)
 	rw.WriteHeader(http.StatusNoContent)
 }
 
+// pageAsk is the words of the nth ask: link (from 0) of a page's line,
+// as the page holds them.
+func pageAsk(n *nodefile.Node, line, nth int) (string, bool) {
+	p, err := n.Page()
+	if err != nil || line < 1 || nth < 0 {
+		return "", false
+	}
+	i := 0
+	for _, l := range p.Links {
+		if l.Kind != nodefile.LinkAsk || l.Line != line {
+			continue
+		}
+		if i == nth {
+			return l.Label, true
+		}
+		i++
+	}
+	return "", false
+}
+
 // askTaintPrefix is the taint of the words of a button of a block marked
 // external: its node and block follow.
 const askTaintPrefix = "ask:"
 
-// addAsk adds a button's words as the user's message to node. From a
-// block marked external, the message is tainted as it is stored, in the
+// addAsk adds a button's words as the user's message to node: a block's
+// (block, its name) or its page's (block ""). From a block or a page
+// marked external, the message is tainted as it is stored, in the
 // same statement: delivered, it taints the turn (brain.go), and it is
 // never taken for the user's own words (fromUntrusted).
 func (c *core) addAsk(text, node, block string, external bool) error {
 	why := ""
 	if external {
-		why = askTaintPrefix + node + "/" + block
+		why = askTaintPrefix + node
+		if block != "" {
+			why += "/" + block
+		}
 	}
 	_, err := c.store.db.Exec(`INSERT INTO messages (time, role, text, delivered, node, taint) VALUES (?, ?, ?, 0, ?, ?)`,
 		time.Now().Unix(), roleUser, text, node, why)
 	return err
+}
+
+// A page's tasks.
+
+// nodeTaskIn is a task the user ticked on a node's page: its line (from
+// 1, in the body as the page read it), the line's text as the page read
+// it, and its new state (" ", "x", "/", "-").
+type nodeTaskIn struct {
+	Line  int    `json:"line"`
+	Text  string `json:"text"`
+	State string `json:"state"`
+}
+
+// handleNodeTask is POST /api/nodes/{id}/task: the user ticks (or
+// unticks) a task of a node's page. Its line is written on the node's
+// last version, whichever it is (nodefile.SetTask through ChangeLast): a
+// version by the user, the box its only change; the line is found by its
+// text, its number a hint, so another author's write since does not stop
+// it, and nothing the request says but the state reaches the file. The
+// skills that work in the node hear of it (node.gesture). 200 with the
+// version and its hash; 409 when the line is gone or there twice (the
+// page reads itself again); 410 archived; 400 for a state that is not
+// one.
+func (w *web) handleNodeTask(rw http.ResponseWriter, r *http.Request, _ *session) {
+	sum, ok := w.gestureNode(rw, r)
+	if !ok {
+		return
+	}
+	var in nodeTaskIn
+	if !gestureBody(rw, r, 16<<10, &in) {
+		return
+	}
+	c := w.c
+	d, err := c.authorWriteOn(sum.ID, onLast, byUser, false, c.nodeSourceOK(), func(n *nodefile.Node) error {
+		body, err := n.Body()
+		if err != nil {
+			return err
+		}
+		out, err := nodefile.SetTask(body, nodefile.LineRef{Line: in.Line, Text: in.Text}, in.State)
+		if err != nil {
+			return err
+		}
+		return n.AuthorBody(out)
+	})
+	switch {
+	case errors.Is(err, nodestore.ErrArchived):
+		writeJSON(rw, http.StatusGone, map[string]string{"error": "archived"})
+		return
+	case errors.Is(err, nodefile.ErrLineGone), errors.Is(err, nodefile.ErrLineTwice):
+		writeJSON(rw, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	case err != nil:
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	c.wakeNodeSkills(sum.ID, "task")
+	w.notify()
+	writeJSON(rw, http.StatusOK, map[string]any{"version": d.Version.N, "hash": d.Version.Hash})
 }
 
 // Archives.

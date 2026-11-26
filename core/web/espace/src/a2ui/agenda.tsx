@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import type { Lang, T } from "../i18n";
 import { Icon as IconView } from "./icons";
 import { InlineYes } from "./inline";
@@ -22,8 +22,16 @@ import { day, locale, minutesOf, time, wall } from "./format";
 // words: it carries the small amber sign of what comes from outside. A
 // status is always said in the user's words, never as the source wrote it;
 // one the page does not know says nothing.
+//
+// A page's [!agenda] gives an event more than a calendar's: its title as
+// written (label, its link to the event kept) and its detail, the lines
+// under it. Such an event opens on a click: under the days, its title,
+// its time, its place and its detail.
 
-export type AgendaEvent = { title: string; start: string; end?: string; place?: string; allDay?: boolean; status?: string };
+export type AgendaEvent = { title: string; start: string; end?: string; place?: string; allDay?: boolean; status?: string; label?: ReactNode; detail?: ReactNode };
+
+// The events open under the days (their places in the list), and how to open one.
+const Opened = createContext<{ open: ReadonlySet<number>; toggle: (n: number) => void } | null>(null);
 
 // An event and its place in the source's list (n): the row eriphe-core
 // tells its card by.
@@ -154,7 +162,15 @@ export function Agenda({ date, days, events, ghosts, cards, lang, t, now }: Prop
   const n = Math.max(1, Math.min(AGENDA_DAYS, Math.round(days)));
   const dates = Array.from({ length: n }, (_, i) => addDays(date, i));
   const label = dayName(lang, t, date, now);
+  const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
+  const shown = all.filter((ev) => ev.n !== undefined && open.has(ev.n) && !ev.ghost);
+  const toggle = (k: number) => {
+    const next = new Set(open);
+    if (!next.delete(k)) next.add(k);
+    setOpen(next);
+  };
   return (
+    <Opened.Provider value={{ open, toggle }}>
     <section className={`a2-agenda a2-agenda-n${Math.min(n, 3)}`} aria-label={label.join(", ")}>
       <div className="a2-agenda-main">
         <HourDay date={date} items={all} cards={cards} lang={lang} t={t} now={now} />
@@ -167,7 +183,18 @@ export function Agenda({ date, days, events, ghosts, cards, lang, t, now }: Prop
           ))}
         </ol>
       )}
+      {shown.map((ev) => (
+        <div key={ev.n} className="a2-agenda-more" role="region" aria-label={ev.title}>
+          <p className="a2-agenda-more-head">
+            <span className="a2-ev-title">{ev.label ?? ev.title}</span>
+            {span(lang, ev) && <span className="a2-ev-time">{span(lang, ev)}</span>}
+            {ev.place && <span className="a2-ev-place">{ev.place}</span>}
+          </p>
+          {ev.detail && <div className="a2-agenda-more-detail">{ev.detail}</div>}
+        </div>
+      ))}
     </section>
+    </Opened.Provider>
   );
 }
 
@@ -210,8 +237,20 @@ function Outside({ t }: { t: T }) {
   );
 }
 
-// Title is an entry's title, after the outside sign of an invitation.
+// Title is an entry's title, after the outside sign of an invitation; an
+// event with more to say (a page's: its link, its detail) opens on a
+// click, under the days.
 function Title({ ev, t }: { ev: Entry; t: T }) {
+  const o = useContext(Opened);
+  if (o && ev.n !== undefined && !ev.ghost && (ev.label || ev.detail)) {
+    const n = ev.n;
+    return (
+      <button type="button" className="a2-ev-title a2-ev-open" aria-expanded={o.open.has(n)} onClick={() => o.toggle(n)}>
+        {ev.invited && <Outside t={t} />}
+        {ev.title}
+      </button>
+    );
+  }
   return (
     <span className="a2-ev-title">
       {ev.invited && <Outside t={t} />}
@@ -282,6 +321,7 @@ function HourDay({ date, items, cards, lang, t, now }: DayProps) {
           <Title ev={p.ev} t={t} />
           {rows === 1 && word && <span className="a2-ev-said">{word}</span>}
           {rows === 1 && <span className="a2-ev-time">{span(lang, p.ev)}</span>}
+          {rows === 1 && p.ev.place && <span className="a2-ev-place">{p.ev.place}</span>}
         </span>
         {rows > 1 && (
           <span className="a2-ev-line a2-ev-sub">
@@ -310,6 +350,7 @@ function HourDay({ date, items, cards, lang, t, now }: DayProps) {
             <li key={i} className={`a2-ev a2-ev-allday ${stClass(ev)}`} data-proposal={ev.ghost}>
               <Title ev={ev} t={t} />
               {said(t, ev) && <span className="a2-ev-said">{said(t, ev)}</span>}
+              {ev.place && <span className="a2-ev-place">{ev.place}</span>}
               {yes(ev, cards)}
             </li>
           ))}
@@ -368,7 +409,7 @@ function ListDay({ date, items, cards, lang, t, now, small = false }: DayProps &
                 <span className="a2-agenda-at">{at || t("espace.a2.days.allday")}</span>
                 <span className="a2-agenda-what">
                   <Title ev={ev} t={t} />
-                  {!small && ev.place && <span className="a2-ev-place">{ev.place}</span>}
+                  {ev.place && <span className="a2-ev-place">{ev.place}</span>}
                   {word && <span className="a2-ev-said">{word}</span>}
                 </span>
                 {yes(ev, cards)}

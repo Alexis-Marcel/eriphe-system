@@ -22,6 +22,7 @@ function pageOf(s: GallerySection): NodePage {
   return {
     ...base,
     node: { id: s.id, title: s.title, maintained: ["vitrine"], weight: 0.6, status: "idle", created: now, updated: now, version: 1 },
+    body: p.body,
     parts: p.parts,
     cards: p.cards,
     settled: p.settled,

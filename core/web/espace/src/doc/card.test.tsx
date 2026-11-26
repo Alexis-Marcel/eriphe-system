@@ -20,6 +20,7 @@ const pageWith = (proposal: ProposalView | undefined): NodePage => ({
   node: { id: "n1", title: "Garder un œil sur mes mails", weight: 0.6, status: "waits", created: "", updated: "", version: 2 },
   version: 2,
   versions: [],
+  body: "## Ce qu'on a décidé\n\nToutes les boîtes.\n\n```eriphe:block vue\n{\"card\": \"skill:3\"}\n```\nLa suite.\n",
   parts: [{ text: "## Ce qu'on a décidé\n\nToutes les boîtes.\n" }, { block: { name: "vue", components: [], data: {}, card: "skill:3", proposal } }, { text: "La suite.\n" }],
   cards: [],
 });

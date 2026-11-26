@@ -1,19 +1,23 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useAdapter } from "../a2ui/adapter";
-import { Markdown, type Wiki } from "../a2ui/markdown";
+import { type Wiki } from "../a2ui/markdown";
 import { ListsContext, type Lists } from "../a2ui/lists";
 import { SurfaceView } from "../a2ui/Surfaces";
-import { ask, openItem, type ListRow, type NodePage } from "../data/api";
+import { ask, askLine, openItem, tick, type ListRow, type NodePage } from "../data/api";
 import { sourceKey, store, useGraph } from "../data/store";
 import { useWords } from "../i18n";
+import { PageBody, type BodyProps } from "../page/Body";
 import { Cards } from "../page/Cards";
 import { Props } from "./Props";
-import { blockOf, messages, pieces, sourceLists, sourceMessage, surfaceOf, toGesture, type Piece } from "./blocks";
+import { blockOf, messages, pieces, sourceLists, sourceMessage, surfaceOf, toGesture } from "./blocks";
 
-// Doc draws a node's page: its text as Markdown, by the page's own
-// renderer, which makes no HTML of it; its blocks through the A2UI
-// renderer, a surface each, in an adapter of the page's own; a card block
-// as the card it places, read from eriphe-core (Cards), or « not found ». While the
+// Doc draws a node's page: its body as a Markdown page (page/Body.tsx),
+// by the page's own renderer, which makes no HTML of it; on the last
+// version of a node on the graph, a task's box ticks (eriphe-core writes
+// its line, on the node's last version) and an ask: link asks. A legacy
+// block, where its fence is, through the A2UI renderer, a surface each, in
+// an adapter of the page's own; a card block as the card it places, read
+// from eriphe-core (Cards), or « not found ». While the
 // last version shows, a source's new value goes straight into its block
 // (the stream's "source"); an older version shows as it was. A block's
 // one gesture, a button's ask, goes to eriphe-core, which reads its words
@@ -113,7 +117,39 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
   }, [latest, live, page, rows, opened, nodes, onOpen]);
 
   const surfaces = useSyncExternalStore(adapter.subscribe, adapter.surfaces);
-  if (ps.length === 0)
+  // A legacy block, by the name its fence gives it.
+  const legacy = useCallback(
+    (name: string): ReactNode => {
+      const p = ps.find((x) => (x.kind === "block" ? x.block.name : x.kind === "text" ? "" : x.name) === name);
+      if (!p) return null; // a card block decided: it left the page
+      if (p.kind === "broken") return <p className="pg-broken" role="note">{t("espace.page.broken", p.name)}</p>;
+      if (p.kind === "card")
+        return p.found ? (
+          <div className="pg-card" data-card={p.ref}>
+            <Cards surface={p.surface} refs={[p.ref]} home={page.node.id} />
+          </div>
+        ) : (
+          <p className="pg-card-missing" role="note">
+            {t("espace.card.missing")}
+          </p>
+        );
+      if (p.kind !== "block") return null;
+      const s = surfaces.find((x) => x.id === p.surface);
+      return (
+        <section className={`a2-block${p.block.external ? " ext" : ""}`} data-surface={p.surface}>
+          {/* Someone else's words: the page's head says it once (its
+              ⚠); the block itself looks like any other. */}
+          {s && <SurfaceView surface={s} />}
+        </section>
+      );
+    },
+    [ps, surfaces, page, t],
+  );
+  const id = page.node.id;
+  const acts = latest && live;
+  const onTick = useMemo<BodyProps["tick"]>(() => (acts ? (it, line, to) => tick(id, it.line, line, to).catch(() => false) : undefined), [acts, id]);
+  const onAsk = useMemo<BodyProps["ask"]>(() => (acts ? (line, n) => void askLine(id, line, n).catch(() => undefined) : undefined), [acts, id]);
+  if (!page.body.trim())
     return (
       <>
         <Props page={page} />
@@ -123,30 +159,7 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
   return (
     <ListsContext.Provider value={lists}>
       <Props page={page} />
-      <div className="pg-doc">
-        {ps.map((p: Piece, i) => {
-          if (p.kind === "text") return <Markdown key={i} text={p.text} newTab={t("espace.a2.newtab")} wiki={wiki} />;
-          if (p.kind === "broken") return <p key={i} className="pg-broken" role="note">{t("espace.page.broken", p.name)}</p>;
-          if (p.kind === "card")
-            return p.found ? (
-              <div key={p.surface} className="pg-card" data-card={p.ref}>
-                <Cards surface={p.surface} refs={[p.ref]} home={page.node.id} />
-              </div>
-            ) : (
-              <p key={p.surface} className="pg-card-missing" role="note">
-                {t("espace.card.missing")}
-              </p>
-            );
-          const s = surfaces.find((x) => x.id === p.surface);
-          return (
-            <section key={p.surface} className={`a2-block${p.block.external ? " ext" : ""}`} data-surface={p.surface}>
-              {/* Someone else's words: the page's head says it once (its
-                  ⚠); the block itself looks like any other. */}
-              {s && <SurfaceView surface={s} />}
-            </section>
-          );
-        })}
-      </div>
+      <PageBody body={page.body} wiki={wiki} tick={onTick} ask={onAsk} legacy={legacy} />
     </ListsContext.Provider>
   );
 }

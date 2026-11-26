@@ -148,7 +148,13 @@ function block(v: SampleView, b: Authored): PageBlock {
   return { name: b.name, external: b.external, components: comps, data, lists };
 }
 
-export function samplePage(id: string): { parts: PagePart[]; cards: ProposalView[]; settled: ProposalView[] } | null {
+// bodyOf is a page's body as its file would hold it: its text, and each
+// block in its fence (its JSON left out: the page draws it from parts).
+export function bodyOf(parts: PagePart[]): string {
+  return parts.map((p) => (p.block ? `\n\`\`\`eriphe:block ${p.block.name}\n{}\n\`\`\`\n\n` : (p.text ?? ""))).join("");
+}
+
+export function samplePage(id: string): { body: string; parts: PagePart[]; cards: ProposalView[]; settled: ProposalView[] } | null {
   const v = viewOf(id);
   if (!v) return null;
   // the node's own cards, as eriphe-core splits them: those that still ask
@@ -158,8 +164,10 @@ export function samplePage(id: string): { parts: PagePart[]; cards: ProposalView
   // the samples' cards are all within the week)
   const agenda = v.parts.some((p) => typeof p !== "string" && p.components.some((c) => c.component === "Agenda"));
   const own = v.cards.filter((c) => !c.items && !(agenda && c.when?.length && stillAsks(c)));
+  const parts = v.parts.map((p) => (typeof p === "string" ? { text: p } : { block: block(v, p) }));
   return {
-    parts: v.parts.map((p) => (typeof p === "string" ? { text: p } : { block: block(v, p) })),
+    body: bodyOf(parts),
+    parts,
     cards: own.filter(stillAsks).map(asView),
     settled: own.filter((c) => !stillAsks(c)).map(asView),
   };
