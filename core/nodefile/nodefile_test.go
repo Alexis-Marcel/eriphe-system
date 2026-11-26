@@ -532,15 +532,15 @@ func TestCodeAPI(t *testing.T) {
 	}
 }
 
-// The doc's examples: the full one parses, round trips and shows its
-// blocks; the canonical one is what code writes.
+// The doc's full example parses, round trips, and is a page the check
+// finds nothing in: its references, its do:, card: and ask: links.
 func TestDocExamples(t *testing.T) {
 	doc, err := os.ReadFile("../../docs/node-format.md")
 	if err != nil {
 		t.Fatal(err)
 	}
 	examples := regexp.MustCompile("(?s)````markdown\n(.*?)````\n").FindAllSubmatch(doc, -1)
-	if len(examples) != 2 {
+	if len(examples) != 1 {
 		t.Fatalf("%d examples", len(examples))
 	}
 	full := examples[0][1]
@@ -551,17 +551,15 @@ func TestDocExamples(t *testing.T) {
 	if out := mustBytes(t, n); !bytes.Equal(out, full) {
 		t.Errorf("round trip:\n%s", out)
 	}
-	if n.Block("titles") == nil || len(n.Block("readers").Sources) != 1 {
-		t.Errorf("blocks: %+v", n.Blocks())
-	}
-	canon := examples[1][1]
-	c, err := Parse([]byte(head(string(canon))))
+	p, err := n.Page()
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := c.Block("status").canonical()
-	if err != nil || !bytes.Equal(got, canon) {
-		t.Errorf("canonical form:\n%s\nwant:\n%s", got, canon)
+	if pr := p.Check(func(string) bool { return true }); len(pr) > 0 {
+		t.Errorf("problems %+v", pr)
+	}
+	if len(p.Refs) != 2 || len(p.Links) != 3 || len(n.Blocks()) != 0 {
+		t.Errorf("refs %+v, links %+v, blocks %+v", p.Refs, p.Links, n.Blocks())
 	}
 }
 
