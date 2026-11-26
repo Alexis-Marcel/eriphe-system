@@ -344,6 +344,12 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(skillCard).toContainText("mails-recus");
   const details = skillCard.locator("details.a2-proposal-details");
   await expect(details.locator(".a2-proposal-md")).toBeHidden();
+  // Shown beside the subject, the page may lie past the screen's edge
+  // (only the one the bar talks to is framed): the user goes to it from
+  // the subject's link, and the bar talks to it.
+  await watch.getByText("Mes mails", { exact: true }).click();
+  await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Mes mails");
+  await still(mailsPage);
   await shot(page, "skill-card");
   await details.locator("summary").click();
   await expect(details.locator(".a2-proposal-md h3")).toHaveText("Trier les mails");
