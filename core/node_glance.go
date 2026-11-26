@@ -9,24 +9,28 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
 
-// A node's glance: a figure one of its sources holds (a source's
-// "glance", docs/node-format.md), that its bubble shows as a small tile
+// A node's glance: a figure its page writes on a line that follows the
+// event journal (node_listen.go), that its bubble shows as a small tile
 // when the figure moved past its threshold, until the user opens the
 // node. Nothing here knows what the figure is: the PEA, the errors of the
 // prod, the house's consumption.
 //
-//   - Code reads the figure at each read of its source (readNodeOnce: on
-//     its period, after a change of its server, at a monitor's look),
-//     without a model: the number at its path, a JSON number only.
+//   - The page declares it: a callout marked glance <threshold>
+//     (> [!figures|glance 3%]), else the node's property glance (glance:
+//     3%); the figure is the first number written there by an on: line,
+//     its label the words before it (nodefile's LineGlance).
+//   - Code reads it at each change of the node's file (a value an event
+//     wrote, an author's write), without a model.
 //   - It keeps here, in core.db (node_glance), what the variation needs:
 //     the figure's first value of the user's day, its value before it last
 //     changed, its last one, and a few recent values for the tile's line,
-//     one every glanceSample at most, the last one live.
+//     one every glanceSample at most, the last one live. The value itself
+//     is the file's.
 //   - The variation is from the reference the glance says (the day's
-//     first value, the previous one, a fixed base), in percent of it or in
-//     the figure's units. The node is past its threshold once the variation
-//     reaches it, and stays so until it falls under glanceOff of it: a
-//     figure hovering at its threshold does not flap.
+//     first value, the previous one), in percent of it or in the figure's
+//     units. The node is past its threshold once the variation reaches
+//     it, and stays so until it falls under glanceOff of it: a figure
+//     hovering at its threshold does not flap.
 //   - Opening the node (the workspace's view, web_gestures.go) while it is
 //     past its threshold marks it seen: its bubble is a circle again, on
 //     every screen and after a reload, until the variation falls under
@@ -35,12 +39,13 @@ import (
 //     the workspace draws at most a few tiles, the furthest past their
 //     threshold first, and never one for a node that waits for the user
 //     (graph/glance.ts).
-//   - Its label is the author's words: on a block marked external, it may
-//     be someone else's, and the tile's words say so (labelExternal).
+//   - Its label is the page's words: in a callout marked external, or a
+//     node that is, they may be someone else's, and the tile's words say
+//     so (labelExternal).
 
 const nodeGlanceSchema = `CREATE TABLE IF NOT EXISTS node_glance (
 	node   TEXT PRIMARY KEY,
-	spec   TEXT NOT NULL,              -- the block, source and glance as declared: one changed starts afresh
+	spec   TEXT NOT NULL,              -- its line and glance as declared: one changed starts afresh
 	day    TEXT NOT NULL DEFAULT '',   -- the user's day of first
 	first  REAL NOT NULL DEFAULT 0,    -- the figure's first value that day
 	prev   REAL NOT NULL DEFAULT 0,    -- its value before it last changed
@@ -48,7 +53,7 @@ const nodeGlanceSchema = `CREATE TABLE IF NOT EXISTS node_glance (
 	series TEXT NOT NULL DEFAULT '[]', -- its recent values, [[unix, value], …]
 	shown  INTEGER NOT NULL DEFAULT 0, -- past its threshold
 	seen   INTEGER NOT NULL DEFAULT 0, -- opened since it crossed
-	ext    INTEGER NOT NULL DEFAULT 0  -- its block is external: its label may be someone else's words
+	ext    INTEGER NOT NULL DEFAULT 0  -- its line is in a callout or node external: its label may be someone else's words
 );`
 
 func init() { extraSchema = append(extraSchema, nodeGlanceSchema) }
@@ -63,11 +68,10 @@ const (
 	glanceSeries = 32
 )
 
-// glanceSpec is what a glance is declared as: its block, source and
-// glance, as one string.
+// glanceSpec is what a glance is declared as: its line's on: target and
+// its glance, as one string.
 type glanceSpec struct {
-	Block  string          `json:"block"`
-	Name   string          `json:"name"`
+	Line   string          `json:"line"`
 	Glance nodefile.Glance `json:"glance"`
 }
 
@@ -240,35 +244,31 @@ func (c *core) keepGlance(id string, g *graphGlance) {
 	}
 }
 
-// noteGlance reads a node's glance from its sources' reads (the first
-// source that declares one, by block then name), keeps it, and tells the
-// graph when what its tile shows changed.
-func (c *core) noteGlance(id string, reads []nodeRead, now time.Time) {
-	i := slices.IndexFunc(reads, func(r nodeRead) bool { return r.Source.Glance != nil })
-	if i < 0 {
-		if _, ok := c.loadGlance(id); ok {
+// noteGlance reads a node's glance from its page (nodefile's
+// LineGlance), keeps it, and tells the graph when what its tile shows
+// changed. A node archived, gone, or whose page declares none has none.
+func (c *core) noteGlance(id string, now time.Time) {
+	var lg nodefile.LineGlance
+	ok := false
+	if d, err := c.nodes.Read(id, 0); err == nil && d.Node.Meta.Archived.IsZero() {
+		lg, ok = d.Node.LineGlance()
+	}
+	if !ok {
+		if _, kept := c.loadGlance(id); kept {
 			c.store.db.Exec(`DELETE FROM node_glance WHERE node = ?`, id)
 		}
 		c.keepGlance(id, nil)
 		return
 	}
-	r := reads[i]
-	g := *r.Source.Glance
-	raw, _ := json.Marshal(glanceSpec{Block: r.Block, Name: r.Name, Glance: g})
-	st, ok := c.loadGlance(id)
-	if !ok || st.Spec != string(raw) {
-		st = glanceState{Spec: string(raw)} // new, or changed: from its next value
+	raw, _ := json.Marshal(glanceSpec{Line: lg.Target, Glance: lg.Glance})
+	st, kept := c.loadGlance(id)
+	if !kept || st.Spec != string(raw) {
+		st = glanceState{Spec: string(raw)} // new, or changed: from this value
 	}
-	if v, ok := g.Figure(r.Value); ok {
-		st = stepGlance(st, g, v, now, c.userZone(), slices.Contains(c.view().Open, id))
-	}
-	if d, err := c.nodes.Read(id, 0); err == nil {
-		if b := d.Node.Block(r.Block); b != nil {
-			st.Ext = b.External
-		}
-	}
+	st = stepGlance(st, lg.Glance, lg.Value, now, c.userZone(), slices.Contains(c.view().Open, id))
+	st.Ext = lg.External
 	c.saveGlance(id, st)
-	c.keepGlance(id, st.view(g))
+	c.keepGlance(id, st.view(lg.Glance))
 }
 
 // glanceOpened marks seen the glances past their threshold of the nodes
@@ -286,25 +286,5 @@ func (c *core) glanceOpened(ids []string) {
 		st.Seen = true
 		c.saveGlance(id, st)
 		c.keepGlance(id, st.view(spec.Glance))
-	}
-}
-
-// forgetGlances drops the glances of the nodes no longer live.
-func (c *core) forgetGlances(live map[string]bool) {
-	rows, err := c.store.db.Query(`SELECT node FROM node_glance`)
-	if err != nil {
-		return
-	}
-	var gone []string
-	for rows.Next() {
-		var id string
-		if rows.Scan(&id) == nil && !live[id] {
-			gone = append(gone, id)
-		}
-	}
-	rows.Close()
-	for _, id := range gone {
-		c.store.db.Exec(`DELETE FROM node_glance WHERE node = ?`, id)
-		c.glances.Delete(id)
 	}
 }

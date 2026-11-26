@@ -34,6 +34,19 @@ var nodeRemovals = map[string]string{
 	"nodestore/git.go commit wt.Remove(c.path)":                          "commits the removal of a file already removed by hand (reconcile's change without data): the history keeps it",
 	"nodestore/git.go writeFile os.Rename(tmp, path)":                    "writes a node's file whole, its new bytes over the old ones, which the history keeps",
 	"nodestore/trace.go appendTrace os.Rename(path, s.tracePath(id, 1))": "a trace past MaxTraceFile becomes its older part, the one before dropped (docs/node-format.md)",
+	"nodestore/pack.go writePack os.Remove(tmpPack)":                     "the pack written aside, when it failed or once renamed",
+	"nodestore/pack.go writePack os.Remove(tmpIdx)":                      "the pack's index written aside, when it failed or once renamed",
+	"nodestore/pack.go writePack os.Rename(tmpPack, base+\".pack\")":     "the pack takes its name once read back whole",
+	"nodestore/pack.go writePack os.Rename(tmpIdx, base+\".idx\")":       "its index takes its name after it",
+}
+
+// historyPacked are the calls of historyDropping the store makes, as
+// nodeRemovals says them, with why they drop no history: Pack (git gc
+// without prune) removes them once its pack, read back whole, holds every
+// object the branch reaches and the repository opened again reads them.
+var historyPacked = map[string]string{
+	"nodestore/pack.go pack ls.DeleteLooseObject(h)":                        "a loose copy of an object the new pack holds",
+	"nodestore/pack.go pack ps.DeleteOldObjectPackAndIndex(h, time.Time{})": "a pack before the new one, which holds what it holds that the branch reaches",
 }
 
 // historyDropping are go-git's operations that drop history, objects or
@@ -92,6 +105,11 @@ func TestNodesAreNeverLost(t *testing.T) {
 	for at := range nodeRemovals {
 		if !used[at] {
 			t.Errorf("nodeRemovals: %s removes nothing any more: take it out", at)
+		}
+	}
+	for at := range historyPacked {
+		if !used[at] {
+			t.Errorf("historyPacked: %s is not called any more: take it out", at)
 		}
 	}
 }
@@ -180,7 +198,11 @@ func nodeLossHits(path string, src []byte, used map[string]bool) ([]string, erro
 				case pkg == "exec" && (name == "Command" || name == "CommandContext") && runsGit(x):
 					hit(x, "runs git")
 				case store && historyDropping[name] && !imported[pkg]:
-					hit(x, name+": drops history")
+					at := path + " " + fn + " " + string(text(x))
+					if _, ok := historyPacked[at]; !ok {
+						hit(x, name+": drops history")
+					}
+					used[at] = true
 				case store && removal:
 					at := path + " " + fn + " " + string(text(x))
 					if _, ok := nodeRemovals[at]; !ok {
@@ -236,6 +258,9 @@ func TestNodesGuardCatches(t *testing.T) {
 		{"nodestore/x.go", `func reset(wt *git.Worktree) { wt.Reset(&git.ResetOptions{Mode: git.HardReset}) }`, 1},
 		{"nodestore/x.go", `func push(r *git.Repository) { r.Push(&git.PushOptions{Force: true}) }`, 1},
 		{"nodestore/x.go", `func prune(r *git.Repository) { r.Prune(git.PruneOptions{}); r.RepackObjects(nil) }`, 2},
+		{"nodestore/pack.go", `func pack(ls storer.LooseObjectStorer, h plumbing.Hash) error { return ls.DeleteLooseObject(h) }`, 0},
+		{"nodestore/pack.go", `func gc(ls storer.LooseObjectStorer, h plumbing.Hash) error { return ls.DeleteLooseObject(h) }`, 1},
+		{"nodestore/pack.go", `func pack(r *git.Repository) error { return r.RepackObjects(&git.RepackConfig{}) }`, 1},
 		{"nodestore/x.go", `func drop(path string) { os.Remove(path) }`, 1},
 		{"nodestore/x.go", `func drop(wt *git.Worktree) { wt.Remove("a-a1.md") }`, 1},
 		{"nodestore/backup.go", `func Backup(tmp string) { os.Remove(tmp) }`, 0},

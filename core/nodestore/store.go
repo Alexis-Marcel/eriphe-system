@@ -11,7 +11,9 @@
 //     to in a folder beside the repository (<repository>-trace), its
 //     oldest part moved to <id>.trace.1.md past MaxTraceFile (trace.go).
 //   - Every write is one commit, with its author (brain, task:<id>,
-//     user…). A node's write makes a new version; the index keeps each
+//     user…), but code's write of the values a page's lines follow: the
+//     file is written, the values go in the node's next version, or in a
+//     daily one, author readings (values.go). A node's write makes a new version; the index keeps each
 //     version's commit hash, so history is never asked of git by path. A
 //     write carries the hash of the version it was made on (expect): a
 //     stale one is refused (ErrConflict), never written over.
@@ -31,7 +33,8 @@
 //     "outside"), reindexed and reported.
 //   - Nodes are the user's notes and are never lost. No code removes the
 //     repository, a node's file, its trace (but a trace's oldest part past
-//     MaxTraceFile) or its history (no gc, prune, reset nor force); a node
+//     MaxTraceFile) or its history (no prune, reset nor force; Pack packs the
+//     objects a branch reaches, as git gc without prune); a node
 //     is only archived, by the user. A file of an older
 //     format is converted at start in a version of its own (author
 //     "convert"), the old one kept in the history and read converted; a
@@ -468,6 +471,9 @@ func (s *Store) change(id, expect, author, op string, fn func(*nodefile.Node) er
 	if err := fn(n); err != nil {
 		return nil, err
 	}
+	if err := s.keepHeard(cur, n); err != nil {
+		return nil, err
+	}
 	if err := n.Validate(); err != nil {
 		return nil, err
 	}
@@ -528,16 +534,18 @@ func (s *Store) onlyCodeSince(cur *Doc, expect string) bool {
 	if s.db.QueryRow(`SELECT n FROM node_versions WHERE id = ? AND hash = ?`, cur.Node.Meta.ID, expect).Scan(&n) != nil || n >= cur.Version.N {
 		return false
 	}
-	raw, err := s.fileAt(expect, cur.File)
+	// The versions compared, not the file: values code wrote since the
+	// last one (values.go) are no author's.
+	was, err := s.nodeAt(expect, cur.File)
 	if err != nil {
 		return false
 	}
-	was, _, err := s.parse(raw)
+	last, err := s.nodeAt(cur.Version.Hash, cur.File)
 	if err != nil {
 		return false
 	}
 	a, err1 := was.AuthorBytes()
-	b, err2 := cur.Node.AuthorBytes()
+	b, err2 := last.AuthorBytes()
 	return err1 == nil && err2 == nil && bytes.Equal(a, b)
 }
 
@@ -636,6 +644,10 @@ func (s *Store) indexVersions(now time.Time, xs []indexed) error {
 		}
 		if _, err := tx.Exec(`INSERT OR REPLACE INTO node_versions (id, n, hash, author, at) VALUES (?, ?, ?, ?, ?)`,
 			x.node.Meta.ID, x.v.N, x.v.Hash, x.v.Author, x.v.At.Unix()); err != nil {
+			return err
+		}
+		// Its values code wrote are in this version (values.go).
+		if _, err := tx.Exec(`DELETE FROM node_pending WHERE id = ?`, x.node.Meta.ID); err != nil {
 			return err
 		}
 	}

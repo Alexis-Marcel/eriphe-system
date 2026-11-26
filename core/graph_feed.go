@@ -64,9 +64,11 @@ type progressLine struct {
 // useNodes is the graph eriphe-core works on, watched for the workspace.
 func (c *core) useNodes(s *nodestore.Store) {
 	c.nodes = s
+	c.listen = newListenQueue()
 	s.Watch(func(ch nodestore.Change) {
 		switch ch.What {
 		case nodestore.ChangedDoc:
+			c.docChanged(ch.ID) // its glance (node_listen.go)
 			c.graphSaid(graphEvent{Kind: graphEvNode, Node: ch.ID})
 			c.graphSaid(graphEvent{Kind: graphEvDoc, Node: ch.ID})
 		case nodestore.ChangedTrace:

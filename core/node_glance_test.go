@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"math"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -102,46 +104,55 @@ func TestGlanceSeriesAndReferences(t *testing.T) {
 	}
 }
 
-// glanceBody is a node's body whose block reads a source with a glance.
-func glanceBody(glance string) string {
-	return "Le PEA.\n\n```eriphe:block pea\n" +
-		`{"components": [{"id": "root", "component": "Text", "text": "PEA"}], "sources": {"pea": {"tool": "bourse/portefeuille", "glance": ` + glance + `}}}` + "\n```\n"
+// glancePage is a page whose callout shows the PEA at a glance, its line
+// following the monitor pea.
+func glancePage(opts string) string {
+	return "La bourse.\n\n> [!figures" + opts + "]\n> - PEA : [100 €](on:monitor.changed/pea)\n"
 }
 
-// A node's glance, from its source's reads to its row in the graph: kept
-// in core.db, so a restart and every screen know it; opening the node in
-// the workspace marks it seen; a glance taken away, or its node gone, is
-// forgotten.
+// A node's glance follows its line: the values an event writes there, kept
+// in core.db so a restart and every screen know it; opening the node in
+// the workspace marks it seen; a glance changed starts afresh, one taken
+// away, or its node archived, is forgotten.
 func TestNodeGlance(t *testing.T) {
 	tw, csrf := graphWeb(t)
 	c := tw.c
-	id := mustNode(t, c, nodestore.New{Title: "Investissements", Body: glanceBody(`{"label": "PEA", "path": "total", "threshold": 2}`), Author: byBrain})
-	read := func(v any, at time.Time) *graphGlance {
-		t.Helper()
-		reads := c.nodeReads(id)
-		if len(reads) != 1 {
-			t.Fatalf("reads %+v", reads)
-		}
-		reads[0].Value = v
-		c.noteGlance(id, reads, at)
+	id := mustNode(t, c, nodestore.New{Title: "Investissements", Body: glancePage("|glance 2%"), Author: byBrain})
+	now := time.Now()
+	row := func() *graphGlance {
 		sum, _ := c.nodes.Get(id)
 		return c.graphRow(sum).Glance
 	}
-	now := time.Now()
-	if x := read(nil, now); x != nil {
-		t.Fatalf("a glance before any figure: %+v", x)
+	hear := func(v any, at time.Time) *graphGlance {
+		t.Helper()
+		c.heard(journalEvent{Kind: evMonitorChanged, Key: "pea", Source: "monitor:pea", At: at, Payload: map[string]any{"value": v}})
+		return row()
 	}
-	if x := read(map[string]any{"total": "100 €"}, now); x != nil {
-		t.Fatalf("words taken for a figure: %+v", x)
+	edit := func(body string) {
+		t.Helper()
+		d, _ := c.nodes.Read(id, 0)
+		if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(nodefile.Source) error { return nil }, func(n *nodefile.Node) error {
+			return n.AuthorBody(body)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		c.noteGlance(id, now) // as runNodes does after a change of the file
+	}
+	if x := row(); x != nil {
+		t.Fatalf("a glance before its page was read: %+v", x)
 	}
 	head, _ := c.graphHead()
-	if x := read(map[string]any{"total": 100.0}, now); x == nil || x.Label != "PEA" || x.Value != 100 || x.Shown || x.LabelExternal {
-		t.Fatalf("first figure: %+v", x)
+	c.noteGlance(id, now)
+	if x := row(); x == nil || x.Label != "PEA" || x.Value != 100 || x.Shown || x.LabelExternal {
+		t.Fatalf("its line's figure: %+v", x)
 	}
 	if evs, _, _, _ := c.graphAfter(head); len(evs) == 0 {
 		t.Error("the graph is not told of its glance")
 	}
-	if x := read(map[string]any{"total": 103.0}, now.Add(time.Minute)); !x.Shown || x.Seen {
+	if x := hear(101.0, now); x.Shown || x.Value != 101 {
+		t.Fatalf("under its threshold: %+v", x)
+	}
+	if x := hear(103.0, now.Add(time.Minute)); !x.Shown || x.Seen || x.Value != 103 {
 		t.Fatalf("past its threshold: %+v", x)
 	}
 	// Opened in the workspace: seen, on every screen, after a restart too.
@@ -149,69 +160,70 @@ func TestNodeGlance(t *testing.T) {
 		t.Fatalf("view: %d", code)
 	}
 	c.glances = sync.Map{}
-	sum, _ := c.nodes.Get(id)
-	if x := c.graphRow(sum).Glance; x == nil || !x.Seen || !x.Shown || x.Value != 103 {
+	if x := row(); x == nil || !x.Seen || !x.Shown || x.Value != 103 {
 		t.Fatalf("not seen after a restart: %+v", x)
 	}
 	// Closed; the figure falls back under 1.7 %: re-armed.
 	gesture(t, tw, csrf, "PUT", "/api/espace/view", espaceView{Open: []string{}})
-	if x := read(map[string]any{"total": 101.0}, now.Add(2*time.Minute)); x.Shown || x.Seen {
+	if x := hear(101.0, now.Add(2*time.Minute)); x.Shown || x.Seen {
 		t.Fatalf("re-armed: %+v", x)
 	}
-	if x := read(map[string]any{"total": 102.5}, now.Add(3*time.Minute)); !x.Shown || x.Seen {
+	if x := hear(102.5, now.Add(3*time.Minute)); !x.Shown || x.Seen {
 		t.Fatalf("crossed again: %+v", x)
 	}
-	// Its glance changed: from its next figure, afresh.
+	// Its threshold changed: from the line's value, afresh.
 	d, _ := c.nodes.Read(id, 0)
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(nodefile.Source) error { return nil }, func(n *nodefile.Node) error {
-		return n.AuthorBody(glanceBody(`{"label": "PEA", "path": "total", "threshold": 5}`))
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if x := read(map[string]any{"total": 102.5}, now.Add(4*time.Minute)); x.Threshold != 5 || x.Ref != 102.5 || x.Shown {
+	body, _ := d.Node.Body()
+	edit(strings.Replace(body, "glance 2%", "glance 5%", 1))
+	if x := row(); x.Threshold != 5 || x.Ref != 103 || x.Value != 103 || x.Shown {
 		t.Fatalf("a changed glance: %+v", x)
 	}
 	// Taken away: gone, and forgotten.
-	d, _ = c.nodes.Read(id, 0)
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(nodefile.Source) error { return nil }, func(n *nodefile.Node) error {
-		return n.AuthorBody("```eriphe:block pea\n" + `{"components": [{"id": "root", "component": "Text", "text": "PEA"}], "sources": {"pea": {"tool": "bourse/portefeuille"}}}` + "\n```\n")
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if x := read(map[string]any{"total": 110.0}, now.Add(5*time.Minute)); x != nil {
+	edit(glancePage(""))
+	if x := row(); x != nil {
 		t.Fatalf("a glance taken away: %+v", x)
 	}
 	if _, ok := c.loadGlance(id); ok {
 		t.Error("a glance taken away is still kept")
 	}
-	c.saveGlance(id, glanceState{Spec: "{}"})
-	c.forgetGlances(map[string]bool{})
+	// Declared by the node's property instead, then archived.
+	d, _ = c.nodes.Read(id, 0)
+	if _, err := c.nodes.Change(id, d.Version.Hash, byBrain, func(n *nodefile.Node) error { return n.Meta.SetProp("glance", "10%") }); err != nil {
+		t.Fatal(err)
+	}
+	c.noteGlance(id, now)
+	if x := row(); x == nil || x.Threshold != 10 {
+		t.Fatalf("by its property: %+v", x)
+	}
+	if err := c.nodes.Archive(id, byUser); err != nil {
+		t.Fatal(err)
+	}
+	c.noteGlance(id, now)
 	if _, ok := c.loadGlance(id); ok {
-		t.Error("the glance of a node gone is still kept")
+		t.Error("the glance of a node archived is still kept")
 	}
 }
 
-// One glance per node, and its label marked when its block may hold
-// someone else's words.
-func TestNodeGlanceGuard(t *testing.T) {
+// An event written by someone else marks the callout its value is in:
+// the tile says its label may be someone else's words, and no author takes
+// the mark off.
+func TestNodeGlanceExternal(t *testing.T) {
 	tw, _ := graphWeb(t)
 	c := tw.c
-	two := glanceBody(`{"label": "PEA", "path": "total", "threshold": 2}`) + "\n```eriphe:block cto\n" +
-		`{"components": [{"id": "root", "component": "Text", "text": "CTO"}], "sources": {"cto": {"tool": "bourse/compte", "glance": {"label": "CTO", "path": "total", "threshold": 2}}}}` + "\n```\n"
-	id := mustNode(t, c, nodestore.New{Title: "Investissements", Body: "Rien.\n", Author: byBrain})
+	id := mustNode(t, c, nodestore.New{Title: "Investissements", Body: glancePage("|glance 2%"), Author: byBrain})
+	c.heard(journalEvent{Kind: evMonitorChanged, Key: "pea", Source: "monitor:pea", At: time.Now(), External: true, Payload: map[string]any{"value": 98.0}})
+	if x := c.nodeGlance(id); x == nil || !x.LabelExternal || x.Value != 98 {
+		t.Fatalf("a label in a callout marked external is not marked: %+v", x)
+	}
 	d, _ := c.nodes.Read(id, 0)
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(nodefile.Source) error { return nil }, func(n *nodefile.Node) error { return n.AuthorBody(two) }); err == nil {
-		t.Fatal("two glances on a node")
+	body, _ := d.Node.Body()
+	if !strings.Contains(body, "> [!figures|glance 2%|external]\n") {
+		t.Fatalf("not marked:\n%s", body)
 	}
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, true, func(nodefile.Source) error { return nil }, func(n *nodefile.Node) error {
-		return n.AuthorBody(glanceBody(`{"label": "PEA", "path": "total", "threshold": 2}`))
-	}); err != nil {
-		t.Fatal(err)
-	}
-	reads := c.nodeReads(id)
-	reads[0].Value = map[string]any{"total": 1.0}
-	c.noteGlance(id, reads, time.Now())
-	if x := c.nodeGlance(id); x == nil || !x.LabelExternal {
-		t.Fatalf("a label written after an external read is not marked: %+v", x)
+	_, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(nodefile.Source) error { return nil }, func(n *nodefile.Node) error {
+		return n.AuthorBody(strings.Replace(body, "|external", "", 1))
+	})
+	if !errors.Is(err, nodefile.ErrCodeField) {
+		t.Fatalf("an author took the mark off: %v", err)
 	}
 }

@@ -5,17 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
 
 // The event journal: one place where everything that happens is written,
 // whatever its source, without being interpreted. Triggered skills (#275)
-// subscribe to it; the brain reads it through since (kind event).
+// and the lines of the pages that follow it (node_listen.go) subscribe to
+// it; the brain reads it through since (kind event).
 //
 // A source writes an event with emit: its kind (monitor.new,
 // monitor.received…), a key that groups the events of one thing (a monitor's
@@ -52,8 +54,9 @@ const (
 	eventPerSourceHr = 600 // a source's events an hour, past which they are dropped
 )
 
-// eventKindRe: lowercase words joined by dots, two to four of them.
-var eventKindRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,3}$`)
+// eventKindRe: lowercase words joined by dots, two to four of them, as a
+// page's on: line names them (nodefile/listen.go).
+var eventKindRe = nodefile.EventKindRe
 
 // journalEvent is one event of the journal.
 type journalEvent struct {

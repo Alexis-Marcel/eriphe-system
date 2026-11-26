@@ -83,6 +83,7 @@ type core struct {
 	findSources atomic.Bool            // a block reads node_find: a node's change reads it again (node_find.go)
 	yeses       sync.WaitGroup         // the calls a card's yes runs, under way (runApprovedCall)
 	glances     sync.Map               // node id → its glance as the graph shows it, nil for none (node_glance.go)
+	listen      listenQueue            // the events a page's lines follow, the nodes changed (node_listen.go)
 	graph       graphFeed              // what changes on the graph, for the workspace (graph_feed.go)
 
 	appClients // the clients of the providers that mint tokens (github_app.go)

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -273,7 +272,6 @@ type scenarioTools struct {
 	trashNo string           // trash: answers with this error, trashing nothing (view-failed.spec.ts)
 	replied []string         // repondre: the id of each call (view-bilan.spec.ts)
 	purged  []string         // purger: the ids it deleted (view-refresh.spec.ts)
-	kw      float64          // conso: the house's consumption (view-glance.spec.ts)
 	arrived []map[string]any // recus: the mails that came after the received (the live bench)
 	// veille: the news watch's server, whose tool changes after it was
 	// added (tools.spec.ts).
@@ -376,12 +374,6 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				defer f.mu.Unlock()
 				f.lit = append(f.lit, in.Piece)
 				return nil, map[string]any{"ok": true, "piece": in.Piece}, nil
-			})
-		mcp.AddTool(s, &mcp.Tool{Name: "conso", Description: "La consommation de la maison, en kW", Annotations: read},
-			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
-				f.mu.Lock()
-				defer f.mu.Unlock()
-				return nil, map[string]any{"kw": cmp.Or(f.kw, 2)}, nil
 			})
 	case "agenda":
 		mcp.AddTool(s, &mcp.Tool{Name: "aujourdhui", Description: "Les rendez-vous du jour", Annotations: read},
@@ -1072,9 +1064,10 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		return "C'est toi qui archives : « Archiver », en haut de sa page."
 	case strings.Contains(said, "Garde un œil sur la consommation"):
 		// A glance on the figure the user asked to watch, on a node of its
-		// own, on the side (view-glance.spec.ts).
-		out := b.self("node_open", map[string]any{"goal": "Un but.", "title": "Énergie maison", "aside": true, "body": "La consommation de la maison.\n\n```eriphe:block conso\n" +
-			`{"components": [{"id": "root", "component": "Metric", "label": "Consommation (kW)", "value": {"@path": "/conso/kw"}}], "sources": {"conso": {"tool": "maison/conso", "glance": {"label": "Conso", "path": "kw", "threshold": 10}}}}` + "\n```\n"})
+		// own, on the side: a line that follows the monitor conso
+		// (view-glance.spec.ts).
+		out := b.self("node_open", map[string]any{"goal": "Un but.", "title": "Énergie maison", "aside": true,
+			"body": "La consommation de la maison.\n\n> [!figures|glance 10%]\n> - Conso : [2,0 kW](on:monitor.changed/conso)\n"})
 		if id, _ := out["id"].(string); id != "" {
 			keep("conso", id)
 		}
@@ -1732,17 +1725,15 @@ func (sc *scenario) handlePurge(rw http.ResponseWriter, r *http.Request) {
 }
 
 // handleConso is POST /e2e/conso?kw=…: the house's consumption is now kw,
-// and the node that watches it reads it again (view-glance.spec.ts), as its
-// period or its server's change would.
+// as the monitor conso writes it in the journal; the line of the node
+// that follows it is rewritten, and its glance with it
+// (view-glance.spec.ts).
 func (sc *scenario) handleConso(rw http.ResponseWriter, r *http.Request) {
 	kw, err := strconv.ParseFloat(r.URL.Query().Get("kw"), 64)
 	if err != nil {
 		http.Error(rw, "kw", http.StatusBadRequest)
 		return
 	}
-	sc.tools.mu.Lock()
-	sc.tools.kw = kw
-	sc.tools.mu.Unlock()
 	sc.mu.Lock()
 	id := sc.nodes["conso"]
 	sc.mu.Unlock()
@@ -1750,7 +1741,7 @@ func (sc *scenario) handleConso(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, "no glance yet", http.StatusConflict)
 		return
 	}
-	sc.c.readNode(sc.ctx, id, []string{"conso"}, time.Now()) // named: read now, due or not
+	sc.c.heard(journalEvent{Kind: evMonitorChanged, Key: "conso", Source: "monitor:conso", At: time.Now(), Payload: map[string]any{"value": kw}})
 	writeJSON(rw, http.StatusOK, map[string]any{"id": id, "glance": sc.c.nodeGlance(id)})
 }
 

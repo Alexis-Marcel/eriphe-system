@@ -61,12 +61,15 @@ func openNodes(cfg *Config) (*nodestore.Store, error) {
 	return s, nil
 }
 
-// runNodes backs the graph up once a night, at the memory's hour
-// (extract_at), into the memory's backup folder (nodesNight).
+// runNodes writes the lines that follow the event journal, and the
+// glances of the nodes changed (node_listen.go), one at a time; and backs
+// the graph up once a night, at the memory's hour (extract_at), into the
+// memory's backup folder (nodesNight).
 func (c *core) runNodes(ctx context.Context) {
 	if c.nodes == nil {
 		return
 	}
+	c.subscribeEvents(c.queueHeard)
 	tick := time.NewTicker(time.Minute)
 	defer tick.Stop()
 	var done string
@@ -76,6 +79,12 @@ func (c *core) runNodes(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
+		case e := <-c.listen.events:
+			c.heard(e)
+		case <-c.listen.kick:
+			for _, id := range c.changedDocs() {
+				c.noteGlance(id, time.Now())
+			}
 		}
 	}
 }
@@ -83,7 +92,10 @@ func (c *core) runNodes(ctx context.Context) {
 // nodesNight backs the graph up when the night's hour has passed and the
 // day has not been backed up (done, or its copy is in the backup folder,
 // for a start after the hour); it gives the day backed up. A backup that
-// failed gives done as it was: the next tick tries again.
+// failed gives done as it was: the next tick tries again. Before it, the
+// values written since the nodes' last versions make one version, author
+// readings (nodestore's values.go): at most one a day; after it, the
+// repository is packed when its loose objects are many.
 func (c *core) nodesNight(done string, now time.Time) string {
 	mc := c.conf().memoryConfig()
 	today := now.Format("2006-01-02")
@@ -98,9 +110,19 @@ func (c *core) nodesNight(done string, now time.Time) string {
 	if _, err := os.Stat(filepath.Join(mc.BackupDir, "nodes-"+today+".db")); err == nil {
 		return today
 	}
+	if ids, err := c.nodes.CommitReadings(); err != nil {
+		log.Printf("nodes: readings: %v", err)
+	} else if len(ids) > 0 {
+		log.Printf("nodes: the values of %d nodes in a version of the day", len(ids))
+	}
 	if err := c.nodes.Backup(mc.BackupDir, mc.BackupKeep); err != nil {
 		log.Printf("nodes: backup: %v", err)
 		return done
+	}
+	if packed, err := c.nodes.Pack(); err != nil {
+		log.Printf("nodes: pack: %v", err)
+	} else if packed {
+		log.Printf("nodes: repository packed")
 	}
 	return today
 }

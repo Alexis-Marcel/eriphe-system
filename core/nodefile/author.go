@@ -37,6 +37,29 @@ func (n *Node) AuthorBody(body string) error {
 			return err
 		}
 	}
+	// The external marks of its callouts are code's (listen.go).
+	was, err := n.Page()
+	if err != nil {
+		return err
+	}
+	now, err := (&Node{segs: segs}).Page()
+	if err != nil {
+		return err
+	}
+	if err := keepMarks(was, now); err != nil {
+		return err
+	}
+	n.segs = segs
+	return nil
+}
+
+// CodeBody replaces the node's body with code's: its blocks in their
+// full form, code's fields as written. No author writes this way.
+func (n *Node) CodeBody(body string) error {
+	segs, err := parseBody([]byte(body), false)
+	if err != nil {
+		return err
+	}
 	n.segs = segs
 	return nil
 }
