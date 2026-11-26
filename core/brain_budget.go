@@ -80,7 +80,7 @@ var brainToolClass = map[string]string{
 	"list_repos": budgetRead, "task_status": budgetRead, "list_tasks": budgetRead, "recall": budgetRead,
 	"intentions": budgetRead, "learned": budgetRead, "read_attachment": budgetRead, "list_skills": budgetRead,
 	"read_skill": budgetRead, "skill_runs": budgetRead, "monitors": budgetRead, "node_find": budgetRead,
-	"node_read": budgetRead, "catalog_read": budgetRead, "sources_read": budgetRead, "notifications": budgetRead,
+	"node_read": budgetRead, "page_format": budgetRead, "notifications": budgetRead,
 	"where_now": budgetRead, "since": budgetRead,
 	// Routing and launching: the way out of a refusal.
 	"run_task": budgetRoute, "answer_task": budgetRoute, "stop_task": budgetRoute, "node_open": budgetRoute,

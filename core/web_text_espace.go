@@ -118,6 +118,7 @@ var espaceStrings = map[string]map[string]string{
 		"espace.who.task":          "task",
 		"espace.who.eriphe":        "code",
 		"espace.who.outside":       "extérieur",
+		"espace.who.readings":      "relevés",
 
 		// La barre : ce qui attend {{name}} au-dessus d'elle (orb/Bar.tsx).
 		"espace.bar.waiting":      "Ce qui attend {{name}}",
@@ -321,6 +322,7 @@ var espaceStrings = map[string]map[string]string{
 		"espace.who.task":          "task",
 		"espace.who.eriphe":        "code",
 		"espace.who.outside":       "outside",
+		"espace.who.readings":      "readings",
 
 		// The bar: what waits for {{name}} above it (orb/Bar.tsx).
 		"espace.bar.waiting":      "Waiting for {{name}}",

@@ -206,8 +206,4 @@ func TestNodeFindSource(t *testing.T) {
 	if !c.untrustedSources(&b) {
 		t.Fatal("a node_find source with include_external is trusted")
 	}
-	// sources_read lists it, with its arguments.
-	if raw := fmtJSON(mustBrainNodes(t, c, "sources_read", map[string]any{"tool": nodeFindSource})); !strings.Contains(raw, `"columns"`) {
-		t.Fatalf("sources_read: %s", raw)
-	}
 }

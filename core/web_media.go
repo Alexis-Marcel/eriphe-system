@@ -307,6 +307,6 @@ func (c *core) handleTaskMedia(w http.ResponseWriter, r *http.Request) {
 	log.Printf("node %s: image %s (%s) from task %s", node, name, humanSize(int64(len(data))), t.ID)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"src": mediaScheme + name, "type": kind, "size": len(data),
-		"note": "Write src as the url of an Image in a block of your node (only there), with a Link to the page's address beside it.",
+		"note": "Kept with your node as src; a page does not show an image yet: link the page's address in your node.",
 	})
 }

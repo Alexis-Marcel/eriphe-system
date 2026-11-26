@@ -401,7 +401,7 @@ func (c *core) startSkillRun(ctx context.Context, sk triggeredSkill, key string,
 			c.readNode(ctx, node, names, time.Now())
 		}
 	}
-	// It notes items in its node (item_note): as the user wants to see them.
+	// It writes its node's items as the user wants to see them.
 	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, home, events, now, c.seePreferences()), Agent: sk.Manifest.Uses.Model, about: alias,
 		askStart: false, approvedInAdvance: true, cleanStart: !external, inNode: sk.Trigger.Node, origin: skillOrigin(sk.Name, events), skill: sk.Name}
 	for _, t := range sk.Manifest.Uses.Tools {
@@ -482,20 +482,20 @@ func (c *core) homeNode(id string) (title string, external bool, err error) {
 
 // skillRunPrompt is a run's prompt: the skill, the home node it works
 // in (its title; "" for a node of its own), then its events. prefs are
-// the user's preferences about what they see, for the items it notes
+// the user's preferences about what they see, for the items it writes
 // (seePreferences).
 func skillRunPrompt(sk triggeredSkill, home string, events []journalEvent, now time.Time, prefs []string) string {
 	var b strings.Builder
 	b.WriteString(skillMethod(sk.Name, sk.Manifest) + "\n\n") // task_launch.go
 	if home != "" {
-		fmt.Fprintf(&b, "[tu entretiens le node « %s », ta maison (le but de ce node dit ce qu'on y écrit) : lis-le (node_read), note chaque élément de ses sources (item_note ; avec son group quand une List du node filtre sur _group : l'un de ses groupes), "+
+		fmt.Fprintf(&b, "[tu entretiens le node « %s », ta maison (le but de ce node dit ce qu'on y écrit) : lis-le (node_read), tiens chaque élément sur sa ligne, avec sa référence, sous le titre de son groupe (node_edit, une ligne à la fois ; page_format dit comment), "+
 			"et ouvre un enfant (node_open) pour ce qui demande un travail, un brouillon par exemple ; ce que tu ferais qui change quelque chose attend son oui sur une carte]\n\n", home)
 	}
 	if s := skillCanText(sk.Trigger); s != "" {
 		b.WriteString(strings.TrimSpace(s) + "\n\n")
 	}
 	if len(prefs) > 0 {
-		b.WriteString("[ce que l'utilisateur veut voir, plus ou moins (ses préférences, de sa mémoire) : note les éléments en conséquence ; ce qu'il ne veut plus voir est `none`]\n")
+		b.WriteString("[ce que l'utilisateur veut voir, plus ou moins (ses préférences, de sa mémoire) : écris les éléments en conséquence ; ce qu'il ne veut plus voir n'est pas dans la page]\n")
 		for _, p := range prefs {
 			fmt.Fprintf(&b, "- %s\n", p)
 		}

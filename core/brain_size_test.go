@@ -11,9 +11,9 @@ import (
 // standing prompt, its tools' schemas as the MCP client lists them (name,
 // description, input schema, annotations), and its tools' instructions.
 // Each is bounded: a rule the code enforces is code, a shape is said once
-// (sharedShapes), a block's grammar is catalog_read's.
+// (sharedShapes), a page's format is page_format's.
 const (
-	brainPromptMax  = 33700 // runes
+	brainPromptMax  = 33561 // runes: never longer (#786)
 	brainToolsMax   = 45000 // bytes of JSON, every tool
 	brainInstrucMax = 5000  // bytes
 )

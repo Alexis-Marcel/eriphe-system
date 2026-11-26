@@ -23,8 +23,8 @@ import (
 // server (pool.go provide): the brain has it by default (assistantGrant
 // lends it every lent tool), a skill or a task is lent it like any
 // server ({kind: tool, ref: eriphe-folders}, a skill's tools), and its
-// reads are read-only by their annotations, so they are blocks' sources
-// (sources_read) and the brain's free reads like any.
+// reads are read-only by their annotations, so they are legacy blocks' sources
+// (until #787) and the brain's free reads like any.
 //
 // Each call is decided by the policy like any catalog call (policy.go),
 // on the folder it names: its reads are Lire, its writes Modifier

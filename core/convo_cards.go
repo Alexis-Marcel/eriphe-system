@@ -589,16 +589,8 @@ func (c *core) answerProposal(ctx context.Context, kind string, id int64, approv
 // cardNote tells the brain where its proposal waits: on a card, with its message.
 func cardNote(user string) string {
 	return "A card with Oui / Non goes with your message in the conversation (and on the channel " + user + " writes from, if any), " +
-		"and waits in the page of the node of this turn: place it in its document with a card block (card, the ref above) where it belongs. " +
+		"and waits in the page of the node of this turn: place it in its document where it belongs, a line [its words](card:<the ref above>). " +
 		"Say what you propose in one natural sentence, never as a list of pending items; " + user + " answers on the card, never you."
-}
-
-// cardPlaceNote tells the brain how to place a card in the document of
-// the node it was proposed from: a card block, its ref and nothing else;
-// code draws the card, its Oui and Non, and where it stands.
-func cardPlaceNote(ref string) string {
-	return "Place its card in the subject's document where it belongs (under « Ce qu'on a décidé », say): node_edit with a block whose value is " +
-		`{"card": "` + ref + `"}` + " and nothing else; code draws the card from its records. Unplaced, it waits at the foot of the page."
 }
 
 // Free text: a plain "oui" or "non".

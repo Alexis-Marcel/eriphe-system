@@ -89,10 +89,6 @@ var eriphe = sync.OnceValue(func() *Catalog {
 // Eriphe returns Eriphe's catalog, loaded once.
 func Eriphe() *Catalog { return eriphe() }
 
-// CatalogPrompt is the French section that tells a model which components
-// and functions Eriphe's catalog offers.
-func CatalogPrompt() string { return Eriphe().Prompt() }
-
 // Validate checks agent messages against Eriphe's catalog (Catalog.Validate).
 func Validate(raw []byte) []ValidationError { return Eriphe().Validate(raw) }
 
