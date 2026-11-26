@@ -15,7 +15,7 @@ pages the check below finds nothing in.
 
 ````markdown
 ---
-format: 2
+format: 3
 id: k3v9q2m7
 title: Mes mails
 goal: Tableau de bord des mails à traiter, tenu par le skill mails ; on n'y écrit pas de réponses.
@@ -96,7 +96,7 @@ A node is the user's note: it outlives every change of Eriphe. No code wipes a n
 archived, by the user), and a change of this format converts the files instead of leaving them
 unread.
 
-- **Where:** each file says its own format, in its front matter's `format`. The format is 2 today;
+- **Where:** each file says its own format, in its front matter's `format`. The format is 3 today;
   a file that does not say it is in format 1. It is in the file rather than once for the
   repository because the file is the unit: a file
   copied in from elsewhere, and each old version in the history, says the format it was written
@@ -110,6 +110,20 @@ unread.
   ends, nothing else rewritten.
 - **The conversions so far:** 1 → 2 drops `lifetime` (`work` or `standing`): there are only
   nodes, and a node a skill maintains is told by the skill (its `node:`), never by its file.
+- 2 → 3 writes each block of a page (a fence ```` ```eriphe:block ````, A2UI components with their
+  data and the sources code read live) as the page's own Markdown, at its place, the text around
+  it kept: lists, items with their detail folded under them, callouts (`figures`, `steps`, `chart`,
+  `agenda`, `person`, `warning`, `info`, `success`), tables, quotes, code, `ask:` links (a button
+  asks what it sent), links as written, and `card:` for a card block. A block that read sources
+  becomes a snapshot under « Écrit le … » (the time of the last read): the last values code kept
+  (`node_reads`) and the notes of its items (`node_items`), an item whose server and id are known
+  as a reference (`[m1]: mail:<id>`), its note the line's comment, its group a heading, its state
+  the box; a figure bound to a monitor's value becomes an `on:monitor.changed/<name>` line. Words
+  from the data, the reads and the notes are escaped so that none reads as a link, a heading or a
+  cell; a block that may show someone else's words makes the node `external` (its title still
+  trusted). Code has no tool: no `do:` line is written. What cannot be written (an input field, a
+  gallery, a computed value) stays whole in a ```` ```json ```` fence, readable. A version of the
+  history is converted without the values (they are core.db's, kept for the last version only).
 - **At start**, a file of an older format is converted to today's, through each conversion in
   turn: all of them in one commit by `convert`, each node a version of its own, the old one kept in
   the history. A file changed by hand meanwhile is first committed as it is (`outside`). A file

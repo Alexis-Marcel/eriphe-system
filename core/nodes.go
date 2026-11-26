@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
@@ -33,10 +34,11 @@ func refuseSecret(text string) error {
 }
 
 // openNodes opens the graph, and logs what its start found: the files
-// changed or removed outside Eriphe, those that do not read as a node.
-func openNodes(cfg *Config) (*nodestore.Store, error) {
+// changed or removed outside Eriphe, those that do not read as a node, those
+// converted to today's format (with what snaps gives of their blocks).
+func openNodes(cfg *Config, snaps nodefile.Snapshots) (*nodestore.Store, error) {
 	dir, index := cfg.nodesPaths()
-	s, rep, err := nodestore.Open(dir, index, nodestore.Options{Refuse: refuseSecret})
+	s, rep, err := nodestore.Open(dir, index, nodestore.Options{Refuse: refuseSecret, Snapshots: snaps})
 	if err != nil {
 		return nil, err
 	}

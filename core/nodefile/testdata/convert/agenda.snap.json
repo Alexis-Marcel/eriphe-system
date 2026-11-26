@@ -1,0 +1,8 @@
+{"semaine": {
+  "read": "2026-11-26T07:00:00Z",
+  "values": {"agenda": {"events": [
+    {"id": "ZXYtMQ", "title": "Point projet", "start": "2026-11-26T14:00:00+01:00", "end": "2026-11-26T15:00:00+01:00", "place": "Visio", "status": "confirmed"},
+    {"id": "ZXYtMg", "title": "Réunion | budget", "start": "2026-11-26T10:00:00+01:00", "end": "2026-11-26T11:00:00+01:00", "status": "needs-action"},
+    {"id": "ZXYtMw", "title": "Course à pied", "start": "2026-11-29T08:00:00+01:00", "end": "2026-11-29T09:00:00+01:00"}
+  ]}}
+}}

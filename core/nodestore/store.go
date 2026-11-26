@@ -108,10 +108,18 @@ type Options struct {
 	Now func() time.Time
 	// NewID makes a node's id; random by default.
 	NewID func() string
+	// Snapshots give what code kept outside a format-2 file for its blocks
+	// (their sources' last values, their items' notes): a file converted
+	// at start writes them in its page (nodefile.ConversionsWith). nil:
+	// none. Called from several goroutines.
+	Snapshots nodefile.Snapshots
 
 	// conversions are the file format's (nodefile.Conversions by
 	// default); a test gives its own.
 	conversions []nodefile.Conversion
+	// atStart are the conversions of the files converted at start: with
+	// the snapshots (a version of the history is converted without).
+	atStart []nodefile.Conversion
 }
 
 // What changed of a node, as Watch tells it.
@@ -239,8 +247,10 @@ func Open(dir, index string, opts Options) (*Store, Report, error) {
 	if opts.NewID == nil {
 		opts.NewID = randomID
 	}
+	opts.atStart = opts.conversions
 	if opts.conversions == nil {
 		opts.conversions = nodefile.Conversions()
+		opts.atStart = nodefile.ConversionsWith(opts.Snapshots)
 	}
 	if rel, err := filepath.Rel(dir, index); err == nil && !strings.HasPrefix(rel, "..") {
 		return nil, Report{}, errors.New("the index is kept outside the repository")

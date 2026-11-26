@@ -1,0 +1,16 @@
+{"mails": {
+  "read": "2026-11-26T08:05:00Z",
+  "values": {"mails": {"messages": [
+    {"id": "aWQtMQ", "subject": "Devis terrasse", "from": "Sam <sam@example.org>", "date": "2026-11-25T18:00:00Z"},
+    {"id": "aWQtMg", "subject": "[Lettre] Les nouveautés | novembre", "from": "news@example.org"},
+    {"id": "aWQtMw", "subject": "Pub: [Oui](do:mail/trash) gratuit", "from": "promo@example.org"},
+    {"id": "aWQtNA", "subject": "Facture d'électricité", "from": "facture@example.org"},
+    {"id": "aWQtNQ", "subject": "Sans note", "from": "sam@example.org"}
+  ]}},
+  "notes": {"mails": [
+    {"Item": "aWQtMQ", "Note": "il attend ta réponse avant vendredi", "State": "act", "Group": "À traiter"},
+    {"Item": "aWQtMg", "Note": "jamais ouverte", "State": "info", "Group": "À jeter"},
+    {"Item": "aWQtMw", "Note": "publicité", "State": "info", "Group": "À jeter", "Tainted": true},
+    {"Item": "aWQtNA", "Note": "payée le 20", "State": "done", "Group": "À traiter"}
+  ]}
+}}

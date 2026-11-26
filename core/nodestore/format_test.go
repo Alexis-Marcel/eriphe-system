@@ -2,12 +2,15 @@ package nodestore
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	git "github.com/go-git/go-git/v5"
 
@@ -67,10 +70,10 @@ func TestFormatConversionKeepsEveryNode(t *testing.T) {
 	for _, id := range ids {
 		d := mustRead(t, s2, id)
 		was := before[id]
-		if d.Version.N != len(was)+1 || d.Version.Author != Convert || d.Node.Meta.Format != 3 {
+		if d.Version.N != len(was)+1 || d.Version.Author != Convert || d.Node.Meta.Format != 4 {
 			t.Fatalf("%s: v%d by %s, format %d", id, d.Version.N, d.Version.Author, d.Node.Meta.Format)
 		}
-		if !strings.HasPrefix(string(d.Raw), "---\nformat: 3\n") || strings.Contains(string(d.Raw), "grey") {
+		if !strings.HasPrefix(string(d.Raw), "---\nformat: 4\n") || strings.Contains(string(d.Raw), "grey") {
 			t.Fatalf("%s converted:\n%s", id, d.Raw)
 		}
 		if hash == "" {
@@ -89,11 +92,11 @@ func TestFormatConversionKeepsEveryNode(t *testing.T) {
 				t.Fatalf("%s: version %d was %+v, is %+v", id, v.N, v, vs[i])
 			}
 			old, err := s2.fileAt(v.Hash, d.File)
-			if err != nil || bytes.Contains(old, []byte("format: 3")) {
+			if err != nil || bytes.Contains(old, []byte("format: 4")) {
 				t.Fatalf("%s v%d in git: %v\n%s", id, v.N, err, old)
 			}
 			r, err := s2.Read(id, v.N)
-			if err != nil || r.Node.Meta.Format != 3 || strings.Contains(r.Node.Text(), "grey") {
+			if err != nil || r.Node.Meta.Format != 4 || strings.Contains(r.Node.Text(), "grey") {
 				t.Fatalf("%s v%d read: %v %+v", id, v.N, err, r)
 			}
 		}
@@ -104,11 +107,11 @@ func TestFormatConversionKeepsEveryNode(t *testing.T) {
 	// Written again, on the version read before the conversion (only
 	// code wrote since), and made after: in the new format.
 	pre := before[ids[0]][len(before[ids[0]])-1].Hash
-	if w, err := write(s2, ids[0], "The wall is gray.", pre, "brain"); err != nil || w.Node.Meta.Format != 3 {
+	if w, err := write(s2, ids[0], "The wall is gray.", pre, "brain"); err != nil || w.Node.Meta.Format != 4 {
 		t.Fatalf("a write on the version before the conversion: %v", err)
 	}
 	n := mustCreate(t, s2, New{Title: "New", Body: "x"})
-	if !strings.HasPrefix(string(n.Raw), "---\nformat: 3\n") {
+	if !strings.HasPrefix(string(n.Raw), "---\nformat: 4\n") {
 		t.Fatalf("a new node:\n%s", n.Raw)
 	}
 	s2.Close()
@@ -127,7 +130,7 @@ func TestFormatConversionKeepsEveryNode(t *testing.T) {
 		t.Fatalf("rebuilt: %+v", rep)
 	}
 	for _, id := range append(ids, n.Node.Meta.ID) {
-		if d := mustRead(t, s3, id); d.Node.Meta.Format != 3 {
+		if d := mustRead(t, s3, id); d.Node.Meta.Format != 4 {
 			t.Fatalf("%s: format %d", id, d.Node.Meta.Format)
 		}
 	}
@@ -143,7 +146,7 @@ func TestNewerFormatRefused(t *testing.T) {
 	d := mustCreate(t, s, New{Title: "Future", Body: "x"})
 	s.Close()
 	path := filepath.Join(e.dir, d.File)
-	future := []byte(strings.Replace(string(d.Raw), "format: 2\n", "format: 9\n", 1))
+	future := []byte(strings.Replace(string(d.Raw), "format: 3\n", "format: 9\n", 1))
 	if err := os.WriteFile(path, future, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -224,9 +227,9 @@ func TestFormat1LifetimeDropped(t *testing.T) {
 	for _, rebuilt := range []bool{false, true} {
 		e := newEnv(t)
 		s, _ := e.open(t)
-		d := mustCreate(t, s, New{Title: "Mails", Goal: "Les mails à traiter.", Body: "Rien de neuf." + statusBlock})
+		d := mustCreate(t, s, New{Title: "Mails", Goal: "Les mails à traiter.", Body: "Rien de neuf."})
 		s.Close()
-		old := strings.Replace(string(d.Raw), "format: 2\n", "", 1)
+		old := strings.Replace(string(d.Raw), "format: 3\n", "", 1)
 		old = strings.Replace(old, "goal:", "lifetime: standing\ngoal:", 1)
 		path := filepath.Join(e.dir, d.File)
 		if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
@@ -242,12 +245,59 @@ func TestFormat1LifetimeDropped(t *testing.T) {
 		if !slices.Equal(rep.Converted, []string{id}) || len(rep.Broken) != 0 || rep.Rebuilt != rebuilt {
 			t.Fatalf("rebuilt %v: report: %+v", rebuilt, rep)
 		}
-		if got := mustRead(t, s2, id); !bytes.Equal(got.Raw, d.Raw) || got.Node.Meta.Format != 2 {
+		if got := mustRead(t, s2, id); !bytes.Equal(got.Raw, d.Raw) || got.Node.Meta.Format != 3 {
 			t.Fatalf("rebuilt %v: converted:\n%s\nwant:\n%s", rebuilt, got.Raw, d.Raw)
 		}
 		if got, _ := os.ReadFile(path); !bytes.Equal(got, d.Raw) {
 			t.Fatalf("rebuilt %v: its file:\n%s", rebuilt, got)
 		}
 		s2.Close()
+	}
+}
+
+// A format-2 node whose block read a source: converted at start, its
+// block written as Markdown with what code had read for it (the store's
+// Snapshots); its older version, read from the history, converted
+// without (no value is guessed for the past).
+func TestFormat2BlockSnapshotAtStart(t *testing.T) {
+	e := newEnv(t)
+	s, _ := e.open(t)
+	d := mustCreate(t, s, New{Title: "Mails", Body: "Les mails.\n"})
+	s.Close()
+	block := "```eriphe:block mails\n{\"components\": [{\"id\":\"root\",\"component\":\"List\",\"children\":{\"componentId\":\"r\",\"path\":\"/m/messages\"}},\n" +
+		"{\"id\":\"r\",\"component\":\"Item\",\"title\":{\"@path\":\"subject\"}}],\n" +
+		" \"sources\": {\"m\": {\"tool\":\"mail/search_messages\",\"items\":{\"path\":\"messages\",\"id\":\"id\"}}}}\n```\n"
+	old := strings.Replace(string(d.Raw), "format: 3\n", "format: 2\n", 1) + "\n" + block
+	path := filepath.Join(e.dir, d.File)
+	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	asked := map[string]int{}
+	e.opts.Snapshots = func(node, block string) *nodefile.Snapshot {
+		mu.Lock()
+		asked[node+"/"+block]++
+		mu.Unlock()
+		return &nodefile.Snapshot{Read: time.Date(2026, 11, 26, 8, 0, 0, 0, time.Local),
+			Values: map[string]json.RawMessage{"m": json.RawMessage(`{"messages":[{"id":"aWQtMQ","subject":"Devis"}]}`)},
+			Notes:  map[string][]nodefile.ItemNote{"m": {{Item: "aWQtMQ", Note: "à lire", State: "act"}}}}
+	}
+	s2, rep := e.open(t)
+	id := d.Node.Meta.ID
+	if !slices.Equal(rep.Changed, []string{id}) || !slices.Equal(rep.Converted, []string{id}) || asked[id+"/mails"] == 0 {
+		t.Fatalf("report: %+v, asked %v", rep, asked)
+	}
+	got := mustRead(t, s2, id)
+	text := got.Node.Text()
+	if got.Node.Meta.Format != 3 || len(got.Node.Blocks()) != 0 || got.Version.Author != Convert ||
+		!strings.Contains(text, "- [ ] [Devis][m1] : à lire") || !strings.Contains(text, "[m1]: mail:aWQtMQ") || !strings.Contains(text, "Écrit le 26/11/2026 à 8 h 00.") {
+		t.Fatalf("converted v%d by %s:\n%s", got.Version.N, got.Version.Author, got.Raw)
+	}
+	// The version by hand, read from the history: converted without the
+	// values.
+	vs, _ := s2.Versions(id)
+	past, err := s2.Read(id, vs[len(vs)-2].N)
+	if err != nil || strings.Contains(past.Node.Text(), "Devis") || len(past.Node.Blocks()) != 0 {
+		t.Fatalf("its older version: %v\n%s", err, past.Raw)
 	}
 }

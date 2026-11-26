@@ -1,0 +1,7 @@
+{"resume": {
+  "read": "2026-11-26T17:00:00Z",
+  "values": {
+    "allocation": {"lines":[{"ticker":"CW8","name":"MSCI World","part":62.5},{"ticker":"OBLI","name":"Obligations | euro","part":20}]},
+    "movers": {"items":[{"name":"MSCI World","ticker":"CW8","change":"+1,2 %"}]}
+  }
+}}
