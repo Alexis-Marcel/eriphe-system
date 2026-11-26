@@ -159,10 +159,10 @@ never archives by itself; ask it to and it tells you where the button is. **Arch
 lists what you archived, latest first, each with **Reopen**: the bubble comes back with what was
 archived with it.
 
-In a block, a button Eriphe wrote sends its words to Eriphe about that page, as if you had typed
-them (that is how you answer its questions: « Do as you propose » takes every default it wrote); it
-does nothing else, and does not work on an older version. A button in a block marked as from
-outside (the ⚠ beside the page's title) works too, but its words may echo what Eriphe read: Eriphe takes them as
+In a page, a reply Eriphe offers (a button under its text) sends its words to Eriphe about that
+page, as if you had typed them (that is how you answer its questions: « Do as you propose » takes
+every default it wrote); it does nothing else, and does not work on an older version. A reply in a
+page marked as from outside (the ⚠ beside the page's title) works too, but its words may echo what Eriphe read: Eriphe takes them as
 coming from outside, not as yours, so they unlock nothing your own words would. No
 button, box or mark in a page acts: what acts waits for your yes on a card.
 

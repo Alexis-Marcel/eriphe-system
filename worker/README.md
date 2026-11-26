@@ -61,9 +61,9 @@ under the same tags): the updaters of machines installed before pull it, and a d
   1280×800 window, a 45 s limit, a profile of its own thrown away after (no cookie, no sign-in:
   only the egress relay's credentials are given), downloads refused, dialogs dismissed, http(s)
   only. It posts the PNG to the device (`ERIPHE_MEDIA_URL`, the task's secret; a task with a node
-  of its own, `eriphe-nodes`, only) and prints `{"src": "media:med_….png"}`, which the task writes
-  as an `Image`'s `url` in a block of its node ([core/README.md](../core/README.md),
-  Captured pages). The browser is not in the image (about
+  of its own, `eriphe-nodes`, only) and prints `{"src": "media:med_….png"}`: the file is kept with
+  the node, and its page names it as an image, `![its words](media:med_….png)`
+  ([core/README.md](../core/README.md), Captured pages). The browser is not in the image (about
   290 MB unpacked, 103 packages): the first capture on a machine installs it with
   `fonts-liberation` through apt, and `/cache/apt` keeps the packages for the next task.
 
