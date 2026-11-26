@@ -61,7 +61,8 @@ func (c *core) refItems(p *nodefile.Page) []refItem {
 		if d.Scheme == "" || d.ID == "" {
 			continue
 		}
-		if _, ok := servers[d.Scheme]; !ok && !providedServer(d.Scheme) {
+		_, catalog := servers[d.Scheme]
+		if _, provided := providedServers[d.Scheme]; !catalog && !provided {
 			continue // a catalog server's, or one Eriphe provides (tool_review.go)
 		}
 		out = append(out, refItem{Label: d.Label, Server: d.Scheme, ID: d.ID})

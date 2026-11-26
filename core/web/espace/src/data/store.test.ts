@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, OrbWords } from "./api";
 import {
-  applyDoc, applyMoved, applyNodes, applyNotes, applyOrb, applyProgress, applyShow, applySource, closePage, empty, NOTES_KEPT,
-  landed, openPage, pathOf, restore, setClosed, setGraphCentring, setGraphForces, setSent, setTheme, SHOW_FRESH, sourceKey, subtree, talkTo, viewOf, type State,
+  applyDoc, applyMoved, applyNodes, applyNotes, applyOrb, applyProgress, applyShow, closePage, empty, NOTES_KEPT,
+  landed, openPage, pathOf, restore, setClosed, setGraphCentring, setGraphForces, setSent, setTheme, SHOW_FRESH, subtree, talkTo, viewOf, type State,
 } from "./store";
 import { DEFAULT_FORCES, FORCE_RANGES } from "../graph/layout";
 
@@ -131,18 +131,13 @@ describe("the store", () => {
     expect(landed(null, null)).toBe(false);
   });
 
-  it("counts what changed: versions, traces, progress, sources, proposals, notices", () => {
+  it("counts what changed: versions, traces, progress, proposals, notices", () => {
     let s = withGraph();
     s = applyDoc(applyDoc(s, { id: "a", version: 2 }), { id: "a", trace: true });
     expect(s.docs.a).toBe(1);
     expect(s.traces.a).toBe(1);
     s = applyProgress(s, { node: "a1", text: "1/2", at: "2026-11-18T10:00:00Z" });
     expect(s.progress.a1.text).toBe("1/2");
-    s = applySource(s, { node: "a", block: "b", name: "n", value: { x: 1 } });
-    expect(s.sources[sourceKey("a", "b", "n")]).toEqual({ x: 1 });
-    // the rows of its Lists, by the List's component
-    s = applySource(s, { node: "a", block: "b", name: "n", value: {}, lists: [{ component: "drop", items: [{ n: 2, id: "m3" }] }] });
-    expect(s.rows[sourceKey("a", "b", "drop")]).toEqual([{ n: 2, id: "m3" }]);
     s = applyMoved(s, { refs: ["card:1"], nodes: ["a", 3 as never] });
     expect(s.moved).toMatchObject({ n: 1, refs: ["card:1"], nodes: ["a"] });
     expect(applyMoved(s, { refs: [] })).toBe(s);

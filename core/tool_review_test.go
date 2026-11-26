@@ -248,6 +248,13 @@ func TestToolChangesListed(t *testing.T) {
 	if x, _ := c.cardsWhere(`ref = ?`, ref); len(x) != 1 || x[0].Text != "Accepter les 3" {
 		t.Errorf("the card: %+v", x)
 	}
+	// The page draws it on each change's row: its references are items of
+	// the server Eriphe provides, as a catalog server's are.
+	p, _ := d.Node.Page()
+	items := c.pageItems(id, p)
+	if len(items) != 3 || items[0].Card != ref || items[0].Row == 0 {
+		t.Errorf("the page's items: %+v", items)
+	}
 	if c.graphRow(sum).Status != nodeWaits {
 		t.Error("the node does not wait while its card does")
 	}

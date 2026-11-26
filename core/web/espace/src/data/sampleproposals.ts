@@ -1,72 +1,13 @@
-import type { OrbFeed } from "../data/api";
-import { sampleCards } from "../data/samplecore";
+import type { Moved, Proposals, ProposalView } from "../a2ui/proposals";
 import type { Lang } from "../i18n";
-import type { Message } from "./adapter";
-import { CATALOG } from "./catalog";
-import gallery from "./gallery.json";
-import type { Moved, Proposals, ProposalView } from "./proposals";
+import type { OrbFeed } from "./api";
+import { sampleCards } from "./samplecore";
 
-// Made-up A2UI messages, in the shape eriphe-core sends, for the dev server
-// and the tests, when no eriphe-core is behind. No real name, address or
-// tool in them.
+// The dev server's proposals and orb (dev.tsx). Made-up words, no real
+// name, address or tool in them.
 
-const words = {
-  fr: {
-    title: "À faire aujourd'hui",
-    items: [{ label: "Relire le devis de Sam" }, { label: "Préparer la réunion de 14 h" }, { label: "Répondre à l'école" }],
-    empty: "Rien à faire",
-    ask: "Résume ma journée",
-    askText: "Résume ma journée en trois lignes",
-  },
-  en: {
-    title: "To do today",
-    items: [{ label: "Read Sam's quote" }, { label: "Prepare the 2 pm meeting" }, { label: "Answer the school" }],
-    empty: "Nothing to do",
-    ask: "Sum up my day",
-    askText: "Sum up my day in three lines",
-  },
-};
-
-export const SAMPLE_SURFACE = "sample-today";
-
-export function surfaceFixtures(lang: Lang): Message[] {
-  const w = words[lang];
-  return [
-    {
-      version: "1.0",
-      createSurface: {
-        surfaceId: SAMPLE_SURFACE,
-        catalogId: CATALOG.id,
-        components: [
-          { id: "root", component: "Column", children: ["title", "items", "actions"] },
-          { id: "title", component: "Text", variant: "title", text: { "@path": "/title" } },
-          { id: "items", component: "List", children: { componentId: "item", path: "/items" }, emptyText: w.empty },
-          { id: "item", component: "Text", text: { "@path": "label" } },
-          { id: "actions", component: "Row", justify: "end", children: ["ask"] },
-          {
-            id: "ask",
-            component: "Button",
-            label: w.ask,
-            variant: "quiet",
-            action: { event: { name: "ask", context: { text: w.askText } } },
-          },
-        ],
-        dataModel: { title: w.title, items: w.items },
-      },
-    },
-  ];
-}
-
-// The gallery: surfaces that use every component of the catalog, for the
-// tests and to look at the components on the dev server (?gallery). A Go
-// test checks that eriphe-core accepts them (espace_gallery_test.go).
-export function galleryFixtures(lang: Lang): Message[] {
-  return gallery[lang] as unknown as Message[];
-}
-
-
-// Made-up proposals for the gallery: its Proposal's, and a dated one its
-// Agenda shows as a ghost. Answering one changes nothing but its state on the
+// Made-up proposals for the dev server: a few of each kind, and a dated
+// one an agenda shows as a ghost. Answering one changes nothing but its state on the
 // page, and says it moved, as eriphe-core's stream would.
 export function sampleProposals(lang: Lang): Proposals {
   const en = lang === "en";

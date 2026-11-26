@@ -55,16 +55,6 @@ const SLOT = 30; // minutes a grid row stands for
 const LANES = 3; // lanes of a clash at most; a fourth overlap shares the last
 export const AGENDA_DAYS = 7; // days at most
 
-// cleanEvents keeps the events that are one (a title, a start), each with
-// its place in the list as given: what is dropped shifts no other's card.
-export function cleanEvents(v: unknown): Listed[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .map((e, n) => ({ e, n }))
-    .filter(({ e }) => !!e && typeof e === "object" && typeof e.title === "string" && typeof e.start === "string")
-    .map(({ e, n }) => ({ ...(e as AgendaEvent), n }));
-}
-
 // An entry of a day: an event (n, its place in the source's list) or a
 // proposal (ghost, its ref); card, the card it carries; invited, an
 // invitation not answered; waits when it asks the user's answer.

@@ -1,7 +1,7 @@
 import { expect, test } from "./fixtures";
 
 // A yes whose call fails, against the test core of TestEspaceScenario: a
-// view of the mailbox (/e2e/courrier) is open; the user says « supprime
+// page of the mailbox (/e2e/courrier) is open; the user says « supprime
 // ces 2 »; the scripted brain calls mail/trash on two rows, whose trash
 // now answers with an error (/e2e/trash-fails). Oui: nothing is trashed;
 // the card is decided, so it leaves its rows and the page's foot; the
@@ -24,9 +24,10 @@ test("a failed yes leaves the page; the ⋯ menu keeps why, the orb says it", as
     expect(seeded.ok(), await seeded.text()).toBe(true);
     const pg = page.locator('article.pg[aria-label="Courrier"]');
     await expect(pg).toBeVisible();
-    const rows = pg.locator(".a2-list > li");
+    const rows = pg.locator(".md-item");
     await expect(rows).toHaveCount(4);
 
+    await pg.locator(".md-p").first().click(); // the bar talks to it
     await input.fill("supprime ces 2");
     await input.press("Enter");
     const colis = rows.filter({ hasText: "Votre colis est arrivé" });

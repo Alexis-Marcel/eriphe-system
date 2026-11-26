@@ -37,7 +37,6 @@ const pageOf = (): NodePage => ({
   version: 2,
   versions: [],
   body,
-  parts: [{ text: body }],
   items: [],
   placed: [],
   cards: [],

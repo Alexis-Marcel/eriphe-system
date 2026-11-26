@@ -21,8 +21,7 @@ import (
 // writable in task_write.go): its node and the nodes under it, the node
 // it works for, the nodes someone else linked to or from these
 // (node_write, node_edit, node_append); it opens a child of one of them
-// (node_open), notes an item a source of one of them lists (item_note),
-// and says how its work goes (progress). Following a skill, it proposes a
+// (node_open), and says how its work goes (progress). Following a skill, it proposes a
 // version of it (skill_propose.go). It never starts a task (the
 // engine starts steps), never archives, approves nor closes a node.
 //

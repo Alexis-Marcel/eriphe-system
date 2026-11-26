@@ -205,13 +205,6 @@ describe("a page drawn from its Markdown", () => {
     await draw({ body: page("mails") });
     expect([...el.querySelectorAll(".md-link-do")].map((x) => x.textContent)).toEqual(["Archiver ces mails", "Jeter ces mails"]);
   });
-
-  it("draws a legacy block where its fence is", async () => {
-    const legacy = vi.fn((name: string) => <section className="legacy">{name}</section>);
-    await draw({ body: "Avant.\n\n```eriphe:block vue\n{}\n```\n\nAprès.\n", legacy });
-    expect(legacy).toHaveBeenCalledWith("vue");
-    expect([...el.querySelectorAll(".md-p, .legacy")].map((x) => x.textContent)).toEqual(["Avant.", "vue", "Après."]);
-  });
 });
 
 describe("a page's lines", () => {

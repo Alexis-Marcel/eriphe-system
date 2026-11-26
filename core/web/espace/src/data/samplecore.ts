@@ -1,42 +1,28 @@
-import { stillAsks, type ListRow, type Moved, type Opened, type PageBlock, type PagePart, type ProposalView, type SourceList } from "./api";
+import { stillAsks, type Moved, type Opened, type PageItem, type ProposalView } from "./api";
 
 // A small make-believe eriphe-core for the dev server (sample.ts): a few
-// view nodes kept as their author writes them in the node's file (text and
-// eriphe:block JSON: components and sources; their sources' values
-// and their items' notes as code keeps them), and what code does with
-// them, done here the way eriphe-core does it in Go:
-//   - the block's data: each source's value at /<name>, each item with its
-//     note's fields (_note, _state, _group) and, while a card waits on it,
-//     _card (item_cards.go);
-//   - the Lists the page must know (list_rows.go, list_sections.go):
-//     their filter applied, their template path unfiltered, their rows,
-//     each with the card that waits on it;
+// pages as their author writes them (Markdown, page/read.ts), the items
+// their references name, and what code does with them, done here the way
+// eriphe-core does it in Go:
+//   - each reference to an item, on its row, with the card that waits on
+//     it (page_items.go);
 //   - an item opened in place (item_open.go);
-//   - a card answered (one item's, or a batch's over many, its rows
-//     unticked left out): its items settle and leave their section, and
-//     the view's skill writes its bilan again.
+//   - a card answered: its items settle, and the page's skill writes the
+//     page again without them.
 // Nothing leaves the page. No real name, address or tool in it.
 
-export type Src = {
-  tool: string;
-  args?: Record<string, unknown>;
-  items: { path: string; id: string; title: string; detail?: string; open?: { tool: string; id: string } };
-};
-export type Authored = { name: string; external?: boolean; components: Record<string, unknown>[]; data?: Record<string, unknown>; sources?: Record<string, Src> };
-export type Note = { group?: string; note?: string; state?: string };
+// An item a page references: what its server reads of it.
+export type SampleItem = Opened & { id: string };
 export type SampleView = {
   id: string;
-  // the node's body: its text (the skill's bilan, its digest) and blocks
-  parts: (string | Authored)[];
-  // the sources' last values, by name
-  values: Record<string, Record<string, unknown>>;
-  notes: Record<string, Note>;
-  // what opening an item reads
-  bodies: Record<string, Opened>;
+  // the node's body, as its file holds it
+  body: (v: SampleView) => string;
+  // the items its references name, by label
+  items: Record<string, SampleItem>;
+  // the items done (a card on them answered yes): the page leaves them out
+  done: Set<string>;
   // the cards: those on items (items), the others the node's
   cards: SampleCard[];
-  // the view's skill writing its bilan again, from what is left
-  bilan?: (v: SampleView) => string;
 };
 export type SampleCard = Omit<ProposalView, "verb"> & { verb?: string; items?: string[]; settled?: boolean };
 
@@ -65,137 +51,49 @@ export function onBump(f: (id: string) => void): () => void {
 const bump = (id: string) => bumpers.forEach((f) => f(id));
 const moved = (refs: string[]) => followers.forEach((f) => f({ refs }));
 
-// A filter of a List's path: [field=value] or [field!=value], one or more.
-type Filter = { field: string; value: string; not: boolean };
-function parsePath(path: string): { base: string; filters: Filter[] } {
-  const filters: Filter[] = [];
-  const base = path.replace(/\[([A-Za-z0-9_]+)(!?=)([^\]]*)\]/g, (_, field: string, op: string, value: string) => {
-    filters.push({ field, value, not: op === "!=" });
-    return "";
-  });
-  return { base, filters };
-}
-const keeps = (it: Record<string, unknown>, fs: Filter[]) => fs.every((f) => (String(it[f.field] ?? "") === f.value) !== f.not);
-
-const at = (v: unknown, path: string): unknown => path.split("/").filter(Boolean).reduce<unknown>((o, k) => (o && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined), v);
-
-// itemsOf are a source's items, each with its note's fields and its card.
-function itemsOf(v: SampleView, name: string, src: Src): Record<string, unknown>[] {
-  const list = (at(v.values[name], src.items.path) as Record<string, unknown>[] | undefined) ?? [];
-  return list.map((it) => {
-    const id = String(it[src.items.id]);
-    const n = v.notes[id] ?? {};
-    const card = v.cards.find((c) => c.items?.includes(id) && !c.settled);
-    return { ...it, _note: n.note ?? "", _state: n.state ?? "", _group: n.group ?? "", _card: card?.ref ?? "" };
-  });
-}
-
-function block(v: SampleView, b: Authored): PageBlock {
-  const data: Record<string, unknown> = { ...(b.data ?? {}) };
-  const comps = b.components.map((c) => ({ ...c }));
-  const folded = new Set(comps.filter((c) => c.component === "Fold" && typeof c.list === "string").map((c) => String(c.list)));
-  const lists: SourceList[] = [];
-  for (const [name, src] of Object.entries(b.sources ?? {})) {
-    const items = itemsOf(v, name, src);
-    const value = structuredClone(v.values[name]);
-    const holder = at(value, src.items.path.split("/").slice(0, -1).join("/")) ?? value;
-    (holder as Record<string, unknown>)[src.items.path.split("/").at(-1)!] = items;
-    data[name] = value;
-    for (const c of comps) {
-      // A component that names the source (Sections, Gallery, Table: the
-      // catalog's x-source) reads its rows, as eriphe-core binds it
-      // (nodefile/rows.go); a Sections is always told its rows.
-      const prop = c.component === "Table" ? "rows" : "items";
-      if (["Sections", "Gallery", "Table"].includes(String(c.component)) && c[prop] === name) {
-        c[prop] = { "@path": `/${name}/${src.items.path}` };
-        if (c.component === "Sections") {
-          const rows: ListRow[] = items.map((it, n) => ({
-            n,
-            id: String(it[src.items.id]),
-            title: String(it[src.items.title] ?? ""),
-            detail: src.items.detail ? String(it[src.items.detail] ?? "") : undefined,
-            card: (it._card as string) || undefined,
-          }));
-          lists.push({ component: String(c.id ?? "root"), source: name, open: !!src.items.open, items: rows });
-        }
-        continue;
-      }
-      // An Agenda bound to the source's items: its events' rows, each with
-      // the card that waits on it (an invitation's), as for a List.
-      const evs = c.events as { "@path"?: string } | undefined;
-      if (c.component === "Agenda" && evs?.["@path"] === `/${name}/${src.items.path}`) {
-        const rows: ListRow[] = items.map((it, n) => ({ n, id: String(it[src.items.id]), title: String(it[src.items.title] ?? ""), card: (it._card as string) || undefined }));
-        lists.push({ component: String(c.id), source: name, items: rows });
-        continue;
-      }
-      const ch = c.children as { path?: string; componentId?: string } | undefined;
-      if (c.component !== "List" || !ch?.path) continue;
-      const { base, filters } = parsePath(ch.path);
-      if (base !== `/${name}/${src.items.path}`) continue;
-      // code filters, the page draws the List over all the source's items
-      c.children = { ...ch, path: base };
-      const carded = items.some((it) => it._card);
-      if (!filters.length && !folded.has(String(c.id)) && !carded && !src.items.open) continue;
-      const rows: ListRow[] = [];
-      items.forEach((it, n) => {
-        if (!keeps(it, filters)) return;
-        const id = String(it[src.items.id]);
-        rows.push({ n, id, title: String(it[src.items.title] ?? ""), detail: src.items.detail ? String(it[src.items.detail] ?? "") : undefined, card: (it._card as string) || undefined });
-      });
-      lists.push({ component: String(c.id), source: name, filtered: filters.length > 0, open: !!src.items.open, items: rows });
+// itemsOf are the page's references to items, each on its line, with the
+// card that waits on it, as page_items.go tells them.
+function itemsOf(v: SampleView, body: string): PageItem[] {
+  const out: PageItem[] = [];
+  body.split("\n").forEach((l, i) => {
+    for (const m of l.matchAll(/\[([^\]]+)\]\[([^\]]+)\]/g)) {
+      const it = v.items[m[2].toLowerCase()];
+      if (!it) continue;
+      const card = v.cards.find((c) => c.items?.includes(it.id) && !c.settled);
+      const row = /^\s*[-*] /.test(l) ? i + 1 : undefined;
+      out.push({ line: i + 1, label: m[2], text: m[1], row, id: it.id, open: true, card: card?.ref, title: it.title, detail: it.from, external: it.external });
     }
-  }
-  return { name: b.name, external: b.external, components: comps, data, lists };
+  });
+  return out;
 }
 
-// bodyOf is a page's body as its file would hold it: its text, and each
-// block in its fence (its JSON left out: the page draws it from parts).
-export function bodyOf(parts: PagePart[]): string {
-  return parts.map((p) => (p.block ? `\n\`\`\`eriphe:block ${p.block.name}\n{}\n\`\`\`\n\n` : (p.text ?? ""))).join("");
-}
-
-export function samplePage(id: string): { body: string; parts: PagePart[]; cards: ProposalView[]; settled: ProposalView[] } | null {
+export function samplePage(id: string): { body: string; items: PageItem[]; cards: ProposalView[]; settled: ProposalView[] } | null {
   const v = viewOf(id);
   if (!v) return null;
+  const body = v.body(v);
   // the node's own cards, as eriphe-core splits them: those that still ask
   // at the foot, the decided ones for the « ⋯ » menu; those on items show
-  // on their lines, and a dated one that still asks in the page's Agenda,
-  // as a ghost with its Oui (eriphe-core checks the Agenda draws its day;
-  // the samples' cards are all within the week)
-  const agenda = v.parts.some((p) => typeof p !== "string" && p.components.some((c) => c.component === "Agenda"));
-  const own = v.cards.filter((c) => !c.items && !(agenda && c.when?.length && stillAsks(c)));
-  const parts = v.parts.map((p) => (typeof p === "string" ? { text: p } : { block: block(v, p) }));
+  // on their rows
+  const own = v.cards.filter((c) => !c.items);
   return {
-    body: bodyOf(parts),
-    parts,
+    body,
+    items: itemsOf(v, body),
     cards: own.filter(stillAsks).map(asView),
     settled: own.filter((c) => !stillAsks(c)).map(asView),
   };
 }
 
-export async function sampleOpen(id: string, item: string): Promise<Opened> {
+export async function sampleOpen(id: string, ref: string): Promise<Opened> {
   await new Promise((r) => setTimeout(r, 250));
-  const v = viewOf(id);
-  const o = v?.bodies[item];
-  const n = v?.notes[item];
-  return o ? { ...o, note: n ? { group: n.group, note: n.note, external: true } : undefined } : { error: "Introuvable." };
-}
-
-// later: the view's skill runs again a moment after (the monitor saw the
-// change) and writes its bilan from what is left.
-function later(v: SampleView) {
-  if (!v.bilan) return;
-  setTimeout(() => {
-    const i = v.parts.findIndex((p) => typeof p === "string");
-    if (i >= 0) v.parts[i] = v.bilan!(v);
-    bump(v.id);
-  }, 1200);
+  const it = viewOf(id)?.items[ref.toLowerCase()];
+  if (!it) return { error: "Introuvable." };
+  const { id: _, ...read } = it;
+  return read;
 }
 
 // The views' cards as proposals: answered, a card on items runs (then is
-// done), and its items settle: code notes them done (those of the calls
-// left, unticked, stay), and the List that keeps what is not done no
-// longer shows them.
+// done), and its items settle: the page's skill writes the page again
+// without them (those of the calls left, unticked, stay).
 export function sampleCards(): {
   read(ref: string): ProposalView | null;
   answer(ref: string, yes: boolean, only?: number[]): boolean;
@@ -224,14 +122,13 @@ export function sampleCards(): {
       setTimeout(() => {
         if (yes) f.c.exec = "done";
         f.c.settled = true;
-        if (yes) for (const it of going) f.v.notes[it] = { ...(f.v.notes[it] ?? {}), state: "done" };
+        if (yes) for (const it of going) f.v.done.add(it);
         moved([ref]);
         bump(f.v.id);
-        later(f.v);
       }, 900);
       return true;
     },
-    // the cards dated on a day that still wait: an Agenda's ghosts
+    // the cards dated on a day that still wait: an agenda's ghosts
     day: (date) => {
       const dated = views.flatMap((v) => v.cards).filter((c) => c.state === "pending" && c.when?.some((w) => w.start.startsWith(date)));
       return dated.filter((c, i) => dated.findIndex((d) => d.ref === c.ref) === i).map(asView);

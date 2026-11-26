@@ -820,8 +820,10 @@ func (c *conv) render(id string, scope any, depth int) []mdBlock {
 		}
 		return []mdBlock{{lines: defang(strings.Split(md, "\n"))}}
 	case "Image":
+		// An address as written, or one of the node's own files (a page a
+		// task captured: media:med_….png), kept by its name.
 		u := textOf(c.value(scope, comp.get("url")))
-		if !httpURL(u) {
+		if !httpURL(u) && !mediaFile.MatchString(u) {
 			return nil
 		}
 		return para("![" + label(c.text(scope, comp.get("alt"))) + "](" + u + ")")
@@ -971,6 +973,9 @@ func defang(lines []string) []string {
 	}
 	return out
 }
+
+// mediaFile is one of the node's own files, by its name (nodestore's).
+var mediaFile = regexp.MustCompile(`^media:med_[0-9a-f]{32}\.(png|jpg|gif|webp)$`)
 
 func httpURL(u string) bool {
 	return (strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://")) && !strings.ContainsAny(u, " \t\r\n<>()[]")

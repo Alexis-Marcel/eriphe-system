@@ -261,13 +261,10 @@ type scenarioTools struct {
 	lit     []string
 	sent    []string
 	moved   [][]string       // move: the ids of each call (view-rows.spec.ts)
-	deleted [][]string       // supprimer: the ids of each call (sections.spec.ts)
-	thrown  [][]string       // jeter: the ids of each call (blocks.spec.ts)
-	read    []string         // lire: the id of each call (sources-open.spec.ts)
+	read    []string         // lire: the id of each call (view-rows.spec.ts)
 	trashed []string         // trash: "<account>:<ids>" of each call (view-bilan.spec.ts)
 	trashNo string           // trash: answers with this error, trashing nothing (view-failed.spec.ts)
 	replied []string         // repondre: the id of each call (view-bilan.spec.ts)
-	purged  []string         // purger: the ids it deleted (view-refresh.spec.ts)
 	arrived []map[string]any // recus: the mails that came after the received (the live bench)
 	// veille: the news watch's server, whose tool changes after it was
 	// added (tools.spec.ts).
@@ -389,7 +386,7 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				f.mu.Lock()
 				defer f.mu.Unlock()
 				f.read = append(f.read, in.ID)
-				for _, m := range append(slices.Clone(received), f.arrived...) {
+				for _, m := range slices.Concat(received, f.arrived, bilan, courrier, boite) {
 					if m["id"] == in.ID {
 						return nil, m, nil
 					}
@@ -1089,7 +1086,7 @@ func (sc *scenario) handleTools(rw http.ResponseWriter, r *http.Request) {
 	f := sc.tools
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	writeJSON(rw, http.StatusOK, map[string]any{"lit": jsonList(f.lit), "sent": jsonList(f.sent), "moved": jsonList(f.moved), "deleted": jsonList(f.deleted), "thrown": jsonList(f.thrown), "read": jsonList(f.read), "trashed": jsonList(f.trashed), "replied": jsonList(f.replied), "purged": jsonList(f.purged)})
+	writeJSON(rw, http.StatusOK, map[string]any{"lit": jsonList(f.lit), "sent": jsonList(f.sent), "moved": jsonList(f.moved), "read": jsonList(f.read), "trashed": jsonList(f.trashed), "replied": jsonList(f.replied)})
 }
 
 // jsonList is a copy of s, empty rather than nil: a spec reads [] before the

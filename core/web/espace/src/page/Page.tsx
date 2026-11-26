@@ -103,14 +103,14 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen, big, 
               line, the one ⚠ of a node someone else's words reached (its
               title among them, or its content: its words say which), and
               the sign of a node the user did not ask for. That ⚠ is the
-              page's one sign for it: a block inside looks like any other
-              (Doc.tsx). */}
+              page's one sign for it: a callout an event someone else
+              wrote in (marked |external by code) looks like any other. */}
           <h2>
             <span className="pg-title-tx" title={node?.title || external}>
               <NodeTitle x={node} fallback={external} mark={false} />
             </span>
-            {(node?.external || node?.titleExternal || page?.parts.some((x) => x.block?.external)) && (
-              <ExtMark why={node?.external || page?.parts.some((x) => x.block?.external) ? t("espace.external.why") : undefined} />
+            {(node?.external || node?.titleExternal || markedCallout(page?.body)) && (
+              <ExtMark why={node?.external || markedCallout(page?.body) ? t("espace.external.why") : undefined} />
             )}
             {node?.unasked && <UnaskedMark />}
           </h2>
@@ -325,12 +325,16 @@ export function Origin({ origin }: { origin: PageOrigin }) {
   );
 }
 
+// markedCallout tells whether a page holds a callout code marked external
+// (an event someone else wrote in it: nodefile/listen.go).
+const markedCallout = (body: string | undefined) => !!body && /^> \[![^\]\s|]*(\|[^\]]*)?\|external\b/m.test(body);
+
 // Alive is what keeps a node a skill maintains alive, as eriphe-core says it:
-// its sources, monitors and skills, each by its name and what it does,
+// its monitors and skills, each by its name and what it does,
 // and when it last changed.
 export function Alive({ alive }: { alive: PageAlive }) {
   const { t, lang } = useWords();
-  const groups = (["sources", "monitors", "skills"] as const).filter((k) => alive[k]?.length);
+  const groups = (["monitors", "skills"] as const).filter((k) => alive[k]?.length);
   return (
     <section className="pg-alive" role="group" aria-label={t("espace.alive")}>
       <h3>{t("espace.alive")}</h3>

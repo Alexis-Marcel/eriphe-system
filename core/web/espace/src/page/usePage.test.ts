@@ -5,12 +5,13 @@ import { concerns } from "./usePage";
 const card = (ref: string): ProposalView => ({ ref, card: 1, state: "pending", text: ref, verb: "Faire" });
 
 // A page as eriphe-core sends it: a card at its foot, one decided, a card
-// block, a List whose row a card waits on.
+// a card: link places, a card on an item's row.
 const page = {
   node: { id: "n1" },
   cards: [card("card:1")],
   settled: [card("card:2")],
-  parts: [{ block: { name: "c", card: "card:3" } }, { block: { name: "l", lists: [{ component: "x", source: "s", items: [{ n: 0, id: "m", card: "card:4" }] }] } }],
+  placed: ["card:3"],
+  items: [{ line: 3, label: "m1", text: "Le mail", id: "m", card: "card:4" }],
 } as unknown as NodePage;
 
 describe("a page reads itself again", () => {

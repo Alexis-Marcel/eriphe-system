@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ProposalsContext, type Proposals, type ProposalView } from "../a2ui/proposals";
-import { setReads, type NodePage, type OpenWhat } from "../data/api";
+import { setReads, type NodePage } from "../data/api";
 import { makeT, WordsContext } from "../i18n";
 import strings from "../strings.json";
 import { Doc } from "./Doc";
@@ -34,7 +34,6 @@ const pageOf = (more: Partial<NodePage> = {}): NodePage => ({
   version: 2,
   versions: [],
   body,
-  parts: [{ text: body }],
   items: [
     { line: 2, label: "m1", text: "Facture de Sam", row: 2, id: "m1", open: true, card: "calls:1", title: "Facture de novembre", detail: "Sam <sam@example.org>", external: true },
     { line: 3, label: "m2", text: "Pub Maison Lune · Gift Guide", row: 3, id: "m2", open: true, card: "calls:1", title: "Les clés pour samedi", detail: "Sam <sam@example.org>", external: true, misleading: true },
@@ -55,7 +54,7 @@ const views: Record<string, ProposalView> = {
 describe("a page's referenced items", () => {
   let el: HTMLDivElement;
   let root: Root;
-  let opened: OpenWhat[];
+  let opened: string[];
   beforeEach(() => {
     el = document.createElement("div");
     document.body.append(el);
@@ -65,8 +64,8 @@ describe("a page's referenced items", () => {
       page: async () => null,
       trace: async () => [],
       file: async () => null,
-      open: async (_id, what) => {
-        opened.push(what);
+      open: async (_id, ref) => {
+        opened.push(ref);
         return { title: "Les clés pour samedi", from: "Sam <sam@example.org>", body: "Je passe samedi.", misleading: true };
       },
     });
@@ -131,7 +130,7 @@ describe("a page's referenced items", () => {
     await draw();
     await act(async () => row(3).querySelector<HTMLElement>(".md-title")!.click());
     await act(async () => {});
-    expect(opened).toEqual([{ ref: "m2" }]);
+    expect(opened).toEqual(["m2"]);
     const read = row(3).querySelector(".md-opened");
     expect(read?.querySelector(".a2-read-title")?.textContent).toBe("Les clés pour samedi");
     expect(read?.querySelector(".a2-read-lie")?.textContent).toContain("« Pub Maison Lune · Gift Guide »");
@@ -168,7 +167,7 @@ describe("a page's referenced items", () => {
 `;
     const placed = ["calls:11", "calls:12", "calls:13", "calls:14", "calls:15", "calls:16"];
     for (const ref of placed) views[ref] ??= card(ref, `Carte ${ref}`);
-    await draw(true, pageOf({ body: md, parts: [{ text: md }], items: [{ line: 18, label: "m1", text: "Le mail", row: 18, id: "m1", card: "calls:16", title: "Le mail" }], placed }));
+    await draw(true, pageOf({ body: md, items: [{ line: 18, label: "m1", text: "Le mail", row: 18, id: "m1", card: "calls:16", title: "Le mail" }], placed }));
     for (let i = 0; i < 30; i++) {
       const shut = el.querySelector<HTMLElement>('[aria-expanded="false"]');
       if (!shut) break;

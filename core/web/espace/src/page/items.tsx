@@ -138,7 +138,7 @@ function RefOpened({ id, x, card, marked, cache }: { id: string; x: PageItem; ca
     let live = true;
     const pending =
       cache.get(key)?.pending ??
-      openItem(id, { ref: x.label }).catch(() => ({
+      openItem(id, x.label).catch(() => ({
         error: t("espace.open.error"),
       }));
     cache.set(key, { open: true, loading: true, pending });
@@ -154,7 +154,7 @@ function RefOpened({ id, x, card, marked, cache }: { id: string; x: PageItem; ca
   }, [cache, key, id, x.label, st.read, t]);
   return (
     <div className="a2-opened md-ref-opened" role="region" aria-label={x.text}>
-      <OpenedView st={st} said="" marked={marked} card={card} where={{ surfaceId: `${id}--page`, componentId: `open-${x.label}` }} named={x.text} />
+      <OpenedView st={st} marked={marked} card={card} where={{ surfaceId: `${id}--page`, componentId: `open-${x.label}` }} named={x.text} />
     </div>
   );
 }

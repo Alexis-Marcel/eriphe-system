@@ -170,8 +170,8 @@ func callPhrase(tool, title string, input map[string]any, labels []itemLabel, la
 	rest := maps.Clone(input)
 	delete(rest, key)
 	delete(rest, "account")
-	// One item it is bound to (an event made from a mail, item_note's
-	// call), or the only one it names: said by itself.
+	// One item it is bound to (an event made from a mail), or the only
+	// one it names: said by itself.
 	one := ""
 	if len(labels) == 1 && n <= 1 {
 		one = labelLine(labels[0], lang)

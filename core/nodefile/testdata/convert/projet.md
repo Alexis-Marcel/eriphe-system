@@ -16,6 +16,8 @@ Les travaux de la terrasse, avec Sam.
 
 [Le devis en ligne](https://example.org/devis/terrasse)
 
+![La terrasse avant les travaux](media:med_0123456789abcdef0123456789abcdef.png)
+
 ---
 
 [Relance Sam pour le bois](ask:) · [Branche l'agenda](ask:)

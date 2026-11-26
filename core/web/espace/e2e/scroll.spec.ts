@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import { still } from "./rest";
 
-// A page scrolls as one: its head stays, its document, its blocks and the
+// A page scrolls as one: its head stays, its document, its lists and the
 // cards waiting at its foot scroll together, and the wheel over it scrolls
 // it, never the graph. Played on the scenario's test core
 // (TestEspaceScenario), signed in as there; the page shown is « Ma
@@ -37,21 +37,7 @@ async function fake(page: Page, answered: number[]) {
     if (route.request().method() !== "GET") return route.fulfill({ status: 204 });
     const r = await route.fetch();
     const p = await r.json();
-    p.body = `${longText}\n${"`".repeat(3)}eriphe:block mails\n{}\n${"`".repeat(3)}\n`;
-    p.parts = [
-      { text: longText },
-      {
-        block: {
-          name: "mails",
-          components: [
-            { id: "root", component: "Column", children: ["items"] },
-            { id: "items", component: "List", children: { componentId: "item", path: "/items" } },
-            { id: "item", component: "Text", text: { "@path": "label" } },
-          ],
-          data: { items: mails },
-        },
-      },
-    ];
+    p.body = `${longText}\n\n## Mails\n\n${mails.map((m) => `- ${m.label}`).join("\n")}\n`;
     p.cards = cards.map((c) => ({ ...c, state: answered.includes(c.card) ? "approved" : "pending" }));
     await route.fulfill({ response: r, json: p });
   });
@@ -95,8 +81,8 @@ test.describe("a long page with its cards", () => {
     await expect(pg.locator(".pg-foot .a2-proposal")).toHaveCount(2);
     await expect(pg).toContainText("Message 40");
     const body = pg.locator(".pg-body");
-    // The cards are in the body, which is the page's one scroll; no block
-    // of it scrolls on its own.
+    // The cards are in the body, which is the page's one scroll; nothing
+    // in it scrolls on its own.
     await expect(body.locator(".pg-foot")).toHaveCount(1);
     const nested = await body.evaluate((b) =>
       [...b.querySelectorAll("*")].filter((e) => {

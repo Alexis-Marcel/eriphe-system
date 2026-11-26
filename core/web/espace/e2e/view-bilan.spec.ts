@@ -3,19 +3,18 @@ import { expect, test } from "./fixtures";
 import { rest } from "./rest";
 
 // A page as a bilan (docs/node-format.md), against the test core of
-// TestEspaceScenario: the bilan on top, drawn larger; one block that reads
-// the mails of two accounts (mail/bilan) once, written after an external
-// read (one sign in the page's head, nothing on the block); « À
-// traiter » whose rows say what Eriphe proposes, Sam's with its one Oui
-// (a reply its skill drafted, a card on the mail); « À jeter » as a batch
-// whose rows share one card (a trash per mail, folded); « Pour info »
-// folded. The user reads Sam's mail as a letter with what Oui sends, says
-// yes on the row, unticks one mail of the batch and says yes to the
-// others on its line, then enlarges and
-// resizes the page. Seeded at /e2e/bilan, on its own node.
+// TestEspaceScenario: the bilan on top, drawn larger; the mails of two
+// accounts (mail/bilan) as references, the page written after an external
+// read (one sign in the page's head, nothing on its lines); « À traiter »
+// whose rows say the mails, Sam's with its one Oui (a reply its skill
+// drafted, a card on the mail); « À jeter » whose three rows share one
+// card (a trash per mail, folded): a Oui on any answers it. The user reads
+// Sam's mail as a letter with what Oui sends, says yes on the row, says
+// yes to the trash, then enlarges and resizes the page. Seeded at
+// /e2e/bilan, on its own node.
 
 
-test("a page as a bilan: a proposal's Oui, a batch, an item read as a letter, a page as a window", async ({ page, request }) => {
+test("a page as a bilan: a proposal's Oui, a shared card, an item read as a letter, a page as a window", async ({ page, request }) => {
   const problems: string[] = [];
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
@@ -29,28 +28,28 @@ test("a page as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect(pg).toBeVisible();
 
   // The bilan: its first paragraph larger than the « Pour info » after it.
-  const lead = pg.locator(".pg-doc > .md-p").first();
+  const lead = pg.locator(".pg-doc .md-p").first();
   await expect(lead).toHaveText("1 réponse attendue : Sam, avant vendredi. 1 hameçonnage dans le lot à jeter.");
-  const size = (n: number) => pg.locator(".pg-doc > .md-p").nth(n).evaluate((p) => parseFloat(getComputedStyle(p).fontSize));
+  const size = (n: number) => pg.locator(".pg-doc .md-p").nth(n).evaluate((p) => parseFloat(getComputedStyle(p).fontSize));
   expect(await size(0)).toBeGreaterThan(await size(1));
-  // Someone else's words: one sign in the head (its ⚠, no word), nothing on the block.
+  // Someone else's words: one sign in the head (its ⚠, no word), nothing on the lines.
   await expect(pg.locator(".pg-title .ext-mark")).toHaveCount(1);
-  await expect(pg.locator(".a2-block.ext")).toHaveCount(1);
-  await expect(pg.locator(".a2-block-mark")).toHaveCount(0); // no edge, no dot: the head says it
+  await expect(pg.locator(".a2-inline-ext")).toHaveCount(0);
   await expect(pg.getByText("extérieur", { exact: true })).toHaveCount(0);
 
-  // « À traiter »: each row what Eriphe proposes; Sam's with its one yes, its verb.
-  const todo = pg.locator(".a2-openrow").filter({ hasText: "Répondre à Sam" });
-  const lease = pg.locator(".a2-openrow").filter({ hasText: "À lire : l'avenant au bail" });
+  // « À traiter »: Sam's row with its one yes, its verb.
+  const rows = pg.locator(".md-item");
+  const todo = rows.filter({ hasText: "Devis terrasse" });
+  const lease = rows.filter({ hasText: "Avenant au bail" });
   await expect(todo).toHaveCount(1);
   await expect(todo.locator(".a2-inline-yes")).toHaveText("Envoyer");
   await expect(todo.locator(".a2-inline-yes")).toHaveAttribute("title", "Envoyer la réponse · « Devis terrasse » · Sam");
   await expect(lease.locator(".a2-inline-yes")).toHaveCount(0);
-  await expect(pg.locator(".pg-foot")).toHaveCount(0); // the card is on its row, not at the foot
+  await expect(pg.locator(".pg-foot")).toHaveCount(0); // the cards are on their rows, not at the foot
   await shots(page, "1-bilan");
 
   // Sam's mail, opened: a letter, then what Oui sends, the reply itself.
-  await todo.locator(".a2-openbtn").click();
+  await todo.locator(".md-title").click();
   const read = todo.locator(".a2-read");
   await expect(read.locator(".a2-read-from")).toContainText("Sam");
   await expect(read.locator(".a2-read-addr")).toHaveText("sam@example.org");
@@ -63,38 +62,29 @@ test("a page as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect(read.locator("summary")).toHaveText(["détails"]);
   await expect(read.locator(".a2-taint")).toHaveCount(0); // the page's head says it
   await shots(page, "2-mail-opened");
-  await todo.locator(".a2-openclose").click();
+  await todo.locator(".md-title").click();
+  await expect(read).toHaveCount(0);
 
-  // Its Oui on the row: the reply goes, the mail is settled and leaves.
-  await todo.locator(".a2-inline-yes").click();
+  // Its Oui on the row: the reply goes, the row says it is done.
+  await todo.locator(".a2-inline-yes").first().click();
   await expect.poll(async () => (await (await request.get("/e2e/tools")).json()).replied).toEqual(["a1"]);
-  await expect(todo).toHaveCount(0);
+  await expect(todo.locator(".a2-inline-yes")).toHaveCount(0);
   await expect(lease).toHaveCount(1);
 
-  // « À jeter »: a batch line carrying its rows' one card, all ticked;
-  // opened, one mail kept: its Oui says how many go.
-  const batch = pg.locator(".a2-batch").filter({ hasText: "à jeter" });
-  // « Pour info »: a batch with no card, its line only.
-  const infos = pg.locator(".a2-batch").filter({ hasText: "pour info" });
-  await expect(infos.locator(".a2-fold-label")).toHaveText("Les 2 mails pour info");
-  await expect(infos.locator(".a2-inline-yes")).toHaveCount(0);
-  await expect(batch.locator(".a2-fold-label")).toHaveText("3 mails inutiles à jeter");
-  const yes = batch.locator(".a2-fold-card .a2-inline-yes");
-  await expect(yes).toHaveText("Mettre 3 mails à la corbeille");
-  await batch.locator(".a2-fold-head").click();
-  await expect(batch.locator(".a2-batchrows .a2-inline-yes")).toHaveCount(0); // its rows are quiet: the Oui is the line's
-  await batch.getByRole("checkbox", { name: "Décocher « Lettre du dimanche » : le garder" }).uncheck();
-  await expect(batch.locator(".a2-batch-kept")).toHaveText("1 gardé(s)");
-  await expect(yes).toHaveText("Mettre 2 mails à la corbeille");
-  await shots(page, "3-batch-open");
-  await yes.click();
+  // « À jeter »: three rows share one card, each says how many share it;
+  // a Oui on any of them answers it: the three mails go.
+  const junk = rows.filter({ has: page.locator('.a2-inline-shared') });
+  await expect(junk).toHaveCount(3);
+  await expect(junk.first().locator(".a2-inline-shared")).toContainText("3");
+  await expect(junk.first().locator(".a2-inline-yes")).toHaveText("Mettre 3 mails à la corbeille");
+  await shots(page, "3-shared");
+  await junk.first().locator(".a2-inline-yes").click();
   // Its own calls, each as it was kept: the test core is shared with the
   // other files (view-calls.spec.ts trashes too).
   const mine = (all: string[]) => all.filter((x) => /:[aij]\d/.test(x)).sort();
-  await expect.poll(async () => mine((await (await request.get("/e2e/tools")).json()).trashed)).toEqual(["perso:j1", "perso:j3"]);
-  // Decided, the batch asks nothing more: the mail kept stays, no Oui.
-  await expect(batch.locator(".a2-fold-label")).toHaveText("1 mails inutiles à jeter");
-  await expect(batch.locator(".a2-inline-yes")).toHaveCount(0);
+  await expect.poll(async () => mine((await (await request.get("/e2e/tools")).json()).trashed)).toEqual(["perso:j1", "perso:j2", "perso:j3"]);
+  // Decided, the rows ask nothing more.
+  await expect(pg.locator(".a2-inline-yes")).toHaveCount(0);
   await shots(page, "5-after-actions");
 
   // The ⋯ menu: what was decided.
@@ -113,7 +103,7 @@ test("a page as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await pg.getByRole("button", { name: "Agrandir" }).click();
   await expect(box).toHaveClass(/\bbig\b/);
   await expect.poll(async () => (await box.boundingBox())!.width).toBeGreaterThan(w0 + 200);
-  const text = await pg.locator(".pg-doc > .md-p").first().boundingBox();
+  const text = await pg.locator(".pg-doc .md-p").first().boundingBox();
   expect(text!.width).toBeLessThanOrEqual(761);
   await rest(page); // the camera frames it
   // No bubble rests behind the bar: the page keeps the bar's room clear.

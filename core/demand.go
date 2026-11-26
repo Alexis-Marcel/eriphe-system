@@ -46,8 +46,8 @@ type keeper struct {
 // batch is its card.
 func (c *core) keepCall(ctx context.Context, k keeper, tool string, input map[string]any) accessQuestion {
 	raw, _ := json.Marshal(input)
-	// Its node: the one whose sources list the items it names (its
-	// keeper's first), else its keeper's.
+	// Its node: its keeper's, on the rows of the items its page
+	// references that the call names (callRows).
 	node, labels := c.callRows(ctx, k.node, tool, input)
 	if node == "" {
 		node = k.node

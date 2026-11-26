@@ -42,8 +42,6 @@ export const ICONS: Record<string, ReactNode> = {
   warning: <>{P("M12 3 2.5 20h19L12 3Z")}{P("M12 10v4.5")}{P("M12 17.5v.01")}</>,
 };
 
-export const ICON_NAMES = Object.keys(ICONS);
-
 // Icon draws one icon of the set, hidden from assistive technology: what it
 // means is said by the text beside it. An unknown name draws nothing.
 export function Icon({ name, className = "" }: { name: unknown; className?: string }) {

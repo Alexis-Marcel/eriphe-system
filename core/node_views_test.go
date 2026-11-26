@@ -275,13 +275,11 @@ func TestRunInExternalNodeIsExternal(t *testing.T) {
 
 // A skill and the monitor it brings are made by one yes, or neither: a
 // monitor of its name made meanwhile refuses the yes, a step that fails
-// takes the monitor back, and the card still waits; no makes neither. A
-// page's block reads only a monitor the user approved: until then, its
-// tool or resource. A source out of the catalog is refused.
+// takes the monitor back, and the card still waits; no makes neither.
 func TestSkillMonitorAllOrNothing(t *testing.T) {
 	c, _, _ := viewCore(t)
 	page, isErr := callBrainTool(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "La prod",
-		"body": "```eriphe:block etat\n" + `{"components": {"component": "Text", "text": {"@path": "/cpu/data/cpu"}}, "sources": {"cpu": {"tool": "monitor/status", "args": {"service": "web"}}}}` + "\n```\n"})
+		"body": "> [!figures]\n> - CPU : [0 %](on:monitor.crossed/cpu)\n"})
 	if isErr {
 		t.Fatal(page)
 	}

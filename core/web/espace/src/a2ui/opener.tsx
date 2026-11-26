@@ -1,105 +1,26 @@
-import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import type { ListRow, Opened, SourceList } from "../data/api";
+import { useEffect, useState } from "react";
+import type { Opened } from "../data/api";
 import { useWords } from "../i18n";
 import { stamp } from "./format";
 import { Icon } from "./icons";
-import type { Lists } from "./lists";
 import { answerOne, useMoved, useProposals, type ProposalView } from "./proposals";
 
-// An item opened in place (item_open.go): a row of a List whose source
-// says how one item is read in full opens below itself on a click, or on
-// its disclosure button (the keyboard's way), and closes the same way or
-// by its ✕. eriphe-core reads the item with the source's read tool, the
-// first time it is opened (a read that needs the user's yes is not made:
-// a line says to ask Eriphe, who proposes it on a card), and the page
-// keeps what it said for its session (lists.opened), drawn again as it
-// was when the page is. Opening is never a yes.
+// An item a page references, opened in place below its line
+// (page/items.tsx, item_open.go): eriphe-core reads it with its server's
+// read tool, the first time it is opened (a read that needs the user's
+// yes is not made: a line says to ask Eriphe, who proposes it on a card).
+// Opening is never a yes.
 // It reads as a letter: who and when, quietly, on one line; its subject;
-// its text, shown as text, never as HTML. The item's note only when the
-// row does not already say it. The card that waits on it (item.card,
-// code's list, never the block's data) comes next: what its Oui does,
-// the very words or event it makes, and its Oui there. One « détails »
-// at the foot holds the exact call and the item as read. Someone else's
-// words are marked once, by the page's head (its ⚠): nothing
-// here repeats it. A click on a box, a button (its card's Oui) or a link
-// of the row does not open it.
+// its text, shown as text, never as HTML. The card that waits on it
+// (code's, never the page's words) comes next: what its Oui does, the
+// very words or event it makes, and its Oui there. One « détails » at the
+// foot holds the exact call and the item as read. Someone else's words
+// are marked once, by the page's head (its ⚠): nothing here repeats it.
 
 // OpenState is a row's: open or not, and what was read.
 // pending is the read under way, kept with it: a row drawn again while it
 // reads (the page read again) takes it up.
 export type OpenState = { open: boolean; read?: Opened; loading?: boolean; pending?: Promise<Opened> };
-
-const INTERACTIVE = "button, a, input, label, select, textarea, [role=button]";
-
-export function Opener({ surface, list, lists, item, children }: { surface: string; list: SourceList; lists: Lists; item: ListRow; children: ReactNode }) {
-  const { t } = useWords();
-  const key = `${surface}\u0000${list.component}\u0000${item.id}`;
-  const [st, setSt] = useState<OpenState>(() => lists.opened?.get(key) ?? { open: false });
-  useEffect(() => void lists.opened?.set(key, st), [lists.opened, key, st]);
-  const panel = useId();
-  const head = useRef<HTMLDivElement>(null);
-
-  // A read under way, from this row or the one drawn before it: its
-  // answer, when it comes, is the row's, kept at once (the page may have
-  // drawn the list again meanwhile).
-  const pending = st.loading ? st.pending : undefined;
-  useEffect(() => {
-    if (!pending) return;
-    let here = true;
-    void pending.then((r) => {
-      const next = { open: true, read: r, loading: false };
-      lists.opened?.set(key, next);
-      if (here) setSt(next);
-    });
-    return () => {
-      here = false;
-    };
-  }, [pending, lists.opened, key]);
-
-  const read = () => {
-    const p = (lists.open?.(surface, list, item.id) ?? Promise.resolve<Opened>({ error: t("espace.open.error") })).catch(() => ({
-      error: t("espace.open.error"),
-    }));
-    const next = { ...st, open: true, loading: true, pending: p };
-    lists.opened?.set(key, next);
-    setSt(next);
-  };
-  const toggle = () => {
-    if (st.open) setSt((s) => ({ ...s, open: false }));
-    else if (st.read && !st.read.error) setSt((s) => ({ ...s, open: true }));
-    else void read();
-  };
-  const onRow = (e: MouseEvent) => {
-    if ((e.target as Element).closest(INTERACTIVE)) return; // its own gestures
-    toggle();
-  };
-
-  return (
-    <div className={`a2-openrow${st.open ? " open" : ""}`}>
-      <div className="a2-openhead" ref={head} onClick={onRow}>
-        <div className="a2-openmain">{children}</div>
-        <button
-          type="button"
-          className="a2-openbtn"
-          aria-expanded={st.open}
-          aria-controls={panel}
-          aria-label={st.open ? t("espace.open.close") : t("espace.open.show", item.title || item.id)}
-          onClick={toggle}
-        >
-          {st.open ? "▾" : "▸"}
-        </button>
-      </div>
-      {st.open && (
-        <div id={panel} className="a2-opened" role="region" aria-label={item.title || item.id}>
-          <button type="button" className="a2-openclose" aria-label={t("espace.open.close")} onClick={() => setSt((s) => ({ ...s, open: false }))}>
-            ✕
-          </button>
-          <OpenedView st={st} said={head.current?.textContent ?? ""} marked={!!lists.marked?.(surface)} card={item.card} where={{ surfaceId: surface, componentId: list.component }} />
-        </div>
-      )}
-    </div>
-  );
-}
 
 // useCard is the card that waits on an opened item, read again whenever it
 // moves (its Oui on the row, a channel, another page).
@@ -132,26 +53,23 @@ export function sender(from: string): { name: string; address?: string } {
 // a message) rather than a fact on a line.
 const LONG = 90;
 
-// OpenedView is an item opened, as read (st): a List's row's, or a page's
-// line's (page/Body.tsx). said: what its row says already (its note is
-// not said again); marked: the page's head already says someone else's
+// OpenedView is an item opened, as read (st), below a page's line
+// (page/items.tsx). marked: the page's head already says someone else's
 // words; card: the card that waits on it, its Oui here too; named: the
 // page's words for it, said with a warning when eriphe-core finds they do
 // not say the item read (misleading).
-export function OpenedView({ st, said, marked, card, where, named }: { st: OpenState; said: string; marked: boolean; card?: string; where: { surfaceId: string; componentId: string }; named?: string }) {
+export function OpenedView({ st, marked, card, where, named }: { st: OpenState; marked: boolean; card?: string; where: { surfaceId: string; componentId: string }; named?: string }) {
   const { t, lang } = useWords();
   const [p, setP] = useCard(card);
   const r = st.read;
   if (st.loading || !r) return <p className="a2-openwait" role="status">{t("espace.open.loading")}</p>;
   if (r.error) return <p className="a2-openfail" role="status">{r.error}</p>;
-  // The note, only when the row does not already say it.
-  const note = r.note && (r.note.group || r.note.note) && !(r.note.note && said.includes(r.note.note)) ? r.note : undefined;
   const who = r.from ? sender(r.from) : null;
   const when = r.date ? stamp(lang, r.date) || r.date : "";
   const exact = (p?.fields ?? []).filter((f) => f.detail);
-  // Someone else's words in a block not marked as such (the page's head says it
+  // Someone else's words on a page not marked as such (the page's head says it
   // otherwise): a small amber sign, its sentence on hover.
-  const taint = (r.external || note?.external) && !marked && (
+  const taint = r.external && !marked && (
     <span className="a2-taint" role="img" title={t("espace.external.why")} aria-label={t("espace.external.why")}>
       <Icon name="warning" />
     </span>
@@ -180,12 +98,6 @@ export function OpenedView({ st, said, marked, card, where, named }: { st: OpenS
         </p>
       )}
       {r.title && <h4 className="a2-read-title">{r.title}</h4>}
-      {note && (
-        <p className="a2-read-note">
-          {note.group ? t("espace.open.group", note.group) : t("espace.open.note")}
-          {note.note ? ` : ${note.note}` : ""}
-        </p>
-      )}
       {r.body && <div className="a2-read-text">{r.body}</div>}
       {p && card && <OnYes p={p} card={card} where={where} onAnswered={setP} />}
       {(exact.length > 0 || r.raw) && (

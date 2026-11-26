@@ -23,9 +23,6 @@ import (
 //   - "progress": a task's line of where its node's work is
 //     ({node, text, at});
 //
-//   - "source": a live block's new value ({node, block, name, value}), at
-//     /<name> of the block's data, as the page draws it;
-//
 //   - "show": the brain asks to open a node's page ({node, by, at, seq}),
 //     the last request at once, then each new one;
 //
