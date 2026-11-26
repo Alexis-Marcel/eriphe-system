@@ -215,7 +215,7 @@ func ReadPage(body string) *Page {
 			continue
 		}
 		if m := pageDefRe.FindStringSubmatch(t); m != nil {
-			d := RefDef{Label: refLabel(m[1]), Target: m[2], Line: ln}
+			d := RefDef{Label: RefLabel(m[1]), Target: m[2], Line: ln}
 			if s, id, ok := strings.Cut(d.Target, ":"); ok && schemeRe.MatchString(s) {
 				d.Scheme, d.ID = s, id
 			}
@@ -244,9 +244,9 @@ func ReadPage(body string) *Page {
 
 var schemeRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*$`)
 
-// refLabel is a label as references match it: without case, its spaces
+// RefLabel is a label as references match it: without case, its spaces
 // one each.
-func refLabel(s string) string { return strings.Join(strings.Fields(strings.ToLower(s)), " ") }
+func RefLabel(s string) string { return strings.Join(strings.Fields(strings.ToLower(s)), " ") }
 
 func blank(s string) bool { return strings.TrimSpace(s) == "" }
 
@@ -559,6 +559,71 @@ func (p *Page) Heading(ln int) *PageBlock {
 	return nil
 }
 
+// ownLists are the callout types that draw their lists their own way (a
+// figure, a step, an event, a person's facts), not as rows: their items
+// carry no row's cards.
+var ownLists = map[string]bool{"figures": true, "chart": true, "steps": true, "agenda": true, "person": true}
+
+// Row is the line of the item a reader sees holding item line ln without
+// opening anything: the outermost item whose line or detail holds it, in
+// a list of the page or of a callout that draws its lists as rows, open
+// (an alert, a note; not a figures or an agenda, nor a folded one). ln itself for an item in no
+// other's detail; 0 when no row starts at ln.
+func (p *Page) Row(ln int) int {
+	if ln <= 0 {
+		return 0
+	}
+	return rowIn(p.Blocks, ln, 0)
+}
+
+// Unseen tells a line of the page's own callouts the reader does not see
+// as written: in the body of a folded one, or in a chart (its table drawn
+// as a chart). A card: link there places nothing.
+func (p *Page) Unseen(ln int) bool {
+	for _, b := range p.Blocks {
+		if b.Kind == KindCallout && ln > b.Line && ln <= b.End {
+			return b.Fold == "-" || b.Type == "chart"
+		}
+	}
+	return false
+}
+
+// rowIn finds item line ln in blocks; outer is the item whose detail
+// they are (0 for none).
+func rowIn(bs []PageBlock, ln, outer int) int {
+	for _, b := range bs {
+		if ln < b.Line || ln > b.End {
+			continue
+		}
+		switch b.Kind {
+		case KindCallout:
+			if outer == 0 && (ownLists[b.Type] || b.Fold == "-") {
+				return 0 // drawn its own way, or folded: no row the reader sees
+			}
+			if r := rowIn(b.Body, ln, outer); r != 0 {
+				return r
+			}
+		case KindList:
+			for _, it := range b.Items {
+				if ln < it.Line || ln > it.End {
+					continue
+				}
+				top := outer
+				if top == 0 {
+					top = it.Line
+				}
+				if it.Line == ln {
+					return top
+				}
+				if r := rowIn(it.Detail, ln, top); r != 0 {
+					return r
+				}
+			}
+		}
+	}
+	return 0
+}
+
 // inline reads each line's references and links, outside code.
 func (p *Page) inline() {
 	for i, t := range p.lines {
@@ -625,7 +690,7 @@ func inlineTokens(s string) []token {
 					if strings.TrimSpace(label) == "" {
 						label = text
 					}
-					t.ref, t.label = true, refLabel(label)
+					t.ref, t.label = true, RefLabel(label)
 				case m[6] >= 0:
 					kind, target, ok := strings.Cut(s[i+m[6]:i+m[7]], ":")
 					if !ok || !isLinkKind(kind) {

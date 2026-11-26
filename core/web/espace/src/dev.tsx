@@ -36,7 +36,7 @@ export function dev(lang: Lang): Dev {
     page: async (id, version) => sample.page(id, version) ?? (physics && store.getState().nodes[id] ? sample.pageOf(store.getState().nodes[id]) : null),
     trace: async (id) => sample.trace(id),
     file: async (id) => sample.file(id),
-    open: (id, _block, _source, item) => sampleOpen(id, item),
+    open: (id, what) => sampleOpen(id, "item" in what ? what.item : what.ref),
   });
   return {
     proposals: sampleProposals(lang),

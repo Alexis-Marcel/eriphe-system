@@ -19,9 +19,10 @@ import (
 // fold into one: the oldest, whoever kept them (a run, the brain).
 //
 //   - The same thing: the same server and tool, the same arguments but
-//     the one that names items its node's sources list (kept with the
-//     call: its labels), a list of their ids or one id. Nothing of a
-//     tool's own: the source's items descriptor says what an id is. A
+//     the one that names items its node's page references or its
+//     sources list (kept with the call: its labels), a list of their ids
+//     or one id. Nothing of a tool's own: the page's reference (or the
+//     source's items descriptor) says what an id is. A
 //     different account or destination is another argument: another
 //     card. A call on no item folds with nothing: the same call waiting
 //     in the node is the same demand (keepCall, demand.go).

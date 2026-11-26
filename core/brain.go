@@ -539,7 +539,6 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) (undecided string) {
 		}
 		if e.Type == "turn_end" {
 			c.fileTurnAnswer()                  // a long answer nothing filed goes in a node (node_net.go)
-			c.placeDemands()                    // a card it kept on no item and did not place: at its page's end (demand.go)
 			c.cardsTurnEnded()                  // what it proposed after its last message
 			c.attentionAnswered(c.notifyTime()) // its answer to the user done: a breakpoint (attention.go)
 		}

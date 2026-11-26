@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -23,12 +24,13 @@ import (
 //     how many and of what kind (the kind as the tool declares it, else
 //     « élément »). The account it names is said apart, quietly
 //     (accountWords: « compte Gmail »).
-//   - The items are those of a node's sources its input names by their
-//     id (a string, or a list of them), with their title and detail (a
-//     mail's subject and sender) as the source lists them, kept with the
-//     call when it is kept (the item may leave the list after); at most
-//     callLinesMax named, then « et N autres »; an id no source lists is
-//     counted, never guessed. Never the words a model wrote of them (an
+//   - The items are those its node's page references, or its sources
+//     list, that its input names by their id (a string, or a list of
+//     them), with their title and detail (a mail's subject and sender) as
+//     their server read them (page_items.go) or the source lists them,
+//     kept with the call when it is kept (the item may leave the page
+//     after); at most callLinesMax named, then « et N autres »; an id
+//     not read is counted, never guessed. Never the words a model wrote of them (an
 //     item's note). A title read from a server the user does not trust
 //     keeps its quiet mark (⚠): someone else's words.
 //   - A call kept after reading external content stays « extérieur »:
@@ -40,6 +42,9 @@ type itemLabel struct {
 	Title  string `json:"title,omitempty"`
 	Detail string `json:"detail,omitempty"`
 	Source string `json:"source,omitempty"` // the node's source that lists it
+	// Server: the catalog server whose item the node's page references
+	// (page_items.go); "" for a source's
+	Server string `json:"server,omitempty"`
 	// External: read from a server the user does not trust, its words
 	// someone else's: shown marked
 	External bool `json:"external,omitempty"`
@@ -88,13 +93,17 @@ func (c *core) callItemLabels(node, tool string, input map[string]any) []itemLab
 	return out
 }
 
-// callRows is the node whose sources list the items a call names, and
-// those items: prefer's first (the node the turn is about), else any
+// callRows is the node whose page references the items a call names, or
+// whose sources list them, and those items: prefer's (the node the turn
+// is about), its page's references first (page_items.go); else any
 // node's, not archived, whose sources last read one of them; "" when
-// none lists any.
-func (c *core) callRows(prefer, tool string, input map[string]any) (string, []itemLabel) {
+// none lists any. A page's references are looked for in prefer only.
+func (c *core) callRows(ctx context.Context, prefer, tool string, input map[string]any) (string, []itemLabel) {
 	if c.nodes == nil {
 		return "", nil
+	}
+	if ls := c.refItemLabels(ctx, prefer, tool, input); len(ls) > 0 {
+		return prefer, ls
 	}
 	if ls := c.callItemLabels(prefer, tool, input); len(ls) > 0 {
 		return prefer, ls

@@ -674,7 +674,6 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 			c.cardNow(cardCalls, batch, "", "task:"+r.Task)
 		}
 	}
-	c.placeDemands()
 	source, tainted := "skill:"+r.Skill, c.taskResultTaint(r.Task) != ""
 	if weight == weightInterrupts {
 		c.runUrgent(r, st)

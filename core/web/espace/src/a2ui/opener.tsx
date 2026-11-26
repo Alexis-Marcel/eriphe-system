@@ -132,7 +132,13 @@ export function sender(from: string): { name: string; address?: string } {
 // a message) rather than a fact on a line.
 const LONG = 90;
 
-function OpenedView({ st, said, marked, card, where }: { st: OpenState; said: string; marked: boolean; card?: string; where: { surfaceId: string; componentId: string } }) {
+// OpenedView is an item opened, as read (st): a List's row's, or a page's
+// line's (page/Body.tsx). said: what its row says already (its note is
+// not said again); marked: the page's head already says someone else's
+// words; card: the card that waits on it, its Oui here too; named: the
+// page's words for it, said with a warning when eriphe-core finds they do
+// not say the item read (misleading).
+export function OpenedView({ st, said, marked, card, where, named }: { st: OpenState; said: string; marked: boolean; card?: string; where: { surfaceId: string; componentId: string }; named?: string }) {
   const { t, lang } = useWords();
   const [p, setP] = useCard(card);
   const r = st.read;
@@ -167,6 +173,11 @@ function OpenedView({ st, said, marked, card, where }: { st: OpenState; said: st
             </time>
           )}
         </header>
+      )}
+      {r.misleading && named && (
+        <p className="a2-read-lie" role="note">
+          <Icon name="warning" /> {t("espace.open.misleading", named)}
+        </p>
       )}
       {r.title && <h4 className="a2-read-title">{r.title}</h4>}
       {note && (

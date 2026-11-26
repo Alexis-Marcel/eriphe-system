@@ -178,10 +178,11 @@ func TestStaleItemsLeaveTheirDemand(t *testing.T) {
 	}
 }
 
-// A run's call on no item of its node: its card is a block of the node,
-// where the run places it; one it does not place, code puts at the end
-// of the page. Placed or not, it is not at the page's foot.
-func TestDemandOnNoItemIsABlock(t *testing.T) {
+// A call on no item waits in its node: its keeper is told how to place
+// it in a line of the page (card:), and one it places is drawn there, not
+// at the foot; one it does not place waits at the foot, code writing
+// nothing in the page.
+func TestDemandOnNoItemIsPlacedByALine(t *testing.T) {
 	c, node, r := mailView(t)
 	keep(c, r.Task, "p1", "mcp__monitor__rollback", map[string]any{"version": "1.0"})
 	keep(c, r.Task, "p2", "mcp__monitor__rollback", map[string]any{"version": "2.0"})
@@ -190,39 +191,25 @@ func TestDemandOnNoItemIsABlock(t *testing.T) {
 	c.store.db.QueryRow(`SELECT id FROM access_asks WHERE permission_id = 'p2'`).Scan(&unplaced)
 	ref, other := proposalRef(cardCalls, placed), proposalRef(cardCalls, unplaced)
 	items, _ := c.store.inbox(r.Task)
-	if len(items) != 2 || !strings.Contains(fmt.Sprint(items[0].Data["message"]), `{"card": "`+ref+`"}`) {
+	if len(items) != 2 || !strings.Contains(fmt.Sprint(items[0].Data["message"]), "(card:"+ref+")") {
 		t.Fatalf("the run is not told how to place it: %+v", items)
 	}
 	// The run places the first under its plan, before its turn ends.
-	mustNodes(t, c, r.Task, "node_edit", map[string]any{"expect": lastHash(t, c, node), "block": "revenir", "value": map[string]any{"card": ref}})
+	mustNodes(t, c, r.Task, "node_edit", map[string]any{"old": "Les mails reçus.", "new": "Les mails reçus.\n\n[Revenir à la 1.0](card:" + ref + ")"})
+	before, _ := c.nodes.Read(node, 0)
 	endTurn(t, c, r.Task, "Deux retours en arrière proposés.")
-
-	d, _ := c.nodes.Read(node, 0)
-	var cards []string
-	for _, b := range d.Node.Blocks() {
-		if b.Card != "" {
-			cards = append(cards, b.Name+"="+b.Card)
-		}
-	}
-	if !slices.Equal(cards, []string{"revenir=" + ref, "carte_calls_" + fmt.Sprint(unplaced) + "=" + other}) {
-		t.Errorf("the node's card blocks %v", cards)
+	if d, _ := c.nodes.Read(node, 0); d.Version.N != before.Version.N {
+		t.Errorf("code wrote in the page: version %d after %d", d.Version.N, before.Version.N)
 	}
 	pg, _ := (&web{c: c}).nodePageOf(node, 0, "fr")
-	for _, want := range []string{ref, other} {
-		if !slices.ContainsFunc(pg.Parts, func(p pagePart) bool {
-			return p.Block != nil && p.Block.Proposal != nil && p.Block.Proposal.Ref == want
-		}) {
-			t.Errorf("%s is not drawn in the page", want)
-		}
-		if slices.ContainsFunc(pg.Cards, func(v proposalView) bool { return v.Ref == want }) {
-			t.Errorf("%s is at the foot", want)
-		}
+	if !slices.Equal(pg.Placed, []string{ref}) {
+		t.Errorf("placed %v, want %s", pg.Placed, ref)
 	}
-	// Placed once: its next pass changes nothing.
-	v := d.Version.N
-	c.placeDemands()
-	if d, _ := c.nodes.Read(node, 0); d.Version.N != v {
-		t.Errorf("placed again: version %d after %d", d.Version.N, v)
+	if slices.ContainsFunc(pg.Cards, func(v proposalView) bool { return v.Ref == ref }) {
+		t.Errorf("%s is at the foot too", ref)
+	}
+	if !slices.ContainsFunc(pg.Cards, func(v proposalView) bool { return v.Ref == other }) {
+		t.Errorf("%s is not at the foot: %+v", other, pg.Cards)
 	}
 }
 

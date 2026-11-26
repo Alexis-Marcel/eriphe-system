@@ -3,16 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"maps"
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
-	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
 // A demand: Eriphe asking the user's yes for calls it may not make alone,
@@ -23,13 +19,14 @@ import (
 //     own (its batch), and answers nothing: its keeper says it was not
 //     run. What differs between the brain and a run is only in keeper:
 //     where it is answered, its node, its taint, its run.
-//   - On items a node's sources list (by their ids in its input), it
-//     waits on their rows (item_cards.go); calls that do the same thing
-//     to other items of the node fold into one card (call_fold.go),
-//     whoever kept them, each item once. On no item, it is a block of its
-//     node, {"card": ref}, placed by its keeper where it reads best; one
-//     never placed is put at the end of the page by code (placeDemands).
-//     The same call waiting in the same node is the same demand.
+//   - On items its node's page references (page_items.go), or a node's
+//     sources list (by their ids in its input), it waits on their lines
+//     (item_cards.go); calls that do the same thing to other items of the
+//     node fold into one card (call_fold.go), whoever kept them, each item
+//     once. On no item, its keeper may place it in a line of its node's
+//     page where it reads best ([its words](card:ref)); one never placed
+//     waits at the foot of the page. The same call waiting in the same
+//     node is the same demand.
 //   - Its items leave the source: they leave the demand; one left with no
 //     item is withdrawn by code (staleDemands), never the user's no.
 //   - Tasks in containers ask their access their own way (access_card.go):
@@ -52,7 +49,7 @@ func (c *core) keepCall(ctx context.Context, k keeper, tool string, input map[st
 	raw, _ := json.Marshal(input)
 	// Its node: the one whose sources list the items it names (its
 	// keeper's first), else its keeper's.
-	node, labels := c.callRows(k.node, tool, input)
+	node, labels := c.callRows(ctx, k.node, tool, input)
 	if node == "" {
 		node = k.node
 	}
@@ -109,7 +106,7 @@ func (c *core) newDemand(ctx context.Context, k keeper, node string, labels []it
 	}
 	batch := id
 	if k.run != 0 && item != "" {
-		if b := c.runItemBatch(k.run, node, source, item); b != 0 {
+		if b := c.runItemBatch(k.run, node, source, n.Server, item); b != 0 {
 			batch = b
 		}
 	}
@@ -140,8 +137,7 @@ const (
 	keptByBrain = "Pas exécutée pour l'instant : la carte %s la demande à %s. Ne la relance pas et continue, tu restes disponible. S'il dit oui, eriphe-core l'exécute telle quelle et te donne le résultat."
 	keptByRun   = "Pas exécutée maintenant : eriphe-core la garde telle quelle sur la carte %s, que %s verra à la fin de ton tour ; s'il dit oui, elle sera exécutée. N'insiste pas et continue ; dis-le dans ton message final."
 	keptOnRows  = " Elle attend sur les lignes des éléments qu'elle touche."
-	keptBlock   = ` Place-la dans le document du nœud %s là où elle se lit le mieux (sous le plan qu'elle valide, par exemple) : node_edit avec un bloc {"card": "%s"} et rien d'autre ; sinon eriphe-core la met à la fin de la page.`
-	keptItem    = " Si elle porte sur un élément de ton nœud sans le nommer (un événement à créer pour un mail), passe plutôt sa référence %d à item_note (call) sur cet élément : elle attendra sur sa ligne."
+	keptBlock   = " Pour la placer dans la page du nœud %s là où elle se lit le mieux (sur la ligne de l'élément qu'elle concerne, sous le plan qu'elle valide), écris-y un lien [ses mots](card:%s) ; sinon elle attend en bas de la page."
 )
 
 // keptSay is what a keeper is told of the call it kept.
@@ -156,9 +152,6 @@ func (c *core) keptSay(k keeper, a accessQuestion) string {
 		s += keptOnRows
 	case a.Node != "":
 		s += fmt.Sprintf(keptBlock, a.Node, ref)
-		if k.run != 0 {
-			s += fmt.Sprintf(keptItem, a.ID)
-		}
 	}
 	return s
 }
@@ -301,56 +294,6 @@ func (c *core) staleDemands(ctx context.Context, node string, r nodeRead) {
 	}
 }
 
-// placeDemands puts at the end of its node's page each card that waits
-// on no item and that its keeper did not place: a block {"card": ref},
-// written by code. Its keeper had its turn (the brain's, a run's) to put
-// it where it reads best.
-func (c *core) placeDemands() {
-	if c.nodes == nil {
-		return
-	}
-	for _, batch := range c.proposedBatches() {
-		asks := c.batchAsks(batch)
-		if len(asks) == 0 || asks[0].Node == "" || asks[0].TaskID == "" || !c.proposalOf(cardCalls, batch).Pending {
-			continue
-		}
-		if slices.ContainsFunc(asks, func(a accessQuestion) bool { return len(askItems(a)) > 0 }) {
-			continue // on its items' rows
-		}
-		c.placeCard(asks[0].Node, proposalRef(cardCalls, batch))
-	}
-}
-
-// placeCard appends a card block to a node's document, unless one of its
-// blocks places that card already.
-func (c *core) placeCard(node, ref string) {
-	if !c.nodeHasCard(node, ref) {
-		return
-	}
-	for try := 0; try < 3; try++ {
-		d, err := c.nodes.Read(node, 0)
-		if err != nil || !d.Node.Meta.Archived.IsZero() {
-			return
-		}
-		if slices.ContainsFunc(d.Node.Blocks(), func(b *nodefile.Block) bool { return b.Card == ref }) {
-			return
-		}
-		name := "carte_" + strings.ReplaceAll(ref, ":", "_")
-		_, err = c.nodes.Change(node, d.Version.Hash, nodeByCode, func(n *nodefile.Node) error {
-			return n.PutAuthorBlock(name, []byte(`{"card": "`+ref+`"}`), "")
-		})
-		if err == nil {
-			log.Printf("demand: %s placed at the end of node %s", ref, node)
-			c.nodeMoved(node, false)
-			return
-		}
-		if !errors.Is(err, nodestore.ErrConflict) {
-			log.Printf("demand: %s: not placed in node %s: %v", ref, node, err)
-			return
-		}
-	}
-}
-
 // answerCall is a page's yes or no on one call of a card (a skill's
 // page): yes runs it alone, as kept; no refuses it; the card's other
 // calls wait on.
@@ -451,5 +394,4 @@ func (c *core) migrateDemands(ctx context.Context) {
 			c.staleDemands(ctx, node, r)
 		}
 	}
-	c.placeDemands()
 }

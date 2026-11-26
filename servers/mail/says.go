@@ -58,7 +58,7 @@ var says = map[string]map[string]any{
 // opens are the fields of an item a read tool says, for eriphe-core to
 // show it opened: its _meta "eriphe/open" (core/README.md, Items).
 var opens = map[string]map[string]string{
-	"read_message": {"title": "subject", "from": "from", "date": "date", "body": "body"},
+	"read_message": {"id": "id", "title": "subject", "from": "from", "date": "date", "body": "body"},
 }
 
 // metaOf is a tool's _meta: how eriphe-core says its call, and the fields
