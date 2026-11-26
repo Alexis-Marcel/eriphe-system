@@ -181,20 +181,16 @@ func cardsOf(c *core, kind string) []proposal {
 	return out
 }
 
-// « Surveille mes mails »: the brain writes the page at once, no card,
-// and proposes the skill that maintains it, its monitor on the same card;
-// neither runs before the yes, and the one yes makes both. The node is
-// maintained only once the skill is on: computed, never in its file. A
-// mail comes: the monitor wakes the skill, whose run works in its home
-// node: it notes the mail, opens « Répondre à Sam » with a draft, and its
-// send is kept for a « Send? » card on the mail. Nothing is sent before
-// that yes.
 // TestSkillCardWaitsWhereProposed: a skill's version waits in the node
-// of the turn that proposed it, like any card; never on the page the
-// skill maintains, nor where an earlier version of it waited (#784).
+// of the turn or task that proposed it, like any card; never on the page
+// the skill maintains, nor where an earlier version of it waited (#784).
 func TestSkillCardWaitsWhereProposed(t *testing.T) {
 	c, _, _ := viewCore(t)
-	home, _ := mailPage(t, c, "Note chaque mail.")
+	home, first := mailPage(t, c, "Note chaque mail.")
+	if err := c.decideProposal(context.Background(), cardSkill, first.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	ref := proposalRef(cardSkill, first.ID)
 	out, isErr := callBrainTool(t, c, "node_open", map[string]any{"title": "Améliorer Mes mails",
 		"goal": "Décider avec l'utilisateur comment trier mieux ses mails."})
 	if isErr {
@@ -204,24 +200,37 @@ func TestSkillCardWaitsWhereProposed(t *testing.T) {
 	c.turn.about(talk) // the owner decides here
 	sk := mailSkill("Note chaque mail ; propose d'archiver ce qui ne compte pas.")
 	sk["node"] = home
+	delete(sk, "monitor") // on already
 	if out, isErr := callBrainTool(t, c, "write_skill", sk); isErr {
 		t.Fatalf("write_skill: %v", out)
 	}
-	cards := cardsOf(c, cardSkill)
-	if len(cards) != 1 {
-		t.Fatalf("cards %+v", c.pendingProposals())
+	if len(cardsOf(c, cardSkill)) != 1 || !cardWaitsOn(c, talk) || cardWaitsOn(c, home) {
+		t.Fatalf("waits in the discussion %v, on the page %v", cardWaitsOn(c, talk), cardWaitsOn(c, home))
 	}
-	if !cardWaitsOn(c, talk) {
-		t.Fatal("the new version's card does not wait in the node it was proposed from")
+	if got := c.cardNodes(ref); !slices.Equal(got, []string{talk}) {
+		t.Fatalf("linked to %v, want only %s: not where the first version waited", got, talk)
 	}
-	if cardWaitsOn(c, home) {
-		t.Fatal("the new version's card waits on the page the skill maintains")
+
+	// A task that follows the skill proposes one: its card waits in the
+	// task's node.
+	if err := c.decideProposal(context.Background(), cardSkill, first.ID, false); err != nil {
+		t.Fatal(err)
 	}
-	if got := c.cardNodes(proposalRef(cardSkill, cards[0].ID)); !slices.Equal(got, []string{talk}) {
-		t.Fatalf("linked to %v, want only %s", got, talk)
+	task, _ := launched(t, c, map[string]any{"ask": "Trie mieux mes mails.", "skill": "tri-mails", "node": talk})
+	mustNodes(t, c, task.ID, "skill_propose", map[string]any{"skill": "tri-mails", "instructions": "Note chaque mail, groupe-les par expéditeur.", "why": "Plus lisible."})
+	if got, want := c.cardNodes(ref), c.taskNode(task.ID); !slices.Equal(got, []string{want}) || want == home {
+		t.Fatalf("linked to %v, want only the task's node %s", got, want)
 	}
 }
 
+// « Surveille mes mails »: the brain writes the page at once, no card,
+// and proposes the skill that maintains it, its monitor on the same card;
+// neither runs before the yes, and the one yes makes both. The node is
+// maintained only once the skill is on: computed, never in its file. A
+// mail comes: the monitor wakes the skill, whose run works in its home
+// node: it notes the mail, opens « Répondre à Sam » with a draft, and its
+// send is kept for a « Send? » card on the mail. Nothing is sent before
+// that yes.
 func TestMailViewOneYes(t *testing.T) {
 	c, fm, now := viewCore(t)
 	node, v := mailPage(t, c, "Note chaque mail. Pour un mail qui attend une réponse, ouvre un node « Répondre à … » avec un brouillon, et appelle l'envoi : il attend le oui.")
