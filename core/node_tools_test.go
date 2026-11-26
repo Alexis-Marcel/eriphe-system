@@ -52,7 +52,7 @@ func TestBrainNodeEditNeedsID(t *testing.T) {
 			}
 		}
 	}
-	if !slices.Contains(schema.Required, "id") || !slices.Contains(schema.Required, "expect") {
+	if !slices.Contains(schema.Required, "id") || slices.Contains(schema.Required, "expect") {
 		t.Fatalf("required %v", schema.Required)
 	}
 	if d := schema.Properties["id"].Description; d == "" || strings.Contains(d, "leave it out") {
@@ -60,7 +60,7 @@ func TestBrainNodeEditNeedsID(t *testing.T) {
 	}
 	id := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Liste de courses", "body": "Du pain."})["id"].(string)
 	d, _ := c.nodes.Read(id, 0)
-	mustBrainNodes(t, c, "node_edit", map[string]any{"id": id, "expect": d.Version.Hash, "old": "pain", "new": "lait"})
+	mustBrainNodes(t, c, "node_edit", map[string]any{"id": id, "old": "pain", "new": "lait"})
 	if d, _ := c.nodes.Read(id, 0); d.Node.Text() != "Du lait." {
 		t.Errorf("edited %q", d.Node.Text())
 	}
@@ -85,15 +85,21 @@ func TestBrainNodeTools(t *testing.T) {
 		t.Fatalf("read: %v", read)
 	}
 	hash := read["hash"].(string)
-	w := mustBrainNodes(t, c, "node_write", map[string]any{"id": id, "body": "Un devis reçu.", "expect": hash})
+	mustBrainNodes(t, c, "node_write", map[string]any{"id": id, "body": "Un devis reçu.", "expect": hash})
 	// Stale: made on the version before.
 	if _, msg := brainNodes(t, c, "node_write", map[string]any{"id": id, "body": "Écrasé.", "expect": hash}); !strings.Contains(msg, "changed since") {
 		t.Errorf("a stale write: %q", msg)
 	}
-	if _, msg := brainNodes(t, c, "node_edit", map[string]any{"id": id, "old": "Un", "new": "Deux", "expect": hash}); !strings.Contains(msg, "changed since") {
-		t.Errorf("a stale edit: %q", msg)
+	// A line edit needs no version: made after an older read, it
+	// applies while its line is there, and is refused once it is gone.
+	mustBrainNodes(t, c, "node_edit", map[string]any{"id": id, "old": "Un devis", "new": "Deux devis", "expect": hash})
+	if _, msg := brainNodes(t, c, "node_edit", map[string]any{"id": id, "old": "Un devis", "new": "Trois devis"}); !strings.Contains(msg, "read it again") {
+		t.Errorf("an edit of a line gone: %q", msg)
 	}
-	mustBrainNodes(t, c, "node_edit", map[string]any{"id": id, "old": "Un devis", "new": "Deux devis", "expect": w["hash"]})
+	// A block still names its version.
+	if _, msg := brainNodes(t, c, "node_edit", map[string]any{"id": id, "block": "b", "value": map[string]any{"components": map[string]any{"component": "Text", "text": "x"}}}); !strings.Contains(msg, "expect") {
+		t.Errorf("a block without expect: %q", msg)
+	}
 	if d, _ := c.nodes.Read(id, 0); d.Node.Text() != "Deux devis reçus." && !strings.HasPrefix(d.Node.Text(), "Deux devis") {
 		t.Errorf("edited: %q", d.Node.Text())
 	}

@@ -139,6 +139,74 @@ written with a title since changed then waits.
 A node's links, the graph's edges, are its text's links (resolved) and its front matter's `links`
 (code's), together.
 
+## The page (format 3)
+
+In format 3 a node's body is a **Markdown page**, and only that: everything the page shows is
+written in the file, so that a reader without Eriphe (Obsidian, another agent, the search) finds it
+all. Eriphe draws it better, never otherwise. Format 3 is described here ahead of its conversion:
+until the conversion of the blocks lands, files stay in format 2 and a body may still hold blocks
+(below), which the page reader reads as code.
+
+[`core/nodefile`](../core/nodefile) reads a page (`ReadPage`, `md.go`) into a tree, checks it
+(`Check`, `check.go`) and changes one line of it (`lines.go`). Go's reading is the reference; the
+workspace reads the same pages the same way, both held to the fixture pages of
+[`core/nodefile/testdata/pages`](../core/nodefile/testdata/pages) (each page with its tree and its
+problems as JSON). Lines are counted from 1 in the body, what follows the front matter.
+
+**What a page holds.** Plain Markdown, with Obsidian's conventions where they exist:
+
+- **Headings** `#` to `######`, paragraphs, tables, `---`, fenced code (`` ```diff `` for a diff),
+  `[[Title]]` links and `![[Title]]` alone on a line to embed another node.
+- **Lists.** An item is one line; the lines indented under it (spaces or tabs, a tab counting four)
+  are its **detail**, read as blocks of their own. A task is `- [ ]` (open), `- [x]` (done), `- [/]`
+  (in progress) or `- [-]` (dropped). `📅 2026-11-27` in an item's line is its date.
+- **When it was written.** A first line of text that starts with « Écrit le », « Mis à jour le »
+  (or « Written on », « Updated on ») says when the page was written; it is not one of the blocks.
+- **Callouts.** A quote whose first line is `> [!type|option|option]- Title`: `-` after the
+  brackets folds it, `+` shows it open. The types Eriphe draws are `figures`, `chart`, `steps`,
+  `agenda`, `person`, `warning`, `info`, `success` and `note`. Any type takes `aside` (the page's
+  side column); `chart` takes `line`, `bar` or `stack` (line when none), and holds a table whose
+  first column is the x and each other column a series, its cells numbers (`18 385`, `1,8`, `−2`),
+  the unit in the header (`Dépenses (€)`). A plain quote whose last line is `— Sam, 24/11` says who
+  said it and when.
+- **References.** A thing that lives elsewhere is a reference link, `[words][m1]`, with its target
+  on a line of its own, at the bottom: `[m1]: mail:<id>`. The target's scheme is a catalog server's
+  name (or `https:` for a page), its id everything after the first colon, as the tool gave it: never
+  made up. A label is unique in the page, matched without case. The link's words are the author's;
+  what Eriphe shows of the thing comes from the thing.
+- **Eriphe's links**, valid Markdown links whose scheme is one of four:
+  - `[Jeter ces mails](do:mail/trash)`, on its own line, the first under a heading: an action on
+    the references of that heading's section, down to the next heading of its level or a higher
+    one. Its author must have the tool. Anywhere else it acts on nothing.
+  - `[Envoyer la réponse](card:<ref>)` places a card already proposed on that line.
+  - `[Montre la semaine](ask:)` is a probable reply, sent to Eriphe as a message.
+  - `[18 385 €](on:<event>)` is a value an event rewrites.
+
+**The check.** After each write of an author (`node_open`, `node_write`, `node_edit`,
+`node_append`), code reads the page and the write's result lists what is wrong in it
+(`problems`: a line, a code and words), the write kept all the same:
+
+| Code | What |
+|---|---|
+| `ref-undefined` | a reference whose label has no target |
+| `ref-unused` | a target no reference uses |
+| `ref-duplicate` | a label defined twice |
+| `callout-type`, `callout-option` | a callout type, or an option, Eriphe does not draw |
+| `date-impossible`, `date-malformed` | `📅` followed by a day that does not exist, or by no `YYYY-MM-DD` |
+| `do-place` | a `do:` link not alone on the first line under a heading |
+| `do-target`, `do-tool` | a `do:` link that names no `server/tool`, or a tool its author does not have |
+| `link-target` | a `card:` or `on:` link that names nothing |
+| `chart` | a chart without a table, or a cell of a series that is not a number |
+| `fence-open` | a code fence never closed |
+
+**Changing a line.** A page has several authors (a skill, code, the user's gestures), so an author
+changes a line, never the whole page. `node_edit` replaces a line, or a piece of text, found once
+(`old`, `new`), or moves an item with its detail (`move`, `after`: after a heading it becomes the
+section's first item, under its `do:` line; after another item, it goes after that item's detail,
+at its indent and in its callout). A line edit needs no version: it is made on the last one, and is
+refused once its line is gone (the author reads the page again). A whole body (`node_write`) and a
+block still name the version they were made on (`expect`).
+
 ## Body and blocks
 
 The body is markdown. The page shows the node's title above it: a heading that only repeats the

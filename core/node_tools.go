@@ -23,8 +23,10 @@ import (
 //
 // What code keeps, whatever the brain writes:
 //   - the author is code's: brain;
-//   - a write names the version it was made on (expect: its hash), and a
-//     stale one is refused; an archived node is not written;
+//   - a whole body or a block names the version it was made on (expect:
+//     its hash), and a stale one is refused; a line edit names its line,
+//     refused once it is gone (node_page.go); an archived node is not
+//     written; a write says what is wrong in its page (problems);
 //   - the user's marks and external are code's: an author's write that
 //     changes them is refused; the values a block's sources read are
 //     code's too, kept outside the file and given by node_read;
@@ -99,13 +101,13 @@ func registerNodeTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in brainNodeWriteIn) (map[string]any, error) {
 			return c.brainNodeWrite(in.ID, in.Expect, func(n *nodefile.Node) error { return n.AuthorBody(in.Body) })
 		})
-	tool(s, "node_edit", "Edit a node on the version expect names: write one block (block, value, before), or replace a piece of its text found once (old, new). A block whose value is only {\"card\": \"<ref>\"} places that card of the node there.",
+	tool(s, "node_edit", "Edit a node: replace a line, or a piece of its text, found once (old, new), or move an item with its detail (move, after), on its last version, refused when the line is gone; or write one block (block, value, before) on the version expect names. A block whose value is only {\"card\": \"<ref>\"} places that card of the node there.",
 		func(ctx context.Context, in brainNodeEditIn) (map[string]any, error) {
-			fn, err := nodeEdit(in.nodeEdits)
+			fn, expect, err := nodeEdit(in.nodeEdits)
 			if err != nil {
 				return nil, err
 			}
-			return c.brainNodeWrite(in.ID, in.Expect, fn)
+			return c.brainNodeWrite(in.ID, expect, fn)
 		})
 	tool(s, "node_set", "Change a node's title or goal, its properties and tags (props), move it under another (parent; \"\" for the top), or set it done once its goal is reached (or not, when it comes back). Only the user archives.",
 		func(ctx context.Context, in brainNodeSetIn) (map[string]any, error) { return c.brainNodeSet(in) })
@@ -166,6 +168,9 @@ func (c *core) brainNodeOpen(ctx context.Context, in brainNodeOpenIn) (map[strin
 		c.showNode(id, byBrain, false) // from a node: beside it, the bar where it is
 	}
 	out := map[string]any{"id": id, "title": d.Node.Meta.Title, "version": d.Version.N, "hash": d.Version.Hash}
+	if pr := pageProblems(d, c.brainHasTool); pr != nil {
+		out["problems"] = pr
+	}
 	if page := c.pageReport(id); page != nil {
 		out["page"] = page // what its blocks show (page_report.go)
 	}
@@ -425,7 +430,7 @@ func (c *core) brainNodeWrite(id, expect string, fn func(*nodefile.Node) error) 
 	}
 	c.turn.wrote()
 	c.turnNode(sum.ID)
-	out := written(d)
+	out := written(d, c.brainHasTool)
 	// Its sources read at once, and what its page shows said back
 	// (page_report.go): its author fixes it in this turn.
 	if page := c.pageReport(sum.ID); page != nil {
