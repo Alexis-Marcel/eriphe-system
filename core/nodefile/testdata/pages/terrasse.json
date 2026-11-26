@@ -1,0 +1,236 @@
+{
+  "page": {
+    "written": {
+      "text": "Écrit le 26/11/2026",
+      "line": 1
+    },
+    "blocks": [
+      {
+        "kind": "callout",
+        "line": 3,
+        "end": 8,
+        "type": "person",
+        "opts": [
+          "aside"
+        ],
+        "title": "Sam",
+        "body": [
+          {
+            "kind": "list",
+            "line": 4,
+            "end": 6,
+            "items": [
+              {
+                "line": 4,
+                "end": 4,
+                "text": "Rôle : artisan, la terrasse"
+              },
+              {
+                "line": 5,
+                "end": 5,
+                "text": "Téléphone : 01 23 45 67 89"
+              },
+              {
+                "line": 6,
+                "end": 6,
+                "text": "Mail : sam@example.org"
+              }
+            ]
+          },
+          {
+            "kind": "paragraph",
+            "line": 8,
+            "end": 8,
+            "text": "Il attend ta réponse au devis avant vendredi."
+          }
+        ]
+      },
+      {
+        "kind": "paragraph",
+        "line": 10,
+        "end": 10,
+        "text": "On refait la terrasse en bois avant l'hiver. Sam a visité le 18/11 et envoyé son devis le 24 : 4 200 €, la pose comprise."
+      },
+      {
+        "kind": "quote",
+        "line": 12,
+        "end": 13,
+        "text": "Le bois est commandé, je peux commencer la semaine du 8 si le temps tient. Il faudra juste vider la terrasse la veille.",
+        "from": "Sam",
+        "when": "24/11"
+      },
+      {
+        "kind": "callout",
+        "line": 15,
+        "end": 22,
+        "type": "steps",
+        "title": "Où on en est",
+        "body": [
+          {
+            "kind": "list",
+            "line": 16,
+            "end": 22,
+            "items": [
+              {
+                "line": 16,
+                "end": 16,
+                "task": "x",
+                "text": "Visite de Sam 📅 2026-11-18",
+                "due": "2026-11-18"
+              },
+              {
+                "line": 17,
+                "end": 18,
+                "task": "x",
+                "text": "Devis reçu 📅 2026-11-24",
+                "due": "2026-11-24",
+                "detail": [
+                  {
+                    "kind": "list",
+                    "line": 18,
+                    "end": 18,
+                    "items": [
+                      {
+                        "line": 18,
+                        "end": 18,
+                        "text": "4 200 € : bois, quincaillerie, pose."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "line": 19,
+                "end": 19,
+                "task": "/",
+                "text": "Répondre au devis 📅 2026-11-28",
+                "due": "2026-11-28"
+              },
+              {
+                "line": 20,
+                "end": 20,
+                "task": " ",
+                "text": "Acompte de 30 % 📅 2026-12-01",
+                "due": "2026-12-01"
+              },
+              {
+                "line": 21,
+                "end": 22,
+                "task": " ",
+                "text": "Travaux 📅 2026-12-08",
+                "due": "2026-12-08",
+                "detail": [
+                  {
+                    "kind": "list",
+                    "line": 22,
+                    "end": 22,
+                    "items": [
+                      {
+                        "line": 22,
+                        "end": 22,
+                        "text": "Une semaine, si le temps tient."
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "callout",
+        "line": 24,
+        "end": 30,
+        "type": "chart",
+        "opts": [
+          "bar"
+        ],
+        "title": "Budget : dépensé et prévu",
+        "body": [
+          {
+            "kind": "table",
+            "line": 25,
+            "end": 30,
+            "head": [
+              "Poste",
+              "Prévu (€)",
+              "Dépensé (€)"
+            ],
+            "rows": [
+              [
+                "Bois",
+                "2 400",
+                "0"
+              ],
+              [
+                "Quincaillerie",
+                "300",
+                "120"
+              ],
+              [
+                "Pose",
+                "1 500",
+                "0"
+              ],
+              [
+                "Outillage",
+                "200",
+                "180"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "heading",
+        "line": 32,
+        "end": 32,
+        "level": 3,
+        "text": "Décisions"
+      },
+      {
+        "kind": "list",
+        "line": 33,
+        "end": 34,
+        "items": [
+          {
+            "line": 33,
+            "end": 33,
+            "text": "Pin traité classe 4 plutôt que composite : moins cher, Sam le pose plus vite."
+          },
+          {
+            "line": 34,
+            "end": 34,
+            "text": "Pas d'éclairage cette année."
+          }
+        ]
+      },
+      {
+        "kind": "heading",
+        "line": 36,
+        "end": 36,
+        "level": 3,
+        "text": "Prochaine étape"
+      },
+      {
+        "kind": "list",
+        "line": 37,
+        "end": 37,
+        "items": [
+          {
+            "line": 37,
+            "end": 37,
+            "task": " ",
+            "text": "Répondre à Sam : le brouillon est dans [[Mes mails]] 📅 2026-11-28",
+            "due": "2026-11-28"
+          }
+        ]
+      }
+    ],
+    "refs": [],
+    "uses": [],
+    "links": []
+  },
+  "problems": []
+}

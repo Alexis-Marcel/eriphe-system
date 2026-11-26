@@ -1,0 +1,399 @@
+{
+  "page": {
+    "written": {
+      "text": "Écrit le 26/11/2026",
+      "line": 1
+    },
+    "blocks": [
+      {
+        "kind": "callout",
+        "line": 3,
+        "end": 5,
+        "type": "figures",
+        "title": "Budget",
+        "body": [
+          {
+            "kind": "list",
+            "line": 4,
+            "end": 5,
+            "items": [
+              {
+                "line": 4,
+                "end": 4,
+                "text": "Dépensé : 1 840 € sur 3 000 €"
+              },
+              {
+                "line": 5,
+                "end": 5,
+                "text": "Reste : 1 160 €"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "callout",
+        "line": 7,
+        "end": 19,
+        "type": "steps",
+        "title": "Avancement",
+        "body": [
+          {
+            "kind": "list",
+            "line": 8,
+            "end": 19,
+            "items": [
+              {
+                "line": 8,
+                "end": 9,
+                "task": "x",
+                "text": "Choisir le déménageur 📅 2026-11-06",
+                "due": "2026-11-06",
+                "detail": [
+                  {
+                    "kind": "list",
+                    "line": 9,
+                    "end": 9,
+                    "items": [
+                      {
+                        "line": 9,
+                        "end": 9,
+                        "text": "Léa, devis signé à 2 400 €."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "line": 10,
+                "end": 11,
+                "task": "x",
+                "text": "Donner le préavis du bail 📅 2026-11-13",
+                "due": "2026-11-13",
+                "detail": [
+                  {
+                    "kind": "list",
+                    "line": 11,
+                    "end": 11,
+                    "items": [
+                      {
+                        "line": 11,
+                        "end": 11,
+                        "text": "Lettre recommandée, accusé reçu le 16/11."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "line": 12,
+                "end": 13,
+                "task": "/",
+                "text": "Faire les cartons 📅 2026-12-05",
+                "due": "2026-12-05",
+                "detail": [
+                  {
+                    "kind": "list",
+                    "line": 13,
+                    "end": 13,
+                    "items": [
+                      {
+                        "line": 13,
+                        "end": 13,
+                        "text": "Cuisine et bureau faits, reste les chambres."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "line": 14,
+                "end": 15,
+                "task": " ",
+                "text": "Changer d'adresse 📅 2026-12-08",
+                "due": "2026-12-08",
+                "detail": [
+                  {
+                    "kind": "list",
+                    "line": 15,
+                    "end": 15,
+                    "items": [
+                      {
+                        "line": 15,
+                        "end": 15,
+                        "text": "Banque, assurances, impôts, La Poste."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "line": 16,
+                "end": 17,
+                "task": " ",
+                "text": "Déménager 📅 2026-12-12",
+                "due": "2026-12-12",
+                "detail": [
+                  {
+                    "kind": "list",
+                    "line": 17,
+                    "end": 17,
+                    "items": [
+                      {
+                        "line": 17,
+                        "end": 17,
+                        "text": "Camion à 8 h, arrivée prévue vers 14 h."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "line": 18,
+                "end": 19,
+                "task": " ",
+                "text": "État des lieux de sortie 📅 2026-12-14",
+                "due": "2026-12-14",
+                "detail": [
+                  {
+                    "kind": "list",
+                    "line": 19,
+                    "end": 19,
+                    "items": [
+                      {
+                        "line": 19,
+                        "end": 19,
+                        "text": "Avec l'agence, à 10 h."
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "callout",
+        "line": 21,
+        "end": 27,
+        "type": "agenda",
+        "title": "Rendez-vous de la semaine",
+        "body": [
+          {
+            "kind": "heading",
+            "line": 22,
+            "end": 22,
+            "level": 3,
+            "text": "Jeudi 26 novembre"
+          },
+          {
+            "kind": "list",
+            "line": 23,
+            "end": 23,
+            "items": [
+              {
+                "line": 23,
+                "end": 23,
+                "text": "18:00–19:00 Visite technique avec Léa · ancien appartement"
+              }
+            ]
+          },
+          {
+            "kind": "heading",
+            "line": 24,
+            "end": 24,
+            "level": 3,
+            "text": "Vendredi 27 novembre"
+          },
+          {
+            "kind": "list",
+            "line": 25,
+            "end": 25,
+            "items": [
+              {
+                "line": 25,
+                "end": 25,
+                "text": "12:30–13:00 Signature de l'assurance habitation · agence du centre"
+              }
+            ]
+          },
+          {
+            "kind": "heading",
+            "line": 26,
+            "end": 26,
+            "level": 3,
+            "text": "Samedi 28 novembre"
+          },
+          {
+            "kind": "list",
+            "line": 27,
+            "end": 27,
+            "items": [
+              {
+                "line": 27,
+                "end": 27,
+                "text": "10:00–11:30 Remise des clés du nouvel appartement · 12 rue des Lilas"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "callout",
+        "line": 29,
+        "end": 35,
+        "type": "chart",
+        "opts": [
+          "line"
+        ],
+        "title": "Dépenses par semaine",
+        "body": [
+          {
+            "kind": "table",
+            "line": 30,
+            "end": 35,
+            "head": [
+              "Semaine du",
+              "Dépenses (€)"
+            ],
+            "rows": [
+              [
+                "2026-11-02",
+                "420"
+              ],
+              [
+                "2026-11-09",
+                "380"
+              ],
+              [
+                "2026-11-16",
+                "610"
+              ],
+              [
+                "2026-11-23",
+                "430"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "callout",
+        "line": 37,
+        "end": 41,
+        "type": "person",
+        "opts": [
+          "aside"
+        ],
+        "title": "Léa",
+        "body": [
+          {
+            "kind": "list",
+            "line": 38,
+            "end": 39,
+            "items": [
+              {
+                "line": 38,
+                "end": 38,
+                "text": "Rôle : déménageuse"
+              },
+              {
+                "line": 39,
+                "end": 39,
+                "text": "Téléphone : 01 23 45 67 89"
+              }
+            ]
+          },
+          {
+            "kind": "paragraph",
+            "line": 41,
+            "end": 41,
+            "text": "Elle attend la liste des meubles avant la visite de jeudi."
+          }
+        ]
+      },
+      {
+        "kind": "heading",
+        "line": 43,
+        "end": 43,
+        "level": 2,
+        "text": "À faire"
+      },
+      {
+        "kind": "list",
+        "line": 44,
+        "end": 48,
+        "items": [
+          {
+            "line": 44,
+            "end": 45,
+            "task": " ",
+            "text": "Réserver le stationnement du camion : demande à la mairie 📅 2026-12-01",
+            "due": "2026-12-01",
+            "detail": [
+              {
+                "kind": "list",
+                "line": 45,
+                "end": 45,
+                "items": [
+                  {
+                    "line": 45,
+                    "end": 45,
+                    "text": "Formulaire en ligne, 10 jours de délai."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "line": 46,
+            "end": 46,
+            "task": " ",
+            "text": "Envoyer la liste des meubles à Léa : pour la visite technique 📅 2026-11-26",
+            "due": "2026-11-26"
+          },
+          {
+            "line": 47,
+            "end": 47,
+            "task": " ",
+            "text": "Acheter des cartons : il en manque une vingtaine"
+          },
+          {
+            "line": 48,
+            "end": 48,
+            "task": " ",
+            "text": "Vider la cave"
+          }
+        ]
+      },
+      {
+        "kind": "paragraph",
+        "line": 50,
+        "end": 50,
+        "text": "[Montre ce qu'il reste à payer](ask:) · [Écris à Léa pour confirmer le 12 décembre](ask:)"
+      }
+    ],
+    "refs": [],
+    "uses": [],
+    "links": [
+      {
+        "kind": "ask",
+        "label": "Montre ce qu'il reste à payer",
+        "target": "",
+        "line": 50,
+        "alone": true,
+        "heading": 43
+      },
+      {
+        "kind": "ask",
+        "label": "Écris à Léa pour confirmer le 12 décembre",
+        "target": "",
+        "line": 50,
+        "alone": true,
+        "heading": 43
+      }
+    ]
+  },
+  "problems": []
+}

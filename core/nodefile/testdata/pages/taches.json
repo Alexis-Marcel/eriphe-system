@@ -1,0 +1,60 @@
+{
+  "page": {
+    "written": {
+      "text": "Écrit le 26/11/2026",
+      "line": 1
+    },
+    "blocks": [
+      {
+        "kind": "list",
+        "line": 3,
+        "end": 8,
+        "items": [
+          {
+            "line": 3,
+            "end": 3,
+            "task": " ",
+            "text": "Valider l'option de train : référence ABC123 📅 2026-11-27",
+            "due": "2026-11-27"
+          },
+          {
+            "line": 4,
+            "end": 4,
+            "task": " ",
+            "text": "Répondre au devis de Sam : voir [[Mes mails]] 📅 2026-11-28",
+            "due": "2026-11-28"
+          },
+          {
+            "line": 5,
+            "end": 5,
+            "task": "/",
+            "text": "Publier l'app sur les stores : correctif déjà en staging"
+          },
+          {
+            "line": 6,
+            "end": 6,
+            "task": " ",
+            "text": "Renvoyer le pantalon : commande n° 0001, étiquette imprimée"
+          },
+          {
+            "line": 7,
+            "end": 7,
+            "task": "x",
+            "text": "Payer la cantine 📅 2026-11-25",
+            "due": "2026-11-25"
+          },
+          {
+            "line": 8,
+            "end": 8,
+            "task": "-",
+            "text": "Changer de forfait mobile : l'offre a expiré"
+          }
+        ]
+      }
+    ],
+    "refs": [],
+    "uses": [],
+    "links": []
+  },
+  "problems": []
+}

@@ -1,0 +1,192 @@
+{
+  "page": {
+    "written": {
+      "text": "Écrit le 26/11/2026 à 18 h, cours de clôture",
+      "line": 1
+    },
+    "blocks": [
+      {
+        "kind": "callout",
+        "line": 3,
+        "end": 7,
+        "type": "figures",
+        "body": [
+          {
+            "kind": "list",
+            "line": 4,
+            "end": 7,
+            "items": [
+              {
+                "line": 4,
+                "end": 4,
+                "text": "Valeur : 18 420 € (▼ 1,1 % aujourd'hui)"
+              },
+              {
+                "line": 5,
+                "end": 5,
+                "text": "Plus-value : 194 €"
+              },
+              {
+                "line": 6,
+                "end": 6,
+                "text": "PEA : 12 380 € (▲ 1,8 % cette semaine)"
+              },
+              {
+                "line": 7,
+                "end": 7,
+                "text": "Liquidités : 610 €"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "callout",
+        "line": 9,
+        "end": 19,
+        "type": "chart",
+        "opts": [
+          "line"
+        ],
+        "title": "Valeur sur 30 jours",
+        "body": [
+          {
+            "kind": "table",
+            "line": 10,
+            "end": 19,
+            "head": [
+              "Jour",
+              "Valeur (€)"
+            ],
+            "rows": [
+              [
+                "2026-10-28",
+                "17 950"
+              ],
+              [
+                "2026-11-02",
+                "18 120"
+              ],
+              [
+                "2026-11-06",
+                "17 880"
+              ],
+              [
+                "2026-11-10",
+                "18 240"
+              ],
+              [
+                "2026-11-14",
+                "18 610"
+              ],
+              [
+                "2026-11-18",
+                "18 390"
+              ],
+              [
+                "2026-11-22",
+                "18 530"
+              ],
+              [
+                "2026-11-26",
+                "18 420"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "heading",
+        "line": 21,
+        "end": 21,
+        "level": 3,
+        "text": "Répartition face au plan"
+      },
+      {
+        "kind": "table",
+        "line": 22,
+        "end": 28,
+        "head": [
+          "Ligne",
+          "Part",
+          "Cible",
+          "Écart"
+        ],
+        "rows": [
+          [
+            "ETF Monde",
+            "62 %",
+            "60 %",
+            "+2 %"
+          ],
+          [
+            "ETF Émergents",
+            "9 %",
+            "10 %",
+            "−1 %"
+          ],
+          [
+            "Obligations",
+            "18 %",
+            "20 %",
+            "−2 %"
+          ],
+          [
+            "Actions en direct",
+            "8 %",
+            "7 %",
+            "+1 %"
+          ],
+          [
+            "Liquidités",
+            "3 %",
+            "3 %",
+            "0 %"
+          ]
+        ]
+      },
+      {
+        "kind": "callout",
+        "line": 30,
+        "end": 31,
+        "type": "warning",
+        "title": "Obligations sous la cible",
+        "body": [
+          {
+            "kind": "paragraph",
+            "line": 31,
+            "end": 31,
+            "text": "La ligne Obligations est 2 points sous le plan depuis trois semaines."
+          }
+        ]
+      },
+      {
+        "kind": "paragraph",
+        "line": 33,
+        "end": 33,
+        "text": "[Propose un rééquilibrage](ask:) · [Montre les frais de l'année](ask:)"
+      }
+    ],
+    "refs": [],
+    "uses": [],
+    "links": [
+      {
+        "kind": "ask",
+        "label": "Propose un rééquilibrage",
+        "target": "",
+        "line": 33,
+        "alone": true,
+        "heading": 21
+      },
+      {
+        "kind": "ask",
+        "label": "Montre les frais de l'année",
+        "target": "",
+        "line": 33,
+        "alone": true,
+        "heading": 21
+      }
+    ]
+  },
+  "problems": []
+}

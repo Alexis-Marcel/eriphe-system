@@ -1,0 +1,54 @@
+{
+  "page": {
+    "blocks": [
+      {
+        "kind": "list",
+        "line": 1,
+        "end": 3,
+        "items": [
+          {
+            "line": 1,
+            "end": 1,
+            "task": " ",
+            "text": "Payer le loyer 📅 2026-02-30",
+            "due": "2026-02-30"
+          },
+          {
+            "line": 2,
+            "end": 2,
+            "task": " ",
+            "text": "Rendre le dossier 📅 27/11"
+          },
+          {
+            "line": 3,
+            "end": 3,
+            "task": "x",
+            "text": "Appeler Sam 📅 2026-11-25",
+            "due": "2026-11-25"
+          }
+        ]
+      },
+      {
+        "kind": "paragraph",
+        "line": 5,
+        "end": 5,
+        "text": "Le code garde ses dates telles quelles : `📅 2026-13-01`."
+      }
+    ],
+    "refs": [],
+    "uses": [],
+    "links": []
+  },
+  "problems": [
+    {
+      "line": 1,
+      "code": "date-impossible",
+      "what": "2026-02-30 is not a date"
+    },
+    {
+      "line": 2,
+      "code": "date-malformed",
+      "what": "a date after 📅 is written YYYY-MM-DD (📅 2026-11-27)"
+    }
+  ]
+}

@@ -1,0 +1,167 @@
+{
+  "page": {
+    "written": {
+      "text": "Mis à jour le 26/11/2026",
+      "line": 1
+    },
+    "blocks": [
+      {
+        "kind": "heading",
+        "line": 3,
+        "end": 3,
+        "level": 2,
+        "text": "Courses"
+      },
+      {
+        "kind": "list",
+        "line": 4,
+        "end": 8,
+        "items": [
+          {
+            "line": 4,
+            "end": 7,
+            "task": " ",
+            "text": "Pain",
+            "detail": [
+              {
+                "kind": "list",
+                "line": 5,
+                "end": 7,
+                "items": [
+                  {
+                    "line": 5,
+                    "end": 5,
+                    "text": "Le complet, pas le blanc."
+                  },
+                  {
+                    "line": 6,
+                    "end": 7,
+                    "task": "/",
+                    "text": "Fromage : chez le crémier",
+                    "detail": [
+                      {
+                        "kind": "list",
+                        "line": 7,
+                        "end": 7,
+                        "items": [
+                          {
+                            "line": 7,
+                            "end": 7,
+                            "text": "Comté 18 mois."
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "line": 8,
+            "end": 8,
+            "task": "x",
+            "text": "Lait"
+          }
+        ]
+      },
+      {
+        "kind": "callout",
+        "line": 10,
+        "end": 12,
+        "type": "steps",
+        "opts": [
+          "aside"
+        ],
+        "fold": "-",
+        "title": "Repliées",
+        "body": [
+          {
+            "kind": "list",
+            "line": 11,
+            "end": 12,
+            "items": [
+              {
+                "line": 11,
+                "end": 11,
+                "task": "x",
+                "text": "Liste écrite 📅 2026-11-25",
+                "due": "2026-11-25"
+              },
+              {
+                "line": 12,
+                "end": 12,
+                "task": " ",
+                "text": "Courses faites 📅 2026-11-26",
+                "due": "2026-11-26"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "code",
+        "line": 14,
+        "end": 16,
+        "text": "{\"components\": [{\"id\": \"root\", \"component\": \"Text\", \"text\": \"[pas lu][m9] ni [ceci](do:mail/trash)\"}]}",
+        "lang": "eriphe:block"
+      },
+      {
+        "kind": "list",
+        "line": 18,
+        "end": 19,
+        "ordered": true,
+        "items": [
+          {
+            "line": 18,
+            "end": 18,
+            "text": "Premier"
+          },
+          {
+            "line": 19,
+            "end": 19,
+            "text": "Second"
+          }
+        ]
+      },
+      {
+        "kind": "rule",
+        "line": 21,
+        "end": 21
+      },
+      {
+        "kind": "quote",
+        "line": 23,
+        "end": 23,
+        "text": "Une citation sans auteur."
+      },
+      {
+        "kind": "paragraph",
+        "line": 25,
+        "end": 25,
+        "text": "[Que manque-t-il ?](ask:) · [Ajoute du café](ask:)"
+      }
+    ],
+    "refs": [],
+    "uses": [],
+    "links": [
+      {
+        "kind": "ask",
+        "label": "Que manque-t-il ?",
+        "target": "",
+        "line": 25,
+        "alone": true,
+        "heading": 3
+      },
+      {
+        "kind": "ask",
+        "label": "Ajoute du café",
+        "target": "",
+        "line": 25,
+        "alone": true,
+        "heading": 3
+      }
+    ]
+  },
+  "problems": []
+}

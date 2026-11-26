@@ -1,0 +1,29 @@
+{
+  "page": {
+    "blocks": [
+      {
+        "kind": "paragraph",
+        "line": 1,
+        "end": 1,
+        "text": "Le correctif :"
+      },
+      {
+        "kind": "code",
+        "line": 3,
+        "end": 7,
+        "text": "- <string>3.2.0</string>\n+ <string>3.2.1</string>\n\n- [ ] [Pas une référence][m1] : dans le code",
+        "lang": "diff"
+      }
+    ],
+    "refs": [],
+    "uses": [],
+    "links": []
+  },
+  "problems": [
+    {
+      "line": 3,
+      "code": "fence-open",
+      "what": "this code block is never closed: the rest of the page is read as code"
+    }
+  ]
+}

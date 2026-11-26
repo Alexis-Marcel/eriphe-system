@@ -1,0 +1,125 @@
+{
+  "page": {
+    "blocks": [
+      {
+        "kind": "callout",
+        "line": 1,
+        "end": 2,
+        "type": "tip",
+        "title": "Un conseil",
+        "body": [
+          {
+            "kind": "paragraph",
+            "line": 2,
+            "end": 2,
+            "text": "Ce type n'existe pas chez Eriphe."
+          }
+        ]
+      },
+      {
+        "kind": "callout",
+        "line": 4,
+        "end": 5,
+        "type": "figures",
+        "opts": [
+          "line",
+          "aside"
+        ],
+        "title": "Chiffres",
+        "body": [
+          {
+            "kind": "list",
+            "line": 5,
+            "end": 5,
+            "items": [
+              {
+                "line": 5,
+                "end": 5,
+                "text": "Valeur : 18 420 €"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "callout",
+        "line": 7,
+        "end": 8,
+        "type": "chart",
+        "opts": [
+          "bar"
+        ],
+        "title": "Sans tableau",
+        "body": [
+          {
+            "kind": "paragraph",
+            "line": 8,
+            "end": 8,
+            "text": "Rien à dessiner ici."
+          }
+        ]
+      },
+      {
+        "kind": "callout",
+        "line": 10,
+        "end": 14,
+        "type": "chart",
+        "opts": [
+          "pie"
+        ],
+        "title": "Dépenses",
+        "body": [
+          {
+            "kind": "table",
+            "line": 11,
+            "end": 14,
+            "head": [
+              "Mois",
+              "Dépenses (€)"
+            ],
+            "rows": [
+              [
+                "Octobre",
+                "420"
+              ],
+              [
+                "Novembre",
+                "beaucoup"
+              ]
+            ]
+          }
+        ]
+      }
+    ],
+    "refs": [],
+    "uses": [],
+    "links": []
+  },
+  "problems": [
+    {
+      "line": 1,
+      "code": "callout-type",
+      "what": "[!tip] is not a callout Eriphe draws (agenda, chart, figures, info, note, person, steps, success, warning): it is drawn as a note"
+    },
+    {
+      "line": 4,
+      "code": "callout-option",
+      "what": "[!figures] takes no option \"line\""
+    },
+    {
+      "line": 7,
+      "code": "chart",
+      "what": "[!chart] draws a table: | x | Series (unit) |, a row per point"
+    },
+    {
+      "line": 10,
+      "code": "callout-option",
+      "what": "[!chart] takes no option \"pie\""
+    },
+    {
+      "line": 14,
+      "code": "chart",
+      "what": "\"beaucoup\" is not a number: a series' cells are numbers, the unit in the header"
+    }
+  ]
+}

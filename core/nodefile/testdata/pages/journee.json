@@ -1,0 +1,190 @@
+{
+  "page": {
+    "written": {
+      "text": "Écrit le 26/11/2026 à 7 h",
+      "line": 1
+    },
+    "blocks": [
+      {
+        "kind": "callout",
+        "line": 3,
+        "end": 11,
+        "type": "agenda",
+        "body": [
+          {
+            "kind": "heading",
+            "line": 4,
+            "end": 4,
+            "level": 3,
+            "text": "Jeudi 26 novembre"
+          },
+          {
+            "kind": "list",
+            "line": 5,
+            "end": 8,
+            "items": [
+              {
+                "line": 5,
+                "end": 5,
+                "text": "09:30–10:00 [Point d'équipe][e1] · visio"
+              },
+              {
+                "line": 6,
+                "end": 6,
+                "text": "12:30–13:15 [Dentiste][e2] · cabinet du centre"
+              },
+              {
+                "line": 7,
+                "end": 8,
+                "text": "16:00–17:00 [Revue du projet Terrasse][e3] · chez Sam",
+                "detail": [
+                  {
+                    "kind": "list",
+                    "line": 8,
+                    "end": 8,
+                    "items": [
+                      {
+                        "line": 8,
+                        "end": 8,
+                        "text": "Invitation de Sam, pas encore répondue. [Accepter](card:calendar:77)"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "heading",
+            "line": 9,
+            "end": 9,
+            "level": 3,
+            "text": "Vendredi 27 novembre"
+          },
+          {
+            "kind": "list",
+            "line": 10,
+            "end": 11,
+            "items": [
+              {
+                "line": 10,
+                "end": 10,
+                "text": "07:30–08:15 [Course à pied][e4] · parc"
+              },
+              {
+                "line": 11,
+                "end": 11,
+                "text": "14:00–15:00 Appel avec la banque · téléphone"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "list",
+        "line": 13,
+        "end": 15,
+        "items": [
+          {
+            "line": 13,
+            "end": 13,
+            "task": " ",
+            "text": "Préparer les questions pour le dentiste"
+          },
+          {
+            "line": 14,
+            "end": 14,
+            "task": " ",
+            "text": "Relire le devis de Sam avant 16 h : voir [[Travaux de la terrasse avec Sam]]"
+          },
+          {
+            "line": 15,
+            "end": 15,
+            "task": "x",
+            "text": "Sortir les poubelles"
+          }
+        ]
+      },
+      {
+        "kind": "paragraph",
+        "line": 17,
+        "end": 17,
+        "text": "[Montre la semaine](ask:)"
+      }
+    ],
+    "refs": [
+      {
+        "label": "e1",
+        "target": "event:ev-standup",
+        "scheme": "event",
+        "id": "ev-standup",
+        "line": 19
+      },
+      {
+        "label": "e2",
+        "target": "event:ev-dentiste",
+        "scheme": "event",
+        "id": "ev-dentiste",
+        "line": 20
+      },
+      {
+        "label": "e3",
+        "target": "event:ev-invit",
+        "scheme": "event",
+        "id": "ev-invit",
+        "line": 21
+      },
+      {
+        "label": "e4",
+        "target": "event:ev-sport",
+        "scheme": "event",
+        "id": "ev-sport",
+        "line": 22
+      }
+    ],
+    "uses": [
+      {
+        "label": "e1",
+        "text": "Point d'équipe",
+        "line": 5,
+        "item": 5
+      },
+      {
+        "label": "e2",
+        "text": "Dentiste",
+        "line": 6,
+        "item": 6
+      },
+      {
+        "label": "e3",
+        "text": "Revue du projet Terrasse",
+        "line": 7,
+        "item": 7
+      },
+      {
+        "label": "e4",
+        "text": "Course à pied",
+        "line": 10,
+        "item": 10
+      }
+    ],
+    "links": [
+      {
+        "kind": "card",
+        "label": "Accepter",
+        "target": "calendar:77",
+        "line": 8,
+        "item": 8,
+        "callout": 3
+      },
+      {
+        "kind": "ask",
+        "label": "Montre la semaine",
+        "target": "",
+        "line": 17,
+        "alone": true
+      }
+    ]
+  },
+  "problems": []
+}

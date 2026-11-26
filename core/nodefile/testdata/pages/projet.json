@@ -1,0 +1,253 @@
+{
+  "page": {
+    "written": {
+      "text": "Écrit le 26/11/2026 à 11 h par la tâche « Corriger le lancement iOS »",
+      "line": 1
+    },
+    "blocks": [
+      {
+        "kind": "paragraph",
+        "line": 3,
+        "end": 3,
+        "text": "L'app se ferme au lancement sur iOS 19 : une clé manquante dans `Info.plist` fait planter le module de notifications."
+      },
+      {
+        "kind": "callout",
+        "line": 5,
+        "end": 13,
+        "type": "steps",
+        "title": "Correctif",
+        "body": [
+          {
+            "kind": "list",
+            "line": 6,
+            "end": 13,
+            "items": [
+              {
+                "line": 6,
+                "end": 7,
+                "task": "x",
+                "text": "Reproduire le plantage 📅 2026-11-24",
+                "due": "2026-11-24",
+                "detail": [
+                  {
+                    "kind": "list",
+                    "line": 7,
+                    "end": 7,
+                    "items": [
+                      {
+                        "line": 7,
+                        "end": 7,
+                        "text": "Sur simulateur iOS 19.1, à chaque lancement à froid."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "line": 8,
+                "end": 9,
+                "task": "x",
+                "text": "Trouver la cause 📅 2026-11-25",
+                "due": "2026-11-25",
+                "detail": [
+                  {
+                    "kind": "list",
+                    "line": 9,
+                    "end": 9,
+                    "items": [
+                      {
+                        "line": 9,
+                        "end": 9,
+                        "text": "Le module de notifications lit `NSUserNotificationsUsageDescription`, absente depuis la 3.2.0."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "line": 10,
+                "end": 11,
+                "task": "/",
+                "text": "Corriger et tester 📅 2026-11-26",
+                "due": "2026-11-26",
+                "detail": [
+                  {
+                    "kind": "list",
+                    "line": 11,
+                    "end": 11,
+                    "items": [
+                      {
+                        "line": 11,
+                        "end": 11,
+                        "text": "Clé ajoutée, tests verts ; reste la vérification sur un vrai téléphone."
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "line": 12,
+                "end": 13,
+                "task": " ",
+                "text": "Publier en production 📅 2026-11-27",
+                "due": "2026-11-27",
+                "detail": [
+                  {
+                    "kind": "list",
+                    "line": 13,
+                    "end": 13,
+                    "items": [
+                      {
+                        "line": 13,
+                        "end": 13,
+                        "text": "Après ton oui, version 3.2.1."
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "callout",
+        "line": 15,
+        "end": 18,
+        "type": "figures",
+        "opts": [
+          "aside"
+        ],
+        "title": "Vérifications",
+        "body": [
+          {
+            "kind": "list",
+            "line": 16,
+            "end": 18,
+            "items": [
+              {
+                "line": 16,
+                "end": 16,
+                "text": "Tests : 44/44"
+              },
+              {
+                "line": 17,
+                "end": 17,
+                "text": "Build iOS : vert"
+              },
+              {
+                "line": 18,
+                "end": 18,
+                "text": "Taille : 38,2 Mo (▲ 0,1 Mo)"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "code",
+        "line": 20,
+        "end": 29,
+        "text": "--- a/ios/App/Info.plist\n+++ b/ios/App/Info.plist\n@@ -41,6 +41,8 @@\n   <key>CFBundleVersion</key>\n-  <string>3.2.0</string>\n+  <string>3.2.1</string>\n+  <key>NSUserNotificationsUsageDescription</key>\n+  <string>Pour te prévenir quand une tâche est finie.</string>",
+        "lang": "diff"
+      },
+      {
+        "kind": "list",
+        "line": 31,
+        "end": 32,
+        "items": [
+          {
+            "line": 31,
+            "end": 31,
+            "text": "[Fix: l'app plante au lancement sur iOS 19][pr1] : revue approuvée"
+          },
+          {
+            "line": 32,
+            "end": 32,
+            "text": "[Page du ticket](https://example.org/example/app/issues/127)"
+          }
+        ]
+      },
+      {
+        "kind": "heading",
+        "line": 34,
+        "end": 34,
+        "level": 3,
+        "text": "Décisions"
+      },
+      {
+        "kind": "list",
+        "line": 35,
+        "end": 36,
+        "items": [
+          {
+            "line": 35,
+            "end": 35,
+            "text": "Pas de retour à la 3.1 : le correctif est plus rapide que le retour arrière."
+          },
+          {
+            "line": 36,
+            "end": 36,
+            "text": "La clé reste obligatoire : un test vérifie sa présence."
+          }
+        ]
+      },
+      {
+        "kind": "heading",
+        "line": 38,
+        "end": 38,
+        "level": 3,
+        "text": "Publier"
+      },
+      {
+        "kind": "paragraph",
+        "line": 39,
+        "end": 39,
+        "text": "[Publier en prod](card:calls:530)"
+      },
+      {
+        "kind": "paragraph",
+        "line": 41,
+        "end": 41,
+        "text": "[Teste sur un vrai téléphone d'abord](ask:)"
+      }
+    ],
+    "refs": [
+      {
+        "label": "pr1",
+        "target": "pr:example/app#128",
+        "scheme": "pr",
+        "id": "example/app#128",
+        "line": 43
+      }
+    ],
+    "uses": [
+      {
+        "label": "pr1",
+        "text": "Fix: l'app plante au lancement sur iOS 19",
+        "line": 31,
+        "item": 31
+      }
+    ],
+    "links": [
+      {
+        "kind": "card",
+        "label": "Publier en prod",
+        "target": "calls:530",
+        "line": 39,
+        "alone": true,
+        "heading": 38
+      },
+      {
+        "kind": "ask",
+        "label": "Teste sur un vrai téléphone d'abord",
+        "target": "",
+        "line": 41,
+        "alone": true,
+        "heading": 38
+      }
+    ]
+  },
+  "problems": []
+}
