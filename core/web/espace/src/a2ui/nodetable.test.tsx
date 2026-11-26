@@ -95,7 +95,7 @@ describe("a Table of nodes", () => {
 describe("a node's properties", () => {
   it("shows its tags and properties, nothing when it has none", async () => {
     const page = {
-      node: graph.a1, version: 1, versions: [], parts: [], cards: [],
+      node: graph.a1, version: 1, versions: [], body: "", parts: [], cards: [],
       tags: ["etude/sante"],
       props: [{ key: "pages", value: 1200, kind: "number" }, { key: "auteurs", value: ["Sam", "[[Lina]]"], kind: "text" }],
     } as NodePage;
@@ -111,7 +111,7 @@ describe("a node's properties", () => {
 
   it("shows a photo kept with it as its picture, a PDF as a link", async () => {
     const page = {
-      node: graph.a1, version: 1, versions: [], parts: [], cards: [],
+      node: graph.a1, version: 1, versions: [], body: "", parts: [], cards: [],
       tags: ["vêtement"],
       props: [
         { key: "photo", value: "media:med_a.jpg", kind: "text", media: [{ src: "/espace/media?u=media%3Aa1%2Fmed_a.jpg&s=x", image: true }] },

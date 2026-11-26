@@ -203,6 +203,14 @@ problems as JSON). Lines are counted from 1 in the body, what follows the front 
 | `chart` | a chart without a table, or a cell of a series that is not a number |
 | `fence-open` | a code fence never closed |
 
+**In the workspace.** The page draws a node's body from its Markdown (`core/web/espace/src/page`):
+a task is a row whose box the user ticks (one line rewritten by eriphe-core, a version of theirs),
+an item's detail folds under it, a callout is drawn by the workspace's component of its type
+(figures, a chart, steps, an agenda, a person, an alert), a reference shows its words with its
+target, and a line of `ask:` links is a row of replies. A day without its year takes the year of
+the page's « Écrit le » line, else it is shown as written: never a guessed year. Blocks still in
+the body are drawn as before, at their place.
+
 **Changing a line.** A page has several authors (a skill, code, the user's gestures), so an author
 changes a line, never the whole page. `node_edit` replaces a line, or a piece of text, found once
 (`old`, `new`), or moves an item with its detail (`move`, `after`: after a heading it becomes the

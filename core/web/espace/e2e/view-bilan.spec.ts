@@ -29,9 +29,9 @@ test("a page as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect(pg).toBeVisible();
 
   // The bilan: its first paragraph larger than the « Pour info » after it.
-  const lead = pg.locator(".pg-doc > .a2-markdown:first-child > p").first();
+  const lead = pg.locator(".pg-doc > .md-p").first();
   await expect(lead).toHaveText("1 réponse attendue : Sam, avant vendredi. 1 hameçonnage dans le lot à jeter.");
-  const size = (n: number) => pg.locator(".pg-doc > .a2-markdown:first-child > p").nth(n).evaluate((p) => parseFloat(getComputedStyle(p).fontSize));
+  const size = (n: number) => pg.locator(".pg-doc > .md-p").nth(n).evaluate((p) => parseFloat(getComputedStyle(p).fontSize));
   expect(await size(0)).toBeGreaterThan(await size(1));
   // Someone else's words: one sign in the head (its ⚠, no word), nothing on the block.
   await expect(pg.locator(".pg-title .ext-mark")).toHaveCount(1);
@@ -113,7 +113,7 @@ test("a page as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await pg.getByRole("button", { name: "Agrandir" }).click();
   await expect(box).toHaveClass(/\bbig\b/);
   await expect.poll(async () => (await box.boundingBox())!.width).toBeGreaterThan(w0 + 200);
-  const text = await pg.locator(".pg-doc > .a2-markdown").first().boundingBox();
+  const text = await pg.locator(".pg-doc > .md-p").first().boundingBox();
   expect(text!.width).toBeLessThanOrEqual(761);
   await rest(page); // the camera frames it
   // No bubble rests behind the bar: the page keeps the bar's room clear.

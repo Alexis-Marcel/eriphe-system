@@ -39,7 +39,9 @@ export default defineConfig({
       },
     },
   },
-  server: { port: 5300, strictPort: true },
+  // The tests read eriphe-core's fixture pages (core/nodefile/testdata):
+  // the page reader is held to them (page/read.test.ts, page/body.test.tsx).
+  server: { port: 5300, strictPort: true, fs: { allow: [".", "../../nodefile/testdata"] } },
   preview: { port: 5301, strictPort: true, headers: { "Content-Security-Policy": csp } },
   test: { environment: "node", include: ["src/**/*.test.ts", "src/**/*.test.tsx"] },
 });

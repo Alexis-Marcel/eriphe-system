@@ -1065,33 +1065,42 @@ const Person = createComponentImplementation(
     }),
   },
   ({ props }) => {
-    const id = useId();
-    const name = nameOf(str(props.name));
-    const facts = (Array.isArray(props.facts) ? props.facts : []).filter((f): f is z.infer<typeof Fact> => !!f && typeof f.label === "string" && typeof f.value === "string").slice(0, 8);
-    return (
-      <section className="a2-person" aria-labelledby={id}>
-        <span className="a2-person-face" aria-hidden="true">{initials(name)}</span>
-        <div className="a2-person-main">
-          <p className="a2-person-head">
-            <span id={id} className="a2-person-name">{name}</span>
-            {props.detail && <span className="a2-person-detail">{props.detail}</span>}
-          </p>
-          {props.note && <p className="a2-person-note">{props.note}</p>}
-          {facts.length > 0 && (
-            <dl className="a2-person-facts">
-              {facts.map((f, i) => (
-                <div key={i}>
-                  <dt>{f.label}</dt>
-                  <dd>{factLink(f.value) ? <a href={factLink(f.value)!} rel="noopener noreferrer">{f.value}</a> : f.value}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </div>
-      </section>
-    );
+    const facts = (Array.isArray(props.facts) ? props.facts : []).filter((f): f is z.infer<typeof Fact> => !!f && typeof f.label === "string" && typeof f.value === "string");
+    return <PersonView name={str(props.name)} detail={props.detail} note={props.note} facts={facts.map((f) => ({ label: f.label, value: f.value, href: factLink(f.value) }))} />;
   },
 );
+
+// A fact of a Person: its words (a page's keep their bold and links), and
+// where it opens (factLink), when it does.
+export type PersonFact = { label: ReactNode; value: ReactNode; href?: string | null };
+
+// PersonView draws a Person: the catalog's, and a page's [!person].
+export function PersonView({ name: raw, detail, note, facts }: { name: string; detail?: ReactNode; note?: ReactNode; facts: PersonFact[] }) {
+  const id = useId();
+  const name = nameOf(raw);
+  return (
+    <section className="a2-person" aria-labelledby={id}>
+      <span className="a2-person-face" aria-hidden="true">{initials(name)}</span>
+      <div className="a2-person-main">
+        <p className="a2-person-head">
+          <span id={id} className="a2-person-name">{name}</span>
+          {detail && <span className="a2-person-detail">{detail}</span>}
+        </p>
+        {note && <p className="a2-person-note">{note}</p>}
+        {facts.length > 0 && (
+          <dl className="a2-person-facts">
+            {facts.slice(0, 8).map((f, i) => (
+              <div key={i}>
+                <dt>{f.label}</dt>
+                <dd>{f.href ? <a href={f.href} rel="noopener noreferrer">{f.value}</a> : f.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+    </section>
+  );
+}
 
 // Quote: someone else's words, as they wrote them, and who and when; the
 // page they come from shown in clear, opened on a click only, as a Link's.
@@ -1105,38 +1114,44 @@ const Quote = createComponentImplementation(
       url: z.union([z.string(), CommonSchemas.DataBinding]).optional(),
     }),
   },
-  ({ props, context }) => {
-    const { t, lang } = useWords();
-    const from = nameOf(str(props.from)), date = str(props.date);
-    const u = linkTo(str(props.url));
-    // As a Link: the whole address when the block shows external content.
-    const whole = external(context.dataContext.surface);
-    return (
-      <figure className="a2-quote">
-        <blockquote className="a2-quote-text" cite={u?.href}>
-          {str(props.text)}
-        </blockquote>
-        {(from || date || u) && (
-          <figcaption className="a2-quote-from">
-            {from && <span className="a2-quote-who">{from}</span>}
-            {date && wall(date) && (
-              <time className="a2-quote-when" dateTime={date}>
-                {sent(lang, date)}
-              </time>
-            )}
-            {u && (
-              <a className="a2-link a2-quote-link" href={u.href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" title={u.href}>
-                <IconView name="link" />
-                <span className="a2-link-host">{whole ? u.href : u.host}</span>
-                <span className="sr-only"> {t("espace.a2.newtab")}</span>
-              </a>
-            )}
-          </figcaption>
-        )}
-      </figure>
-    );
-  },
+  // As a Link: the whole address when the block shows external content.
+  ({ props, context }) => <QuoteView text={str(props.text)} from={str(props.from)} date={str(props.date)} url={linkTo(str(props.url))} whole={external(context.dataContext.surface)} />,
 );
+
+// QuoteView draws a Quote: the catalog's, and a page's quote (its words
+// keep their bold and links). date is ISO; written, a date as its author
+// wrote it, shown as is when it reads as no day.
+export function QuoteView({ text, from: by, date = "", written, url: u, whole }: { text: ReactNode; from?: string; date?: string; written?: string; url?: URL | null; whole?: boolean }) {
+  const { t, lang } = useWords();
+  const from = nameOf(by ?? "");
+  const day = date && wall(date) ? date : "";
+  return (
+    <figure className="a2-quote">
+      <blockquote className="a2-quote-text" cite={u?.href}>
+        {text}
+      </blockquote>
+      {(from || day || written || u) && (
+        <figcaption className="a2-quote-from">
+          {from && <span className="a2-quote-who">{from}</span>}
+          {day ? (
+            <time className="a2-quote-when" dateTime={day}>
+              {sent(lang, day)}
+            </time>
+          ) : (
+            written && <span className="a2-quote-when">{written}</span>
+          )}
+          {u && (
+            <a className="a2-link a2-quote-link" href={u.href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" title={u.href}>
+              <IconView name="link" />
+              <span className="a2-link-host">{whole ? u.href : u.host}</span>
+              <span className="sr-only"> {t("espace.a2.newtab")}</span>
+            </a>
+          )}
+        </figcaption>
+      )}
+    </figure>
+  );
+}
 
 // Agenda is anything from a calendar: its days from date (today when
 // absent), the first by the hour. Bound to a source's items, each event's
@@ -1217,22 +1232,27 @@ const Alert = createComponentImplementation(
       text: CommonSchemas.DynamicString,
     }),
   },
-  ({ props }) => {
-    const { t } = useWords();
-    const level = props.level ?? "info";
-    const urgent = level === "warning" || level === "error";
-    return (
-      <div className={`a2-alert a2-alert-${level}`} role={urgent ? "alert" : "status"}>
-        <IconView name={ALERT_ICON[level]} />
-        <div>
-          <span className="sr-only">{t(`espace.a2.level.${level}`)}, </span>
-          {props.title && <p className="a2-alert-title">{props.title}</p>}
-          <p className="a2-alert-text">{props.text}</p>
-        </div>
-      </div>
-    );
-  },
+  ({ props }) => <AlertView level={props.level} title={props.title} text={props.text} />,
 );
+
+// AlertView draws an Alert: the catalog's, and a page's [!warning],
+// [!info] or [!success] (its words keep their bold and links; its other
+// blocks under them, children).
+export function AlertView({ level = "info", title, text, children }: { level?: keyof typeof ALERT_ICON; title?: ReactNode; text?: ReactNode; children?: ReactNode }) {
+  const { t } = useWords();
+  const urgent = level === "warning" || level === "error";
+  return (
+    <div className={`a2-alert a2-alert-${level}`} role={urgent ? "alert" : "status"}>
+      <IconView name={ALERT_ICON[level]} />
+      <div>
+        <span className="sr-only">{t(`espace.a2.level.${level}`)}, </span>
+        {title && <p className="a2-alert-title">{title}</p>}
+        {text && <p className="a2-alert-text">{text}</p>}
+        {children}
+      </div>
+    </div>
+  );
+}
 
 // Placeholder holds a surface's place while its author prepares it. (The
 // engine's own placeholder, a child not arrived yet, is another thing:

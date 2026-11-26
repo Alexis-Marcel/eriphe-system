@@ -3642,7 +3642,7 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
 - `GET /api/nodes/{id}[?version=n]`: a node's page (`nodePage`): its row (below), the version
   shown, its versions (`n`, `author`, `at`; code's own versions, a source's new values, are not
   listed but the last; nor an empty creation, a step opened for its task to write: `shift` 1, the
-  page numbering the versions from the first with something in it), its body as parts in order (`parts`: Markdown `text`, or a `block`), and
+  page numbering the versions from the first with something in it), its body as written (`body`, the Markdown the page draws, held to `nodefile.ReadPage` by `web/espace/src/page/read.ts`) and as parts in order (`parts`: Markdown `text`, or a `block`, which the page draws where its fence is), and
   the cards it waits on (`cards`, as the [proposals](#proposals-in-the-blocks-they-concern-card_movesgo)
   show them). A maintained node's page ([Live pages](#live-pages-node_livego-node_homego)) says what keeps it alive (`alive`, `node_alive.go`), from
   what code knows, never a model's words: the `sources` its blocks read (`name`, `what`: the tool
@@ -3737,13 +3737,20 @@ token in `X-CSRF-Token`:
   (`authorWrite` as `user`, the node's guard and the secrets filter as for any author), made on
   the version whose hash is `expect`. A newer version gives `409` with its `version`, `hash` and
   `body`, and writes nothing; an archived node `410`; a body that does not read `400`.
-- `POST /api/nodes/{id}/ask` `{block, component}`: a block's button. Its words are read again in
-  the stored block (`a2ui.AskText`), never taken from the page, and become the user's message to
-  that node. A block marked external asks too, but its words may echo what was read: the message
-  is stored tainted (`ask:<node>/<block>`), so the turn it starts is tainted as the one that wrote
+- `POST /api/nodes/{id}/ask` `{block, component}` or `{line, n}`: a block's button, or a page's
+  probable reply (the `n`-th `ask:` link of that body line). Its words are read again in the stored
+  block (`a2ui.AskText`) or the stored page (`nodefile.ReadPage`), never taken from the page, and
+  become the user's message to that node. A block marked external, or a node written after reading
+  external content, asks too, but its words may echo what was read: the message is stored tainted
+  (`ask:<node>/<block>`, `ask:<node>` for a page's line), so the turn it starts is tainted as the one that wrote
   it, and it is never taken for the user's own words (`fromUntrusted`: no owner memory cited from
   it, no text « oui » on a card, no lending, the extraction reads it as external). It acts on
   nothing: no route marks a block's items or acts on them; a yes is a card's.
+- `POST /api/nodes/{id}/task` `{line, text, state}`: the user's tick on a page's task
+  (`nodefile.SetTask`: `[ ]`, `[x]`, `[/]` or `[-]`), made on the last version (`nodes.ChangeLast`),
+  a version by `user`. The line is found by its text (`line` a hint): a line gone, or written
+  twice, is `409` and nothing is written; an archived node `410`; a state that is not one of the
+  four `400`. `200` `{version, hash}`. A skill triggered by `node.gesture` in that node is woken.
 - `POST /api/nodes/{id}/open` `{block, source, item}`: an item opened in place
   (`item_open.go`), the user's gesture. The source's `items.open` is read again in the stored block
   (`409` when it has none); the item must be one the source lists now (`400`). The tool (a read of

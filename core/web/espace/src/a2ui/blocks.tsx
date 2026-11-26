@@ -109,46 +109,57 @@ const Figure = z.object({
 const Figures = createComponentImplementation(
   { name: "Figures", schema: z.object({ items: listOr(Figure), title: CommonSchemas.DynamicString.optional() }) },
   ({ props }) => {
-    const { t, lang } = useWords();
     const items = (Array.isArray(props.items) ? props.items : []).filter((f): f is z.infer<typeof Figure> => !!f && typeof f === "object");
-    return (
-      <div className="a2-figs-block">
-        <BlockTitle text={str(props.title)} />
-        <div className={`a2-figs n${Math.min(items.length, 4)}`}>
-          {items.map((f, i) => {
-            const n = num(f.value);
-            const value = n !== undefined && typeof f.value === "number" ? number(lang, n) : str(f.value);
-            const unit = str(f.unit);
-            // Its change in ink, and one sign of which way: ▲ up, ▼ down.
-            const delta = num(f.delta);
-            const size = delta === undefined ? "" : `${number(lang, Math.abs(delta))}${unit ? ` ${unit}` : ""}`;
-            const said = delta === undefined ? "" : t(delta > 0 ? "espace.a2.delta.up" : delta < 0 ? "espace.a2.delta.down" : "espace.a2.delta.flat", size);
-            const trend = cleanTrend(f.trend);
-            return (
-              <div className="a2-fig" key={i}>
-                <span className="a2-fig-label">{str(f.label)}</span>
-                {/* keyed by its value: a figure that moved comes in again, a
-                    faint flash (blocks.css) */}
-                <span className="a2-fig-value" key={value}>
-                  {value || "—"}
-                  {unit && <small> {unit}</small>}
-                </span>
-                {(delta !== undefined || f.deltaLabel) && (
-                  <span className="a2-fig-delta">
-                    {delta !== undefined && delta !== 0 && <b aria-hidden="true">{delta > 0 ? "▲" : "▼"} {size}</b>}
-                    {said && <span className="sr-only">{said}</span>}
-                    {f.deltaLabel ? ` ${str(f.deltaLabel)}` : ""}
-                  </span>
-                )}
-                {trend.length > 1 && <Spark values={trend} />}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
+    return <FiguresView title={str(props.title)} items={items.map((f) => ({ label: str(f.label), value: typeof f.value === "number" ? f.value : str(f.value), unit: str(f.unit), delta: num(f.delta), deltaLabel: str(f.deltaLabel), trend: cleanTrend(f.trend) }))} />;
   },
 );
+
+// A figure as FiguresView draws it: a number is written in the user's
+// language, any other value as it is (a page's keeps its bold and links);
+// its change in its own unit when it has one (18 385 € ▲ 1,8 %), else
+// the value's.
+export type FigureItem = { label: ReactNode; value?: number | ReactNode; unit?: string; delta?: number; deltaUnit?: string; deltaLabel?: ReactNode; trend?: number[] };
+
+// FiguresView draws Figures: the catalog's, and a page's [!figures].
+export function FiguresView({ title, items }: { title?: string; items: FigureItem[] }) {
+  const { t, lang } = useWords();
+  return (
+    <div className="a2-figs-block">
+      <BlockTitle text={title ?? ""} />
+      <div className={`a2-figs n${Math.min(items.length, 4)}`}>
+        {items.map((f, i) => {
+          const value = typeof f.value === "number" ? number(lang, f.value) : f.value;
+          const unit = f.unit ?? "";
+          // Its change in ink, and one sign of which way: ▲ up, ▼ down.
+          const delta = f.delta;
+          const du = f.deltaUnit || unit;
+          const size = delta === undefined ? "" : `${number(lang, Math.abs(delta))}${du ? ` ${du}` : ""}`;
+          const said = delta === undefined ? "" : t(delta > 0 ? "espace.a2.delta.up" : delta < 0 ? "espace.a2.delta.down" : "espace.a2.delta.flat", size);
+          const trend = f.trend ?? [];
+          return (
+            <div className="a2-fig" key={i}>
+              <span className="a2-fig-label">{f.label}</span>
+              {/* keyed by its value: a figure that moved comes in again, a
+                  faint flash (blocks.css) */}
+              <span className="a2-fig-value" key={typeof value === "string" ? value : undefined}>
+                {value === "" || value === undefined || value === null ? "—" : value}
+                {unit && <small> {unit}</small>}
+              </span>
+              {(delta !== undefined || f.deltaLabel) && (
+                <span className="a2-fig-delta">
+                  {delta !== undefined && delta !== 0 && <b aria-hidden="true">{delta > 0 ? "▲" : "▼"} {size}</b>}
+                  {said && <span className="sr-only">{said}</span>}
+                  {f.deltaLabel ? <> {f.deltaLabel}</> : ""}
+                </span>
+              )}
+              {trend.length > 1 && <Spark values={trend} />}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // --- Sections -----------------------------------------------------------
 

@@ -1,6 +1,6 @@
 import golden from "../doc/page.golden.json";
 import type { GraphNode, NodeFile, NodePage, TraceEntry } from "./api";
-import { samplePage, setViews } from "./samplecore";
+import { bodyOf, samplePage, setViews } from "./samplecore";
 import { sampleDays } from "./sampledays";
 import { sampleViews } from "./sampleviews";
 
@@ -67,6 +67,7 @@ const page = (id: string, n = nodes.find((x) => x.id === id)): NodePage | null =
       node: n,
       version: n.version,
       versions,
+      body: view.body,
       parts: view.parts,
       cards: view.cards,
       settled: view.settled,
@@ -78,7 +79,8 @@ const page = (id: string, n = nodes.find((x) => x.id === id)): NodePage | null =
     node: n,
     version: n.version,
     versions,
-    parts: [{ text: `# ${n.title || "…"}\n\nUn exemple : ces données sont fictives.\n\n` }, { block: { ...block, external: n.external } }],
+    body: bodyOf([{ text: "Un exemple : ces données sont fictives.\n" }, { block }]),
+    parts: [{ text: "Un exemple : ces données sont fictives.\n" }, { block: { ...block, external: n.external } }],
     cards: [],
   };
 };

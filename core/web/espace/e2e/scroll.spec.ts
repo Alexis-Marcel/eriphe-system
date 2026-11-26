@@ -37,6 +37,7 @@ async function fake(page: Page, answered: number[]) {
     if (route.request().method() !== "GET") return route.fulfill({ status: 204 });
     const r = await route.fetch();
     const p = await r.json();
+    p.body = `${longText}\n${"`".repeat(3)}eriphe:block mails\n{}\n${"`".repeat(3)}\n`;
     p.parts = [
       { text: longText },
       {

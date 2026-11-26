@@ -300,7 +300,9 @@ function render(items: Inline[], ctx: Ctx, key: string): ReactNode[] {
   });
 }
 
-function inline(text: string, ctx: Ctx, key = "i"): ReactNode[] {
+// inline draws a piece of text's inline Markdown (a node's page draws its
+// lines with it: page/Body.tsx).
+export function inline(text: string, ctx: Ctx, key = "i"): ReactNode[] {
   return render(emphasis(scan(text)), ctx, key);
 }
 

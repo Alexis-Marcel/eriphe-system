@@ -69,6 +69,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/catalog", sc.handleCatalog)
 	mux.HandleFunc("POST /e2e/conso", sc.handleConso)
 	mux.HandleFunc("POST /e2e/view", sc.handleView)
+	mux.HandleFunc("POST /e2e/page", sc.handlePage)
 	mux.Handle("/", sc.web.w.routes())
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -1694,6 +1695,39 @@ func (sc *scenario) handleView(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rw.WriteHeader(http.StatusNoContent)
+}
+
+// handlePage is POST /e2e/page: a node whose page is written in
+// Markdown (markdown-page.spec.ts): its tasks, a task's detail, figures,
+// steps and a chart, each a callout; written by the brain, and shown.
+func (sc *scenario) handlePage(rw http.ResponseWriter, r *http.Request) {
+	c := sc.c
+	body := "Écrit le 26/11/2026.\n\n" +
+		"## À faire\n" +
+		"- [ ] Répondre au devis de Sam : avant vendredi 📅 2026-11-28\n" +
+		"  - Le devis est de 4 200 €, la pose comprise.\n" +
+		"- [x] Vider la terrasse\n\n" +
+		"> [!figures] Budget\n" +
+		"> - Prévu : 4 200 €\n" +
+		"> - Dépensé : 300 € (▲ 120 € cette semaine)\n\n" +
+		"> [!steps] Où on en est\n" +
+		"> - [x] Visite de Sam 📅 2026-11-18\n" +
+		"> - [/] Répondre au devis 📅 2026-11-28\n" +
+		"> - [ ] Travaux 📅 2026-12-08\n\n" +
+		"> [!chart|bar] Budget par poste\n" +
+		"> | Poste | Prévu (€) | Dépensé (€) |\n" +
+		"> |---|---|---|\n" +
+		"> | Bois | 2 400 | 0 |\n" +
+		"> | Pose | 1 500 | 120 |\n"
+	d, err := c.nodes.Create(nodestore.New{Title: "Terrasse en Markdown", Author: byBrain, Body: body})
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	id := d.Node.Meta.ID
+	c.showNode(id, byBrain, false)
+	c.bump()
+	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
 }
 
 // handlePurge is POST /e2e/purge: a view of a mailbox (mail/promos), read

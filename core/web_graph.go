@@ -188,14 +188,20 @@ func (c *core) graphRows() ([]graphNode, error) {
 // card on an item, its Oui on its row); the others, decided, are its
 // settled ones, the last first, for its ⋯ menu (« Déjà décidé »).
 type nodePage struct {
-	Node     graphNode      `json:"node"`
-	Version  int            `json:"version"` // the version shown
-	Archived *time.Time     `json:"archived,omitempty"`
-	Versions []pageVersion  `json:"versions"`
-	Shift    int            `json:"shift,omitempty"` // 1 when its creation was empty: the user's v1 is its version 2
-	Parts    []pagePart     `json:"parts"`
-	Cards    []proposalView `json:"cards"`
-	Settled  []proposalView `json:"settled"`
+	Node     graphNode     `json:"node"`
+	Version  int           `json:"version"` // the version shown
+	Archived *time.Time    `json:"archived,omitempty"`
+	Versions []pageVersion `json:"versions"`
+	Shift    int           `json:"shift,omitempty"` // 1 when its creation was empty: the user's v1 is its version 2
+	// Body is the node's body as its file holds it, the page the
+	// workspace reads and draws (web/espace, page/read.ts: the lines it
+	// ticks are this body's, as nodefile.ReadPage counts them). Parts
+	// are its legacy blocks ready to draw, each where its fence is, and
+	// the text between them.
+	Body    string         `json:"body"`
+	Parts   []pagePart     `json:"parts"`
+	Cards   []proposalView `json:"cards"`
+	Settled []proposalView `json:"settled"`
 	// Refs: the node each [[name]] of its text opens, by the name as
 	// written; a name no node has is not there (the page greys it).
 	Refs map[string]pageRef `json:"refs"`
@@ -354,12 +360,17 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 		}
 		p.Parts = append(p.Parts, pagePart{Block: &b})
 	}
-	// Every way the text writes a name is a key of its own.
+	// Every way the text writes a name is a key of its own, an embed's
+	// (![[Name]]) too.
 	var names []string
 	for _, part := range d.Node.Parts() {
 		for _, l := range nodefile.WikiLinks(part.Text) {
 			names = append(names, l.Name)
 		}
+	}
+	if body, err := d.Node.Body(); err == nil {
+		p.Body = body
+		names = append(names, embedNames(nodefile.ReadPage(body).Blocks)...)
 	}
 	if found, err := c.nodes.Resolve(id, names); err == nil {
 		for name, x := range found {
@@ -405,6 +416,25 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 		}
 	}
 	return p, nil
+}
+
+// embedNames are the names a page's embeds (![[Name]]) write, in its
+// lists and callouts too.
+func embedNames(bs []nodefile.PageBlock) []string {
+	var out []string
+	for _, b := range bs {
+		switch b.Kind {
+		case nodefile.KindEmbed:
+			out = append(out, b.Name)
+		case nodefile.KindCallout:
+			out = append(out, embedNames(b.Body)...)
+		case nodefile.KindList:
+			for _, it := range b.Items {
+				out = append(out, embedNames(it.Detail)...)
+			}
+		}
+	}
+	return out
 }
 
 // settledMax is the most decided cards a page lists in its ⋯ menu.

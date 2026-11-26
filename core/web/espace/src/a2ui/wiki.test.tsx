@@ -117,6 +117,7 @@ describe("a page's [[links]]", () => {
     node: { id: "n1", title: "Écrire l'article", weight: 0.6, status: "idle", created: "", updated: "", version: 3 },
     version: 3,
     versions: [],
+    body: "## Les sujets liés\n\n- [[Recherche sur le télétravail|La recherche]]\n- [[Choisir l'angle]]\n- [[L'article]]\n",
     parts: [{ text: "## Les sujets liés\n\n- [[Recherche sur le télétravail|La recherche]]\n- [[Choisir l'angle]]\n- [[L'article]]\n" }],
     cards: [],
     refs: {

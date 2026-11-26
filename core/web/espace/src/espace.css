@@ -812,7 +812,7 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .gr-page.sizing { transition: none; }
 /* Enlarged: its text and its lists keep a measure that reads (about
    760 px, centred); a block with a table or a chart takes the whole width. */
-.gr-page.big .pg-doc > * { width: min(100%, 760px); justify-self: center; }
+.gr-page.big .pg-doc > *, .gr-page.big .md-page > .md-written { width: min(100%, 760px); justify-self: center; align-self: center; }
 .gr-page.big .pg-doc > .a2-block:has(.a2-table, .a2-chart) { width: 100%; }
 .pg-big { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--fg3); cursor: pointer; }
 .pg-big:hover, .pg-big[aria-pressed="true"] { background: var(--fill); color: var(--fg); }
@@ -1163,8 +1163,8 @@ a.notice-text:hover { text-decoration: underline; }
 /* --- A page's opening, items that propose, batches -------------------------
    A page's text opens with what matters (the prompt: « commence par ce qui
    compte »): its first paragraph is its lead, a size above the rest. */
-.pg-doc > .a2-markdown:first-child > p:first-child { font-size: var(--fs-lead); line-height: var(--lh-body); letter-spacing: -0.01em; color: var(--fg); }
-.pg-doc > .a2-markdown:first-child > p:first-child + p { color: var(--fg2); font-size: var(--fs-body); }
+.pg-doc > .md-p:first-child { font-size: var(--fs-lead); line-height: var(--lh-body); letter-spacing: -0.01em; color: var(--fg); }
+.pg-doc > .md-p:first-child + .md-p { color: var(--fg2); font-size: var(--fs-body); }
 
 /* An item that proposes: one line, the item and its one Oui, no frame of
    its own; the rows of the list are what separates them. */

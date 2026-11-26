@@ -3,8 +3,9 @@ import type { Lang } from "../i18n";
 // The data layer's requests: the one place, with stream.ts, that talks to
 // eriphe-core. The page reads
 // - /espace/boot: its words, the CSRF token, the assistant's name;
-// - GET /api/nodes/{id}[?version=n]: a node's page, its text and its
-//   blocks ready to draw, its versions, the cards it waits on (web_graph.go);
+// - GET /api/nodes/{id}[?version=n]: a node's page, its body (Markdown)
+//   and its blocks ready to draw, its versions, the cards it waits on
+//   (web_graph.go);
 // - GET /api/nodes/{id}/trace and /md: its trace, its file as it is;
 // - GET /api/proposals/{ref}, ?day=: a proposal a block shows, those of a
 //   day (web_proposals.go);
@@ -14,8 +15,9 @@ import type { Lang } from "../i18n";
 // - POST /cards/{id}/yes|no: a card's answer;
 // - POST /brain/retry: once more the turn Eriphe could not answer;
 // - the user's gestures (web_gestures.go): PUT /api/nodes/{id}/md (an edit,
-//   made on the version it was read at), POST .../ask (a block's button,
-//   which only asks), .../open (an item read in full), .../archive and
+//   made on the version it was read at), POST .../ask (a block's button
+//   or a page's ask: link, which only asks), .../task (a task ticked, its
+//   line written on the last version), .../open (an item read in full), .../archive and
 //   .../reopen, PUT /api/espace/view (the pages open, the display settings:
 //   the theme, the graph's forces);
 // - POST /presence: whether this tab is in front of the user (presence.ts).
@@ -183,6 +185,9 @@ export type NodePage = {
   archived?: string;
   versions: PageVersion[];
   shift?: number;
+  // body: its Markdown as its file holds it, the page drawn (page/Body.tsx);
+  // parts: its legacy blocks, ready to draw where their fences are
+  body: string;
   parts: PagePart[];
   // cards: those that still ask, at its foot; settled: those decided, for the « ⋯ » menu
   cards: ProposalView[];
@@ -299,6 +304,18 @@ export async function saveFile(id: string, body: string, expect: string): Promis
 // ask sends a block's button: eriphe-core reads its words in the block.
 export async function ask(id: string, block: string, component: string): Promise<boolean> {
   return (await sendJSON("POST", `${nodePath(id)}/ask`, { block, component })).status === 204;
+}
+
+// askLine sends a page's ask: link, the nth of its line: eriphe-core
+// reads its words in the page.
+export async function askLine(id: string, line: number, n: number): Promise<boolean> {
+  return (await sendJSON("POST", `${nodePath(id)}/ask`, { line, n })).status === 204;
+}
+
+// tick writes a task's state into its line (text, the line as the page
+// read it; line, its number, a hint), on the node's last version.
+export async function tick(id: string, line: number, text: string, state: string): Promise<boolean> {
+  return (await sendJSON("POST", `${nodePath(id)}/task`, { line, text, state })).status === 200;
 }
 
 export async function archive(id: string): Promise<boolean> {
