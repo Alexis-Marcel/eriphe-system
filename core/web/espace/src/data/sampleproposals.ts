@@ -6,8 +6,7 @@ import { sampleCards } from "./samplecore";
 // The dev server's proposals and orb (dev.tsx). Made-up words, no real
 // name, address or tool in them.
 
-// Made-up proposals for the dev server: a few of each kind, and a dated
-// one an agenda shows as a ghost. Answering one changes nothing but its state on the
+// Made-up proposals for the dev server: a few of each kind. Answering one changes nothing but its state on the
 // page, and says it moved, as eriphe-core's stream would.
 export function sampleProposals(lang: Lang): Proposals {
   const en = lang === "en";
@@ -43,7 +42,6 @@ export function sampleProposals(lang: Lang): Proposals {
       card: 8, verb: "Faire",
       state: "pending",
       text: en ? "An hour to read the quote again" : "Une heure pour relire le devis",
-      when: [{ start: "2026-11-12T14:30:00+01:00", end: "2026-11-12T15:30:00+01:00" }],
     },
   ];
   const states = new Map<string, string>();
@@ -63,7 +61,6 @@ export function sampleProposals(lang: Lang): Proposals {
       for (const f of followers) f({ refs: [ref] });
       return true;
     },
-    day: async (date) => [...views.map((v) => read(v.ref)!).filter((v) => v.state === "pending" && v.when?.some((w) => w.start.startsWith(date))), ...viewCards.day(date)],
     follow: (on) => {
       followers.add(on);
       const off = viewCards.follow(on);

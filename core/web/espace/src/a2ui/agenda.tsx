@@ -1,10 +1,9 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import type { Lang, T } from "../i18n";
 import { Icon as IconView } from "./icons";
-import { InlineYes } from "./inline";
 import { day, locale, minutesOf, time, wall } from "./format";
 
-// The catalog's Agenda: anything from a calendar, one block. Its first day
+// A page's agenda: the events of an [!agenda] callout. Its first day
 // is an hour column (today's with a line at the time it is now), the next
 // one a compact column, the days after a strip of small columns (a list of
 // days when the block is narrow). Placement is classes on a grid of
@@ -12,16 +11,12 @@ import { day, locale, minutesOf, time, wall } from "./format";
 // a style: the CSP refuses them. Events that overlap are a clash, drawn
 // side by side in its lanes (.a2-lane-N), stacked when the block is narrow.
 //
-// What waits for the user is drawn one way, a ghost (a dashed violet
-// outline), whatever it is: an invitation the user has not answered (an
-// event whose status is "needs-action"), an event a card waits on, or a
-// time Eriphe proposes (a dated card, read from eriphe-core). A ghost
-// carries its card's Oui when it has one: an event's is the card that
-// waits on its item (told out of band, as a List's rows are: never from
-// the block's data), a proposal's its own. An invitation is someone else's
-// words: it carries the small amber sign of what comes from outside. A
-// status is always said in the user's words, never as the source wrote it;
-// one the page does not know says nothing.
+// What waits for the user, an invitation not answered (an event whose
+// status is "needs-action"), is drawn as a ghost (a dashed violet
+// outline). An invitation is someone else's words: it carries the small
+// amber sign of what comes from outside. A status is always said in the
+// user's words, never as the source wrote it; one the page does not know
+// says nothing.
 //
 // A page's [!agenda] gives an event more than a calendar's: its title as
 // written (label, its link to the event kept) and its detail, the lines
@@ -33,12 +28,8 @@ export type AgendaEvent = { title: string; start: string; end?: string; place?: 
 // The events open under the days (their places in the list), and how to open one.
 const Opened = createContext<{ open: ReadonlySet<number>; toggle: (n: number) => void } | null>(null);
 
-// An event and its place in the source's list (n): the row eriphe-core
-// tells its card by.
+// An event and its place in the callout's list (n).
 export type Listed = AgendaEvent & { n: number };
-
-// A ghost: a proposal's time; ref is the proposal's card.
-export type Ghost = AgendaEvent & { ref: string; tainted?: boolean };
 
 // The statuses the page says, and how sources write them.
 export type Status = "" | "tentative" | "needs-action" | "declined" | "cancelled";
@@ -55,10 +46,9 @@ const SLOT = 30; // minutes a grid row stands for
 const LANES = 3; // lanes of a clash at most; a fourth overlap shares the last
 export const AGENDA_DAYS = 7; // days at most
 
-// An entry of a day: an event (n, its place in the source's list) or a
-// proposal (ghost, its ref); card, the card it carries; invited, an
-// invitation not answered; waits when it asks the user's answer.
-export type Entry = AgendaEvent & { n?: number; ghost?: string; card?: string; tainted?: boolean; invited: boolean; st: Status; waits: boolean };
+// An entry of a day: an event (n, its place in the list); invited, an
+// invitation not answered, which waits for the user's answer.
+export type Entry = AgendaEvent & { n?: number; invited: boolean; st: Status; waits: boolean };
 // clash: for an entry that waits, the events it overlaps; for an event,
 // whether one that waits overlaps it.
 type Placed = { ev: Entry; start: number; end: number; lane: number; overlap: boolean; clash: string[] };
@@ -66,16 +56,12 @@ type Placed = { ev: Entry; start: number; end: number; lane: number; overlap: bo
 // lanes.
 type Cluster = { start: number; end: number; lanes: number; items: Placed[] };
 
-export function entries(events: Listed[], ghosts: Ghost[] = [], cardOf?: (n: number) => string | undefined): Entry[] {
-  return [
-    ...events.map((e) => {
-      const st = statusOf(e.status);
-      const card = cardOf?.(e.n);
-      const invited = st === "needs-action";
-      return { ...e, st, card, invited, waits: invited || !!card };
-    }),
-    ...ghosts.map((g) => ({ ...g, ghost: g.ref, card: g.ref, st: "" as Status, invited: false, waits: true })),
-  ];
+export function entries(events: Listed[]): Entry[] {
+  return events.map((e) => {
+    const st = statusOf(e.status);
+    const invited = st === "needs-action";
+    return { ...e, st, invited, waits: invited };
+  });
 }
 
 // place puts the timed entries of a day in clusters of those that overlap,
@@ -140,20 +126,16 @@ export function today(now: Date): { date: string; min: number } {
   return { date: `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`, min: now.getHours() * 60 + now.getMinutes() };
 }
 
-// Where an Agenda is answered from, and the card each of its events
-// carries (eriphe-core's, out of band; none outside a page).
-export type AgendaCards = { where: { surfaceId: string; componentId: string }; card: (n: number) => string | undefined };
+type Props = { date: string; days: number; events: Listed[]; lang: Lang; t: T; now: Date };
+type DayProps = { date: string; items: Entry[]; lang: Lang; t: T; now: Date };
 
-type Props = { date: string; days: number; events: Listed[]; ghosts: Ghost[]; cards?: AgendaCards; lang: Lang; t: T; now: Date };
-type DayProps = { date: string; items: Entry[]; cards?: AgendaCards; lang: Lang; t: T; now: Date };
-
-export function Agenda({ date, days, events, ghosts, cards, lang, t, now }: Props) {
-  const all = entries(events, ghosts, cards?.card);
+export function Agenda({ date, days, events, lang, t, now }: Props) {
+  const all = entries(events);
   const n = Math.max(1, Math.min(AGENDA_DAYS, Math.round(days)));
   const dates = Array.from({ length: n }, (_, i) => addDays(date, i));
   const label = dayName(lang, t, date, now);
   const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
-  const shown = all.filter((ev) => ev.n !== undefined && open.has(ev.n) && !ev.ghost);
+  const shown = all.filter((ev) => ev.n !== undefined && open.has(ev.n));
   const toggle = (k: number) => {
     const next = new Set(open);
     if (!next.delete(k)) next.add(k);
@@ -163,13 +145,13 @@ export function Agenda({ date, days, events, ghosts, cards, lang, t, now }: Prop
     <Opened.Provider value={{ open, toggle }}>
     <section className={`a2-agenda a2-agenda-n${Math.min(n, 3)}`} aria-label={label.join(", ")}>
       <div className="a2-agenda-main">
-        <HourDay date={date} items={all} cards={cards} lang={lang} t={t} now={now} />
-        {n > 1 && <ListDay date={dates[1]} items={all} cards={cards} lang={lang} t={t} now={now} />}
+        <HourDay date={date} items={all} lang={lang} t={t} now={now} />
+        {n > 1 && <ListDay date={dates[1]} items={all} lang={lang} t={t} now={now} />}
       </div>
       {n > 2 && (
         <ol className="a2-agenda-week">
           {dates.slice(2).map((d) => (
-            <ListDay key={d} date={d} items={all} cards={cards} lang={lang} t={t} now={now} small />
+            <ListDay key={d} date={d} items={all} lang={lang} t={t} now={now} small />
           ))}
         </ol>
       )}
@@ -211,7 +193,6 @@ function Head({ name }: { name: [string, string] }) {
 // What an entry says of itself besides its title: « à répondre », « peut-être »,
 // « proposé par Eriphe »…
 function said(t: T, ev: Entry): string {
-  if (ev.ghost) return t(ev.tainted ? "espace.a2.days.proposed.tainted" : "espace.a2.days.proposed");
   return ev.st ? t(`espace.a2.days.status.${ev.st}`) : "";
 }
 
@@ -232,7 +213,7 @@ function Outside({ t }: { t: T }) {
 // click, under the days.
 function Title({ ev, t }: { ev: Entry; t: T }) {
   const o = useContext(Opened);
-  if (o && ev.n !== undefined && !ev.ghost && (ev.label || ev.detail)) {
+  if (o && ev.n !== undefined && (ev.label || ev.detail)) {
     const n = ev.n;
     return (
       <button type="button" className="a2-ev-title a2-ev-open" aria-expanded={o.open.has(n)} onClick={() => o.toggle(n)}>
@@ -249,14 +230,6 @@ function Title({ ev, t }: { ev: Entry; t: T }) {
   );
 }
 
-// yes is the card an entry carries, its Oui: an event's, told by
-// eriphe-core; a proposal's, its own. An invitation's line already has
-// its outside sign: the Oui does not repeat it.
-function yes(ev: Entry, cards: AgendaCards | undefined): ReactNode {
-  if (!ev.card) return null;
-  return <InlineYes refText={ev.card} where={cards?.where ?? { surfaceId: "", componentId: "" }} marked={ev.invited} />;
-}
-
 function span(lang: Lang, ev: Entry): string {
   const s = wall(ev.start), e = wall(ev.end);
   if (!s?.time) return "";
@@ -270,7 +243,7 @@ function hour(lang: Lang, h: number): string {
 
 // HourDay is a day by the hour: its all-day entries, then a grid of its
 // hours, its entries placed by their times, today's with a line now.
-function HourDay({ date, items, cards, lang, t, now }: DayProps) {
+function HourDay({ date, items, lang, t, now }: DayProps) {
   const { timed, allDay, clusters } = place(items, date);
   const here = today(now);
   const isToday = date === here.date;
@@ -303,7 +276,7 @@ function HourDay({ date, items, cards, lang, t, now }: DayProps) {
       rows === 1 ? "a2-ev-short" : rows > 2 ? "a2-ev-tall" : "",
     ];
     return (
-      <div key={i} role="listitem" className={classes.filter(Boolean).join(" ")} data-proposal={p.ev.ghost}>
+      <div key={i} role="listitem" className={classes.filter(Boolean).join(" ")}>
         {/* Its title first; then, on a line of their own when it is
             tall enough, its word (« à répondre »), its time, its place
             and what it overlaps. */}
@@ -325,7 +298,6 @@ function HourDay({ date, items, cards, lang, t, now }: DayProps) {
             <span className="a2-ev-clash">{t("espace.a2.days.clash", p.clash.join(", "))}</span>
           </span>
         )}
-        {yes(p.ev, cards)}
         {p.ev.waits && p.clash.length > 0 && rows <= 3 && <span className="sr-only">{t("espace.a2.days.clash", p.clash.join(", "))}</span>}
         {p.overlap && !(p.ev.waits && p.clash.length) && <span className="sr-only">{t("espace.a2.days.overlap")}</span>}
       </div>
@@ -337,11 +309,10 @@ function HourDay({ date, items, cards, lang, t, now }: DayProps) {
       {allDay.length > 0 && (
         <ul className="a2-agenda-allday" aria-label={t("espace.a2.allday")}>
           {allDay.map((ev, i) => (
-            <li key={i} className={`a2-ev a2-ev-allday ${stClass(ev)}`} data-proposal={ev.ghost}>
+            <li key={i} className={`a2-ev a2-ev-allday ${stClass(ev)}`}>
               <Title ev={ev} t={t} />
               {said(t, ev) && <span className="a2-ev-said">{said(t, ev)}</span>}
               {ev.place && <span className="a2-ev-place">{ev.place}</span>}
-              {yes(ev, cards)}
             </li>
           ))}
         </ul>
@@ -381,7 +352,7 @@ function HourDay({ date, items, cards, lang, t, now }: DayProps) {
 }
 
 // ListDay is a day as lines: its all-day entries, then its times in order.
-function ListDay({ date, items, cards, lang, t, now, small = false }: DayProps & { small?: boolean }) {
+function ListDay({ date, items, lang, t, now, small = false }: DayProps & { small?: boolean }) {
   const { timed, allDay } = place(items, date);
   const w = wall(date)!;
   const weekend = [0, 6].includes(w.at.getUTCDay());
@@ -395,14 +366,13 @@ function ListDay({ date, items, cards, lang, t, now, small = false }: DayProps &
           {lines.map(({ ev, at }, i) => {
             const word = said(t, ev);
             return (
-              <li key={i} className={`a2-agenda-line ${stClass(ev)}`} data-proposal={ev.ghost}>
+              <li key={i} className={`a2-agenda-line ${stClass(ev)}`}>
                 <span className="a2-agenda-at">{at || t("espace.a2.days.allday")}</span>
                 <span className="a2-agenda-what">
                   <Title ev={ev} t={t} />
                   {ev.place && <span className="a2-ev-place">{ev.place}</span>}
                   {word && <span className="a2-ev-said">{word}</span>}
                 </span>
-                {yes(ev, cards)}
               </li>
             );
           })}

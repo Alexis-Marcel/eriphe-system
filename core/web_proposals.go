@@ -5,12 +5,10 @@ import (
 	"time"
 )
 
-// A proposal shown in a node's page (its cards) or in a block (the
-// catalog's Proposal component): the page names it by its own ref, kind:id, and reads here
-// what its card says and which card answers it; Oui and Non then go to the
-// card, POST /cards/{id}/yes|no, as in the conversation. An Agenda
-// reads here the dated proposals of its day, which it shows as ghosts
-// (card_moves.go).
+// A proposal shown in a node's page (its cards): the page names it by its
+// own ref, kind:id, and reads here what its card says and which card
+// answers it; Oui and Non then go to the card, POST /cards/{id}/yes|no, as
+// in the conversation.
 
 // proposalView is a proposal as the workspace's Proposal component shows it.
 type proposalView struct {
@@ -28,7 +26,6 @@ type proposalView struct {
 	From    string      `json:"from,omitempty"`         // the node and the task that ask, in words
 	FromExt bool        `json:"fromExternal,omitempty"` // From quotes words that may be someone else's, marked
 	Yes     string      `json:"yes,omitempty"`          // what Oui does, in words
-	When    []spanView  `json:"when,omitempty"`         // when it takes place, if it has a time
 	Exec    string      `json:"exec,omitempty"`         // approved, its call: running, done or failed (access_card.go)
 	ExecWhy string      `json:"execWhy,omitempty"`      // failed: notkept, gone, notallowed or error
 	// ExecError: failed, why in words: the tool's own for an error
@@ -74,11 +71,6 @@ func (w *web) proposalView(x convoCard, p proposal, lang string) proposalView {
 		}
 		v.Exec, v.ExecWhy, v.ExecError, v.ExecErrorExt = w.c.asksExec(asks)
 	}
-	if x.State == cardPending {
-		for _, s := range w.c.proposalSpans(p.Kind, p.ID, w.c.userZone()) {
-			v.When = append(v.When, s.view())
-		}
-	}
 	return v
 }
 
@@ -98,40 +90,4 @@ func (w *web) handleProposal(rw http.ResponseWriter, r *http.Request, _ *session
 	x, p := w.c.liveCard(xs[0])
 	rw.Header().Set("Cache-Control", "no-store")
 	writeJSON(rw, http.StatusOK, w.proposalView(x, p, w.lang(r)))
-}
-
-// dayProposals is the answer of GET /api/proposals?day=.
-type dayProposals struct {
-	Day       string         `json:"day"`
-	Proposals []proposalView `json:"proposals"`
-}
-
-// handleDayProposals is GET /api/proposals?day=YYYY-MM-DD: the proposals
-// that wait and take place that day, in the user's zone, with their times
-// (when); 400 without a day.
-func (w *web) handleDayProposals(rw http.ResponseWriter, r *http.Request, _ *session) {
-	loc := w.c.userZone()
-	from, err := time.ParseInLocation(time.DateOnly, r.URL.Query().Get("day"), loc)
-	if err != nil {
-		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "day is YYYY-MM-DD"})
-		return
-	}
-	lang := w.lang(r)
-	out := dayProposals{Day: from.Format(time.DateOnly), Proposals: []proposalView{}}
-	for _, wc := range w.c.waitingCards() {
-		var on []spanView
-		for _, s := range w.c.proposalSpans(wc.p.Kind, wc.p.ID, loc) {
-			if s.on(from) {
-				on = append(on, s.view())
-			}
-		}
-		if len(on) == 0 {
-			continue
-		}
-		v := w.proposalView(wc.card, wc.p, lang)
-		v.When = on
-		out.Proposals = append(out.Proposals, v)
-	}
-	rw.Header().Set("Cache-Control", "no-store")
-	writeJSON(rw, http.StatusOK, out)
 }

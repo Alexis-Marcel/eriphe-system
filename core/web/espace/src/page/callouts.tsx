@@ -317,7 +317,7 @@ function Agenda({ title, body }: { title: string; body: MdBlock[] }) {
       {first && (
         <>
           <BlockTitle text={title} />
-          <AgendaView date={first} days={Math.min(AGENDA_DAYS, span)} events={events} ghosts={[]} lang={lang} t={t} now={now} />
+          <AgendaView date={first} days={Math.min(AGENDA_DAYS, span)} events={events} lang={lang} t={t} now={now} />
         </>
       )}
       {!first && title && <BlockTitle text={title} />}

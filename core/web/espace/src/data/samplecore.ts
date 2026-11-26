@@ -97,7 +97,6 @@ export async function sampleOpen(id: string, ref: string): Promise<Opened> {
 export function sampleCards(): {
   read(ref: string): ProposalView | null;
   answer(ref: string, yes: boolean, only?: number[]): boolean;
-  day(date: string): ProposalView[];
   follow(on: (m: Moved) => void): () => void;
 } {
   const find = (ref: string) => {
@@ -127,11 +126,6 @@ export function sampleCards(): {
         bump(f.v.id);
       }, 900);
       return true;
-    },
-    // the cards dated on a day that still wait: an agenda's ghosts
-    day: (date) => {
-      const dated = views.flatMap((v) => v.cards).filter((c) => c.state === "pending" && c.when?.some((w) => w.start.startsWith(date)));
-      return dated.filter((c, i) => dated.findIndex((d) => d.ref === c.ref) === i).map(asView);
     },
     follow: (on) => {
       followers.add(on);

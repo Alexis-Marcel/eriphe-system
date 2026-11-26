@@ -76,7 +76,7 @@ describe("a page's referenced items", () => {
     setReads(null);
   });
   const draw = async (latest = true, page = pageOf()) => {
-    const src: Proposals = { read: async (ref) => views[ref] ?? null, answer: async () => true, day: async () => [], follow: () => () => {} };
+    const src: Proposals = { read: async (ref) => views[ref] ?? null, answer: async () => true, follow: () => () => {} };
     await act(async () =>
       root.render(
         <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}>

@@ -7,8 +7,7 @@ import type { Lang } from "../i18n";
 //   and its blocks ready to draw, its versions, the cards it waits on
 //   (web_graph.go);
 // - GET /api/nodes/{id}/trace and /md: its trace, its file as it is;
-// - GET /api/proposals/{ref}, ?day=: a proposal a block shows, those of a
-//   day (web_proposals.go);
+// - GET /api/proposals/{ref}: a proposal's card (web_proposals.go);
 // - GET /api/archives: what the user archived;
 // and writes
 // - POST /messages: what the user says, to the node the bar talks to;
@@ -473,7 +472,6 @@ export type ProposalView = {
   from?: string;
   fromExternal?: boolean; // from quotes words that may be someone else's, marked
   yes?: string;
-  when?: Span[];
   exec?: "running" | "done" | "failed";
   execWhy?: string;
   // Failed: why, in the tool's own words (external: marked).
@@ -500,14 +498,8 @@ export function stillAsks(p: Pick<ProposalView, "state" | "exec">): boolean {
 // out the choices all of whose items they are (call_fold.go).
 export type Choice = { id: number; text: string; n: number; state: string; items?: string[] };
 
-export type Span = { start: string; end?: string; allDay?: boolean };
-
 export function proposal(ref: string): Promise<ProposalView | null> {
   return getJSON<ProposalView>(`/api/proposals/${encodeURIComponent(ref)}`);
-}
-
-export async function dayProposals(date: string): Promise<ProposalView[]> {
-  return (await getJSON<{ proposals: ProposalView[] }>(`/api/proposals?day=${encodeURIComponent(date)}`))?.proposals ?? [];
 }
 
 // What a Proposal component answers: the proposal it shows. Its card's

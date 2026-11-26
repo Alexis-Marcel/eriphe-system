@@ -47,7 +47,6 @@ func (w *web) graphRoutes(mux *webMux) {
 	mux.Handle("GET /api/nodes/{id}/trace", w.auth(w.handleNodeTrace))
 	mux.Handle("GET /api/nodes/{id}/md", w.auth(w.handleNodeMD))
 	mux.Handle("GET /api/proposals/{ref}", w.auth(w.handleProposal)) // web_proposals.go
-	mux.Handle("GET /api/proposals", w.auth(w.handleDayProposals))   // web_proposals.go
 	mux.Handle("GET /api/report/turns", w.auth(w.handleTurnReport))  // turn_report.go
 }
 

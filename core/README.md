@@ -4112,8 +4112,9 @@ only), which relays it here with its own secret and the task's id:
   (413), 20 files a node at most: in `files/<id>/med_<32 hex>.<ext>` of the graph's repository, one
   commit by the task's author (`nodestore.PutFile`). It is not a version of the node; it stays
   with it when it is archived. The answer is `{"src": "media:<name>", "type", "size"}`, which the
-  task names as a property of its node. A Markdown page draws no image yet, so tasks are not told
-  to capture (#786). The bytes never go through a model.
+  task names as a property of its node. A Markdown page draws no image yet (`![words](media:…)`
+  shows its words), so tasks are not told to capture (#786); a format-2 `Image` of a capture was
+  converted to such a line, its file kept. The bytes never go through a model.
 - **Shown.** `nodeFileSrc` signs `media:<node>/<name>` for the node that names it (external or
   not: the file is the node's own and the address carries nothing out), and `GET /espace/media`
   reads it from that node's files only, with the session: an address eriphe-core did not sign gets
@@ -4147,18 +4148,6 @@ A proposal shows where it matters (#428), with no code for any tool:
   the rows of the items it acts on. Its Oui and ✕ answer that
   proposal and no other (its card, `POST /cards/{id}/yes\|no`). One drawn from external content
   carries a small badge (« extérieur »), its whole sentence on hover and for a screen reader.
-- **Dated.** A proposal may have a time, generic: an intention's due
-  date, or, for a call a card keeps (a held write, a run's calls), its arguments that are a date
-  or a date-time, by the tool's input schema (`format` `date-time` or `date`), or, the schema
-  saying no format, enum or pattern, by the whole value (RFC 3339, `YYYY-MM-DDTHH:MM[:SS]` in
-  the user's zone, `YYYY-MM-DD` for a whole day); the earliest starts it, the latest ends it. No
-  name of a tool or of an argument is read. A run's card keeps several calls: each dated one has
-  its own span, all answering the one card. `GET /api/proposals?day=YYYY-MM-DD` gives the day's
-  (`{"day", "proposals": [<proposal view with when>]}`, the times with the user's offset; 400
-  without a day); `GET /api/proposals/{ref}` gives `when` too. The limits of a time read from
-  values: an unrelated date argument (a recurrence's end, say) stretches the span, and a call
-  with a start and a duration but no end gets half an hour. A page's agenda callout draws no
-  proposal (`page/callouts.tsx`).
 - **Moved.** A card made (`cardProposed`, `cardNow`, `cardQueued`), decided (`decideCardWith`, the
   one way any answer goes: its buttons, a channel, a plain "oui", or a page through
   `answerProposal`, `TestOneWayToSayYes`) or settled when its proposal moved elsewhere

@@ -7,8 +7,8 @@
 //   eriphe-capture --file <image> <node-id>    give a PNG or a JPEG already made
 //
 // The node's id is the task's own (node_read gives it). It prints
-// {"src": "media:med_….png", …}: the file is the node's, kept with it; its
-// page names it as an image, ![its words](media:med_….png). The page is opened in a headless Chromium (Debian's
+// {"src": "media:med_….png", …}: the file is the node's, kept with it, and
+// the task names it as a property of its node. The page is opened in a headless Chromium (Debian's
 // chromium-headless-shell, installed on first use through apt and the
 // machine's cache), with a fixed window (1280×800), a time limit, a profile
 // of its own thrown away after (no cookie, no sign-in), downloads refused,

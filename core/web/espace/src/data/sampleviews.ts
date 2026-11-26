@@ -119,7 +119,7 @@ const dayView: SampleView = {
       "[Ajoute aussi mes mails à traiter](ask:) · [Fais-moi un point chaque matin à 8 h](ask:)\n",
     ].join(""),
   cards: [
-    { ref: "intention:3", card: 8, state: "pending", node: "day", text: "Une heure pour relire le devis", when: [{ start: `${today}T16:00:00+01:00`, end: `${today}T17:00:00+01:00` }] },
+    { ref: "intention:3", card: 8, state: "pending", node: "day", text: "Une heure pour relire le devis" },
   ],
 };
 
