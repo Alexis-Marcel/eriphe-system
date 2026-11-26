@@ -49,7 +49,7 @@ func mailPage(t *testing.T, c *core, instructions string) (string, proposal) {
 	if len(cards) != 1 || len(cardsOf(c, cardMonitor)) != 0 {
 		t.Fatalf("cards %+v", c.pendingProposals())
 	}
-	if !cardWaitsOn(c, node) { // its card waits on the node it will maintain
+	if !cardWaitsOn(c, node) { // its card waits in the node of the turn that wrote it
 		t.Fatal("the skill's card is not on its home")
 	}
 	return node, cards[0]
@@ -179,6 +179,48 @@ func cardsOf(c *core, kind string) []proposal {
 		}
 	}
 	return out
+}
+
+// TestSkillCardWaitsWhereProposed: a skill's version waits in the node
+// of the turn or task that proposed it, like any card; never on the page
+// the skill maintains, nor where an earlier version of it waited (#784).
+func TestSkillCardWaitsWhereProposed(t *testing.T) {
+	c, _, _ := viewCore(t)
+	home, first := mailPage(t, c, "Note chaque mail.")
+	if err := c.decideProposal(context.Background(), cardSkill, first.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	ref := proposalRef(cardSkill, first.ID)
+	out, isErr := callBrainTool(t, c, "node_open", map[string]any{"title": "Améliorer Mes mails",
+		"goal": "Décider avec l'utilisateur comment trier mieux ses mails."})
+	if isErr {
+		t.Fatalf("node_open: %v", out)
+	}
+	talk := out["id"].(string)
+	c.turn.about(talk) // the owner decides here
+	sk := mailSkill("Note chaque mail ; propose d'archiver ce qui ne compte pas.")
+	sk["node"] = home
+	delete(sk, "monitor") // on already
+	if out, isErr := callBrainTool(t, c, "write_skill", sk); isErr {
+		t.Fatalf("write_skill: %v", out)
+	}
+	if len(cardsOf(c, cardSkill)) != 1 || !cardWaitsOn(c, talk) || cardWaitsOn(c, home) {
+		t.Fatalf("waits in the discussion %v, on the page %v", cardWaitsOn(c, talk), cardWaitsOn(c, home))
+	}
+	if got := c.cardNodes(ref); !slices.Equal(got, []string{talk}) {
+		t.Fatalf("linked to %v, want only %s: not where the first version waited", got, talk)
+	}
+
+	// A task that follows the skill proposes one: its card waits in the
+	// task's node.
+	if err := c.decideProposal(context.Background(), cardSkill, first.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	task, _ := launched(t, c, map[string]any{"ask": "Trie mieux mes mails.", "skill": "tri-mails", "node": talk})
+	mustNodes(t, c, task.ID, "skill_propose", map[string]any{"skill": "tri-mails", "instructions": "Note chaque mail, groupe-les par expéditeur.", "why": "Plus lisible."})
+	if got, want := c.cardNodes(ref), c.taskNode(task.ID); !slices.Equal(got, []string{want}) || want == home {
+		t.Fatalf("linked to %v, want only the task's node %s", got, want)
+	}
 }
 
 // « Surveille mes mails »: the brain writes the page at once, no card,
