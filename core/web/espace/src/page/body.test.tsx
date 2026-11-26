@@ -131,6 +131,18 @@ describe("a page drawn from its Markdown", () => {
     expect(el.querySelector(".a2-person-facts a")?.getAttribute("href")).toBe("https://example.org/sam");
   });
 
+  it("links only to the web: a reference, a link, a quote's or a person's other targets stay words", async () => {
+    await draw({
+      body:
+        "[Le mail][m1] et [le script][s1], [ici](javascript:alert(1)).\n\n| Où |\n|---|\n| [là](data:text/html,x) |\n\n" +
+        "> Oui.\n> — Sam, [source](javascript:alert(2))\n\n> [!person] Sam\n> - Site : javascript:alert(3)\n\n" +
+        "[m1]: mail:abc\n[s1]: javascript:alert(4)\n",
+    });
+    expect([...el.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([]);
+    expect(el.textContent).toContain("Le mail");
+    expect(el.textContent).toContain("le script");
+  });
+
   it("opens an item's detail on a click, and an event's", async () => {
     await draw({ body: page("mails") });
     const row = el.querySelector<HTMLElement>('.md-row[aria-expanded="false"]')!;

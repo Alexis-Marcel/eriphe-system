@@ -95,6 +95,14 @@ func TestNodeTask(t *testing.T) {
 	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/task", nodeTaskIn{Line: 4, Text: "Rappeler Sam", State: "done"}); code != http.StatusBadRequest {
 		t.Errorf("a state that is not one: %d", code)
 	}
+	// The user's tick on someone else's words leaves them someone else's.
+	ext := mustNode(t, c, nodestore.New{Title: "Lu ailleurs", Body: "- [ ] Répondre\n", External: true})
+	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+ext+"/task", nodeTaskIn{Line: 1, Text: "- [ ] Répondre", State: "x"}); code != 200 {
+		t.Fatalf("tick on an external node: %d", code)
+	}
+	if d, _ := c.nodes.Read(ext, 0); !d.Node.Meta.External {
+		t.Error("a tick made an external node the user's own words")
+	}
 	if err := c.archiveNode(t.Context(), id, byUser); err != nil {
 		t.Fatal(err)
 	}

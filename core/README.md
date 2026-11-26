@@ -3642,7 +3642,7 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
 - `GET /api/nodes/{id}[?version=n]`: a node's page (`nodePage`): its row (below), the version
   shown, its versions (`n`, `author`, `at`; code's own versions, a source's new values, are not
   listed but the last; nor an empty creation, a step opened for its task to write: `shift` 1, the
-  page numbering the versions from the first with something in it), its body as parts in order (`parts`: Markdown `text`, or a `block`), and
+  page numbering the versions from the first with something in it), its body as written (`body`, the Markdown the page draws, held to `nodefile.ReadPage` by `web/espace/src/page/read.ts`) and as parts in order (`parts`: Markdown `text`, or a `block`, which the page draws where its fence is), and
   the cards it waits on (`cards`, as the [proposals](#proposals-in-the-blocks-they-concern-card_movesgo)
   show them). A maintained node's page ([Live pages](#live-pages-node_livego-node_homego)) says what keeps it alive (`alive`, `node_alive.go`), from
   what code knows, never a model's words: the `sources` its blocks read (`name`, `what`: the tool
