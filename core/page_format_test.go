@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -57,8 +58,9 @@ func boundText(path string) []map[string]any {
 }
 
 // The brain writes no surface (#631: views are nodes): no surface_write
-// nor surface_remove; the catalog in full on demand, and its section
-// stays out of its tools' descriptions and instructions.
+// nor surface_remove, no catalog_read nor sources_read (#786: a page is
+// Markdown); page_format gives the format sheet on demand, and it stays
+// out of its tools' descriptions and instructions.
 func TestWorkspaceToolsThroughMCP(t *testing.T) {
 	c, _ := ledgerCore(t)
 	brain := connectServer(t, newMCPServer(c))
@@ -67,21 +69,21 @@ func TestWorkspaceToolsThroughMCP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	full := a2ui.CatalogPrompt()
 	for _, x := range tools.Tools {
-		if strings.Contains(x.Description, full[:200]) {
-			t.Errorf("%s carries the catalog's section", x.Name)
+		if strings.Contains(x.Description, pageFormat[:200]) {
+			t.Errorf("%s carries the format sheet", x.Name)
 		}
-		if x.Name == "surface_write" || x.Name == "surface_remove" {
+		switch x.Name {
+		case "surface_write", "surface_remove", "catalog_read", "sources_read":
 			t.Errorf("the brain still has %s", x.Name)
 		}
 	}
-	if strings.Contains(instructions, "Metric") {
-		t.Error("the brain's instructions carry the catalog")
+	if strings.Contains(instructions, "[!figures]") {
+		t.Error("the brain's instructions carry the format sheet")
 	}
-	got, _ := callOn(t, brain, "catalog_read", map[string]any{})
-	if got["catalog"] != full+"\n"+nodeGrammar {
-		t.Fatalf("catalog_read: %v", got)
+	got, _ := callOn(t, brain, "page_format", map[string]any{})
+	if got["format"] != pageFormat {
+		t.Fatalf("page_format: %v", got)
 	}
 }
 
@@ -105,23 +107,20 @@ func taskEndpoint(t *testing.T, c *core, task, server string, secret ...string) 
 	return sess, err
 }
 
-// Every worker with a node has the catalog beside its node's tools,
+// Every worker with a node has the format sheet beside its node's tools,
 // allowed in advance, never lent: eriphe-workspace is no server, a task is
 // not lent it, and list_tools does not list it.
-func TestWorkerHasTheCatalog(t *testing.T) {
+func TestWorkerHasTheFormat(t *testing.T) {
 	c := nodeCore(t)
 	task, _ := startInNode(t, c, runRequest{Title: "Une page", Prompt: "Compose la page."})
-	got := mustNodes(t, c.core, task.ID, "catalog_read", nil)
-	if got["catalog"] != a2ui.CatalogPrompt()+"\n"+nodeGrammar {
-		t.Fatalf("catalog_read: %v", got)
+	got := mustNodes(t, c.core, task.ID, "page_format", nil)
+	if got["format"] != pageFormat {
+		t.Fatalf("page_format: %v", got)
 	}
-	mustNodes(t, c.core, task.ID, "sources_read", nil)
 	c.store.registerDevice(task.Device, hashSecret("x"))
 	spec := assignedSpec(t, c.core, task.Device, task.ID)
-	for _, name := range []string{"mcp__eriphe-nodes__catalog_read", "mcp__eriphe-nodes__sources_read"} {
-		if !slices.Contains(spec.AllowedTools, name) {
-			t.Errorf("%s not allowed in advance: %v", name, spec.AllowedTools)
-		}
+	if name := "mcp__eriphe-nodes__page_format"; !slices.Contains(spec.AllowedTools, name) {
+		t.Errorf("%s not allowed in advance: %v", name, spec.AllowedTools)
 	}
 	if _, err := c.runTask(context.Background(), runRequest{Prompt: "x", Resources: []ResourceRef{{Kind: resTool, Ref: "eriphe-workspace"}}}); err == nil {
 		t.Error("eriphe-workspace was lent")
@@ -129,5 +128,60 @@ func TestWorkerHasTheCatalog(t *testing.T) {
 	listed, _ := callOn(t, connectServer(t, newMCPServer(c.core)), "list_tools", map[string]any{})
 	if raw, _ := json.Marshal(listed); strings.Contains(string(raw), "eriphe-workspace") {
 		t.Fatalf("list_tools: %s", raw)
+	}
+}
+
+// markdownExamples are the pages a text teaches: each fence opened with
+// ```markdown, whole.
+func markdownExamples(text string) []string {
+	var out []string
+	for {
+		_, rest, ok := strings.Cut(text, "```markdown\n")
+		if !ok {
+			return out
+		}
+		page, after, ok := strings.Cut(rest, "\n```")
+		if !ok {
+			return out
+		}
+		out = append(out, page+"\n")
+		text = after
+	}
+}
+
+// The pages the format sheet and the brain's prompt teach are pages the
+// check finds nothing in (#786): read alone, their do: tools had by
+// their author; and written by the brain, which is told nothing but the
+// do: tools this catalog has not (it has no mail server).
+func TestPageFormatExamples(t *testing.T) {
+	examples := append(markdownExamples(pageFormat), markdownExamples(brainPrompt)...)
+	if len(examples) < 2 {
+		t.Fatalf("%d examples", len(examples))
+	}
+	all := strings.Join(examples, "\n")
+	for _, want := range []string{"Écrit le ", "](do:", "](card:", "](ask:)", "](on:", "]: mail:", "📅 ", "> — ",
+		"> [!figures", "> [!chart|", "> [!steps]", "> [!agenda]", "> [!person]", "> [!warning]"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("no example shows %q", want)
+		}
+	}
+	c := nodeCore(t).core
+	for i, page := range examples {
+		if pr := nodefile.ReadPage(page).Check(func(string) bool { return true }); len(pr) > 0 {
+			t.Errorf("example %d: %+v\n%s", i, pr, page)
+		}
+		out := mustBrainNodes(t, c, "node_open", map[string]any{"title": fmt.Sprintf("Exemple %d", i), "goal": "Un exemple.", "body": page})
+		for _, code := range problemCodes(t, out) {
+			if code != nodefile.ProblemDoTool {
+				t.Errorf("example %d written: %v", i, out["problems"])
+			}
+		}
+		d, err := c.nodes.Read(out["id"].(string), 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if body, _ := d.Node.Body(); body != page {
+			t.Errorf("example %d kept as %q", i, body)
+		}
 	}
 }

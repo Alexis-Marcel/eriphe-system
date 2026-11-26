@@ -108,7 +108,7 @@ func TestTurnBudget(t *testing.T) {
 
 	b := newTurnBudget(1)
 	for range 50 {
-		for _, read := range []string{"node_read", "node_find", "recall", "list_skills", "since", "task_status", "catalog_read"} {
+		for _, read := range []string{"node_read", "node_find", "recall", "list_skills", "since", "task_status", "page_format"} {
 			if why := refusal(b.charge(read, map[string]any{"id": "n1"})); why != "" {
 				t.Fatalf("%s refused: %s", read, why)
 			}

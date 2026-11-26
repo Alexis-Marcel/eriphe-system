@@ -1,12 +1,15 @@
 # The node file format
 
 Eriphe's workspace is a graph of **nodes**. A node is one piece of work and its result: a subject, a
-research, an incident, a reply to write, a page kept up by a skill like the mails. Each node is one markdown
-file with YAML front matter and typed **blocks**. This page describes that file, for the brain, for
-tasks, and for anyone who reads or reuses the files.
+research, an incident, a reply to write, a page kept up by a skill like the mails. Each node is one
+Markdown file with YAML front matter; its body is a **Markdown page** that holds everything the page
+shows. This page describes that file, for the brain, for tasks, and for anyone who reads or reuses
+the files.
 
 The Go package [`core/nodefile`](../core/nodefile) reads and writes this format; everything else in
-Eriphe goes through it.
+Eriphe goes through it. The brain and every task with a node read how to write a page from the
+`page_format` tool ([`core/page-prompt.md`](../core/page-prompt.md), in French), whose examples are
+pages the check below finds nothing in.
 
 ## A full example
 
@@ -14,27 +17,27 @@ Eriphe goes through it.
 ---
 format: 2
 id: k3v9q2m7
-title: Substack
-links: [p8d2x4c1]
-goal: Grow the newsletter. Write the first article with Sam's notes.
+title: Mes mails
+goal: Tableau de bord des mails à traiter, tenu par le skill mails ; on n'y écrit pas de réponses.
 created: 2026-11-17T09:00:00+01:00
 ---
-# Substack
+Écrit le 26/11/2026 à 9 h.
 
-The newsletter and its first article. The articles that work are short and
-open on a question.
+Sam attend ta réponse avant vendredi.
 
-```eriphe:block readers
-{"components": [{"id":"root","component":"Chart","kind":"line","title":"Subscribers","unit":"readers","series":{"@path":"/subscribers/series"}}],
- "sources": {"subscribers":{"tool":"substack/stats","args":{"metric":"subscribers"},"every":60}}}
-```
+## À traiter
+- [ ] [Sam · Devis terrasse][m1] : il attend ta réponse avant vendredi 📅 2026-11-27
+  - Brouillon prêt : « Le devis me va, on commence la semaine du 8. »
+  - [Envoyer la réponse](card:calls:12)
 
-The titles proposed for the first article:
+## À jeter
+[Jeter ces mails](do:mail/trash)
+- [Lettre d'info][m2] : jamais ouverte
 
-```eriphe:block titles
-{"components": [{"id":"root","component":"Table","rows":{"@path":"/titles"}}],
- "data": {"titles":[{"id":"t1","title":"Why I write by hand","why":"opens on a question"},{"id":"t2","title":"Ten years of notes","why":"short"}]}}
-```
+[Montre la semaine](ask:)
+
+[m1]: mail:aWQtMQ
+[m2]: mail:aWQtMg
 ````
 
 ## The file
@@ -139,13 +142,14 @@ written with a title since changed then waits.
 A node's links, the graph's edges, are its text's links (resolved) and its front matter's `links`
 (code's), together.
 
-## The page (format 3)
+## The page
 
-In format 3 a node's body is a **Markdown page**, and only that: everything the page shows is
-written in the file, so that a reader without Eriphe (Obsidian, another agent, the search) finds it
-all. Eriphe draws it better, never otherwise. Format 3 is described here ahead of its conversion:
-until the conversion of the blocks lands, files stay in format 2 and a body may still hold blocks
-(below), which the page reader reads as code.
+A node's body is a **Markdown page**: everything the page shows is written in the file, so that a
+reader without Eriphe (Obsidian, another agent, the search) finds it all. Eriphe draws it better,
+never otherwise, and reads nothing from elsewhere to draw it: when something changes, whoever keeps
+the page writes its line again, or a line follows the event journal
+([Lines that follow events](#lines-that-follow-events)). Files written before may still hold
+[legacy blocks](#legacy-blocks-converted-by-787), which the page reader reads as code.
 
 [`core/nodefile`](../core/nodefile) reads a page (`ReadPage`, `md.go`) into a tree, checks it
 (`Check`, `check.go`) and changes one line of it (`lines.go`). Go's reading is the reference; the
@@ -156,12 +160,17 @@ problems as JSON). Lines are counted from 1 in the body, what follows the front 
 **What a page holds.** Plain Markdown, with Obsidian's conventions where they exist:
 
 - **Headings** `#` to `######`, paragraphs, tables, `---`, fenced code (`` ```diff `` for a diff),
-  `[[Title]]` links and `![[Title]]` alone on a line to embed another node.
+  `[[Title]]` links and `![[Title]]` alone on a line to embed another node (Obsidian embeds it;
+  Eriphe draws it as a link to it).
 - **Lists.** An item is one line; the lines indented under it (spaces or tabs, a tab counting four)
   are its **detail**, read as blocks of their own. A task is `- [ ]` (open), `- [x]` (done), `- [/]`
   (in progress) or `- [-]` (dropped). `📅 2026-11-27` in an item's line is its date.
+  The words before « : » on an item's line are what it is (a short title), the words after it a
+  comment by whoever keeps the page; another voice names itself (« Tâche « Trier » : … »).
 - **When it was written.** A first line of text that starts with « Écrit le », « Mis à jour le »
   (or « Written on », « Updated on ») says when the page was written; it is not one of the blocks.
+  A page that follows something starts with it. No `#` heading repeats the node's title: the page
+  shows it above the body, and one at the top of an author's body is dropped when it is written.
 - **Callouts.** A quote whose first line is `> [!type|option|option]- Title`: `-` after the
   brackets folds it, `+` shows it open. The types Eriphe draws are `figures`, `chart`, `steps`,
   `agenda`, `person`, `warning`, `info`, `success` and `note`. Any type takes `aside` (the page's
@@ -186,7 +195,10 @@ problems as JSON). Lines are counted from 1 in the body, what follows the front 
     sentence, its Oui. Not in a folded callout or a chart, which no reader sees as written. A card
     no line places waits at the foot of the page; code writes nothing in
     the page for it.
-  - `[Montre la semaine](ask:)` is a probable reply, sent to Eriphe as a message.
+  - `[Montre la semaine](ask:)` is a probable reply: on a line of its own at the end of the page
+    (or of an item), several separated by ` · `, the first the default. A click sends its words, as
+    the stored page writes them, to Eriphe as the user's message in the node (marked as not the
+    user's own words when the node is external).
   - `[18 385 €](on:monitor.changed/pea)` is a value an event of the journal rewrites
     ([Lines that follow events](#lines-that-follow-events)).
 
@@ -222,8 +234,11 @@ changes a line, never the whole page. `node_edit` replaces a line, or a piece of
 (`old`, `new`), or moves an item with its detail (`move`, `after`: after a heading it becomes the
 section's first item, under its `do:` line; after another item, it goes after that item's detail,
 at its indent and in its callout). A line edit needs no version: it is made on the last one, and is
-refused once its line is gone (the author reads the page again). A whole body (`node_write`) and a
-block still name the version they were made on (`expect`).
+refused once its line is gone (the author reads the page again). A whole body (`node_write`) names
+the version it was made on (`expect`). Each item's line is unique in the page (its reference or its
+words), so that an edit finds it; adding or removing a reference adds or removes its target too.
+A ticked line stays, struck through, until whoever keeps the page removes it. No sentence repeats
+what the page shows, and a figure says its unit.
 
 ### Cards on referenced items
 
@@ -347,183 +362,7 @@ threshold and crosses it again. A glance is information, never a request: a node
 user keeps its circle and its halo. In a callout marked `external`, or a node that is, the label may
 be someone else's words, and the tile says so.
 
-## Body and blocks
-
-The body is markdown. The page shows the node's title above it: a heading that only repeats the
-title at the top of an author's body is dropped when it is written. A **block** is a fenced
-section that starts with a line `` ```eriphe:block <name> `` and ends at the next line `` ``` ``:
-
-- Its name is lowercase letters, digits and `_`, 32 at most, starting with a letter or a digit. A
-  node has one block of each name.
-- A fence `` ```eriphe:block `` inside another fenced code block (as in the example above, inside
-  a four-backtick fence) is text, not a block.
-- Between its fences, a block is one JSON object:
-
-| Key | Who writes it | What |
-|---|---|---|
-| `components` | the author | One component of Eriphe's catalog (`core/a2ui/catalog_v1.json`), written alone (code gives it the id `root`), or a flat list of them, one with id `root`. |
-| `data` | the author | An object: the values its components read. |
-| `sources` | the author | Live sources read by code, by name: each one's value is at `/<name>`. |
-| `external` | code | `true` when the block was written after reading external content, or binds a source of a server that is not trusted. |
-
-A key that is not one of these is an error. The empty ones may be left out. The values a block's
-sources read are code's, never in the file: they are kept in `core.db`, and the page draws the block
-from them.
-
-### Components and bindings
-
-Each block is checked alone, as an A2UI surface of its own:
-
-- against the catalog: component types, properties, ids, a `root`, children that exist;
-- links: a `Link` url, literal or bound to the block's data, is an `http(s)` address;
-- bindings (`{"@path": "/…"}`, and a template's `path`): each one reads the block's own `data`, one
-  of its `sources` (`/<name>/…`, checked when code reads it). A binding to anything else is an
-  error that names the block.
-- a source named: a property the catalog marks `x-source` (`Sections`' and `Gallery`'s `items`,
-  `Table`'s `rows`) may name one of the block's sources instead of a binding (`"items": "mails"`).
-  It reads that source's rows: its items, where its `items` path says (`/mails/messages`), or
-  node_find's nodes (`/<name>/nodes`). The file keeps the name; code and the page read the binding
-  (`Block.Bound`). A name that is not one of the block's sources, a `Sections` over a source with no
-  `items`, or a source whose items' path is not plain fields, is an error.
-
-The catalog the brain reads is the one a model writes: a few blocks that each say what they show
-(`Sections`, `Figures`, `Gallery`, `Table`, `Chart`, `Timeline`, `Asks`, `Agenda`, …), the page
-supplying the rest (groups, counts, units, columns, layout on a phone, empty and reading states).
-The components it wrote before (`List`, `Item`, `Fold`, `Grid`, `Card`, `Button`, `Metric`,
-`Progress`, `Table`'s `emptyText`) are marked `x-legacy` in the catalog: no longer offered, still
-checked and drawn, so that every node written with them reads as it did.
-
-Where a card shows follows from the components, never from a name: a component whose catalog
-schema says `x-rows` (the Agenda's `events`) bound to a source's items draws their cards on its
-rows; one that says `x-days` (the Agenda) draws the dated proposals of its days, each with its
-Yes, and a dated card of the node whose day it draws (a written or absent `date`) is not repeated
-at the page's foot. An Agenda's events are in the shape the calendar server returns: `title`,
-`start`, `end`, `place`, `allDay`, `status`.
-
-### Sources
-
-A source is one of:
-
-- a tool: `{"tool": "<server>/<tool>", "args": {…}, "every": <minutes>}`;
-- a resource: `{"resource": "<server>", "uri": "…", "every": <minutes>}`;
-- a monitor the user approved: `{"monitor": "<name>"}`;
-- nodes of the graph, as Eriphe's `node_find` finds them: `{"tool": "eriphe-core/node_find", "args":
-  {"tags": ["etude"], "where": [{"key": "statut", "value": "en attente"}], "sort": "rendu",
-  "columns": ["rendu"]}}`. Its value is `{"nodes": [{"id", "title", "status", "changed", … and each
-  column}]}`, read again as soon as a node changes. A title written after an external read, and an
-  external node's properties, are left out unless `include_external` is said: its block is then
-  external. A `Table` whose rows read `/<name>/nodes` shows them, each row opening its node.
-
-`every` is 1 to 1440 minutes (code's default when absent). A tool or a resource that lists things
-may say where its items are: `"items": {"path": "messages", "id": "id", "title": "subject",
-"detail": "from"}`, and how one is read in full (`open`, [Reading an item](#reading-an-item)). A source's name is lowercase letters, digits, `_` and `-`, 40 at most; it is not
-also a key of `data`. A node waits for the user (its bubble's violet halo and ring) only while a
-card waits on it: a source's items never make it wait by themselves.
-
-A source's `glance` (below) is still read, so that the files that hold one keep reading, but no
-longer shown: a figure at a glance is a page's line now ([A figure at a glance](#a-figure-at-a-glance)),
-and the conversion to format 3 moves it there. It was a figure the source's value holds, one per
-node:
-
-```json
-"sources": {"pea": {"tool": "bourse/portefeuille", "glance": {"label": "PEA", "path": "total", "threshold": 2}}}
-```
-
-- `label`: the figure's name on the tile, one line, 24 characters at most.
-- `path`: where the figure is in the source's value, fields joined by dots, a list's index as a
-  number (`rates.0.v`), six steps at most. Only a JSON number there counts: words never reach the
-  tile.
-- `threshold`: how far it must move to show, more than 0.
-- `unit`: `percent` (by default: the variation in percent of the reference) or `amount` (in the
-  figure's own units).
-- `compare`: the reference, `day` (by default: its first value of the user's day), `previous` (its
-  value before it last changed) or `fixed`, with `base` a value given (not 0 in percent).
-
-
-Code reads the sources without a model, as the brain's free reads are: a source new or changed at
-once, then every `every` minutes, a resource at its update, a monitor at each of its looks. A
-source is also read again a second after any call that may change its server (any tool not marked
-read-only, from the conversation, a card or a run), after its server says it changed,
-and when its page is opened or the user comes back if it was read more than a minute ago. A read
-that fails keeps the last good value. The values are kept in `core.db` only: a read makes no
-version, however often it runs, and every version of the page, an archived node's too, shows the
-last ones. A block that reads a server that is not trusted is marked `external`, in a version by
-`eriphe`. An author's write made on a version older than one of code's (`external`) is not
-stale: it applies over it, code's fields kept.
-
-### No yes in a block
-
-A block draws, reads and asks; it never acts. There are no block actions, no marks and no boxes to
-pick: a button only asks Eriphe (`ask`, the words its author wrote, sent as the user's message; from
-an `external` block, sent marked as not the user's own words), and
-whatever asks the user's yes is a **card**, drawn by code: on an item's row when it waits on that
-item (its `_card`, below), at the foot of the page otherwise, or where a `card` block places it (a
-ref alone, so never `external`: a turn that read external content places one too). A
-key `actions` or `marks` is an unknown field, refused like any other.
-
-A card is one thing proposed: the user says yes, or ✕. Its yes button says its verb, never a bare
-« Oui » (« Envoyer », « Archiver », « Jeter les 102 »): the tool's own (its `says` declares a
-`verb`), else the first word of what the card says, else its kind's (« Garder », « Autoriser »).
-Calls that do the same thing to several items of a node (the same tool and arguments but for the
-ids) wait as one card: on each of their rows, the same card; in a `Sections` group whose rows all
-share it, the batch carries its yes on its folded line, and unfolded the user unticks the rows that
-should not go. Every answer, from a card, a word in the bar, a channel
-or a page in Réglages, goes through the same code, which keeps the card in step.
-
-### Sections
-
-A page shows a source's items in sections (« À traiter », « À jeter », « Pour info »): its author
-notes each item with a `group` (`item_note`), a short label it chooses, and a state, and writes one
-`Sections` that names the source:
-
-```json
-{"components": {"component": "Sections", "items": "mails"}}
-```
-
-- The page groups the rows by `_group`, in the source's order: first the groups with something to
-  do (a state `act` or `look`, or a card waiting), a row each, Eriphe's note first, then who and
-  what, six shown then « n de plus »; a group whose rows all share one card is a batch, folded, its
-  card's yes on its line; the other groups folded. Rows noted `done` leave. With nothing to do it
-  says so; empty, and while its source is read, it says that too.
-- Pages written before keep their `List`s, one per section, whose template's path filters the
-  source's items by a field (`[_group=À supprimer]`, `[_state!=done]`, all must hold; on a `List`
-  only, checked when the block is written; a field the item has not reads as empty), their `Fold`
-  with `list` (a batch) and their `Metric` with `list` (a count): still checked and drawn.
-- Each item of a source with `items` carries, in the block's data (never in its file), its note's
-  fields: `_note`, `_state` and `_group` (empty when it has none), `_card`, the ref of the card that
-  waits on it while it still asks something (its yes to give, or a yes that runs or failed; empty
-  otherwise), and `_external: true` when the note was written after reading external content.
-  Code writes them over whatever the source gave. A component may show them (`{"@path":
-  "_note"}`); they follow the notes and the cards live. The page is also told each row's card out
-  of band (its Lists' rows), never from the block's data.
-- An item is done only by its note: a card on an item, once its yes ran, notes the item `done`
-  (code's, its note and group kept, until a skill notes it again), and the source is read again: a
-  List that keeps `[_state!=done]` lets it go at once. Said yes or no, the skills that work in the
-  node are woken (a journal event `node.gesture`): the skill that maintains it writes its bilan again.
-- Code filters, never the page: the page draws a List bound to the source's items as a whole and
-  shows only the rows code kept, in the source's order.
-- A page that lasts says its facts from its sources, never in frozen text: a `Figures` value bound
-  to a source's field (`{"@path": "/pea/total"}`); one written by hand is said back to its author
-  as a problem (the render report).
-
-### Setup buttons
-
-An ask of an `Asks` that sets something up says what with `until` (`{"text": "Branche l'agenda",
-"until": {"tool": "calendar"}}`), one of `{"tool": "<server>"}` (a tool in the catalog that waits
-for no authorization), `{"monitor": "<name>"}` (a monitor that runs) or `{"skill": "<name>"}` (a
-skill approved and on). Code hides it from the page once that holds, reading its own records each
-time the page is drawn: its author need not take it away. The page names an ask by its component
-and its place (`root#1`), so a hidden ask leaves its place empty; an `Asks` left with none goes. A
-`Button` with `until`, on pages written before, goes the same way (and a `Row` or `Column` it leaves
-empty, a `Card` or `Fold` whose child it was).
-
-A skill's run whose call acts on an item without naming it (an event made from a mail) puts it on
-that item with `item_note`'s `call`: its card then waits on the item's row, its words naming the
-item. (A page places it with a `card:` link on the item's line.)
-
-A group is one line of 40 characters at most, without `[ ] / = !`.
-
-### Reading an item
+### Opening an item
 
 A server declares, in the `_meta` of one of its read tools, that the tool reads one of its items by
 id: `"eriphe/open": {"id": "id", "title": "subject", "from": "from", "date": "date", "body":
@@ -531,60 +370,34 @@ id: `"eriphe/open": {"id": "id", "title": "subject", "from": "from", "date": "da
 the title, the sender, the date, the body; the mail and calendar servers declare theirs). A row of
 a page that references an item of that server opens it below itself on a click: code finds the
 reference in the page as stored, by its label (`POST /api/nodes/{id}/open` with `{"ref": "m1"}`),
-never an id from the click, calls the tool with the id as the page writes it, under the rules
-below, and says when the page's words for it are misleading. Only on the page's last version.
+never an id from the click, and calls the tool with the id as the page writes it, under the tool's
+access policy: a free read that does not reach the open web runs; any other is refused, with a line
+saying to ask Eriphe, who will propose it on a card. It says when the page's words for the item are
+misleading. Only on the page's last version. The click that opens is never a yes.
 
-A legacy source's `items` (until format 3 converts it) may say how one item is read in full: `"open": {"tool": "<server>/<tool>", "id":
-"<param>"}`, a read tool of the source's own server and its parameter that takes an item's id
-(nothing else required). Code checks it against the catalog when an author writes it.
-
-A row of a `Sections` (or a `List`) of that source opens below itself on a click (or its disclosure button; a
-click on its card, a button or a link of the row does not), and closes the same way or by its ✕.
-Code reads the open again in the block as stored, checks that the id is one the source lists now,
-and calls the tool with it, as the source gave it, under the tool's access policy: a free read that
-does not reach the open web runs; any other is refused, with a line saying to ask Eriphe, who will
-propose it on a card. The click that opens is never a yes. The page shows
-what the tool said as text, never as HTML, as a letter: who (a name, its address quieter) and when
-(as people say it) on one line, its title or subject, its body; the fields as the read tool
-declares them in its `_meta` (`"eriphe/open": {"title": "subject", "from": "from", "date": "date",
-"body": "body"}`), else a title and a sender found as a row finds them and a text result as the
-body, the rest only in « détails »; the item's
-note when its row does not already say it (« Classé « À supprimer » : … »); then the card that
-waits on the item, if any (« Sur Oui » and what its Oui does, a long field such as the reply
-itself shown whole, and the same Oui as the row's); and one « détails » with the exact call and the
-whole item as JSON. Someone else's words are marked once, by the page's head and the block's edge;
-a block not so marked shows a small amber sign when the server is not trusted. Nothing is
-written: no version, no trace, nothing the brain reads; the page keeps it for its session.
+The page shows what the tool said as text, never as HTML, as a letter: who (a name, its address
+quieter) and when (as people say it) on one line, its title or subject, its body, the fields as the
+read tool declares them; then the card that waits on the item, if any; and one « détails » with the
+exact call and the whole item as JSON. Someone else's words are marked. Nothing is written: no
+version, no trace, nothing the brain reads; the page keeps it for its session.
 
 ### Code's fields
 
-A block's `external`, a callout's `external` option ([Lines that follow events](#lines-that-follow-events)),
-and the front matter's `external`, `title_trusted` and `opened_by`, are written by code only:
+A callout's `external` option ([Lines that follow events](#lines-that-follow-events)), and the front
+matter's `external`, `title_trusted` and `opened_by`, are written by code only (and a legacy block's
+`external`):
 
 - An author (the brain, a task, the user in Eriphe's editor) may leave them out: code keeps them as
   the version written over has them.
 - Written alike, they are accepted. Written otherwise, the write is refused.
-- A new block has none of them.
 
-### The short form
+## Legacy blocks (converted by #787)
 
-An author may give a block's `components` as a single component, an object or a list of one, with
-no `root`: Eriphe completes it with the id `root`. The file always holds the full form.
-
-```json
-{"components": {"component": "Text", "text": "Waiting for Sam's reply."}}
-```
-
-### Canonical form
-
-A block written by code looks like this: its fence, then one key a line, each component on its own
-line, the empty keys left out:
-
-````markdown
-```eriphe:block status
-{"components": [
-  {"id":"root","component":"Text","text":"Waiting for Sam's reply."}
-],
- "data": {"since":"2026-11-17"}}
-```
-````
+Pages written before the Markdown page may still hold **blocks**: a fenced section from a line
+`` ```eriphe:block <name> `` to the next line `` ``` ``, one JSON object (`components` of the A2UI
+catalog in `core/a2ui/catalog_v1.json`, `data`, `sources` read live by code, code's `external`), and
+a card block `{"card": "<ref>"}`. Their sources' values, their items' notes (`item_note`, kept in
+`core.db`), their `Sections`, setup buttons and source glances are not in the file. Authors are no
+longer taught them: nothing new is written with them. Code still reads, checks and draws them so
+that every node reads as it did, until the conversion to format 3 (#787) writes each one as the
+page's own Markdown and removes them, with live sources and item notes.

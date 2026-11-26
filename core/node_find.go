@@ -6,8 +6,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/google/jsonschema-go/jsonschema"
-
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
@@ -55,7 +53,7 @@ type nodeFindIn struct {
 	Archived bool         `json:"archived,omitempty" jsonschema:"the archived nodes too"`
 	// IncludeExternal quotes the titles written after an external read,
 	// as since does: it taints the turn.
-	IncludeExternal bool `json:"include_external,omitempty" jsonschema:"quote what may be someone else's words too (a title written after an external read, an external node's properties): this taints the turn, or the task; a block that reads it is external"`
+	IncludeExternal bool `json:"include_external,omitempty" jsonschema:"quote what may be someone else's words too (a title written after an external read, an external node's properties): this taints the turn, or the task"`
 }
 
 // nodeCondIn is a condition on a property.
@@ -302,18 +300,4 @@ func (c *core) nodesChanged() {
 	if c.findSources.Load() {
 		c.readServerSoon(coreServer, "")
 	}
-}
-
-// nodeFindOffer is node_find as sources_read lists it; full: its
-// arguments and its result's shape.
-func nodeFindOffer(full bool) readOffer {
-	o := readOffer{Tool: nodeFindSource, Free: true, Shape: !full,
-		Description: "The user's nodes, as node_find finds them: by words, tags and properties, sorted, with properties as columns. Its value: {nodes: [{id, title, status, changed, <columns>…}]}, read again at once when a node changes."}
-	if full {
-		if s, err := jsonschema.For[nodeFindIn](nil); err == nil {
-			o.Args = shownSchema(s)
-		}
-		o.Output = json.RawMessage(`{"type": "object", "properties": {"nodes": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "title": {"type": "string"}, "status": {"type": "string"}, "changed": {"type": "string"}}, "additionalProperties": true}}}}`)
-	}
-	return o
 }

@@ -33,7 +33,6 @@ var toolNameAllowed = map[string]string{
 	"github_app.go":       "GitHub's app, the provider of its connections: its permissions",
 	"repo_lend.go":        "git through GitHub, lending a repository: its permissions",
 	"about_key.go":        "the memory's keys: « mail » or « event » are kinds of items the brain must not take for a key, « agenda » a record; not tools",
-	"node_grammar.go":     "the brain's grammar: an example block reads mails, as an example; no code branches on it",
 }
 
 // commonWords are names of Eriphe's own tools that are also core's own

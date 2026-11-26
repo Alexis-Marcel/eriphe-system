@@ -60,8 +60,8 @@ func TestAboutNotedWhenWritten(t *testing.T) {
 	if about != "project:site-web" {
 		t.Errorf("a memory about the key is about %q", about)
 	}
-	// A mail or an event is an item, never an about.
-	if _, err := aboutKey("mail:abc"); err == nil || !strings.Contains(err.Error(), "item_note") {
+	// A mail or an event is a page's reference, never an about.
+	if _, err := aboutKey("mail:abc"); err == nil || !strings.Contains(err.Error(), "[m1]: mail:<id>") {
 		t.Errorf("mail:abc: %v", err)
 	}
 }
