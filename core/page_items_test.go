@@ -205,6 +205,25 @@ func TestCardLinkPlacesOnlyTheNodesCard(t *testing.T) {
 	}
 }
 
+// A call the brain kept on no item goes where the brain's card: line is,
+// its record too: it does not come back to its first node at a start.
+func TestCardLineTakesBrainCall(t *testing.T) {
+	c, _, node := refsCore(t)
+	a := c.keepCall(context.Background(), keeper{task: "b-1", pid: "p1", node: node, turn: true}, "mcp__monitor__rollback", map[string]any{"version": "1.0"})
+	ref := proposalRef(cardCalls, a.Batch)
+	other := mustNode(t, c, nodestore.New{Title: "Le retour en arrière", Body: "On en parle ici.\n"})
+	if _, err := c.authorWriteOn(other, onLast, byBrain, false, nodeAppend("[Revenir à la 1.0](card:"+ref+")")); err != nil {
+		t.Fatal(err)
+	}
+	c.syncCards()
+	if got := c.cardNodes(ref); !slices.Equal(got, []string{other}) {
+		t.Fatalf("linked to %v, want only %s", got, other)
+	}
+	if b, _ := c.accessAskOf(a.ID); b.Node != other {
+		t.Errorf("its call's node is %q", b.Node)
+	}
+}
+
 // Opening a referenced mail reads it by the server's declared read, the
 // reference found in the stored page by its label; the page's misleading
 // words say so. A label the page does not have, or one of a server that

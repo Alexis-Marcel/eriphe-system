@@ -29,7 +29,8 @@ import (
 // node tool called on it, the event of one delivered, the node the user
 // talks to). What the turn raises for the user then (the card of one of
 // its calls, a task's start) is that node's: linked to it (node_cards),
-// and it waits for the user while one waits.
+// and it waits for the user while one waits; a card: line the brain
+// writes in another node takes the card there (cardLinesHome).
 
 // about records the node the turn is about now.
 func (t *brainTurn) about(id string) {
@@ -294,7 +295,61 @@ const nodeCardsSchema = `CREATE TABLE IF NOT EXISTS node_cards (
 );
 CREATE INDEX IF NOT EXISTS node_cards_ref ON node_cards (ref);`
 
-func init() { extraSchema = append(extraSchema, nodeCardsSchema) }
+// card_raisers is who raised each card, as a page names its authors
+// (byBrain, task:<id>, skill:<name>): a card: line that author writes in
+// another node takes the card there (cardLinesHome, page_items.go).
+const cardRaisersSchema = `CREATE TABLE IF NOT EXISTS card_raisers (
+	ref    TEXT PRIMARY KEY,
+	raiser TEXT NOT NULL
+);`
+
+func init() { extraSchema = append(extraSchema, nodeCardsSchema, cardRaisersSchema) }
+
+// cardRaisedBy records who raised a card: the last who did (a skill's
+// version proposed again, by someone else, is theirs now).
+func (c *core) cardRaisedBy(ref, raiser string) {
+	c.store.db.Exec(`INSERT INTO card_raisers (ref, raiser) VALUES (?, ?)
+		ON CONFLICT (ref) DO UPDATE SET raiser = excluded.raiser`, ref, raiser)
+}
+
+// cardRaiser is who raised a card; "" when unknown (code).
+func (c *core) cardRaiser(ref string) string {
+	var r string
+	c.store.db.QueryRow(`SELECT raiser FROM card_raisers WHERE ref = ?`, ref).Scan(&r)
+	return r
+}
+
+// cardHome makes node id a card's only node: its raiser placed it there
+// with a card: line. It waits there, no longer in the nodes it waited in,
+// even once eriphe-core starts again (a kept call's node is its record's:
+// proposalNode). A call on an item stays on the item's row: false.
+func (c *core) cardHome(id, ref string) bool {
+	kind, n, ok := parseProposalRef(ref)
+	if !ok {
+		return false
+	}
+	switch kind {
+	case cardCalls:
+		var items int
+		c.store.db.QueryRow(`SELECT COUNT(*) FROM access_asks WHERE batch = ? AND item != ''`, n).Scan(&items)
+		if items > 0 {
+			return false
+		}
+		c.store.db.Exec(`UPDATE access_asks SET node = ? WHERE batch = ?`, id, n)
+	case cardAccess:
+		c.store.db.Exec(`UPDATE access_asks SET node = ? WHERE id = ? AND item = ''`, id, n)
+	}
+	old := c.cardNodes(ref)
+	c.store.db.Exec(`DELETE FROM node_cards WHERE ref = ? AND node != ?`, ref, id)
+	c.store.db.Exec(`INSERT OR IGNORE INTO node_cards (node, ref, created) VALUES (?, ?, ?)`, id, ref, time.Now().Unix())
+	for _, o := range old {
+		if o != id {
+			c.nodeMoved(o, false)
+		}
+	}
+	c.nodeMoved(id, false)
+	return true
+}
 
 // cardRaisedFor links a card raised for a node to it (cardNodeOf): the
 // node waits for the user while it waits.

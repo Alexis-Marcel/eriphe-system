@@ -545,6 +545,11 @@ func (c *core) newAccessAsk(a accessQuestion) int64 {
 	// the brain in its turn, it goes with the brain's message of the turn,
 	// as any proposal of its; asked by a task, the queue shows it at once.
 	source := cmpOr(a.source, "task:"+a.TaskID)
+	raiser := c.taskAuthor(a.TaskID)
+	if a.inTurn {
+		raiser = byBrain
+	}
+	c.cardRaisedBy(proposalRef(cardAccess, id), raiser)
 	if a.inTurn {
 		inherit := c.turnAbout
 		if a.source != "" {

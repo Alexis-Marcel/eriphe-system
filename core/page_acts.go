@@ -145,7 +145,7 @@ func (c *core) composeAct(ctx context.Context, id string, ref nodefile.LineRef, 
 	if server == "" || tool == "" || schema == nil {
 		return refuse(actTool)
 	}
-	if h := p.Heading(l.Heading); h == nil || !c.authorHasTool(c.lineAuthor(id, doSig(h.Text, a.Text)), l.Target) {
+	if h := p.Heading(l.Heading); h == nil || !c.authorHasTool(c.doAuthor(id, doSig(h.Text, a.Text)), l.Target) {
 		return refuse(actAuthor)
 	}
 	if a.arg, a.list, ok = actArg(schema); !ok {
@@ -349,18 +349,19 @@ func doSigs(body string) map[string]bool {
 	return out
 }
 
-// actWriter is who wrote a do: of a node, known through a version: the
-// versions up to through hold it, since author's.
+// actWriter is who wrote a line of a node (a do:, a card:), known
+// through a version: the versions up to through hold it, since author's.
 type actWriter struct {
 	author  string
 	through int
 }
 
-// lineAuthor is who wrote the do: sig of node id's page: the author of
-// the oldest of the versions, back from the last, that all hold it under
-// the same heading; "" when the last does not. Known once, it is checked
-// again only in the versions written since.
-func (c *core) lineAuthor(id, sig string) string {
+// lineAuthor is who wrote the line sig of node id's page, as in reports
+// whether a body holds it (a do: under its heading, doSigs; a card: line,
+// cardLineIn): the author of the oldest of the versions, back from the
+// last, that all hold it; "" when the last does not. Known once, it is
+// checked again only in the versions written since.
+func (c *core) lineAuthor(id, sig string, in func(body string) bool) string {
 	vs, err := c.nodes.Versions(id)
 	if err != nil || len(vs) == 0 {
 		return ""
@@ -371,7 +372,7 @@ func (c *core) lineAuthor(id, sig string) string {
 			return false
 		}
 		body, err := d.Node.Body()
-		return err == nil && doSigs(body)[sig]
+		return err == nil && in(body)
 	}
 	key := id + "\x00" + sig
 	last := vs[len(vs)-1].N
@@ -397,6 +398,11 @@ func (c *core) lineAuthor(id, sig string) string {
 		c.actAuthors.Store(key, actWriter{author, last})
 	}
 	return author
+}
+
+// doAuthor is who wrote the do: sig of node id's page (lineAuthor).
+func (c *core) doAuthor(id, sig string) string {
+	return c.lineAuthor(id, sig, func(body string) bool { return doSigs(body)[sig] })
 }
 
 // authorHasTool tells whether a node's author has a tool (server/tool):

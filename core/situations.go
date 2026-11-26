@@ -144,6 +144,7 @@ func (c *core) taskRemember(id string, in taskRememberIn) (map[string]any, error
 		return nil, err
 	}
 	if x.Status == memProposed {
+		c.cardRaisedBy(proposalRef(cardMemory, x.ID), c.taskAuthor(id))
 		c.cardProposedBy(cardMemory, x.ID, func() string { return c.taskAbout(id) }, "task:"+id) // the task's, not the brain's turn
 		return map[string]any{"id": x.ID, "status": x.Status, "note": "Only proposed: the user approves it on a card."}, nil
 	}
