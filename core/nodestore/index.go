@@ -24,7 +24,7 @@ import (
 // schemaVersion is the schema nodes.db is at; meta.schema_version says
 // it. A file at an older version is made again from the files and the
 // log (openIndex); one at a newer version is refused, never changed.
-const schemaVersion = 7
+const schemaVersion = 8
 
 // refsSchema holds the [[links]] of the nodes' text: each name a node's
 // text links (its LinkKey) and the node it was resolved to, ” while no
@@ -65,6 +65,15 @@ const schema = `CREATE TABLE nodes (
 	  id TEXT NOT NULL, block TEXT NOT NULL, name TEXT NOT NULL,
 	  spec TEXT NOT NULL,                -- the source as the block says it, JSON
 	  PRIMARY KEY (id, block, name));
+	CREATE TABLE node_listens (
+	  id TEXT NOT NULL, kind TEXT NOT NULL,
+	  key TEXT NOT NULL,                 -- '' for the events of any key
+	  PRIMARY KEY (id, kind, key));
+	CREATE INDEX node_listens_kind ON node_listens (kind, key);
+	CREATE TABLE node_pending (
+	  id TEXT PRIMARY KEY,
+	  blob TEXT NOT NULL,                -- the file's git hash as code wrote it, no version made
+	  since INTEGER NOT NULL);           -- when the first of its values not in a version was written
 	CREATE TABLE node_props (
 	  id TEXT NOT NULL, key TEXT NOT NULL, -- its name, lowercase
 	  pos INTEGER NOT NULL,              -- its place in a list; -1 for a value alone
@@ -250,8 +259,13 @@ func indexNode(tx querier, n *nodefile.Node, file string, raw []byte, version in
 	if err := indexProps(tx, m); err != nil {
 		return err
 	}
-	for _, q := range []string{`DELETE FROM node_links WHERE id = ?`, `DELETE FROM node_sources WHERE id = ?`} {
+	for _, q := range []string{`DELETE FROM node_links WHERE id = ?`, `DELETE FROM node_sources WHERE id = ?`, `DELETE FROM node_listens WHERE id = ?`} {
 		if _, err := tx.Exec(q, m.ID); err != nil {
+			return err
+		}
+	}
+	for _, o := range n.Ons() {
+		if _, err := tx.Exec(`INSERT INTO node_listens (id, kind, key) VALUES (?, ?, ?)`, m.ID, o.Kind, o.Key); err != nil {
 			return err
 		}
 	}
@@ -277,6 +291,7 @@ func forget(tx execer, id string) error {
 	// Its words first, by their row, while its row says which.
 	for _, q := range []string{`DELETE FROM node_fts WHERE rowid = (SELECT fts FROM nodes WHERE id = ?)`,
 		`DELETE FROM nodes WHERE id = ?`, `DELETE FROM node_links WHERE id = ?`, `DELETE FROM node_sources WHERE id = ?`,
+		`DELETE FROM node_listens WHERE id = ?`, `DELETE FROM node_pending WHERE id = ?`,
 		`DELETE FROM node_refs WHERE id = ?`, `DELETE FROM node_props WHERE id = ?`, `UPDATE node_refs SET target = '' WHERE target = ?`} {
 		if _, err := tx.Exec(q, id); err != nil {
 			return err

@@ -165,7 +165,9 @@ problems as JSON). Lines are counted from 1 in the body, what follows the front 
 - **Callouts.** A quote whose first line is `> [!type|option|option]- Title`: `-` after the
   brackets folds it, `+` shows it open. The types Eriphe draws are `figures`, `chart`, `steps`,
   `agenda`, `person`, `warning`, `info`, `success` and `note`. Any type takes `aside` (the page's
-  side column); `chart` takes `line`, `bar` or `stack` (line when none), and holds a table whose
+  side column) and `glance <threshold>` ([A figure at a glance](#a-figure-at-a-glance)); `external`
+  is code's ([Lines that follow events](#lines-that-follow-events)); `chart` takes `line`, `bar` or
+  `stack` (line when none), and holds a table whose
   first column is the x and each other column a series, its cells numbers (`18 385`, `1,8`, `−2`),
   the unit in the header (`Dépenses (€)`). A plain quote whose last line is `— Sam, 24/11` says who
   said it and when.
@@ -180,7 +182,8 @@ problems as JSON). Lines are counted from 1 in the body, what follows the front 
     one. Its author must have the tool. Anywhere else it acts on nothing.
   - `[Envoyer la réponse](card:<ref>)` places a card already proposed on that line.
   - `[Montre la semaine](ask:)` is a probable reply, sent to Eriphe as a message.
-  - `[18 385 €](on:<event>)` is a value an event rewrites.
+  - `[18 385 €](on:monitor.changed/pea)` is a value an event of the journal rewrites
+    ([Lines that follow events](#lines-that-follow-events)).
 
 **The check.** After each write of an author (`node_open`, `node_write`, `node_edit`,
 `node_append`), code reads the page and the write's result lists what is wrong in it
@@ -196,6 +199,7 @@ problems as JSON). Lines are counted from 1 in the body, what follows the front 
 | `do-place` | a `do:` link not alone on the first line under a heading |
 | `do-target`, `do-tool` | a `do:` link that names no `server/tool`, or a tool its author does not have |
 | `link-target` | a `card:` or `on:` link that names nothing |
+| `on-target` | an `on:` link that names no event (`on:<kind>/<key>#<field>`) |
 | `chart` | a chart without a table, or a cell of a series that is not a number |
 | `fence-open` | a code fence never closed |
 
@@ -206,6 +210,61 @@ section's first item, under its `do:` line; after another item, it goes after th
 at its indent and in its callout). A line edit needs no version: it is made on the last one, and is
 refused once its line is gone (the author reads the page again). A whole body (`node_write`) and a
 block still name the version they were made on (`expect`).
+
+### Lines that follow events
+
+A value that moves is a line of the page that follows the event journal, rewritten by code at each
+event, without a model:
+
+```markdown
+> [!figures|glance 3%]
+> - PEA : [18 385 €](on:monitor.changed/pea) · relu le 26/11 à 10 h 05
+```
+
+- **The target** is `on:<kind>/<key>#<field>`: the event's kind (`monitor.changed`, `task.ended`…),
+  its key (a monitor's name; none follows the events of any key), and where the value is in the
+  event's payload, fields joined by dots (`value` when there is no `#`; `#value.total` for a field
+  of a monitor's value). A key holds no space nor `)`, as a Markdown link's target does not. A
+  monitor is one source of events among others; its first look publishes nothing: the first value
+  is the one the author wrote, copied from the tool.
+- **The value.** A number replaces the number of the label, written as the author wrote it (its
+  decimals, its separators, `−` or `+`), what surrounds it kept (the unit): `18 385 €` becomes
+  `18 412 €`. A text replaces the whole label: one line, 80 characters at most, without brackets,
+  parentheses, backticks, `<`, `>`, `|` or `\` (nothing in it reads as a link, code or HTML). A list
+  or an object is not a line's value: a skill woken by the same event writes those.
+- **The date** after the link, ` · relu le 26/11 à 10 h 05` (` · read on Nov 26 at 10:05` in
+  English), is written again, added when there is none.
+- **No version per value.** The file is written; the value enters the history with the node's next
+  version, whoever makes it, or with one version a day, author `readings`, when nobody writes. An
+  author's write made on the version read keeps the values code wrote since, unless it changed one
+  itself.
+- **Someone else's events.** An event written by someone else (a monitor of a server not trusted)
+  marks the callout that holds its line `external`: `> [!figures|external]`. The option is code's:
+  an author's write that takes it off while the line stays in the page, or marks a callout code did
+  not, is refused; no event takes it off (words around a number may still be someone else's). A
+  node with a callout so marked taints whoever reads it, as an external node does. Outside a
+  callout, an event written by someone else only writes numbers.
+
+### A figure at a glance
+
+A page may show one of its figures at a glance: the node's bubble becomes a small tile when the
+figure moved past a threshold, until the user opens the node. The figure is the first number
+written by an `on:` line in the callout marked `glance <threshold>`, else, when the node's property
+`glance` says the threshold (`glance: 3%`), in the whole page; its label is the words before it on
+its line (`PEA`), or the node's title.
+
+- `glance 3%`: the variation in percent of the reference; `glance 500`: in the figure's own units.
+- `previous` after it (`glance 3% previous`) compares with the value before the last change;
+  otherwise the reference is the figure's first value of the user's day.
+
+Code reads the figure at each change of the file (a value an event wrote, an author's write), with
+no model, and keeps in `core.db` what the variation needs (its first value of the day, the previous
+one, its last ones for the tile's line). The node is past its threshold once the variation reaches
+it, and stays so until it falls under 0.85 of it. Opened while past it, the node is **seen**: a
+circle again, on every screen and after a reload, until the variation falls under 0.85 of the
+threshold and crosses it again. A glance is information, never a request: a node that waits for the
+user keeps its circle and its halo. In a callout marked `external`, or a node that is, the label may
+be someone else's words, and the tile says so.
 
 ## Body and blocks
 
@@ -280,8 +339,10 @@ may say where its items are: `"items": {"path": "messages", "id": "id", "title":
 also a key of `data`. A node waits for the user (its bubble's violet halo and ring) only while a
 card waits on it: a source's items never make it wait by themselves.
 
-A source may also give its node a **glance**: a figure its value holds, that the node's bubble shows
-as a small tile when the figure moved past a threshold, until the user opens the node. One per node.
+A source's `glance` (below) is still read, so that the files that hold one keep reading, but no
+longer shown: a figure at a glance is a page's line now ([A figure at a glance](#a-figure-at-a-glance)),
+and the conversion to format 3 moves it there. It was a figure the source's value holds, one per
+node:
 
 ```json
 "sources": {"pea": {"tool": "bourse/portefeuille", "glance": {"label": "PEA", "path": "total", "threshold": 2}}}
@@ -297,12 +358,6 @@ as a small tile when the figure moved past a threshold, until the user opens the
 - `compare`: the reference, `day` (by default: its first value of the user's day), `previous` (its
   value before it last changed) or `fixed`, with `base` a value given (not 0 in percent).
 
-Code reads the figure at each read of its source, with no model, and keeps in `core.db` what the
-variation needs (its first value of the day, the previous one, its last ones for the tile's line). The
-node is past its threshold once the variation reaches it, and stays so until it falls under 0.85 of
-it. Opened while past it, the node is **seen**: a circle again, on every screen and after a reload,
-until the variation falls under 0.85 of the threshold and crosses it again. A glance is information,
-never a request: a node that waits for the user keeps its circle and its halo.
 
 Code reads the sources without a model, as the brain's free reads are: a source new or changed at
 once, then every `every` minutes, a resource at its update, a monitor at each of its looks. A
@@ -413,7 +468,8 @@ written: no version, no trace, nothing the brain reads; the page keeps it for it
 
 ### Code's fields
 
-A block's `external`, and the front matter's `external`, `title_trusted` and `opened_by`, are written by code only:
+A block's `external`, a callout's `external` option ([Lines that follow events](#lines-that-follow-events)),
+and the front matter's `external`, `title_trusted` and `opened_by`, are written by code only:
 
 - An author (the brain, a task, the user in Eriphe's editor) may leave them out: code keeps them as
   the version written over has them.

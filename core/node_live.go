@@ -205,19 +205,16 @@ func (c *core) nodeSourcesDue(ctx context.Context, now time.Time) {
 		log.Printf("nodes: sources: %v", err)
 		return
 	}
-	nodes := map[string]bool{}
 	var ids []string
 	for _, s := range srcs {
 		if s.Source.Tool == nodeFindSource {
 			c.findSources.Store(true) // a node's change reads it again, from the start (node_find.go)
 		}
-		nodes[s.ID] = true
 		if !slices.Contains(ids, s.ID) {
 			ids = append(ids, s.ID)
 		}
 	}
 	c.forgetReads()
-	c.forgetGlances(nodes)
 	c.followNodeResources()
 	for _, id := range ids {
 		due := false
@@ -354,7 +351,6 @@ func (c *core) readNodeOnce(ctx context.Context, node string, only []string, for
 			c.staleDemands(ctx, node, r)
 		}
 	}
-	c.noteGlance(node, reads, now) // node_glance.go
 	c.markUntrusted(node)
 }
 

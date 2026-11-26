@@ -37,6 +37,29 @@ func (n *Node) AuthorBody(body string) error {
 			return err
 		}
 	}
+	// The external marks of its callouts are code's (listen.go).
+	was, err := n.Page()
+	if err != nil {
+		return err
+	}
+	now, err := (&Node{segs: segs}).Page()
+	if err != nil {
+		return err
+	}
+	if err := keepMarks(was, now); err != nil {
+		return err
+	}
+	n.segs = segs
+	return nil
+}
+
+// CodeBody replaces the node's body with code's: its blocks in their
+// full form, code's fields as written. No author writes this way.
+func (n *Node) CodeBody(body string) error {
+	segs, err := parseBody([]byte(body), false)
+	if err != nil {
+		return err
+	}
 	n.segs = segs
 	return nil
 }
@@ -149,7 +172,8 @@ func (n *Node) AuthorText() (string, error) {
 // AuthorBytes is the node as its authors wrote it: its front matter and
 // body in their canonical form, without code's fields (a block's
 // external, the node's external, title_trusted and
-// opened_by, done, links and format). Two versions alike
+// opened_by, done, links and format; the values and dates of the on:
+// lines and the callouts' external marks). Two versions alike
 // there differ only by what code wrote: an author's write made on one
 // applies on the other.
 func (n *Node) AuthorBytes() ([]byte, error) {
@@ -163,7 +187,7 @@ func (n *Node) AuthorBytes() ([]byte, error) {
 	b.Write(front)
 	for _, s := range n.segs {
 		if s.block == nil {
-			b.WriteString(s.text)
+			b.WriteString(withoutValues(s.text)) // the values on: lines follow are code's (listen.go)
 			continue
 		}
 		bare := *s.block

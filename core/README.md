@@ -1279,12 +1279,21 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   one write of git's index; an index is filled in one transaction, each statement prepared once.
   `TestIndexBench` measures it (`ERIPHE_BENCH_NODES=10000`).
 - **Never lost:** nodes are the user's notes. No code removes the repository, a node's file or
-  its trace, nor drops history (no gc, prune, repack, reset, clean or force; go-git only in
+  its trace, nor drops history (no prune, reset, clean or force, no go-git repack; go-git only in
   `nodestore`, git never run as a program); a node is only archived, by the user. The guard test
   `nodes_guard_test.go` holds it: the store's few removals (the backup's own copies, a file's
   removal by hand committed, a file written whole, a trace's oldest part past 2 MiB) are listed
-  there, each with its reason. The index (`nodes.db`) is not the truth: it may be rebuilt from the
-  files at any time.
+  there, each with its reason, and so are the removals of packing (below). The index (`nodes.db`)
+  is not the truth: it may be rebuilt from the files at any time.
+- **Values make no version** (`nodestore/values.go`): code's write of the values a page's lines
+  follow (`WriteValues`, from `node_listen.go`) writes the file and indexes it at its version, the
+  node pending (`node_pending` in `nodes.db`: the file's hash as code wrote it). Read, a node is its
+  file: the last version and the values since; a write's `expect` still names that version. The next
+  version of the node, whoever makes it, holds the values (an author's write made on the version
+  read keeps them, unless it changed one: `nodefile.KeepHeard`); at the night's backup, the nodes
+  still pending make one version, author `readings` (`CommitReadings`), at most one a day. At start,
+  a file as code wrote it is not one changed outside Eriphe; an index made again from the files
+  knows none, and commits such a file as `outside`.
 - **File format:** each file says its format, the front matter's `format` (absent: 1; 2 today,
   1 → 2 dropping `lifetime`; [Format version](../docs/node-format.md#format-version)). A change of the format
   adds its conversion to `nodefile` (from the format before, a pure function of the file's bytes)
@@ -1298,14 +1307,19 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   and `HEAD`: `git clone` reads it and checks it out), `nodes-<day>.trace.tar` (the traces, each as
   long as it was when the tar opened it) and `nodes-<day>.db` (a copy of the index, named last: it
   says the night's backup is whole).
-  The repository is only read: no gc, no repack, no object removed (go-git's repack deleted the
-  loose objects before its new pack was checked, and a failed repack lost the history). The
+  The backup only reads the repository (go-git's repack deleted the loose objects before its new
+  pack was checked, and a failed repack lost the history: it is never called). The
   bundle is packed from the objects as they are, written aside, read back whole (every object
   inflates, the checksum holds, every object of the branch is in it) and only then takes its name;
   older copies are dropped only once the night's are made. A failed backup is logged and leaves
   the repository and the earlier copies as they were, and is tried again at the next minute's
-  tick, not the next night. Objects stay loose: to compact the repository, stop Eriphe and run
-  `git gc` in it. Writes go on meanwhile: the store's lock is held only to read the branch's
+  tick, not the next night. After it, when the repository holds 500 loose objects or more,
+  `Pack` (`nodestore/pack.go`) packs it, writes waiting: every object the branch reaches into one
+  pack, written aside and read back whole (every object inflates, the checksum holds, every object
+  of the branch is in it) before it and its index take their names; the repository is opened again
+  and checked, and only then are the loose copies of what the pack holds removed, and the packs
+  before it (git gc without prune). An object no branch reaches stays loose. Writes go on meanwhile
+  during the backup: the store's lock is held only to read the branch's
   commit, and the bundle packs what it reaches through a repository handle of its own. The
   index is copied first (`VACUUM INTO`, aside) and takes its name last, so it is never ahead of
   the bundle (put back, it is behind at most, which a start reads again from the log) and its
@@ -1498,20 +1512,29 @@ a page: the brain composes each one from the catalog.
   the turn when a block reads a server not trusted. A block that reads a server not trusted is marked `external`, checked at each read:
   code marks it, never unmarks it. A monitor's value is its latest number, its last points, whether
   it is past its limit or failing, and its last events (kind and time, numbers only).
+- **Lines that follow the journal** (`node_listen.go`, `nodefile/listen.go`, table `node_listens`
+  in `nodes.db`): a page's `[18 385 €](on:monitor.changed/pea#value)`
+  ([node format](../docs/node-format.md#lines-that-follow-events)). `runNodes` subscribes to the
+  event journal and, one event at a time in its order, rewrites the lines of every node not archived
+  that follow it (`heard` → the store's `WriteValues`, no version): the label's number in the
+  author's style, or a short inert text, and the date after it. An external event marks the line's
+  callout `external` (code's: `AuthorBody` refuses a write that takes it off, no event does), and the node then taints whoever reads it (`nodeExternal`); outside a callout it
+  writes numbers only. Events past 512 waiting are dropped, logged.
 - **A node's glance** (`node_glance.go`, `nodefile/glance.go`, table `node_glance` in `core.db`): a
-  source may declare a `glance` (label, path, threshold, unit `percent`|`amount`, compare
-  `day`|`previous`|`fixed` with `base`; [node format](../docs/node-format.md#sources)), one per
-  node (`nodeGuard`). Each read of the node (`readNodeOnce` → `noteGlance`) takes the JSON number
-  at its path and keeps the day's first value (in the user's zone), the previous one, the last one and
+  page's callout marked `glance <threshold>` (`glance 3%`, `glance 500`, `previous` after it), or
+  its property `glance`, shows the first number an `on:` line writes there
+  ([node format](../docs/node-format.md#a-figure-at-a-glance)). Each change of the node's file (the
+  store's watcher, then `runNodes` → `noteGlance`) reads it, with the words before it on its line
+  as its label, and keeps the day's first value (in the user's zone), the previous one, the last one and
   up to 32 recent values, one per 30 minutes, the last one live; no model, no brain turn. The
   variation is from its reference, in percent of it or in its units; `shown` once it reaches the
   threshold, until it falls under 0.85 of it (`glanceOff`). `seen` is set when the workspace's
   view opens the node while shown (`glanceOpened`, from `PUT /api/espace/view`), or when it crosses
   while open, and cleared under 0.85: seen survives a reload and holds on every screen. A
-  declaration changed starts afresh; one taken away, or its node gone, is forgotten. The node's
-  row (`graphNode.glance`: label, `labelExternal` when its block is external, unit, value, ref,
-  delta, threshold, series, shown, seen) is sent again (`graphEvNode`) when it changes. The
-  workspace draws at most 3 tiles (graph/glance.ts).
+  declaration changed starts afresh; one taken away, or its node archived, is forgotten. The node's
+  row (`graphNode.glance`: label, `labelExternal` when its callout or node is external, unit, value,
+  ref, delta, threshold, series, shown, seen) is sent again (`graphEvNode`) when it changes. The
+  workspace draws at most 3 tiles (graph/glance.ts). A source's `glance` is no longer read.
 - **Read again after a change** (`source_fresh.go`): a call that ran well and may change something
   (its tool is not marked `readOnlyHint`) is followed by a read of every live source of its server,
   every node's: those of the account it names (its `account` argument) and those that name none;

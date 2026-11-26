@@ -35,6 +35,7 @@ const (
 	ProblemDoTarget       = "do-target"       // do: not server/tool
 	ProblemDoTool         = "do-tool"         // do: a tool its author does not have
 	ProblemLinkTarget     = "link-target"     // card: or on: with nothing after it
+	ProblemOnTarget       = "on-target"       // on: that names no event (on:<kind>/<key>#<field>)
 	ProblemChart          = "chart"           // [!chart] whose table is not one it draws
 	ProblemFenceOpen      = "fence-open"      // a code fence never closed
 )
@@ -126,7 +127,13 @@ func (p *Page) Check(hasTool func(tool string) bool) []Problem {
 					add(b.Line, ProblemCalloutType, "a callout Eriphe does not draw (it draws "+strings.Join(CalloutTypes(), ", ")+"): drawn as a note")
 				}
 				for _, o := range b.Opts {
-					if o != OptAside && !slices.Contains(opts, o) {
+					if g, ok := strings.CutPrefix(o, GlanceOpt+" "); ok {
+						if _, ok := ParseGlance(g); !ok {
+							add(b.Line, ProblemCalloutOption, "glance takes its threshold: glance 3% (of the day's first value) or glance 500 (in the figure's units), then previous to compare with the value before")
+						}
+						continue
+					}
+					if o != OptAside && o != OptExternal && !slices.Contains(opts, o) {
 						add(b.Line, ProblemCalloutOption, "an option this callout does not take (any takes aside; chart takes line, bar or stack)")
 					}
 				}
@@ -157,8 +164,13 @@ func (p *Page) Check(hasTool func(tool string) bool) []Problem {
 				add(l.Line, ProblemDoTool, "a do: link on a tool you do not have: its card could not be composed")
 			}
 		case LinkCard, LinkOn:
-			if strings.TrimSpace(l.Target) == "" {
+			switch {
+			case strings.TrimSpace(l.Target) == "":
 				add(l.Line, ProblemLinkTarget, "a card: or on: link names what it places (card:<ref>)")
+			case l.Kind == LinkOn:
+				if _, ok := ParseOn(l.Target); !ok {
+					add(l.Line, ProblemOnTarget, "an on: link names an event: on:<kind>/<key>#<field> (on:monitor.changed/pea, its value by default)")
+				}
 			}
 		}
 	}

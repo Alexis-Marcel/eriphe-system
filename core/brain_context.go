@@ -316,10 +316,11 @@ func (c *core) nodeLine(x statusNode) string {
 	return b.String()
 }
 
-// nodeFirstLine is the first line of a node's doc; "" for none.
+// nodeFirstLine is the first line of a node's doc; "" for none, or when
+// a callout of its page holds someone else's values (node_listen.go).
 func (c *core) nodeFirstLine(id string) string {
 	d, err := c.nodes.Read(id, 0)
-	if err != nil {
+	if err != nil || d.Node.CalloutExternal() {
 		return ""
 	}
 	return firstLine(d.Node.Text())

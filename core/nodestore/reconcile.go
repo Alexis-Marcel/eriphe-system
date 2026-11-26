@@ -105,6 +105,15 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 	for id, r := range inIndex {
 		byFile[r.file] = id
 	}
+	// A file as code wrote its values, in no version yet (values.go), is
+	// as good as committed: it stays pending.
+	pending, err := s.pendingBlobs()
+	if err != nil {
+		return rep, err
+	}
+	committedAs := func(name, blob string) bool {
+		return head[name].String() == blob || byFile[name] != "" && pending[byFile[name]] == blob
+	}
 	// The files read, and parsed but those the index holds as they are,
 	// on every core; what is found is then dealt with in their order.
 	scans := make([]scanned, len(names))
@@ -124,7 +133,7 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 		}
 		// Committed, indexed as it is, at its last version and in
 		// today's format: nothing to read in it but its id.
-		if id, ok := byFile[name]; ok && sc.formatErr == nil && sc.format == s.format() && head[name].String() == sc.blob {
+		if id, ok := byFile[name]; ok && sc.formatErr == nil && sc.format == s.format() && committedAs(name, sc.blob) {
 			if r, lv := inIndex[id], lasts[id]; r.blob == sc.blob && lv.n != 0 && r.version == lv.n {
 				sc.id = id
 				sc.raw, sc.conv = nil, nil // not kept: nothing is done with them
@@ -147,7 +156,7 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 		}
 		raw := sc.raw
 		onDisk[name] = true
-		committed := head[name].String() == sc.blob
+		committed := committedAs(name, sc.blob)
 		// A file of another format than today's: an older one is
 		// converted, a newer one stops the store before anything is
 		// written. One whose conversion does not give a node is
@@ -176,6 +185,12 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 			continue
 		}
 		seen[id] = name
+		if p, ok := pending[id]; ok && p != sc.blob && head[name].String() == sc.blob {
+			// A stop between the index and the file: its version's.
+			if _, err := s.db.Exec(`DELETE FROM node_pending WHERE id = ?`, id); err != nil {
+				return rep, err
+			}
+		}
 		lv := lasts[id]
 		last, lastAt := lv.n, time.Unix(lv.at, 0)
 		converting := !bytes.Equal(conv, raw)
