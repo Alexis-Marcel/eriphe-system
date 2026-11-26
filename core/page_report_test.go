@@ -144,7 +144,7 @@ func TestPageReportAndSetupButtons(t *testing.T) {
 	}
 	// Its author hears it at its next write.
 	c.turn.start(0, 0, 0)
-	w, err := c.brainNodeWrite(node, d.Version.Hash, func(n *nodefile.Node) error { return n.AuthorBody(recus) })
+	w, err := c.brainNodeWrite(node, writeOn{expect: d.Version.Hash}, func(n *nodefile.Node) error { return n.AuthorBody(recus) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestPageReportWaitsForTheRead(t *testing.T) {
 	id, _ := out["id"].(string)
 	d, _ := c.nodes.Read(id, 0)
 	none := strings.Replace(body, `"etude"`, `"cuisine"`, 1)
-	w, err := c.brainNodeWrite(id, d.Version.Hash, func(n *nodefile.Node) error { return n.AuthorBody(none) })
+	w, err := c.brainNodeWrite(id, writeOn{expect: d.Version.Hash}, func(n *nodefile.Node) error { return n.AuthorBody(none) })
 	if err != nil {
 		t.Fatal(err)
 	}

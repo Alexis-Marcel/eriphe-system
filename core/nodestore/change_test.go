@@ -55,6 +55,37 @@ func TestChange(t *testing.T) {
 	}
 }
 
+// ChangeLast changes the last version, whichever it is, with Change's
+// guards.
+func TestChangeLast(t *testing.T) {
+	s, _ := newEnv(t).open(t)
+	d := mustCreate(t, s, New{Title: "Courses", Body: "- [ ] Pain\n- [ ] Lait\n"})
+	if _, err := s.Change("n1", d.Version.Hash, "brain", func(n *nodefile.Node) error { return n.AuthorBody("- [ ] Pain\n- [ ] Lait\n- [ ] Beurre\n") }); err != nil {
+		t.Fatal(err)
+	}
+	// Made after reading version 1: it applies on version 2.
+	d3, err := s.ChangeLast("n1", "task:t1", func(n *nodefile.Node) error {
+		b, _ := n.Body()
+		body, err := nodefile.SetTask(b, nodefile.LineRef{Text: "Lait"}, nodefile.TaskDone)
+		if err != nil {
+			return err
+		}
+		return n.AuthorBody(body)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body, _ := d3.Node.Body(); d3.Version.N != 3 || body != "- [ ] Pain\n- [x] Lait\n- [ ] Beurre\n" || d3.Version.Author != "task:t1" {
+		t.Fatalf("v%d\n%s", d3.Version.N, d3.Raw)
+	}
+	if _, err := s.ChangeLast("n1", "brain", func(n *nodefile.Node) error { n.Meta.Parent = "n9"; return nil }); err == nil {
+		t.Error("parent changed")
+	}
+	if _, err := s.ChangeLast("n9", "brain", func(n *nodefile.Node) error { return nil }); err == nil {
+		t.Error("no node n9")
+	}
+}
+
 // A write made on a version code changed since, its code's fields only
 // (a block marked external), applies on the last version with them kept;
 // one made on a version an author changed since is stale.

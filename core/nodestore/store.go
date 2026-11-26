@@ -482,7 +482,27 @@ func (s *Store) change(id, expect, author, op string, fn func(*nodefile.Node) er
 func (s *Store) Change(id, expect, author string, fn func(*nodefile.Node) error) (*Doc, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.change(id, expect, author, "change", func(n *nodefile.Node) error {
+	return s.change(id, expect, author, "change", s.keepPlace(fn))
+}
+
+// ChangeLast is Change on the node's last version, whichever it is: for
+// a change that checks itself what it changes (a line found by its text,
+// refused when it is gone), so it needs no version.
+func (s *Store) ChangeLast(id, author string, fn func(*nodefile.Node) error) (*Doc, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cur, err := s.read(id, 0)
+	if err != nil {
+		return nil, err
+	}
+	return s.change(id, cur.Version.Hash, author, "change", s.keepPlace(fn))
+}
+
+// keepPlace is fn, refused when it changes the node's id, parent,
+// creation, done or archived, then the store's filter over what it
+// wrote.
+func (s *Store) keepPlace(fn func(*nodefile.Node) error) func(*nodefile.Node) error {
+	return func(n *nodefile.Node) error {
 		was := n.Meta
 		if err := fn(n); err != nil {
 			return err
@@ -496,7 +516,7 @@ func (s *Store) Change(id, expect, author string, fn func(*nodefile.Node) error)
 			return err
 		}
 		return s.refuse(string(raw))
-	})
+	}
 }
 
 // onlyCodeSince tells whether a node's versions since the one whose hash

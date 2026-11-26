@@ -1,0 +1,100 @@
+{
+  "page": {
+    "blocks": [
+      {
+        "kind": "heading",
+        "line": 1,
+        "end": 1,
+        "level": 2,
+        "text": "À traiter"
+      },
+      {
+        "kind": "list",
+        "line": 2,
+        "end": 4,
+        "items": [
+          {
+            "line": 2,
+            "end": 2,
+            "task": " ",
+            "text": "[Devis de Sam][m1] : il attend ta réponse"
+          },
+          {
+            "line": 3,
+            "end": 3,
+            "task": " ",
+            "text": "[Facture][m2] : sans cible en bas"
+          },
+          {
+            "line": 4,
+            "end": 4,
+            "text": "[Commande expédiée][M1] : même étiquette, sans casse"
+          }
+        ]
+      }
+    ],
+    "refs": [
+      {
+        "label": "m1",
+        "target": "mail:aWQtMQ",
+        "scheme": "mail",
+        "id": "aWQtMQ",
+        "line": 6
+      },
+      {
+        "label": "m3",
+        "target": "mail:aWQtMw",
+        "scheme": "mail",
+        "id": "aWQtMw",
+        "line": 7
+      },
+      {
+        "label": "m1",
+        "target": "mail:aWQtNA",
+        "scheme": "mail",
+        "id": "aWQtNA",
+        "line": 8
+      }
+    ],
+    "uses": [
+      {
+        "label": "m1",
+        "text": "Devis de Sam",
+        "line": 2,
+        "item": 2,
+        "task": " "
+      },
+      {
+        "label": "m2",
+        "text": "Facture",
+        "line": 3,
+        "item": 3,
+        "task": " "
+      },
+      {
+        "label": "m1",
+        "text": "Commande expédiée",
+        "line": 4,
+        "item": 4
+      }
+    ],
+    "links": []
+  },
+  "problems": [
+    {
+      "line": 3,
+      "code": "ref-undefined",
+      "what": "a reference with no target: write [label]: <server>:<id> at the bottom, the id as the tool gave it"
+    },
+    {
+      "line": 7,
+      "code": "ref-unused",
+      "what": "no reference uses this target: remove it with its reference"
+    },
+    {
+      "line": 8,
+      "code": "ref-duplicate",
+      "what": "this label is defined twice: each reference has a label of its own"
+    }
+  ]
+}

@@ -1,0 +1,246 @@
+{
+  "page": {
+    "written": {
+      "text": "Écrit le 26/11/2026 à 9 h",
+      "line": 1
+    },
+    "blocks": [
+      {
+        "kind": "heading",
+        "line": 3,
+        "end": 3,
+        "level": 2,
+        "text": "À traiter"
+      },
+      {
+        "kind": "list",
+        "line": 4,
+        "end": 9,
+        "items": [
+          {
+            "line": 4,
+            "end": 6,
+            "task": " ",
+            "text": "[Option de train à valider][m1] : la réservation expire si tu ne la confirmes pas",
+            "detail": [
+              {
+                "kind": "list",
+                "line": 5,
+                "end": 6,
+                "items": [
+                  {
+                    "line": 5,
+                    "end": 5,
+                    "text": "Valider sur le site du transporteur, rubrique Mes voyages, référence ABC123."
+                  },
+                  {
+                    "line": 6,
+                    "end": 6,
+                    "text": "Date limite introuvable dans le mail, à vérifier sur le site."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "line": 7,
+            "end": 9,
+            "task": " ",
+            "text": "[Sam · Devis terrasse][m2] : il attend ta réponse avant vendredi 📅 2026-11-28",
+            "due": "2026-11-28",
+            "detail": [
+              {
+                "kind": "list",
+                "line": 8,
+                "end": 9,
+                "items": [
+                  {
+                    "line": 8,
+                    "end": 8,
+                    "text": "Brouillon prêt : « Bonjour Sam, le devis me va, on peut caler le début des travaux la semaine du 8. »"
+                  },
+                  {
+                    "line": 9,
+                    "end": 9,
+                    "text": "[Envoyer la réponse](card:calls:412)"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "heading",
+        "line": 11,
+        "end": 11,
+        "level": 2,
+        "text": "À archiver"
+      },
+      {
+        "kind": "paragraph",
+        "line": 12,
+        "end": 12,
+        "text": "[Archiver ces mails](do:mail/move)"
+      },
+      {
+        "kind": "list",
+        "line": 13,
+        "end": 14,
+        "items": [
+          {
+            "line": 13,
+            "end": 13,
+            "text": "[Facture internet de novembre][m3] : payée par prélèvement"
+          },
+          {
+            "line": 14,
+            "end": 14,
+            "text": "[Commande n° 0001 expédiée][m4] : livrée le 22/11"
+          }
+        ]
+      },
+      {
+        "kind": "heading",
+        "line": 16,
+        "end": 16,
+        "level": 2,
+        "text": "À supprimer"
+      },
+      {
+        "kind": "paragraph",
+        "line": 17,
+        "end": 17,
+        "text": "[Jeter ces mails](do:mail/trash)"
+      },
+      {
+        "kind": "list",
+        "line": 18,
+        "end": 19,
+        "items": [
+          {
+            "line": 18,
+            "end": 18,
+            "text": "[Newsletter Le Tri][m5] : newsletter, jamais ouverte"
+          },
+          {
+            "line": 19,
+            "end": 19,
+            "text": "[Pub Maison Lune · Gift Guide][m6] : publicité"
+          }
+        ]
+      }
+    ],
+    "refs": [
+      {
+        "label": "m1",
+        "target": "mail:bTEfc2FtQGV4YW1wbGUub3JnH0lOQk9YHzEfMjkw001",
+        "scheme": "mail",
+        "id": "bTEfc2FtQGV4YW1wbGUub3JnH0lOQk9YHzEfMjkw001",
+        "line": 21
+      },
+      {
+        "label": "m2",
+        "target": "mail:bTEfc2FtQGV4YW1wbGUub3JnH0lOQk9YHzEfMjkw002",
+        "scheme": "mail",
+        "id": "bTEfc2FtQGV4YW1wbGUub3JnH0lOQk9YHzEfMjkw002",
+        "line": 22
+      },
+      {
+        "label": "m3",
+        "target": "mail:bTEfc2FtQGV4YW1wbGUub3JnH0lOQk9YHzEfMjkw003",
+        "scheme": "mail",
+        "id": "bTEfc2FtQGV4YW1wbGUub3JnH0lOQk9YHzEfMjkw003",
+        "line": 23
+      },
+      {
+        "label": "m4",
+        "target": "mail:bTEfc2FtQGV4YW1wbGUub3JnH0lOQk9YHzEfMjkw004",
+        "scheme": "mail",
+        "id": "bTEfc2FtQGV4YW1wbGUub3JnH0lOQk9YHzEfMjkw004",
+        "line": 24
+      },
+      {
+        "label": "m5",
+        "target": "mail:bTEfc2FtQGV4YW1wbGUub3JnH0lOQk9YHzEfMjkw005",
+        "scheme": "mail",
+        "id": "bTEfc2FtQGV4YW1wbGUub3JnH0lOQk9YHzEfMjkw005",
+        "line": 25
+      },
+      {
+        "label": "m6",
+        "target": "mail:bTEfc2FtQGV4YW1wbGUub3JnH0lOQk9YHzEfMjkw006",
+        "scheme": "mail",
+        "id": "bTEfc2FtQGV4YW1wbGUub3JnH0lOQk9YHzEfMjkw006",
+        "line": 26
+      }
+    ],
+    "uses": [
+      {
+        "label": "m1",
+        "text": "Option de train à valider",
+        "line": 4,
+        "item": 4,
+        "task": " "
+      },
+      {
+        "label": "m2",
+        "text": "Sam · Devis terrasse",
+        "line": 7,
+        "item": 7,
+        "task": " "
+      },
+      {
+        "label": "m3",
+        "text": "Facture internet de novembre",
+        "line": 13,
+        "item": 13
+      },
+      {
+        "label": "m4",
+        "text": "Commande n° 0001 expédiée",
+        "line": 14,
+        "item": 14
+      },
+      {
+        "label": "m5",
+        "text": "Newsletter Le Tri",
+        "line": 18,
+        "item": 18
+      },
+      {
+        "label": "m6",
+        "text": "Pub Maison Lune · Gift Guide",
+        "line": 19,
+        "item": 19
+      }
+    ],
+    "links": [
+      {
+        "kind": "card",
+        "label": "Envoyer la réponse",
+        "target": "calls:412",
+        "line": 9,
+        "item": 9,
+        "heading": 3
+      },
+      {
+        "kind": "do",
+        "label": "Archiver ces mails",
+        "target": "mail/move",
+        "line": 12,
+        "alone": true,
+        "heading": 11
+      },
+      {
+        "kind": "do",
+        "label": "Jeter ces mails",
+        "target": "mail/trash",
+        "line": 17,
+        "alone": true,
+        "heading": 16
+      }
+    ]
+  },
+  "problems": []
+}

@@ -330,15 +330,15 @@ func TestBrainBudgetHoldsTheBrainOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	id, word := d.Node.Meta.ID, 0
-	// edit replaces the node's word by the next, on expect (its last
-	// version's when ""): the error's words, "" when it was written.
-	edit := func(cs *mcp.ClientSession, expect string) string {
+	// edit replaces the node's word (old, when it is not "") by the
+	// next: the error's words, "" when it was written.
+	edit := func(cs *mcp.ClientSession, old string) string {
 		d, err := c.nodes.Read(id, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, msg := callOn(t, cs, "node_edit", map[string]any{"id": id, "expect": cmpOr(expect, d.Version.Hash),
-			"old": strings.TrimSpace(d.Node.Text()), "new": "v" + strconv.Itoa(word+1)})
+		_, msg := callOn(t, cs, "node_edit", map[string]any{"id": id,
+			"old": cmpOr(old, strings.TrimSpace(d.Node.Text())), "new": "v" + strconv.Itoa(word+1)})
 		if msg == "" {
 			word++
 		}
@@ -346,9 +346,9 @@ func TestBrainBudgetHoldsTheBrainOnly(t *testing.T) {
 	}
 	for name, cs := range map[string]*mcp.ClientSession{"relayed by its device": relayed, "at self_url": selfURL} {
 		c.turn.start(1, 1, 0)
-		// A stale edit fails: it costs nothing.
-		if msg := edit(cs, "stale"); msg == "" || strings.HasPrefix(msg, "Refused") {
-			t.Fatalf("the brain %s: a stale edit: %q", name, msg)
+		// An edit of a line gone fails: it costs nothing.
+		if msg := edit(cs, "gone"); msg == "" || strings.HasPrefix(msg, "Refused") {
+			t.Fatalf("the brain %s: an edit of a line gone: %q", name, msg)
 		}
 		for i := range brainNodeWrites {
 			if msg := edit(cs, ""); msg != "" {

@@ -1,0 +1,223 @@
+{
+  "tools": [
+    "mail/trash",
+    "mail/move"
+  ],
+  "page": {
+    "blocks": [
+      {
+        "kind": "paragraph",
+        "line": 1,
+        "end": 1,
+        "text": "[Jeter tout](do:mail/trash)"
+      },
+      {
+        "kind": "heading",
+        "line": 3,
+        "end": 3,
+        "level": 2,
+        "text": "À supprimer"
+      },
+      {
+        "kind": "paragraph",
+        "line": 4,
+        "end": 5,
+        "text": "Ces mails peuvent partir.\n[Jeter ces mails](do:mail/trash)"
+      },
+      {
+        "kind": "list",
+        "line": 6,
+        "end": 6,
+        "items": [
+          {
+            "line": 6,
+            "end": 6,
+            "text": "[Newsletter][m1] : jamais ouverte [Jeter](do:mail/trash)"
+          }
+        ]
+      },
+      {
+        "kind": "heading",
+        "line": 8,
+        "end": 8,
+        "level": 2,
+        "text": "À archiver"
+      },
+      {
+        "kind": "paragraph",
+        "line": 9,
+        "end": 9,
+        "text": "[Archiver ces mails](do:mail/move) · [Les marquer lus](do:mail/mark_read)"
+      },
+      {
+        "kind": "list",
+        "line": 10,
+        "end": 10,
+        "items": [
+          {
+            "line": 10,
+            "end": 10,
+            "text": "[Facture][m2] : payée"
+          }
+        ]
+      },
+      {
+        "kind": "heading",
+        "line": 12,
+        "end": 12,
+        "level": 2,
+        "text": "Autres"
+      },
+      {
+        "kind": "paragraph",
+        "line": 13,
+        "end": 13,
+        "text": "[Supprimer](do:trash)"
+      },
+      {
+        "kind": "list",
+        "line": 14,
+        "end": 14,
+        "items": [
+          {
+            "line": 14,
+            "end": 14,
+            "text": "[Pub][m3] : publicité [Envoyer](card:)"
+          }
+        ]
+      }
+    ],
+    "refs": [
+      {
+        "label": "m1",
+        "target": "mail:aWQtMQ",
+        "scheme": "mail",
+        "id": "aWQtMQ",
+        "line": 16
+      },
+      {
+        "label": "m2",
+        "target": "mail:aWQtMg",
+        "scheme": "mail",
+        "id": "aWQtMg",
+        "line": 17
+      },
+      {
+        "label": "m3",
+        "target": "mail:aWQtMw",
+        "scheme": "mail",
+        "id": "aWQtMw",
+        "line": 18
+      }
+    ],
+    "uses": [
+      {
+        "label": "m1",
+        "text": "Newsletter",
+        "line": 6,
+        "item": 6
+      },
+      {
+        "label": "m2",
+        "text": "Facture",
+        "line": 10,
+        "item": 10
+      },
+      {
+        "label": "m3",
+        "text": "Pub",
+        "line": 14,
+        "item": 14
+      }
+    ],
+    "links": [
+      {
+        "kind": "do",
+        "label": "Jeter tout",
+        "target": "mail/trash",
+        "line": 1,
+        "alone": true
+      },
+      {
+        "kind": "do",
+        "label": "Jeter ces mails",
+        "target": "mail/trash",
+        "line": 5,
+        "alone": true,
+        "heading": 3
+      },
+      {
+        "kind": "do",
+        "label": "Jeter",
+        "target": "mail/trash",
+        "line": 6,
+        "item": 6,
+        "heading": 3
+      },
+      {
+        "kind": "do",
+        "label": "Archiver ces mails",
+        "target": "mail/move",
+        "line": 9,
+        "alone": true,
+        "heading": 8
+      },
+      {
+        "kind": "do",
+        "label": "Les marquer lus",
+        "target": "mail/mark_read",
+        "line": 9,
+        "alone": true,
+        "heading": 8
+      },
+      {
+        "kind": "do",
+        "label": "Supprimer",
+        "target": "trash",
+        "line": 13,
+        "alone": true,
+        "heading": 12
+      },
+      {
+        "kind": "card",
+        "label": "Envoyer",
+        "target": "",
+        "line": 14,
+        "item": 14,
+        "heading": 12
+      }
+    ]
+  },
+  "problems": [
+    {
+      "line": 1,
+      "code": "do-place",
+      "what": "a do: link acts on the references of a heading: on its own line, the first under the heading"
+    },
+    {
+      "line": 5,
+      "code": "do-place",
+      "what": "a do: link acts on the references of a heading: on its own line, the first under the heading"
+    },
+    {
+      "line": 6,
+      "code": "do-place",
+      "what": "a do: link acts on the references of a heading: on its own line, the first under the heading"
+    },
+    {
+      "line": 9,
+      "code": "do-tool",
+      "what": "a do: link on a tool you do not have: its card could not be composed"
+    },
+    {
+      "line": 13,
+      "code": "do-target",
+      "what": "a do: link names a tool as server/tool (do:mail/trash)"
+    },
+    {
+      "line": 14,
+      "code": "link-target",
+      "what": "a card: or on: link names what it places (card:<ref>)"
+    }
+  ]
+}

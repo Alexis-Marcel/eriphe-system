@@ -1,0 +1,144 @@
+{
+  "page": {
+    "written": {
+      "text": "Écrit le 27/11/2026 à 18 h",
+      "line": 1
+    },
+    "blocks": [
+      {
+        "kind": "paragraph",
+        "line": 3,
+        "end": 3,
+        "text": "Une semaine chargée mais tenue : le correctif iOS est prêt, le devis de la terrasse est arrivé, et la boîte mail est revenue sous les dix messages."
+      },
+      {
+        "kind": "callout",
+        "line": 5,
+        "end": 8,
+        "type": "figures",
+        "body": [
+          {
+            "kind": "list",
+            "line": 6,
+            "end": 8,
+            "items": [
+              {
+                "line": 6,
+                "end": 6,
+                "text": "Tâches finies : 9 (▲ 3 sur la semaine d'avant)"
+              },
+              {
+                "line": 7,
+                "end": 7,
+                "text": "Mails traités : 64"
+              },
+              {
+                "line": 8,
+                "end": 8,
+                "text": "Heures de réunion : 6 h (▼ 2 h)"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "paragraph",
+        "line": 10,
+        "end": 10,
+        "text": "Le temps est allé surtout au projet iOS, comme prévu ; la maison a pris plus que la semaine d'avant à cause de la terrasse."
+      },
+      {
+        "kind": "callout",
+        "line": 12,
+        "end": 16,
+        "type": "chart",
+        "opts": [
+          "stack"
+        ],
+        "title": "Où est allé le temps (h)",
+        "body": [
+          {
+            "kind": "table",
+            "line": 13,
+            "end": 16,
+            "head": [
+              "Semaine",
+              "Travail (h)",
+              "Maison (h)",
+              "Sport (h)"
+            ],
+            "rows": [
+              [
+                "16/11",
+                "31",
+                "4",
+                "3"
+              ],
+              [
+                "23/11",
+                "33",
+                "7",
+                "2"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "callout",
+        "line": 18,
+        "end": 19,
+        "type": "success",
+        "title": "Correctif prêt",
+        "body": [
+          {
+            "kind": "paragraph",
+            "line": 19,
+            "end": 19,
+            "text": "La version 3.2.1 attend ton oui pour partir en production."
+          }
+        ]
+      },
+      {
+        "kind": "heading",
+        "line": 21,
+        "end": 21,
+        "level": 3,
+        "text": "Ce qui reste"
+      },
+      {
+        "kind": "embed",
+        "line": 22,
+        "end": 22,
+        "name": "Mes tâches"
+      },
+      {
+        "kind": "paragraph",
+        "line": 24,
+        "end": 24,
+        "text": "[Prépare la semaine prochaine](ask:) · [Qu'est-ce que j'ai repoussé ?](ask:)"
+      }
+    ],
+    "refs": [],
+    "uses": [],
+    "links": [
+      {
+        "kind": "ask",
+        "label": "Prépare la semaine prochaine",
+        "target": "",
+        "line": 24,
+        "alone": true,
+        "heading": 21
+      },
+      {
+        "kind": "ask",
+        "label": "Qu'est-ce que j'ai repoussé ?",
+        "target": "",
+        "line": 24,
+        "alone": true,
+        "heading": 21
+      }
+    ]
+  },
+  "problems": []
+}
