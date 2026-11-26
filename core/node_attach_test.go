@@ -7,15 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
 // The photo of a shirt the user sends is kept with the shirt's node
 // (#748): node_set with the attachment's id as a property's value keeps
 // the file in the node (a commit in the graph's repository), the property
-// names it, the page shows it, served by eriphe-core, and a Table of a
-// node_find source shows it beside the node found.
+// names it, the page shows it, served by eriphe-core.
 func TestAttachmentToNodeMedia(t *testing.T) {
 	tw, _ := graphWeb(t)
 	c := tw.c
@@ -61,49 +59,9 @@ func TestAttachmentToNodeMedia(t *testing.T) {
 		t.Fatalf("served %d %v", code, h)
 	}
 
-	// A page of node_find by tag: each node with its photo, signed for
-	// that node.
-	block := "```eriphe:block garde\n" + `{"components": {"component": "Table", "columns": [{"key": "title", "label": "Vêtement"}, {"key": "photo", "label": "Photo"}], "rows": {"@path": "/garde/nodes"}},
- "sources": {"garde": {"tool": "eriphe-core/node_find", "args": {"tags": ["vêtement"], "columns": ["photo"]}}}}` + "\n```\n"
-	page := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Garde-robe", "aside": true, "body": block})["id"].(string)
-	c.live.wg.Wait()
-	gp, err := tw.w.nodePageOf(page, 0, "fr")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var rows []any
-	for _, part := range gp.Parts {
-		if part.Block != nil {
-			rows, _ = part.Block.Data["garde"].(map[string]any)["nodes"].([]any)
-		}
-	}
-	if len(rows) != 1 {
-		t.Fatalf("rows: %s", fmtJSON(gp.Parts))
-	}
-	thumb, _ := rows[0].(map[string]any)["photo"].(string)
-	if !strings.HasPrefix(thumb, mediaPath+"?") {
-		t.Fatalf("thumbnail: %q", thumb)
-	}
-	if code, body, _ := tw.do("GET", thumb, nil, nil); code != http.StatusOK || body != string(photo) {
-		t.Fatalf("thumbnail served %d", code)
-	}
-	// As a List of Images (a gallery), the same address: signed by
-	// eriphe-core, it is kept as it is.
-	b := &nodefile.Block{Name: "galerie", Components: json.RawMessage(`[
-  {"id": "root", "component": "List", "children": {"path": "/garde/nodes", "componentId": "pic"}},
-  {"id": "pic", "component": "Image", "url": {"@path": "photo"}}]`),
-		Sources: map[string]nodefile.Source{"garde": {Tool: nodeFindSource, Args: map[string]any{"tags": []any{"vêtement"}, "columns": []any{"photo"}}}}}
-	reads := c.keptReads(page)
-	for i := range reads {
-		reads[i].Block = "galerie"
-	}
-	v := c.blockView(page, b, reads)
-	if got := v.Data["garde"].(map[string]any)["nodes"].([]any)[0].(map[string]any)["photo"]; got != thumb {
-		t.Fatalf("an Image of a List: %q, want %q", got, thumb)
-	}
-	// An address eriphe-core did not sign is dropped.
-	if got := c.mediaOrDrop(page, mediaPath+"?u=media%3A"+id+"%2F"+name+"&s=forged", false); got != "" {
-		t.Fatalf("a forged address kept: %q", got)
+	// An address eriphe-core did not sign is refused.
+	if code, _, _ := tw.do("GET", mediaPath+"?u=media%3A"+id+"%2F"+name+"&s=forged", nil, nil); code != http.StatusForbidden {
+		t.Fatalf("a forged address served: %d", code)
 	}
 
 	// The brain's node_find still gives the property as it is written.

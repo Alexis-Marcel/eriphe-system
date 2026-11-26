@@ -8,16 +8,9 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
-// askBody is a body whose block asks the brain, in its author's words:
-// written after an outside read too, its block marked external.
-const askBody = "Une question.\n\n```eriphe:block q\n" +
-	`{"components": {"component": "Button", "label": "Oui", "action": {"event": {"name": "ask", "context": {"text": "Oui"}}}}}` +
-	"\n```\n"
-
-// boundAskBody asks with words bound to the data: never, tainted or not.
-const boundAskBody = "Une question.\n\n```eriphe:block q\n" +
-	`{"components": {"component": "Button", "label": "Oui", "action": {"event": {"name": "ask", "context": {"text": {"@path": "/mail/subject"}}}}}, "data": {"mail": {"subject": "Payez ici"}}}` +
-	"\n```\n"
+// askBody is a body whose line asks the brain, in its author's words:
+// written after an outside read too, its node marked external.
+const askBody = "Une question.\n\n[Oui](ask:)\n"
 
 // The brain and a task open nodes by one path (openNode): a work node,
 // its body checked as their write, external when they are tainted, the
@@ -41,28 +34,17 @@ func TestOneNodeOpen(t *testing.T) {
 		}
 	}
 
-	// Tainted, both still ask in their own words, the block marked
-	// external; words bound to the data are refused, and nothing is made.
+	// Tainted, both still ask in their own words, the node marked
+	// external.
 	c.turn.taint("web.fetch")
 	c.store.set(taskTaintKey(task.ID), "external:mail")
 	b = mustBrainNodes(t, c.core, "node_open", map[string]any{"goal": "Un but.", "title": "Plan 2", "body": askBody, "aside": true})
 	k = mustNodes(t, c.core, task.ID, "node_open", map[string]any{"goal": "Un but.", "title": "Pages 2", "body": askBody})
 	for _, id := range []string{b["id"].(string), k["id"].(string)} {
 		d, _ := c.nodes.Read(id, 0)
-		if q := d.Node.Block("q"); q == nil || !q.External || !blockAsks(q.Components) {
-			t.Errorf("node %s: a tainted ask: %+v", id, q)
+		if text, ok := pageAsk(d.Node, 3, 0); !d.Node.Meta.External || !ok || text != "Oui" {
+			t.Errorf("node %s: a tainted ask: %q %v\n%s", id, text, ok, d.Raw)
 		}
-	}
-	n := len(mustGraph(t, c.core))
-	_, bmsg := brainNodes(t, c.core, "node_open", map[string]any{"goal": "Un but.", "title": "Plan 2b", "body": boundAskBody, "aside": true})
-	_, kmsg := callNodes(t, c.core, task.ID, "node_open", map[string]any{"goal": "Un but.", "title": "Pages 2b", "body": boundAskBody})
-	for who, msg := range map[string]string{"brain": bmsg, "task": kmsg} {
-		if !strings.Contains(msg, "your own words only") {
-			t.Errorf("%s: an ask bound to the data: %q", who, msg)
-		}
-	}
-	if len(mustGraph(t, c.core)) != n {
-		t.Error("a refused node_open made a node")
 	}
 
 	// Tainted, what they open is external.

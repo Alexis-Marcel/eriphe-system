@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -10,8 +9,8 @@ import (
 	"time"
 )
 
-// moreMails puts mails m1 to m<n> in the faked server, and reads the
-// node's source again: what its list shows now.
+// moreMails puts mails m1 to m<n> in the faked server, and the page
+// references them, as its skill writes it.
 func moreMails(t *testing.T, c *core, fm *fakeMonitor, node string, n int) {
 	t.Helper()
 	fm.mu.Lock()
@@ -20,7 +19,7 @@ func moreMails(t *testing.T, c *core, fm *fakeMonitor, node string, n int) {
 		fm.got = append(fm.got, map[string]any{"id": fmt.Sprintf("m%d", i), "subject": fmt.Sprintf("Mail %d", i), "from": "news@example.org"})
 	}
 	fm.mu.Unlock()
-	c.readNode(context.Background(), node, []string{"mails"}, time.Now())
+	writeBody(t, c, node, mailsBody(n))
 }
 
 // otherRun is another run of the node's skill, over: what a monitor's
@@ -85,7 +84,7 @@ func TestOneDemandForRunsAndBrain(t *testing.T) {
 		}
 	}
 	ref := proposalRef(cardCalls, batch)
-	cards := c.itemCards(node, "mails")
+	cards := rowCards(c, node)
 	for i := 1; i <= 5; i++ {
 		if cards[fmt.Sprintf("m%d", i)] != ref {
 			t.Errorf("rows %v, want %s on each", cards, ref)
@@ -112,7 +111,6 @@ func TestOneDemandForRunsAndBrain(t *testing.T) {
 	if !slices.Equal(moved, []string{"m1", "m2", "m3", "m4", "m5"}) {
 		t.Errorf("moved %v: each mail once", moved)
 	}
-	c.live.wg.Wait()
 }
 
 // A call on 6 mails and one on 2 others do the same: one card of 8.
@@ -121,7 +119,7 @@ func TestFoldSixAndTwo(t *testing.T) {
 	labels := func(ids ...string) []itemLabel {
 		var out []itemLabel
 		for _, id := range ids {
-			out = append(out, itemLabel{ID: id, Title: "Mail " + id, Source: "mails"})
+			out = append(out, itemLabel{ID: id, Title: "Mail " + id, Server: "monitor"})
 		}
 		return out
 	}
@@ -134,47 +132,6 @@ func TestFoldSixAndTwo(t *testing.T) {
 	}
 	if got := c.proposalOf(cardCalls, a).Text("fr"); got != moveWords("8 mails") {
 		t.Errorf("text %q", got)
-	}
-}
-
-// A mail gone from the source leaves the demand on it; a demand left with
-// no mail is withdrawn, by code: nothing runs, nobody is told a no.
-func TestStaleItemsLeaveTheirDemand(t *testing.T) {
-	c, fm, node, _ := mailViewOf(t)
-	moreMails(t, c, fm, node, 3)
-	l := func(id string) itemLabel { return itemLabel{ID: id, Title: "Mail " + id, Source: "mails"} }
-	two := askOn(t, c, node, "mcp__monitor__move", moveMail("sam@example.org", "archive", "m1", "m2"), l("m1"), l("m2"))
-	one := askOn(t, c, node, "mcp__monitor__send", map[string]any{"id": "m3", "body": "Merci"}, l("m3"))
-	c.store.db.Exec(`UPDATE access_asks SET call = ? WHERE id = ?`, `mcp__monitor__move [{"name":"ids","value":"[\"m1\",\"m2\"]"}]`, two) // its parameters as its card shows them
-	for _, id := range []int64{two, one} {
-		c.cardNow(cardCalls, id, "", nodeRef(node))
-	}
-	before := c.store.lastMessageSeq()
-
-	moreMails(t, c, fm, node, 1) // m2 and m3 left the list
-
-	a, _ := c.accessAskOf(two)
-	if a.State != startProposed || !slices.Equal(choiceItems(a), []string{"m1"}) || a.Input != `{"account":"sam@example.org","ids":["m1"],"to":"archive"}` ||
-		!strings.Contains(a.Call, `[\"m1\"]`) || strings.Contains(a.Call, "m2") {
-		t.Errorf("the demand on m1 and m2: %+v", a)
-	}
-	if got := c.proposalOf(cardCalls, two).Text("fr"); got != moveWords("1 mail") {
-		t.Errorf("its words %q", got)
-	}
-	if x, _ := c.accessAskOf(one); x.State != startRejected {
-		t.Errorf("the demand on m3 alone: %s", x.State)
-	}
-	if got := c.cardState(proposalRef(cardCalls, one)); got != cardGone {
-		t.Errorf("its card: %s", got)
-	}
-	if s, _ := c.callState(one); s != "" {
-		t.Errorf("it ran: %s", s)
-	}
-	if told := toldSince(t, c, before); len(told) != 0 {
-		t.Errorf("told %+v", told)
-	}
-	if cards := c.itemCards(node, "mails"); cards["m1"] != proposalRef(cardCalls, two) || len(cards) != 1 {
-		t.Errorf("rows %v", cards)
 	}
 }
 
@@ -210,97 +167,5 @@ func TestDemandOnNoItemIsPlacedByALine(t *testing.T) {
 	}
 	if !slices.ContainsFunc(pg.Cards, func(v proposalView) bool { return v.Ref == other }) {
 		t.Errorf("%s is not at the foot: %+v", other, pg.Cards)
-	}
-}
-
-// At start, the demands an older Eriphe kept fold under these rules:
-// the brain's access card and a run's card of calls become calls cards,
-// those that do the same fold, each item once; one whose mail is gone is
-// withdrawn; nothing runs, and a second start changes nothing.
-func TestMigrateDemands(t *testing.T) {
-	c, fm, node, r := mailViewOf(t)
-	moreMails(t, c, fm, node, 3)
-	endTurn(t, c, r.Task, "Rien.")
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateIdle})
-	old := func(task string, run int64, input map[string]any, labels ...itemLabel) int64 {
-		t.Helper()
-		raw, _ := json.Marshal(input)
-		ls := ""
-		if len(labels) > 0 {
-			b, _ := json.Marshal(labels)
-			ls = string(b)
-		}
-		res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, server, category, call, input, created, run, node, source, labels)
-			VALUES (?, 'monitor', 'change', ?, ?, ?, ?, ?, ?, ?)`, task, `mcp__monitor__move [{"name":"ids","value":"x"}]`, string(raw), time.Now().Unix(), run, "", "", ls)
-		id, err := rowsID(res, err)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return id
-	}
-	l := func(id string) itemLabel { return itemLabel{ID: id, Title: "Mail " + id, Source: "mails"} }
-	move := func(ids ...string) map[string]any { return moveMail("sam@example.org", "archive", ids...) }
-	// The brain's, on m1, its access card in the node.
-	brain := old("b-1", 0, move("m1"), l("m1"))
-	c.store.db.Exec(`UPDATE access_asks SET node = ?, source = 'mails' WHERE id = ?`, node, brain)
-	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, text, created) VALUES (?, 'access', 'Déplacer', 1)`, proposalRef(cardAccess, brain))
-	c.store.db.Exec(`INSERT INTO node_cards (node, ref, created) VALUES (?, ?, 1)`, node, proposalRef(cardAccess, brain))
-	// The run's two, on m1 and m2, then m3: one runcalls card.
-	first := old(r.Task, r.ID, move("m1", "m2"))
-	second := old(r.Task, r.ID, move("m3"))
-	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, text, created) VALUES (?, 'runcalls', 'Le skill propose 2 action(s)', 1)`, fmt.Sprint("runcalls:", r.ID))
-	c.store.db.Exec(`INSERT INTO node_cards (node, ref, created) VALUES (?, ?, 1)`, node, fmt.Sprint("runcalls:", r.ID))
-	// Yesterday's, on a mail no longer listed.
-	gone := old("b-1", 0, move("m9"), l("m9"))
-	c.store.db.Exec(`UPDATE access_asks SET node = ?, source = 'mails' WHERE id = ?`, node, gone)
-
-	c.reconcileCards()
-
-	got := waitingCalls(c)
-	if len(got) != 1 {
-		t.Fatalf("demands %v", got)
-	}
-	for batch, ids := range got {
-		if !slices.Equal(ids, []string{"m1", "m2", "m3"}) {
-			t.Errorf("its items %v", ids)
-		}
-		if batch != brain {
-			t.Errorf("the oldest card is %d, not %d", batch, brain)
-		}
-	}
-	if xs, _ := c.cardsWhere(`ref = ? AND state = ?`, proposalRef(cardCalls, brain), cardPending); len(xs) != 1 {
-		t.Errorf("the brain's card did not become calls: %+v", xs)
-	}
-	if xs, _ := c.cardsWhere(`kind = 'runcalls' AND state = ?`, cardPending); len(xs) != 0 {
-		t.Errorf("a runcalls card waits: %+v", xs)
-	}
-	if xs, _ := c.cardsWhere(`kind = ? AND state = ?`, cardAccess, cardPending); len(xs) != 0 {
-		t.Errorf("an access card waits: %+v", xs)
-	}
-	for _, id := range []int64{first, second} {
-		if a, _ := c.accessAskOf(id); a.Node != node {
-			t.Errorf("call %d is not the node's: %+v", id, a)
-		}
-	}
-	if a, _ := c.accessAskOf(gone); a.State != startRejected {
-		t.Errorf("the call on a gone mail: %s", a.State)
-	}
-	if moved := movedIDs(fm); len(moved) != 0 {
-		t.Errorf("ran %v", moved)
-	}
-	if cards := c.itemCards(node, "mails"); cards["m1"] != proposalRef(cardCalls, brain) || cards["m3"] != proposalRef(cardCalls, brain) {
-		t.Errorf("rows %v", cards)
-	}
-	// A second start: the same.
-	var n int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM convo_cards`).Scan(&n)
-	c.reconcileCards()
-	if again := waitingCalls(c); fmt.Sprint(again) != fmt.Sprint(got) {
-		t.Errorf("a second start: %v, was %v", again, got)
-	}
-	var m int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM convo_cards`).Scan(&m)
-	if m != n {
-		t.Errorf("cards %d, were %d", m, n)
 	}
 }

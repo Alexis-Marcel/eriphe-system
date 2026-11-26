@@ -43,7 +43,6 @@ func reviewWorld(t *testing.T) (*testWeb, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.live.wg.Wait()
 	c.readNode(context.Background(), id, nil, time.Now())
 	return tw, csrf, id
 }
@@ -232,7 +231,7 @@ func TestToolChangesListed(t *testing.T) {
 	if len(listed) != 3 || listed[0].Line == "" || listed[0].Detail == nil {
 		t.Errorf("the source lists %+v", listed)
 	}
-	cards := c.itemCards(id, reviewSource)
+	cards := rowCards(c, id)
 	ref := ""
 	for _, ch := range listed {
 		if !strings.HasPrefix(cards[ch.ID], cardCalls+":") || (ref != "" && cards[ch.ID] != ref) {
@@ -312,7 +311,7 @@ func reviewAsk(t *testing.T, c *core, node, change string) accessQuestion {
 // reviewCardID is the card the rows share, by its id.
 func reviewCardID(t *testing.T, c *core, node, change string) int64 {
 	t.Helper()
-	ref := c.itemCards(node, reviewSource)[change]
+	ref := rowCards(c, node)[change]
 	xs, err := c.cardsWhere(`ref = ?`, ref)
 	if err != nil || len(xs) != 1 {
 		t.Fatalf("card %q of %s: %v %v", ref, change, xs, err)
@@ -335,7 +334,6 @@ func TestToolReviewCards(t *testing.T) {
 	if code, body, _ := tw.do("POST", fmt.Sprintf("/cards/%d/no", card), no, map[string]string{"X-CSRF-Token": csrf}); code != 200 {
 		t.Fatalf("a row's ✕: %d %s", code, body)
 	}
-	c.live.wg.Wait()
 	c.readNode(context.Background(), id, nil, time.Now()) // its list read again: the ✕ said refuses
 	if refused := c.store.refusedChanges(); len(refused) != 1 || !refused[ids["alerts"]] {
 		t.Fatalf("refused: %v", refused)
@@ -375,7 +373,6 @@ func TestToolReviewCards(t *testing.T) {
 	if len(rows) == 0 || rows[0].By != byUser || rows[0].Tool != "mcp__eriphe-catalog__catalog_accept" || !strings.Contains(rows[0].Reason, "carte") {
 		t.Fatalf("journal: %+v", rows)
 	}
-	c.live.wg.Wait()
 	c.readNode(context.Background(), id, nil, time.Now())
 	if !slices.Contains(u.heldTools(), "alerts") {
 		t.Error("a refused tool is lent")
@@ -433,7 +430,6 @@ func TestToolReviewAcceptAll(t *testing.T) {
 			t.Errorf("call %d: %s %s", a, s, why)
 		}
 	}
-	c.live.wg.Wait()
 	c.readNode(context.Background(), id, nil, time.Now())
 	if left := c.toolChanges("fr"); len(left) != 0 {
 		t.Errorf("left to review: %+v", left)
@@ -452,16 +448,15 @@ func TestToolReviewCardAgain(t *testing.T) {
 	tw, _, id := reviewWorld(t)
 	c := tw.c
 	ids := reviewIDs(t, c, id)
-	was := c.itemCards(id, reviewSource)[ids["status"]]
+	was := rowCards(c, id)[ids["status"]]
 	if n, err := c.settleChanges([]string{ids["status"]}, true); err != nil || n != 1 {
 		t.Fatalf("accepted elsewhere: %d %v", n, err)
 	}
-	c.live.wg.Wait()
 	c.readNode(context.Background(), id, nil, time.Now())
 	if refused := c.store.refusedChanges(); len(refused) != 0 {
 		t.Errorf("a withdrawn card refused %v", refused)
 	}
-	cards := c.itemCards(id, reviewSource)
+	cards := rowCards(c, id)
 	if cards[ids["alerts"]] == "" || cards[ids["alerts"]] != cards[ids["gone"]] || cards[ids["alerts"]] == was || cards[ids["status"]] != "" {
 		t.Errorf("cards after: %v (was %s)", cards, was)
 	}
@@ -491,7 +486,6 @@ func TestToolReviewCardRefused(t *testing.T) {
 	if x, _ := c.card(card); x.State != cardRejected {
 		t.Errorf("the card: %+v", x)
 	}
-	c.live.wg.Wait()
 	c.readNode(context.Background(), id, nil, time.Now())
 	if refused := c.store.refusedChanges(); len(refused) != 3 {
 		t.Errorf("refused: %v", refused)
@@ -508,11 +502,10 @@ func TestToolReviewCardWithdrawn(t *testing.T) {
 	tw, _, id := reviewWorld(t)
 	c := tw.c
 	ids := reviewIDs(t, c, id)
-	ref := c.itemCards(id, reviewSource)[ids["status"]]
+	ref := rowCards(c, id)[ids["status"]]
 	if err := c.approveTools("monitor"); err != nil {
 		t.Fatal(err)
 	}
-	c.live.wg.Wait()
 	c.readNode(context.Background(), id, nil, time.Now())
 	xs, _ := c.cardsWhere(`ref = ?`, ref)
 	if len(xs) != 1 || xs[0].State != cardGone {

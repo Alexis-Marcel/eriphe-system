@@ -519,6 +519,15 @@ func (c *core) toolsMoved(string) {
 	go c.refreshToolReview()
 }
 
+// cardsMovedOn is a card on items of node that moved: « Outils à revoir »
+// follows its own (a row's ✕ refuses its change); another node's skill
+// follows them (itemCardMoved).
+func (c *core) cardsMovedOn(node string) {
+	if node != "" && node == c.store.get(reviewNodeKey) {
+		c.toolsMoved("")
+	}
+}
+
 // reviewMu makes one refresh of « Outils à revoir » at a time.
 var reviewMu sync.Mutex
 

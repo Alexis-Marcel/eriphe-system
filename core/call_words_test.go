@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 )
@@ -32,7 +31,7 @@ func TestCallPhrase(t *testing.T) {
 		// A list its name says is of ids, any name.
 		{"mcp__box__drop", "Retirer", map[string]any{"thing_ids": ids("e1", "e2", "e3")}, nil, "fr", "Retirer · 3 éléments"},
 		// The source that lists them says no kind: « éléments ».
-		{"mcp__box__remove", "", map[string]any{"ids": ids("f1", "f2")}, []itemLabel{{ID: "f1", Source: "files"}, {ID: "f2", Source: "files"}}, "fr", "Utiliser « remove » sur 2 éléments"},
+		{"mcp__box__remove", "", map[string]any{"ids": ids("f1", "f2")}, []itemLabel{{ID: "f1", Server: "box"}, {ID: "f2", Server: "box"}}, "fr", "Utiliser « remove » sur 2 éléments"},
 		// One item it names, by a title: said by itself.
 		{"mcp__box__reply", "Envoyer la réponse", map[string]any{"id": "a1", "body": "Merci"}, []itemLabel{{ID: "a1", Title: "Devis", Detail: "Sam"}}, "fr", "Envoyer la réponse · « Devis » · Sam"},
 		// Nothing by id: the action alone.
@@ -88,109 +87,4 @@ func brainCallOn(t *testing.T, c *core, pid, tool string, input map[string]any) 
 	if err := c.askBrainAccess(context.Background(), &TaskRow{ID: "b-1"}, pid, tool, input, nil); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// The brain, asked in conversation to act on items a view lists, calls
-// the tool on their ids: its card is that view's, says what it does to
-// which mails by their titles (someone else's words, marked), its exact
-// call under the one Détails; it waits on those rows, one card shared,
-// and not at the page's foot. A call that names no row keeps its card
-// apart. Refused, it leaves the rows.
-func TestBrainCallLandsOnItsRows(t *testing.T) {
-	c, node, _ := mailView(t)
-	w := &web{c: c}
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
-	brainCallOn(t, c, "p-1", "mcp__monitor__move", map[string]any{"account": "sam@example.org", "ids": []any{"m1", "m2"}, "to": "archive"})
-
-	var id int64
-	c.store.db.QueryRow(`SELECT id FROM access_asks WHERE permission_id = 'p-1'`).Scan(&id)
-	a, err := c.accessAskOf(id)
-	if err != nil || a.Node != node || a.Source != "mails" || len(a.Labels) != 2 {
-		t.Fatalf("the call %+v, %v", a, err)
-	}
-	ref := proposalRef(cardCalls, id)
-	if !slices.Contains(c.cardNodes(ref), node) {
-		t.Errorf("the card is not the view's: %v", c.cardNodes(ref))
-	}
-	p := c.proposalOf(cardCalls, id)
-	if got := p.Text("fr"); got != "Déplacer 2 mails vers les archives" {
-		t.Errorf("text %q", got)
-	}
-	if got := p.SummaryIn("fr"); !slices.Equal(got, []string{"« STAGE – Data Engineer » · Emplois Example ⚠", "« Votre lettre de la semaine » · news@example.org ⚠"}) {
-		t.Errorf("summary %q", got)
-	}
-	if got := p.ContextIn("fr"); got != "compte sam@example.org" {
-		t.Errorf("context %q", got)
-	}
-	// Détails: its parameters by meaning, no id nor account; its exact
-	// call one click further.
-	fs := p.FieldsIn("fr")
-	raw := rawCall(fs)
-	if len(fs) != 2 || fs[0].Name != "to" || fs[0].Value != "les archives" || !fs[0].Detail || raw == nil || raw.Name != "monitor/move" ||
-		!strings.Contains(raw.Value, `ids : ["m1","m2"]`) || !strings.Contains(raw.Value, "to : archive") {
-		t.Errorf("details %+v", fs)
-	}
-
-	// On both rows, one card; not at the foot.
-	cards := c.itemCards(node, "mails")
-	if cards["m1"] != ref || cards["m2"] != ref {
-		t.Errorf("rows %v", cards)
-	}
-	l, _ := pageListOf(t, w, node, "recus", "root")
-	for _, it := range l.Items {
-		if it.Card != ref {
-			t.Errorf("row %s carries %q", it.ID, it.Card)
-		}
-	}
-	pg, _ := w.nodePageOf(node, 0, "fr")
-	if slices.ContainsFunc(pg.Cards, func(v proposalView) bool { return v.Ref == ref }) {
-		t.Errorf("the foot shows it: %+v", pg.Cards)
-	}
-
-	// A call naming no row: its turn's node, on no row.
-	brainCallOn(t, c, "p-22", "mcp__monitor__move", map[string]any{"account": "sam@example.org", "ids": []any{"zz9"}, "to": "archive"})
-	var other int64
-	c.store.db.QueryRow(`SELECT id FROM access_asks WHERE permission_id = 'p-22'`).Scan(&other)
-	if o, _ := c.accessAskOf(other); o.Node != node || len(o.Labels) != 0 || o.Batch != other {
-		t.Errorf("a call on no row: %+v", o)
-	}
-	if got := c.proposalOf(cardCalls, other).Text("fr"); got != "Déplacer 1 mail vers les archives" {
-		t.Errorf("its words %q", got)
-	}
-
-	// Refused: off its rows.
-	x := cardOf(t, c, cardCalls, id)
-	if _, err := c.decideCard(context.Background(), x.ID, false, "web"); err != nil {
-		t.Fatal(err)
-	}
-	if cards := c.itemCards(node, "mails"); cards["m1"] != "" || cards["m2"] != "" {
-		t.Errorf("rows after a no %v", cards)
-	}
-}
-
-// A shared card's Oui, on any of its rows: the call runs once, its rows
-// carry no card any more, and its items are shown done at once
-// (source_fresh.go), until their source is read again. The call runs
-// beside the yes (runApprovedCall): its row keeps the card, running,
-// until it is done.
-func TestBrainCallOnRowsYesMarksThemDone(t *testing.T) {
-	c, node, _ := mailView(t)
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
-	brainCallOn(t, c, "p-1", "mcp__monitor__move", map[string]any{"account": "sam@example.org", "ids": []any{"m1", "m2"}, "to": "archive"})
-	var id int64
-	c.store.db.QueryRow(`SELECT id FROM access_asks WHERE permission_id = 'p-1'`).Scan(&id)
-	if cards := c.itemCards(node, "mails"); cards["m1"] == "" || cards["m1"] != cards["m2"] {
-		t.Fatalf("one card on both rows: %v", cards)
-	}
-	if _, err := c.decideCard(context.Background(), cardOf(t, c, cardCalls, id).ID, true, "web"); err != nil {
-		t.Fatal(err)
-	}
-	c.yeses.Wait() // the call ran
-	if got := states(t, c, node, "recus", "mails"); got["m1"] != itemDone || got["m2"] != itemDone {
-		t.Errorf("its items at once: %v", got)
-	}
-	if cards := c.itemCards(node, "mails"); cards["m1"] != "" || cards["m2"] != "" {
-		t.Errorf("rows after its yes %v", cards)
-	}
-	c.live.wg.Wait()
 }

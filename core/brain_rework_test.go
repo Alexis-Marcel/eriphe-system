@@ -9,20 +9,14 @@ import (
 
 // The headline case of #770, end to end: in « Mes mails », a page that
 // shows someone else's words (external), the user asks to rework it. The
-// brain, its budget spent, still launches a task on the page; lending the
-// read tool its blocks read starts it with no card, on a clean turn and
-// on one that read the external page (a free read: today's rules ask a
-// card only for what may act, TestLaunchTaintedStart), the task tainted
-// then. The task rewrites the page's sourced blocks when it is lent their
-// tool, adds a block on node_find, and is refused a source it is not lent,
-// saying so.
+// brain, its budget spent, still launches a task on the page; lending a
+// read tool starts it with no card, on a clean turn and on one that read
+// the external page (a free read: today's rules ask a card only for what
+// may act, TestLaunchTaintedStart), the task tainted then. The task
+// rewrites the page.
 func TestReworkAPageEndToEnd(t *testing.T) {
 	c := launchCore(t)
-	inbox := func(text string) string {
-		return "```eriphe:block mails\n{\"components\": {\"component\": \"Text\", \"text\": \"" + text + "\"}, \"sources\": {\"inbox\": {\"tool\": \"github/get_issue\", \"args\": {\"number\": 3}}}}\n```\n"
-	}
-	found := "```eriphe:block suivis\n{\"components\": {\"component\": \"Text\", \"text\": \"Suivis\"}, \"sources\": {\"suivis\": {\"tool\": \"eriphe-core/node_find\", \"args\": {\"tags\": [\"courrier\"]}}}}\n```\n"
-	page := mustNode(t, c, nodestore.New{Title: "Mes mails", Goal: "Les mails à traiter.", Body: "Les mails qui comptent.\n" + inbox("Mails"), External: true, Author: byBrain})
+	page := mustNode(t, c, nodestore.New{Title: "Mes mails", Goal: "Les mails à traiter.", Body: "Les mails qui comptent.\n\n- Mails\n", External: true, Author: byBrain})
 	ask := "Refais cette page : regroupe les mails par expéditeur."
 	lend := []any{map[string]any{"kind": "tool", "ref": "github.get_issue"}}
 
@@ -48,38 +42,13 @@ func TestReworkAPageEndToEnd(t *testing.T) {
 	}
 	read := mustNodes(t, c, task.ID, "node_read", map[string]any{"id": page})
 	mustNodes(t, c, task.ID, "node_write", map[string]any{"id": page, "expect": read["hash"],
-		"body": "Regroupés par expéditeur.\n" + inbox("Par expéditeur") + found})
+		"body": "Regroupés par expéditeur.\n\n### Par expéditeur\n\n- Mails\n"})
 	d, err := c.nodes.Read(page, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Version.Author != "task:"+task.ID || !strings.Contains(string(d.Raw), "Par expéditeur") || d.Node.Block("suivis") == nil {
+	if d.Version.Author != "task:"+task.ID || !strings.Contains(string(d.Raw), "Par expéditeur") {
 		t.Fatalf("the page rewritten by %s:\n%s", d.Version.Author, d.Raw)
-	}
-	// On a page of the user's own, a node_find block is trusted; quoting
-	// what may be someone else's words (include_external), it is
-	// external, as the brain's is (untrustedSources).
-	own := mustNode(t, c, nodestore.New{Title: "Suivis", Goal: "Les suivis de courrier.", Author: byBrain})
-	follow, _ := launched(t, c, map[string]any{"ask": "Liste les suivis.", "node": own})
-	quoted := strings.Replace(found, `"tags": ["courrier"]`, `"tags": ["courrier"], "include_external": true`, 1)
-	for _, w := range []struct {
-		body     string
-		external bool
-	}{{found, false}, {quoted, true}} {
-		r := mustNodes(t, c, follow.ID, "node_read", map[string]any{"id": own})
-		mustNodes(t, c, follow.ID, "node_write", map[string]any{"id": own, "expect": r["hash"], "body": "Les suivis.\n" + w.body})
-		if d, _ := c.nodes.Read(own, 0); d.Node.Block("suivis").External != w.external {
-			t.Fatalf("external %v, want %v:\n%s", d.Node.Block("suivis").External, w.external, d.Raw)
-		}
-	}
-
-	// Launched without the tool: its rewrite of a sourced block is
-	// refused, and the error says which tool it lacks.
-	bare, _ := launched(t, c, map[string]any{"ask": ask, "node": page})
-	read = mustNodes(t, c, bare.ID, "node_read", map[string]any{"id": page})
-	if _, msg := callNodes(t, c, bare.ID, "node_write", map[string]any{"id": page, "expect": read["hash"],
-		"body": "Autrement.\n" + inbox("Autrement") + found}); !strings.Contains(msg, "github/get_issue is not one of the tools you are lent") {
-		t.Fatalf("a source not lent: %q", msg)
 	}
 
 	// The brain read the external page first: its turn is tainted. A

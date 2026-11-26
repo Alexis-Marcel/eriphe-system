@@ -134,7 +134,7 @@ var benchMetrics = []struct{ key, want string }{
 	{"view: bilan lead", "yes"},
 	{"view: items, sections", "yes"},
 	{"view: batch", "yes"},
-	{"skill: item_note", "≥ 1"},
+	{"skill: page written", "a task"},
 	{"skill: card on a row", "-"},
 	{"day: subject first", "yes"},
 	{"day: first node (s)", "-"},
@@ -260,7 +260,7 @@ func (x liveCall) taintOrStale() bool {
 }
 
 // benchWrites are the calls whose refusal is a refused write.
-var benchWrites = []string{"node_open", "node_write", "node_edit", "node_set", "write_skill", "item_note", "node_settle"}
+var benchWrites = []string{"node_open", "node_write", "node_edit", "node_set", "write_skill", "node_settle"}
 
 // playNodesBench plays the scenario once, on a core of its own.
 func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
@@ -376,7 +376,7 @@ func playNodesBench(t *testing.T, cli, model, record string) *benchScore {
 		b.s.set("node_set parent", "not played", false)
 	}
 
-	// 11. A figure to watch: a glance on the source that reads it.
+	// 11. A figure to watch: a glance on the monitor that reads it.
 	b.say("Garde un œil sur la consommation de la maison : je veux voir quand elle dépasse 10 kW.", "", turnWork)
 	b.s.yes("glance set", b.glance("maison/conso"), "no glance reads maison/conso")
 
@@ -570,7 +570,7 @@ func (b *bench) scoreRework(page string) {
 	// The launching turn's writes: those before its answer, not its wakes'.
 	writes := 0
 	for _, x := range b.turnCalls(b.turn) {
-		if x.err == "" && (x.tool == "node_write" || x.tool == "node_edit" || x.tool == "item_note") && (answerAt.IsZero() || x.endAt.Before(answerAt)) {
+		if x.err == "" && (x.tool == "node_write" || x.tool == "node_edit") && (answerAt.IsZero() || x.endAt.Before(answerAt)) {
 			writes++
 		}
 	}
@@ -899,25 +899,53 @@ func (b *bench) scoreTainted(mail string) {
 	}
 	b.s.yes("run_task under the turn's node", under > 0, fmt.Sprintf("%d task nodes, %d under the mail", tasks, under))
 	if !b.shows("prod/erreurs") {
-		b.note("the production is shown in no node and proposed in no view")
+		b.note("the production is followed by no node's page")
 	}
 }
 
-// shows tells a live block reads tool (a node's, or a view proposed).
+// monitorsOf are the names of the monitors that read tool.
+func (b *bench) monitorsOf(tool string) []string {
+	ms, _ := b.sc.c.monitors()
+	var out []string
+	for _, m := range ms {
+		if m.Spec.Server+"/"+m.Spec.Tool == tool {
+			out = append(out, m.Name)
+		}
+	}
+	return out
+}
+
+// shows tells a node's page follows a monitor that reads tool (an on:
+// line).
 func (b *bench) shows(tool string) bool {
-	srcs, _ := b.sc.c.nodes.Sources("")
-	for _, s := range srcs {
-		if s.Source.Tool == tool {
+	names := b.monitorsOf(tool)
+	for id := range b.liveNodes() {
+		d, err := b.sc.c.nodes.Read(id, 0)
+		if err != nil {
+			continue
+		}
+		if slices.ContainsFunc(d.Node.Ons(), func(o nodefile.On) bool { return slices.Contains(names, o.Key) }) {
 			return true
 		}
 	}
 	return false
 }
 
-// glance tells a node's source reads tool with a glance.
+// glance tells a node's glance follows a monitor that reads tool.
 func (b *bench) glance(tool string) bool {
-	srcs, _ := b.sc.c.nodes.Sources("")
-	return slices.ContainsFunc(srcs, func(s nodestore.LiveSource) bool { return s.Source.Tool == tool && s.Source.Glance != nil })
+	names := b.monitorsOf(tool)
+	for id := range b.liveNodes() {
+		d, err := b.sc.c.nodes.Read(id, 0)
+		if err != nil {
+			continue
+		}
+		if g, ok := d.Node.LineGlance(); ok {
+			if o, ok := nodefile.ParseOn(g.Target); ok && slices.Contains(names, o.Key) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // scoreShownFirst scores a page asked for, kept up to date, in the last
@@ -1022,10 +1050,10 @@ func (b *bench) approveView() string {
 	return node
 }
 
-// scoreView scores the view's page: its bilan (the text before its first
-// block), a block whose source lists items in sections (a List filtered
-// by a group), a batch (a Fold over a List). The view is valid with its
-// lead, items and sections.
+// scoreView scores the view's page: its bilan (a paragraph before
+// anything else), its items as references under headings (its sections),
+// a do: line acting on a heading's items (a batch). The view is valid
+// with its lead, items and sections.
 func (b *bench) scoreView(view string) {
 	if view == "" {
 		for _, k := range []string{"view: bilan lead", "view: items, sections", "view: batch"} {
@@ -1037,45 +1065,31 @@ func (b *bench) scoreView(view string) {
 	if err != nil {
 		b.t.Fatal(err)
 	}
-	lead := false
-	for _, p := range d.Node.Parts() {
-		if p.Block != nil {
-			break
-		}
-		lead = lead || strings.TrimSpace(p.Text) != ""
-	}
-	items, sections, batch := false, false, false
-	for _, bl := range d.Node.Blocks() {
-		for _, src := range bl.Sources {
-			items = items || src.Items != nil
-		}
-		var list []map[string]any
-		json.Unmarshal(bl.Components, &list)
-		for _, comp := range list {
-			switch comp["component"] {
-			case "List":
-				ch, _ := comp["children"].(map[string]any)
-				path, _ := ch["path"].(string)
-				sections = sections || strings.Contains(path, "[_group=")
-			case "Fold":
-				batch = batch || comp["list"] != nil
-			}
+	p, _ := d.Node.Page()
+	lead := len(p.Blocks) > 0 && p.Blocks[0].Kind == nodefile.KindParagraph
+	items, sections, batch := len(p.Uses) > 0, false, false
+	for _, u := range p.Uses {
+		for _, bl := range p.Blocks {
+			sections = sections || bl.Kind == nodefile.KindHeading && bl.Line < u.Line
 		}
 	}
-	b.s.yes("view: bilan lead", lead, "no text before the first block")
+	for _, l := range p.Links {
+		batch = batch || l.Kind == nodefile.LinkDo && l.Heading != 0
+	}
+	b.s.yes("view: bilan lead", lead, "no paragraph first")
 	b.s.yes("view: items, sections", items && sections, fmt.Sprintf("items %v, sections %v", items, sections))
-	b.s.yes("view: batch", batch, "no Fold with list")
+	b.s.yes("view: batch", batch, "no do: line under a heading")
 	b.s.viewValid = lead && items && sections
 	b.s.yes("view valid", b.s.viewValid, "")
 }
 
 // runSkill brings a new mail to the view's monitor and lets its skill
-// run on it, as the same model: it scores the items it noted and the
-// cards it left on their rows.
+// run on it, as the same model: it scores the page it wrote again and
+// the cards it placed on its lines.
 func (b *bench) runSkill(view string) {
 	c := b.sc.c
 	if view == "" {
-		b.s.set("skill: item_note", "no view", false)
+		b.s.set("skill: page written", "no view", false)
 		b.s.set("skill: card on a row", "no view", true)
 		return
 	}
@@ -1087,7 +1101,7 @@ func (b *bench) runSkill(view string) {
 		}
 	}
 	if len(ours) == 0 {
-		b.s.set("skill: item_note", "no monitor", false)
+		b.s.set("skill: page written", "no monitor", false)
 		b.s.set("skill: card on a row", "no monitor", true)
 		return
 	}
@@ -1134,33 +1148,17 @@ func (b *bench) runSkill(view string) {
 		}
 	}
 	b.quiet()
-	notes, _ := c.nodeItems(view)
-	var by []string
-	for _, n := range notes {
-		if n.Author != byBrain {
-			by = append(by, n.Item)
-		}
-	}
-	b.s.set("skill: item_note", strconv.Itoa(len(by)), len(by) >= 1)
+	d, _ := c.nodes.Read(view, 0)
+	by := d.Version.Author
+	b.s.set("skill: page written", by, strings.HasPrefix(by, taskTaintPrefix))
 	rows := 0
 	if p, err := b.sc.web.w.nodePageOf(view, 0, "fr"); err == nil {
-		for _, part := range p.Parts {
-			if part.Block == nil {
-				continue
-			}
-			for _, l := range part.Block.Lists {
-				for _, it := range l.Items {
-					if it.Card != "" {
-						rows++
-					}
-				}
-			}
-		}
+		rows = len(p.Placed)
 	}
 	b.s.set("skill: card on a row", strconv.Itoa(rows), true)
 	var state, note string
 	c.store.db.QueryRow(`SELECT state, note FROM skill_runs ORDER BY id DESC LIMIT 1`).Scan(&state, &note)
-	b.note(fmt.Sprintf("skill run: %q %q; notes on %q", state, truncate(note, 200), by))
+	b.note(fmt.Sprintf("skill run: %q %q; page by %s", state, truncate(note, 200), by))
 }
 
 // end scores what the run left: stuck steps, nodes of one title, the

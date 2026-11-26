@@ -83,7 +83,7 @@ func TestCardsOnReferencedLines(t *testing.T) {
 	if len(a.Labels) != 1 || a.Labels[0] != (itemLabel{ID: "m1", Server: "monitor", Title: "Facture de novembre", Detail: "Sam <sam@example.org>", External: true}) {
 		t.Fatalf("m1's labels %+v", a.Labels)
 	}
-	if a.Node != node || a.Source != "" || a.Item != "m1" {
+	if a.Node != node || a.Item != "m1" {
 		t.Fatalf("kept %+v", a)
 	}
 	if got := fm.opened; !slices.Contains(got, "message:m1") || !slices.Contains(got, "message:m2") {

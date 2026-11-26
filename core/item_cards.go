@@ -329,6 +329,7 @@ func (c *core) itemCardMoved(batch int64) {
 		return
 	}
 	node := asks[0].Node
+	c.cardsMovedOn(node)
 	if c.callsAsk(batch) {
 		return
 	}

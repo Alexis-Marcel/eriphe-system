@@ -49,10 +49,6 @@ func TestNodesRefuseSecretsOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// What an author writes: the body, code's fields left out.
-	for _, b := range n.Blocks() {
-		b.External = false
-	}
 	raw, _ := n.Bytes()
 	_, after, _ := strings.Cut(string(raw), "\n---\n")
 	d, err := s.Create(nodestore.New{Title: n.Meta.Title, Goal: n.Meta.Goal, Author: "brain",

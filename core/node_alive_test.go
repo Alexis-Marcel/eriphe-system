@@ -7,9 +7,9 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
-// A view's page says what keeps it alive, in code's words: the source its
-// block reads and how often, the monitor its skill runs on and what it
-// watches, the skill and what starts it, when it last changed. A node
+// A view's page says what keeps it alive, in code's words: the monitor
+// its skill runs on and what it watches, the skill and what starts it,
+// when it last changed. A node
 // that is not standing says nothing of it.
 func TestPageSaysWhatKeepsAViewAlive(t *testing.T) {
 	c, node, _ := mailView(t)
@@ -21,9 +21,6 @@ func TestPageSaysWhatKeepsAViewAlive(t *testing.T) {
 	a := p.Alive
 	if a == nil || a.Updated.IsZero() {
 		t.Fatalf("alive %+v", a)
-	}
-	if len(a.Sources) != 1 || a.Sources[0].Name != "mails" || a.Sources[0].What != "lit monitor monitor://received toutes les 5 min" {
-		t.Errorf("sources %+v", a.Sources)
 	}
 	if len(a.Monitors) != 1 || a.Monitors[0].Name != "mails" || !strings.Contains(a.Monitors[0].What, "monitor monitor://received") {
 		t.Errorf("monitors %+v", a.Monitors)

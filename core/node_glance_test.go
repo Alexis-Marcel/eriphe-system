@@ -21,7 +21,7 @@ import (
 func TestGlanceStep(t *testing.T) {
 	loc := time.FixedZone("Paris", 3600)
 	start := time.Date(2026, 11, 20, 9, 0, 0, 0, loc)
-	g := nodefile.Glance{Label: "PEA", Path: "total", Threshold: 2}
+	g := nodefile.Glance{Label: "PEA", Threshold: 2}
 	var st glanceState
 	read := func(v float64, at time.Duration, open bool) *graphGlance {
 		t.Helper()
@@ -70,11 +70,11 @@ func TestGlanceStep(t *testing.T) {
 }
 
 // Its line: values glanceSample apart, the last one live, glanceSeries at
-// most; compared to the previous value, or a fixed base in its units.
+// most; compared to the previous value.
 func TestGlanceSeriesAndReferences(t *testing.T) {
 	loc := time.UTC
 	start := time.Date(2026, 11, 20, 8, 0, 0, 0, loc)
-	g := nodefile.Glance{Label: "Conso", Path: "kw", Threshold: 2, Compare: nodefile.GlancePrevious}
+	g := nodefile.Glance{Label: "Conso", Threshold: 2, Compare: nodefile.GlancePrevious}
 	var st glanceState
 	for i, v := range []float64{10, 10, 10.1} {
 		st = stepGlance(st, g, v, start.Add(time.Duration(i)*5*time.Minute), loc, false)
@@ -95,13 +95,6 @@ func TestGlanceSeriesAndReferences(t *testing.T) {
 	// The same value again: no change, the reference stays the previous one.
 	if x := st.view(g); x.Ref != 10.1 || x.Delta == 0 {
 		t.Fatalf("previous: %+v", x)
-	}
-	base := 4.0
-	fixed := nodefile.Glance{Label: "Erreurs", Path: "rate", Threshold: 5, Compare: nodefile.GlanceFixed, Base: &base, Unit: nodefile.GlanceAmount}
-	var e glanceState
-	e = stepGlance(e, fixed, 12, start, loc, false)
-	if x := e.view(fixed); !x.Shown || x.Delta != 8 || x.Ref != 4 || x.Unit != nodefile.GlanceAmount {
-		t.Fatalf("fixed, in amount: %+v", x)
 	}
 }
 
@@ -132,7 +125,7 @@ func TestNodeGlance(t *testing.T) {
 	edit := func(body string) {
 		t.Helper()
 		d, _ := c.nodes.Read(id, 0)
-		if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(nodefile.Source) error { return nil }, func(n *nodefile.Node) error {
+		if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(n *nodefile.Node) error {
 			return n.AuthorBody(body)
 		}); err != nil {
 			t.Fatal(err)
@@ -227,7 +220,7 @@ func TestNodeGlanceExternal(t *testing.T) {
 	if _, err := c.readNodeFor(sum, 0, nodeReading{taint: func(ref string) { tainted = append(tainted, ref) }}); err != nil || !slices.Contains(tainted, nodeRef(id)) {
 		t.Errorf("a read of it tainted %v (%v)", tainted, err)
 	}
-	_, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(nodefile.Source) error { return nil }, func(n *nodefile.Node) error {
+	_, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(n *nodefile.Node) error {
 		return n.AuthorBody(strings.Replace(body, "|external", "", 1))
 	})
 	if !errors.Is(err, nodefile.ErrCodeField) {

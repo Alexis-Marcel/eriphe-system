@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -19,7 +20,7 @@ import (
 // run of the live bench (nodes_bench_live_test.go), recorded with what
 // each was given and what code answered, played again against the node
 // tools of the scenario's core without a model. Code's rules on what a
-// node may hold (the blocks' grammar, a card placed by its ref, an ask in
+// node may hold (the page's grammar, a card placed by its ref, an ask in
 // its author's own words) answer the same today, or the test says which
 // call changed.
 //
@@ -43,7 +44,7 @@ import (
 
 // replayTools are the calls recorded: those that write a node, or propose
 // the skill that maintains one.
-var replayTools = []string{"node_open", "node_write", "node_edit", "node_set", "write_skill", "item_note"}
+var replayTools = []string{"node_open", "node_write", "node_edit", "node_set", "write_skill"}
 
 // replayCall is one recorded call.
 type replayCall struct {
@@ -213,7 +214,7 @@ func TestNodesReplay(t *testing.T) {
 		if exp, ok := args["expect"].(string); ok {
 			args["expect"] = "stale"
 			if exp == "$hash" {
-				args["expect"] = hashOf(t, c, names.from[args["id"].(string)])
+				args["expect"] = lastHash(t, c, names.from[args["id"].(string)])
 			}
 		}
 		args = swap(args, names.from).(map[string]any)
@@ -251,16 +252,17 @@ func TestNodesReplay(t *testing.T) {
 	if ran < 10 || refused == 0 {
 		t.Fatalf("%d calls played, %d refused: the recording should hold a run's writes, refusals among them", ran, refused)
 	}
-	// What the calls left holds to the rules whatever was played: a card
-	// block shows its card.
+	// What the calls left holds to the rules whatever was played: a card:
+	// link places a card of its node's.
 	for _, sum := range liveSummaries(t, c) {
 		d, err := c.nodes.Read(sum.ID, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, b := range d.Node.Blocks() {
-			if b.Card != "" && (b.External || !c.nodeHasCard(sum.ID, b.Card)) {
-				t.Errorf("%s: block %s places %s, which the page cannot draw", sum.Title, b.Name, b.Card)
+		p, _ := d.Node.Page()
+		for _, l := range p.Links {
+			if l.Kind == nodefile.LinkCard && !c.nodeHasCard(sum.ID, l.Target) {
+				t.Errorf("%s: line %d places %s, which the page cannot draw", sum.Title, l.Line, l.Target)
 			}
 		}
 	}
@@ -271,8 +273,7 @@ func TestNodesReplay(t *testing.T) {
 // replayDay checks the recording's last turn, the day asked to be
 // followed: its first call opens the subject, untainted; the page is
 // written in it in that very turn, no card, no questionnaire written
-// before it: its Agenda reads the calendar and its buttons offer the
-// changes, its taint marked. Nothing waits for a yes.
+// before it. Nothing waits for a yes.
 func replayDay(t *testing.T, c *core, calls []replayCall, names *replayNames) {
 	t.Helper()
 	last := calls[len(calls)-1].Turn
@@ -295,17 +296,8 @@ func replayDay(t *testing.T, c *core, calls []replayCall, names *replayNames) {
 			}
 		}
 	}
-	d, err := c.nodes.Read(subject, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	agenda, asks := false, false
-	for _, b := range d.Node.Blocks() {
-		agenda = agenda || strings.Contains(string(b.Components), `"Agenda"`) && len(b.Sources) > 0
-		asks = asks || blockAsks(b.Components) && (b.External || !calls[len(calls)-1].Tainted) // marked when written after a read
-	}
-	if !agenda || !asks {
-		t.Errorf("the day's page: agenda %v, asks marked %v:\n%s", agenda, asks, d.Raw)
+	if d, err := c.nodes.Read(subject, 0); err != nil || d.Version.N < 2 {
+		t.Fatalf("the day's page is not written: %v", err)
 	}
 	if cardWaitsOn(c, subject) {
 		t.Error("the day's page waits on a card")

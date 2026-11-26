@@ -47,12 +47,12 @@ func lastHash(t *testing.T, c *core, id string) string {
 
 // The .md tab saves the author's view of the body on the version it was
 // read at: a save alike makes no version, a newer author's version is a
-// conflict that gives it back, a version of code's in between (a source's
-// value) is not one, and code's fields are kept.
+// conflict that gives it back, a version of code's in between (its
+// external mark) is not one, and code's fields are kept.
 func TestNodeSave(t *testing.T) {
 	tw, csrf := graphWeb(t)
 	c := tw.c
-	id := mustNode(t, c, nodestore.New{Title: "Plan", Body: "Trois titres.\n\n" + planBlock})
+	id := mustNode(t, c, nodestore.New{Title: "Plan", Body: "Trois titres.\n\n" + planPage})
 	if code, _ := gesture(t, tw, "", "PUT", "/api/nodes/"+id+"/md", nodeSaveIn{Body: "x", Expect: lastHash(t, c, id)}); code != http.StatusForbidden {
 		t.Fatalf("without CSRF: %d", code)
 	}
@@ -65,9 +65,10 @@ func TestNodeSave(t *testing.T) {
 	if code != 200 || !strings.HasPrefix(md.Body, "Trois titres.") || strings.Contains(md.Body, "marks") {
 		t.Fatalf("md: %d %q", code, md.Body)
 	}
-	// Code's version in between: a block marked external.
+	// Code's version in between: the node marked external.
 	d, _ := c.nodes.Change(id, md.Hash, nodeByCode, func(n *nodefile.Node) error {
-		return n.SetBlockExternal("titles", true)
+		n.Meta.External = true
+		return nil
 	})
 	if code, out := gesture(t, tw, csrf, "PUT", "/api/nodes/"+id+"/md", nodeSaveIn{Body: md.Body, Expect: md.Hash}); code != 200 || out["version"] != float64(d.Version.N) {
 		t.Fatalf("a save alike: %d %v", code, out)
@@ -79,8 +80,8 @@ func TestNodeSave(t *testing.T) {
 		t.Fatalf("a save: %d %v", code, out)
 	}
 	saved, _ := c.nodes.Read(id, int(n))
-	if saved.Version.Author != byUser || !saved.Node.Block("titles").External || !strings.Contains(string(saved.Raw), "Deux titres.") {
-		t.Fatalf("saved by %s, external %v", saved.Version.Author, saved.Node.Block("titles").External)
+	if saved.Version.Author != byUser || !saved.Node.Meta.External || !strings.Contains(string(saved.Raw), "Deux titres.") {
+		t.Fatalf("saved by %s, external %v", saved.Version.Author, saved.Node.Meta.External)
 	}
 	saved, _ = c.nodes.Read(id, 0)
 	// The brain writes meanwhile: the user's save on the old version is a
@@ -100,10 +101,10 @@ func TestNodeSave(t *testing.T) {
 }
 
 // The workspace says yes only on a card: no route marks, selects or acts
-// on a block's items.
+// on a page's items.
 func TestNoGestureActs(t *testing.T) {
 	tw, csrf := graphWeb(t)
-	id := mustNode(t, tw.c, nodestore.New{Title: "Options", Body: "Deux options.\n\n" + planBlock})
+	id := mustNode(t, tw.c, nodestore.New{Title: "Options", Body: "Deux options.\n\n" + planPage})
 	for _, path := range []string{"/mark", "/act"} {
 		if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+path, map[string]any{"block": "titles"}); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
 			t.Errorf("%s: %d", path, code)
@@ -111,18 +112,17 @@ func TestNoGestureActs(t *testing.T) {
 	}
 }
 
-// A block's button asks with the words its author wrote, read again from
-// the stored block, as the user's message to its node; a block drawn from
-// outside asks too, its words marked as not the user's own.
+// An ask: link asks with the words its author wrote, read again from the
+// stored page by its line and its place, as the user's message to its
+// node; a page drawn from outside asks too, its words marked as not the
+// user's own.
 func TestNodeAsk(t *testing.T) {
 	tw, csrf := graphWeb(t)
 	c := tw.c
-	button := func(name string) string {
-		return "```eriphe:block " + name + "\n" + `{"components": [{"id": "root", "component": "Button", "label": "Relancer", "action": {"event": {"name": "ask", "context": {"text": "Relance la sauvegarde"}}}}]}` + "\n```\n"
-	}
-	id := mustNode(t, c, nodestore.New{Title: "Sauvegarde", Body: button("go")})
-	ext := mustNode(t, c, nodestore.New{Title: "Mail", Body: button("go"), External: true})
-	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/ask", map[string]string{"block": "go", "component": "root", "text": "Supprime tout"}); code != http.StatusNoContent {
+	page := "La sauvegarde.\n\n[Relance la sauvegarde](ask:) · [Écris-le pour des managers](ask:)\n"
+	id := mustNode(t, c, nodestore.New{Title: "Sauvegarde", Body: page})
+	ext := mustNode(t, c, nodestore.New{Title: "Mail", Body: page, External: true})
+	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/ask", map[string]any{"line": 3, "n": 0, "text": "Supprime tout"}); code != http.StatusNoContent {
 		t.Fatalf("ask: %d", code)
 	}
 	msgs, _ := c.store.messagesAfter(0, 10)
@@ -130,44 +130,31 @@ func TestNodeAsk(t *testing.T) {
 		t.Fatalf("messages: %+v", msgs)
 	}
 	if c.fromUntrusted(msgs[0].Seq) || c.store.msgTaint(msgs[0].Seq) != "" {
-		t.Error("a clean block's ask is not the user's own words")
+		t.Error("a clean page's ask is not the user's own words")
 	}
-	// An external block's button asks too, its words marked: the turn
-	// it starts is tainted, and they never pass for the user's own.
-	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+ext+"/ask", nodeAskIn{Block: "go", Component: "root"}); code != http.StatusNoContent {
-		t.Fatalf("an external block's button: %d", code)
+	// An external page's link asks too, its words marked: the turn it
+	// starts is tainted, and they never pass for the user's own.
+	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+ext+"/ask", nodeAskIn{Line: 3, N: 1}); code != http.StatusNoContent {
+		t.Fatalf("an external page's link: %d", code)
 	}
 	msgs, _ = c.store.messagesAfter(msgs[0].Seq, 10)
-	if len(msgs) != 1 || msgs[0].Text != "Relance la sauvegarde" || msgs[0].Node != ext {
+	if len(msgs) != 1 || msgs[0].Text != "Écris-le pour des managers" || msgs[0].Node != ext {
 		t.Fatalf("messages: %+v", msgs)
 	}
 	seq := msgs[0].Seq
-	if why := c.store.msgTaint(seq); why != askTaintPrefix+ext+"/go" || !c.fromUntrusted(seq) {
-		t.Errorf("an external block's ask: taint %q", why)
+	if why := c.store.msgTaint(seq); why != askTaintPrefix+ext || !c.fromUntrusted(seq) {
+		t.Errorf("an external page's ask: taint %q", why)
 	}
 	if _, owner := c.ownerMessage(fmt.Sprintf("msg:%d", seq)); owner {
-		t.Error("an external block's ask is cited as the user's own words")
+		t.Error("an external page's ask is cited as the user's own words")
 	}
-	if !strings.Contains(c.messageRef(msgs[0]), "bouton d'un bloc extérieur") {
+	if !strings.Contains(c.messageRef(msgs[0]), "lien d'une page extérieure") {
 		t.Errorf("its ref: %q", c.messageRef(msgs[0]))
 	}
-	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/ask", nodeAskIn{Block: "go", Component: "nope"}); code != http.StatusNotFound {
-		t.Fatalf("no such button: %d", code)
-	}
-
-	// An Asks: the page names an ask by its place, its words read again
-	// from the stored block; a place that holds none is no button.
-	asks := mustNode(t, c, nodestore.New{Title: "Plan", Body: "```eriphe:block suite\n" + `{"components": {"component": "Asks", "items": ["Fais comme tu proposes", "Écris-le pour des managers"]}}` + "\n```\n"})
-	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+asks+"/ask", nodeAskIn{Block: "suite", Component: "root#1"}); code != http.StatusNoContent {
-		t.Fatalf("an Asks' ask: %d", code)
-	}
-	msgs, _ = c.store.messagesAfter(seq, 10)
-	if len(msgs) != 1 || msgs[0].Text != "Écris-le pour des managers" || msgs[0].Node != asks {
-		t.Fatalf("messages: %+v", msgs)
-	}
-	for _, at := range []string{"root", "root#2", "root#x"} {
-		if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+asks+"/ask", nodeAskIn{Block: "suite", Component: at}); code != http.StatusNotFound {
-			t.Errorf("%s: %d", at, code)
+	// A place that holds no ask is no button.
+	for _, at := range []nodeAskIn{{Line: 3, N: 2}, {Line: 1, N: 0}, {Line: 9, N: 0}, {Line: 3, N: -1}} {
+		if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/ask", at); code != http.StatusNotFound {
+			t.Errorf("%+v: %d", at, code)
 		}
 	}
 }

@@ -183,37 +183,3 @@ func TestWaitingLinkOpensNothing(t *testing.T) {
 		t.Fatalf("a waiting link opened a node: %q", err)
 	}
 }
-
-// An item of another node where it works: one its source lists now, with
-// no call; the note is that node's, by the task.
-func TestTaskNotesAnItemWhereItWorks(t *testing.T) {
-	c := nodeCore(t)
-	block := "\n```eriphe:block mails\n{\"components\": {\"component\": \"Text\", \"text\": \"Mails\"}, \"sources\": {\"inbox\": {\"tool\": \"mail/list\", \"every\": 5, \"items\": {\"path\": \"messages\", \"id\": \"id\", \"title\": \"subject\"}}}}\n```\n"
-	parent := mustNode(t, c.core, nodestore.New{Title: "Mes mails", Body: block, Author: byBrain})
-	readNodeValue(t, c.core, parent, "mails", "inbox", map[string]any{"messages": []any{map[string]any{"id": "m1", "subject": "Mardi ?"}}})
-	task, _ := startInNode(t, c, runRequest{Title: "Tri", Prompt: "Trie.", Node: parent})
-	mustNodes(t, c.core, task.ID, "item_note", map[string]any{"id": parent, "source": "inbox", "item": "m1", "note": "Répondre", "state": "act"})
-	items, _ := c.nodeItems(parent)
-	if len(items) != 1 || items[0].Item != "m1" || items[0].Author != "task:"+task.ID {
-		t.Fatalf("items %+v", items)
-	}
-	if _, err := callNodes(t, c.core, task.ID, "item_note", map[string]any{"id": parent, "source": "inbox", "item": "m9", "note": "x"}); !strings.Contains(err, "is not an item") {
-		t.Fatalf("an item not listed: %q", err)
-	}
-	if _, err := callNodes(t, c.core, task.ID, "item_note", map[string]any{"id": parent, "source": "inbox", "item": "m1", "note": "x", "call": 3}); !strings.Contains(err, "own node") {
-		t.Fatalf("a call on another node: %q", err)
-	}
-	// Its page reworked: a block it leaves as it is keeps a source it is
-	// not lent; one it changes is checked as its own.
-	read := mustNodes(t, c.core, task.ID, "node_read", map[string]any{"id": parent})
-	mustNodes(t, c.core, task.ID, "node_write", map[string]any{"id": parent, "body": "Triés ce matin.\n" + block, "expect": read["hash"]})
-	read = mustNodes(t, c.core, task.ID, "node_read", map[string]any{"id": parent})
-	changed := strings.Replace(block, `"every": 5`, `"every": 10`, 1)
-	if _, err := callNodes(t, c.core, task.ID, "node_write", map[string]any{"id": parent, "body": "Triés.\n" + changed, "expect": read["hash"]}); !strings.Contains(err, "not one of the tools you are lent") {
-		t.Fatalf("a source it is not lent: %q", err)
-	}
-	other := mustNode(t, c.core, nodestore.New{Title: "Autres mails", Body: block, Author: byBrain})
-	if _, err := callNodes(t, c.core, task.ID, "item_note", map[string]any{"id": other, "source": "inbox", "item": "m1", "note": "x"}); !strings.Contains(err, "you write where you work") {
-		t.Fatalf("an item elsewhere: %q", err)
-	}
-}

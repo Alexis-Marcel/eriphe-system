@@ -1490,7 +1490,6 @@ func (sc *scenario) handleReview(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	c.live.wg.Wait()
 	c.readNode(sc.ctx, id, []string{reviewSource}, time.Now())
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
 }
@@ -1648,7 +1647,7 @@ func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for item, n := range bilanNotes {
-		if err := c.noteItem(id, itemNote{Source: "mails", Item: item, Group: n[0], Note: n[1], State: "act", Author: byBrain}); err != nil {
+		if err := c.noteItem(id, itemNote{Server: "monitor", Item: item, Group: n[0], Note: n[1], State: "act", Author: byBrain}); err != nil {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)
 			return
 		}

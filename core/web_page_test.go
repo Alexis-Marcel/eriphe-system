@@ -17,7 +17,7 @@ func TestNodePageBody(t *testing.T) {
 	tw, _ := graphWeb(t)
 	c := tw.c
 	mustNode(t, c, nodestore.New{Title: "Mes tâches", Body: "- [ ] Rien\n"})
-	body := "Écrit le 26/11/2026.\n\n- [ ] Payer la cantine 📅 2026-11-27\n\n![[Mes tâches]]\n\n```eriphe:block go\n{\"components\": {\"component\": \"Asks\", \"items\": [\"Suite\"]}}\n```\n"
+	body := "Écrit le 26/11/2026.\n\n- [ ] Payer la cantine 📅 2026-11-27\n\n![[Mes tâches]]\n\n[Suite](ask:)\n"
 	id := mustNode(t, c, nodestore.New{Title: "Journée", Body: body})
 	code, raw, _ := tw.do("GET", "/api/nodes/"+id, nil, nil)
 	var p nodePage
@@ -25,14 +25,11 @@ func TestNodePageBody(t *testing.T) {
 		t.Fatalf("%d %v", code, err)
 	}
 	d, _ := c.nodes.Read(id, 0)
-	if want, _ := d.Node.Body(); p.Body != want || !strings.HasPrefix(p.Body, body[:strings.Index(body, "```")]+"```eriphe:block go\n") {
+	if want, _ := d.Node.Body(); p.Body != want || p.Body != body {
 		t.Errorf("body: %q", p.Body)
 	}
 	if _, ok := p.Refs["Mes tâches"]; !ok {
 		t.Errorf("the embed's node: %v", p.Refs)
-	}
-	if len(p.Parts) != 2 || p.Parts[1].Block == nil || p.Parts[1].Block.Name != "go" {
-		t.Errorf("parts: %+v", p.Parts)
 	}
 }
 
