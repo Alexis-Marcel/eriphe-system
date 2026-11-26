@@ -76,6 +76,60 @@ func TestTaskWritesAMarkdownPage(t *testing.T) {
 	}
 }
 
+// A mail's id, as the mail server gives it: long, random-looking.
+const mailID = "bTEfc2FtQGV4YW1wbGUub3JnH0lOQk9YHzEfMjkwMjY"
+
+// A page whose references name mails by their long ids is written, and
+// a line of it edited (the store scans the whole page again): an item's
+// id is not taken for a credential. A credential's shape as an id, and a
+// long random string in the text, are still refused.
+func TestPageItemIDsAreNotSecrets(t *testing.T) {
+	c := nodeCore(t)
+	parent := mustNode(t, c.core, nodestore.New{Title: "Mes mails", Author: byBrain})
+	task, _ := startInNode(t, c, runRequest{Title: "Tri", Prompt: "Trie.", Node: parent})
+	page := "## À lire\n- [Devis terrasse][m1]\n- [Facture][m2]\n\n[m1]: mail:" + mailID + "\n[m2]: mail:" + mailID + "Zz9\n"
+	cur := mustNodes(t, c.core, task.ID, "node_read", map[string]any{"id": parent})
+	mustNodes(t, c.core, task.ID, "node_write", map[string]any{"id": parent, "body": page, "expect": cur["hash"]})
+	mustNodes(t, c.core, task.ID, "node_edit", map[string]any{"id": parent, "old": "- [Facture][m2]", "new": "- [Facture payée][m2]"})
+	for _, bad := range []string{
+		"[m3]: mail:eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzYW0ifQ.c2lnbmF0dXJlLWhlcmU",
+		"[m3]: mail:AKIAABCDEFGHIJKLMNOP",
+		"- Clé aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1dF3hJ5kL7nP9",
+	} {
+		if _, err := callNodes(t, c.core, task.ID, "node_append", map[string]any{"id": parent, "text": bad}); !strings.Contains(err, "refused") {
+			t.Errorf("%q passed: %q", bad, err)
+		}
+	}
+}
+
+// Only a reference's target, as the page reader reads it, is left out of
+// the long random strings: not one in a code block, nor text after it, nor
+// a link's query, nor a target in another form.
+func TestRefuseSecretItemIDs(t *testing.T) {
+	for _, ok := range []string{
+		"[m1]: mail:" + mailID,
+		"  [Devis terrasse]: calendar:" + mailID + "\n",
+		"[m1]: https://example.org/d/" + mailID,
+	} {
+		if err := refuseSecret(ok); err != nil {
+			t.Errorf("refused %q: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{
+		"```\n[m1]: mail:" + mailID + "\n```",
+		"[m1]: mail:aWQtMQ " + mailID,
+		"[m1]: https://example.org/d?x=" + mailID,
+		"[m1]: Mail:" + mailID,
+		"[m1]: " + mailID,
+		"mail:" + mailID,
+		"[Devis](mail:" + mailID + ")",
+	} {
+		if err := refuseSecret(bad); err == nil {
+			t.Errorf("passed %q", bad)
+		}
+	}
+}
+
 // The brain's writes say the page's problems; its do: links name tools of
 // the catalog. node_find finds a page by a reference's id and by its
 // words.

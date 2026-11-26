@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -32,12 +33,41 @@ func (c *Config) nodesPaths() (dir, index string) {
 }
 
 // refuseSecret is the store's filter: a secret is never written in a
-// node nor in its trace.
+// node nor in its trace. A reference's item id names an item, as a
+// link's path does: it is not read as a long random string
+// (withoutItemIDs); a credential's known shape in it still is.
 func refuseSecret(text string) error {
-	if why := scanSecrets(text); why != "" {
+	if why := scanSecretsNamed(text, withoutItemIDs(text)); why != "" {
 		return errors.New(why)
 	}
 	return nil
+}
+
+// itemSchemeRe is a reference's scheme that names a tool's server (mail,
+// calendar), as the page format writes it.
+var itemSchemeRe = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
+
+// withoutItemIDs is text with the id of each reference to an item left
+// out: a line the page reader takes for a reference's target
+// (`[m1]: mail:<id>`, outside code), its scheme a server's name and its id
+// the one token a tool gave, not a link (a link's path is left out by
+// withoutLinkPaths, its query and fragment still seen). The rest of the
+// line stays.
+func withoutItemIDs(text string) string {
+	p := nodefile.ReadPage(text)
+	if len(p.Refs) == 0 {
+		return text
+	}
+	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	for _, d := range p.Refs {
+		if d.ID == "" || !itemSchemeRe.MatchString(d.Scheme) || strings.HasPrefix(d.ID, "/") || d.Line > len(lines) {
+			continue
+		}
+		l := lines[d.Line-1]
+		at := strings.Index(l, "]:") + 2 // the target follows its label
+		lines[d.Line-1] = l[:at] + strings.Replace(l[at:], d.Target, d.Scheme+":", 1)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // openNodes opens the graph, and logs what its start found: the files

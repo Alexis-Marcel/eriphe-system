@@ -1211,6 +1211,10 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   read as a random string (a pull request's `owner/repo/pull/640/files`, a document's id): a
   token's known shape anywhere, a query's or fragment's token key or long random value, and a
   link's password still are. A random secret as a bare path segment, in no known shape, passes.
+  Nor is a reference's item id (`[m1]: mail:<id>`, the line as the page reader reads it outside
+  code, its scheme a server's lowercase name, its id one token that is not a link): a tool gave it,
+  it names an item (`refuseSecret`, `withoutItemIDs` in `nodes.go`, nodes only: the memory holds no
+  page). A credential's known shape in an id is still refused, and text after the id still read.
 - **Line edits:** `ChangeLast(id, author, fn)` is `Change` on the last version, whichever it is,
   for a change that checks what it changes itself (a line found by its text, refused when gone).
 - **Code's writes:** `Change(id, expect, author, fn)` lets code change what no author may (a
