@@ -70,6 +70,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/conso", sc.handleConso)
 	mux.HandleFunc("POST /e2e/view", sc.handleView)
 	mux.HandleFunc("POST /e2e/page", sc.handlePage)
+	mux.HandleFunc("POST /e2e/do", sc.handleDo)
 	mux.Handle("/", sc.web.w.routes())
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -507,7 +508,7 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 		mcp.AddTool(s, &mcp.Tool{Name: "trash", Description: "Met des mails d'un compte à la corbeille", Meta: mailSays("Mettre {item} à la corbeille", "Move {item} to the trash", "mis à la corbeille", "mis à la corbeille", "moved to the trash")},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 				IDs     []string `json:"ids"`
-				Account string   `json:"account"`
+				Account string   `json:"account,omitempty"` // as the mail server's: the ids say theirs
 			}) (*mcp.CallToolResult, map[string]any, error) {
 				f.mu.Lock()
 				defer f.mu.Unlock()
@@ -1720,6 +1721,30 @@ func (sc *scenario) handlePage(rw http.ResponseWriter, r *http.Request) {
 		"> | Bois | 2 400 | 0 |\n" +
 		"> | Pose | 1 500 | 120 |\n"
 	d, err := c.nodes.Create(nodestore.New{Title: "Terrasse en Markdown", Author: byBrain, Body: body})
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	id := d.Node.Meta.ID
+	c.showNode(id, byBrain, false)
+	c.bump()
+	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
+}
+
+// handleDo is POST /e2e/do: a Markdown page of mails sorted under
+// headings, an action on the first (do:mail/trash), as a skill writes it
+// (page-do.spec.ts).
+func (sc *scenario) handleDo(rw http.ResponseWriter, r *http.Request) {
+	c := sc.c
+	body := "## À jeter\n" +
+		"[Jeter ces mails](do:mail/trash)\n\n" +
+		"- [Promo chaussures][d1] : publicité\n" +
+		"- [Lettre d'info][d2] : jamais lue\n" +
+		"- [Facture du club][d3] : à garder finalement\n\n" +
+		"## À lire\n" +
+		"- [Compte rendu][d4]\n\n" +
+		"[d1]: mail:d1\n[d2]: mail:d2\n[d3]: mail:d3\n[d4]: mail:d4\n"
+	d, err := c.nodes.Create(nodestore.New{Title: "Tri des mails", Author: byBrain, Body: body})
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return

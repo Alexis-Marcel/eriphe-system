@@ -1577,6 +1577,17 @@ a page: the brain composes each one from the catalog.
   sender): the page warns there, the item as read beside it; one not read is `unread` (« non
   vérifié »). `nodePageOf` sends `items` (each reference of an item where it is
   written, with its card and the item as kept) and `placed`; it reads no server.
+- **Actions on a heading's items** (`page_acts.go`): a `do:` link alone on the first line under a
+  heading acts on the references of its section to the tool's server's items (`nodefile.Page.Scope`),
+  but those ticked and those a call of the same tool already names in the node (`actedOn`). Its
+  calls are composed from the tool's input schema (`actArg`: the one required argument, else the
+  one named for ids; a list of strings in one call, a string in a call each); its author, whoever
+  wrote its line by the node's versions (`lineAuthor`), must have the tool (`authorHasTool`); the
+  grid applies (a tool never allowed acts on nothing; `catalogCall` at the run). Nothing is kept
+  before the yes: `POST /api/nodes/{id}/do` composes it from the stored page (its items read for
+  its words, `composeAct`); `POST /api/nodes/{id}/do/yes` with the ids ticked reads the page again
+  and runs those still under the heading as one calls card, kept on the node and said yes to at
+  once (`actYes`, `decideCardChosen`). ([The format](../docs/node-format.md#actions-on-a-headings-items).)
 - **Calls on an item** (`item_cards.go`): a skill run's call kept for the user that names exactly
   one item of a source of the run's node, on the call's own server, is kept on that item
   (`access_asks.node`, `source`, `item`): one card per item (kind `calls`), answered alone. A call

@@ -5,6 +5,7 @@ import { OpenedView, sender, type OpenState } from "../a2ui/opener";
 import { openItem, type NodePage, type PageItem } from "../data/api";
 import { useWords } from "../i18n";
 import type { Slots } from "./Body";
+import { usePageActs } from "./acts";
 import { Cards } from "./Cards";
 import type { MdItem, PageLink } from "./read";
 
@@ -27,6 +28,8 @@ import type { MdItem, PageLink } from "./read";
 // usePageSlots are the slots (page/Body.tsx) of a node's page.
 export function usePageSlots(page: NodePage, latest: boolean): Slots {
   const [opened] = useState(() => new Map<string, OpenState>());
+  // The do: links of its headings, and the boxes of their rows (acts.tsx).
+  const acts = usePageActs(page, latest);
   return useMemo<Slots>(() => {
     const id = page.node.id;
     const items = page.items ?? [];
@@ -39,10 +42,12 @@ export function usePageSlots(page: NodePage, latest: boolean): Slots {
     return {
       item: (it: MdItem) => {
         const mine = onRow(it.line).filter((x) => x.card);
-        if (!mine.length) return null;
+        const ticks = acts.item(it);
+        if (!mine.length) return ticks;
         const seen = new Set<string>();
         return (
           <span className="md-cards">
+            {ticks}
             {mine.map((x) => {
               if (seen.has(x.card!)) return null;
               seen.add(x.card!);
@@ -56,6 +61,7 @@ export function usePageSlots(page: NodePage, latest: boolean): Slots {
         );
       },
       link: (l: PageLink) => {
+        if (l.kind === "do") return acts.link(l);
         if (l.kind !== "card" || !placed.has(l.target)) return undefined;
         if (l.alone)
           return (
@@ -66,7 +72,7 @@ export function usePageSlots(page: NodePage, latest: boolean): Slots {
         return <InlineYes refText={l.target} say where={{ surfaceId: `${id}--page`, componentId: `line-${l.line}` }} marked={marked} />;
       },
       ref: (label: string, ln: number) => {
-        const x = items.find((it) => it.line === ln && it.label === label);
+        const x = items.find((it) => it.line === ln && it.label === label && it.card) ?? acts.ref(label, ln);
         if (x?.misleading) return <Misleading x={x} />;
         if (x?.unread) return <Unread />;
         return null;
@@ -86,13 +92,13 @@ export function usePageSlots(page: NodePage, latest: boolean): Slots {
           }
         : undefined,
     };
-  }, [page, latest, opened]);
+  }, [page, latest, opened, acts]);
 }
 
 // Misleading is the warning beside a reference whose words do not say the
 // item its server read, and what the item is, as read: its title, and who
 // it is from (a name, its address in the tooltip).
-function Misleading({ x }: { x: PageItem }) {
+function Misleading({ x }: { x: Pick<PageItem, "title" | "detail"> }) {
   const { t } = useWords();
   const what = t("espace.md.ref.misleading", [x.title, x.detail].filter(Boolean).join(" · "));
   const who = x.detail ? sender(x.detail).name : "";

@@ -179,7 +179,8 @@ problems as JSON). Lines are counted from 1 in the body, what follows the front 
 - **Eriphe's links**, valid Markdown links whose scheme is one of four:
   - `[Jeter ces mails](do:mail/trash)`, on its own line, the first under a heading: an action on
     the references of that heading's section, down to the next heading of its level or a higher
-    one. Its author must have the tool. Anywhere else it acts on nothing.
+    one. Its author must have the tool. Anywhere else it acts on nothing
+    ([Actions on a heading's items](#actions-on-a-headings-items)).
   - `[Envoyer la réponse](card:<ref>)` places a card already proposed on that line, one of the
     node's own (another node's is drawn as its words): alone on its line, the whole card; in a
     sentence, its Oui. Not in a folded callout or a chart, which no reader sees as written. A card
@@ -250,6 +251,46 @@ The page's JSON (`GET /api/nodes/{id}`) carries this beside its body: `items` (e
 item where it is written: its line, label, words, row, id, whether it opens, the card that waits on
 it and the item as read, `misleading`, `unread`) and `placed` (the cards its lines carry), Go's placement,
 which the workspace draws where it says.
+
+### Actions on a heading's items
+
+A `do:` link, alone on the first line under a heading, is an action the page places; code composes
+it (core/page_acts.go):
+
+```markdown
+## À jeter
+[Jeter ces mails](do:mail/trash)
+
+- [Pub Maison Lune][m1] : publicité
+- [x] [Lettre d'info][m2]
+```
+
+- **What it acts on**: the references under the heading, down to the next heading of its level or
+  a higher one, to items of the tool's server, each id once, on a row the reader sees (not in a
+  paragraph, a table, a folded callout or one drawn its own way); not those whose item is ticked
+  (`[x]`, or dropped `[-]`), nor those a call of the same tool already names in the node (waiting
+  on its card, or said yes to in the last seven days and not failed).
+- **Its words are code's**: what the tool does to how many (the card's sentence and verb), each item
+  as its server reads it (a free read, as for a card on an item), with the same warning where a
+  reference's words do not say it. The link's words are never shown on its card.
+- **Its calls come from the tool's input schema**: the argument that takes the items' ids (the one
+  argument the schema requires, or, with none required, the one named for ids: `id`, `ids`,
+  `…_id`, `…_ids`). A list of strings takes all the items in one call; a string takes one, in a call
+  for each item. A tool that requires anything else has no `do:`: code fills in nothing else.
+- **Its author must have the tool**: whoever wrote its line, by the node's versions (the oldest of
+  the last versions that all hold it). The user has every tool; the brain, those of the catalog; a
+  task, those its grant lends; a skill, those its last run was lent; code, none. A tick of the user
+  since does not change who wrote it.
+- **The access grid** applies to every call: a tool it never allows (or one that must name its
+  account) makes the action act on nothing, and a call refused at its run fails as any card's.
+- **Nothing is kept before the yes.** The page is its state: the workspace draws its line from the
+  page as stored (`POST /api/nodes/{id}/do` with the line and its text: the items, read, and what
+  Oui says for 1, 2… of them), each row it acts on with a box, ticked, and the user unticks what
+  stays. Oui (`POST /api/nodes/{id}/do/yes` with the ids ticked) reads the page again: only the
+  items ticked that are still under the heading run, never one added since it was drawn. The calls
+  are then kept as one calls card on the node, said yes to at once by that yes: its run, its
+  outcome, its record (« Déjà décidé ») and the node's skill woken to write the page again are a
+  card's. A do: that acts on nothing is drawn as its words, why in its tooltip.
 
 ### Lines that follow events
 

@@ -109,6 +109,34 @@ func locate(body string, lines []string, r LineRef, role func(string) bool) (int
 	return 0, ErrLineGone
 }
 
+// FindLine is the number (from 1) of the line r names in body, any line
+// outside code and the references' targets: the line at r.Line when it
+// still holds r's text, else the only one that holds it.
+func FindLine(body string, r LineRef) (int, error) {
+	lines, _ := splitBody(body)
+	i, err := locate(body, lines, r, func(string) bool { return true })
+	if err != nil {
+		return 0, err
+	}
+	return i + 1, nil
+}
+
+// HasLine tells whether body holds a line that is text whole (its > and
+// indent aside).
+func HasLine(body, text string) bool {
+	want := lineCore(text)
+	if want == "" {
+		return false
+	}
+	lines, _ := splitBody(body)
+	for _, l := range lines {
+		if lineCore(l) == want {
+			return true
+		}
+	}
+	return false
+}
+
 // taskBoxRe is a task's line: its prefix up to the box, its state, the
 // rest.
 var taskBoxRe = regexp.MustCompile(`^((?:[ \t]*>[ ]?)*[ \t]*(?:[-*+]|\d+[.)])[ \t]+)\[([ xX/-])\](.*)$`)
