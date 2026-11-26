@@ -121,22 +121,6 @@ func FindLine(body string, r LineRef) (int, error) {
 	return i + 1, nil
 }
 
-// HasLine tells whether body holds a line that is text whole (its > and
-// indent aside).
-func HasLine(body, text string) bool {
-	want := lineCore(text)
-	if want == "" {
-		return false
-	}
-	lines, _ := splitBody(body)
-	for _, l := range lines {
-		if lineCore(l) == want {
-			return true
-		}
-	}
-	return false
-}
-
 // taskBoxRe is a task's line: its prefix up to the box, its state, the
 // rest.
 var taskBoxRe = regexp.MustCompile(`^((?:[ \t]*>[ ]?)*[ \t]*(?:[-*+]|\d+[.)])[ \t]+)\[([ xX/-])\](.*)$`)

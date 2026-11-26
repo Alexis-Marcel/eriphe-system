@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
@@ -192,6 +193,71 @@ func TestActRefusedWhenItsAuthorLacksTheTool(t *testing.T) {
 	c2, _, node2 := actCore(t, actPage, byUser)
 	if a, _ := c2.composeAct(context.Background(), node2, actLine, false, "fr"); a.Refused != "" {
 		t.Errorf("the user's do: %+v", a)
+	}
+}
+
+// Who wrote a do: is who wrote it under its heading: the same line copied
+// under another by an author without the tool acts on nothing there; a
+// page written again many times since keeps its author.
+func TestActAuthorIsTheLinesUnderItsHeading(t *testing.T) {
+	c, _, node := actCore(t, actPage, byBrain)
+	copied := strings.Replace(actPage, "## À garder\n", "## À garder\n[Jeter ces mails](do:monitor/discard)\n\n", 1)
+	if _, err := c.nodes.ChangeLast(node, "task:t-none", func(n *nodefile.Node) error { return n.AuthorBody(copied) }); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := c.composeAct(context.Background(), node, actLine, false, "fr"); a.Refused != "" {
+		t.Errorf("the brain's do: %+v", a)
+	}
+	copy := nodefile.LineRef{Line: 12, Text: "[Jeter ces mails](do:monitor/discard)"}
+	if a, err := c.composeAct(context.Background(), node, copy, false, "fr"); err != nil || a.Refused != actAuthor {
+		t.Errorf("the task's copy %+v %v", a, err)
+	}
+	for i := range 210 {
+		body := copied + strings.Repeat("Une ligne.\n", i+1)
+		if _, err := c.nodes.ChangeLast(node, "skill:tri", func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+			t.Fatal(err)
+		}
+		if i == 100 {
+			if a, _ := c.composeAct(context.Background(), node, actLine, false, "fr"); a.Refused != "" { // known through version 100
+				t.Fatalf("after 100 versions %+v", a)
+			}
+		}
+	}
+	if a, _ := c.composeAct(context.Background(), node, actLine, false, "fr"); a.Refused != "" {
+		t.Errorf("after 210 versions %+v", a)
+	}
+	c.actAuthors.Clear()
+	if a, _ := c.composeAct(context.Background(), node, actLine, false, "fr"); a.Refused != "" {
+		t.Errorf("after 210 versions, read again %+v", a)
+	}
+}
+
+// A skill has the tools its last run with a task was lent.
+func TestActBySkill(t *testing.T) {
+	c, _, node := actCore(t, actPage, "skill:tri")
+	if a, _ := c.composeAct(context.Background(), node, actLine, false, "fr"); a.Refused != actAuthor {
+		t.Fatalf("a skill never run %+v", a)
+	}
+	run := func(skill, task, tools string) {
+		if task != "" {
+			if err := c.store.insertTask(&TaskRow{ID: task, Title: "Skill " + skill, Tools: tools, State: "done"}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := c.store.db.Exec(`INSERT INTO skill_runs (skill, sha, task, state, created) VALUES (?, 'sha1', ?, ?, ?)`, skill, task, skillRunDone, time.Now().Unix()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run("tri", "t-tri", "monitor")
+	run("tri", "", "") // refused before its task started
+	if a, _ := c.composeAct(context.Background(), node, actLine, false, "fr"); a.Refused != "" {
+		t.Errorf("a skill lent monitor %+v", a)
+	}
+	c2, _, node2 := actCore(t, actPage, "skill:autre")
+	c = c2
+	run("autre", "t-autre", "agenda")
+	if a, _ := c2.composeAct(context.Background(), node2, actLine, false, "fr"); a.Refused != actAuthor {
+		t.Errorf("a skill lent agenda only %+v", a)
 	}
 }
 

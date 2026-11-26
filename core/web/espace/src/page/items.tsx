@@ -26,10 +26,11 @@ import type { MdItem, PageLink } from "./read";
 //     last version); the page keeps what it read for its session.
 
 // usePageSlots are the slots (page/Body.tsx) of a node's page.
-export function usePageSlots(page: NodePage, latest: boolean): Slots {
+export function usePageSlots(page: NodePage, latest: boolean, live = true): Slots {
   const [opened] = useState(() => new Map<string, OpenState>());
   // The do: links of its headings, and the boxes of their rows (acts.tsx).
-  const acts = usePageActs(page, latest);
+  // Only on the last version of a node that takes gestures.
+  const acts = usePageActs(page, latest && live);
   return useMemo<Slots>(() => {
     const id = page.node.id;
     const items = page.items ?? [];

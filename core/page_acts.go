@@ -145,7 +145,7 @@ func (c *core) composeAct(ctx context.Context, id string, ref nodefile.LineRef, 
 	if server == "" || tool == "" || schema == nil {
 		return refuse(actTool)
 	}
-	if !c.authorHasTool(c.lineAuthor(id, a.Text), l.Target) {
+	if h := p.Heading(l.Heading); h == nil || !c.authorHasTool(c.lineAuthor(id, doSig(h.Text, a.Text)), l.Target) {
 		return refuse(actAuthor)
 	}
 	if a.arg, a.list, ok = actArg(schema); !ok {
@@ -327,34 +327,77 @@ func (a pageAct) question(items []actItem) accessQuestion {
 	return q
 }
 
-// lineAuthor is who wrote a line of node id's page: the author of the
-// oldest of the versions, back from the last, that all hold it whole; ""
-// when none does, or it goes back further than lineAuthorDepth.
-func (c *core) lineAuthor(id, text string) string {
+// doSig is a do: as its author is known by: the text of its heading and
+// its line. The same line under another heading, or in code, is another.
+func doSig(heading, line string) string {
+	return strings.TrimSpace(heading) + "\x00" + strings.TrimSpace(line)
+}
+
+// doSigs are the do: links of a body placed to act (Scope), by doSig.
+func doSigs(body string) map[string]bool {
+	p := nodefile.ReadPage(body)
+	lines := strings.Split(body, "\n")
+	out := map[string]bool{}
+	for _, l := range p.Links {
+		if _, ok := p.Scope(l); !ok {
+			continue
+		}
+		if h := p.Heading(l.Heading); h != nil && l.Line <= len(lines) {
+			out[doSig(h.Text, lines[l.Line-1])] = true
+		}
+	}
+	return out
+}
+
+// actWriter is who wrote a do: of a node, known through a version: the
+// versions up to through hold it, since author's.
+type actWriter struct {
+	author  string
+	through int
+}
+
+// lineAuthor is who wrote the do: sig of node id's page: the author of
+// the oldest of the versions, back from the last, that all hold it under
+// the same heading; "" when the last does not. Known once, it is checked
+// again only in the versions written since.
+func (c *core) lineAuthor(id, sig string) string {
 	vs, err := c.nodes.Versions(id)
-	if err != nil {
+	if err != nil || len(vs) == 0 {
 		return ""
 	}
-	author := ""
-	for i := len(vs) - 1; i >= 0; i-- {
-		if len(vs)-i > lineAuthorDepth {
-			return ""
-		}
-		d, err := c.nodes.Read(id, vs[i].N)
+	holds := func(n int) bool {
+		d, err := c.nodes.Read(id, n)
 		if err != nil {
-			return ""
+			return false
 		}
 		body, err := d.Node.Body()
-		if err != nil || !nodefile.HasLine(body, text) {
-			break
+		return err == nil && doSigs(body)[sig]
+	}
+	key := id + "\x00" + sig
+	last := vs[len(vs)-1].N
+	if m, ok := c.actAuthors.Load(key); ok {
+		known := m.(actWriter)
+		if known.through == last {
+			return known.author
 		}
+		still := known.through < last
+		for n := known.through + 1; still && n <= last; n++ {
+			still = holds(n)
+		}
+		if still {
+			c.actAuthors.Store(key, actWriter{known.author, last})
+			return known.author
+		}
+	}
+	author := ""
+	for i := len(vs) - 1; i >= 0 && holds(vs[i].N); i-- {
 		author = vs[i].Author
+	}
+	if author != "" {
+		c.actAuthors.Store(key, actWriter{author, last})
 	}
 	return author
 }
-
-// lineAuthorDepth is how many versions back lineAuthor looks.
-const lineAuthorDepth = 200
 
 // authorHasTool tells whether a node's author has a tool (server/tool):
 // the user, in the workspace or in the files (outside), has every tool;
@@ -374,9 +417,7 @@ func (c *core) authorHasTool(author, tool string) bool {
 	if t, ok := strings.CutPrefix(author, "task:"); ok {
 		task = t
 	} else if s, ok := strings.CutPrefix(author, "skill:"); ok {
-		if rs, err := c.skillRunsOf(s, 1); err == nil && len(rs) > 0 {
-			task = rs[0].Task
-		}
+		c.store.db.QueryRow(`SELECT task FROM skill_runs WHERE skill = ? AND task != '' ORDER BY id DESC LIMIT 1`, s).Scan(&task)
 	}
 	if task == "" {
 		return false
@@ -394,6 +435,8 @@ func (c *core) authorHasTool(author, tool string) bool {
 // acts on, kept as one calls card said yes to at once. It gives the
 // card's ref.
 func (c *core) actYes(ctx context.Context, id string, ref nodefile.LineRef, chosen []string, by string) (string, error) {
+	c.actMu.Lock() // two yeses never run the same items
+	defer c.actMu.Unlock()
 	lang := c.userLang()
 	a, err := c.composeAct(ctx, id, ref, true, lang)
 	if err != nil {

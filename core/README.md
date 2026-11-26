@@ -3779,6 +3779,15 @@ token in `X-CSRF-Token`:
   a version by `user`. The line is found by its text (`line` a hint): a line gone, or written
   twice, is `409` and nothing is written; an archived node `410`; a state that is not one of the
   four `400`. `200` `{version, hash}`. A skill triggered by `node.gesture` in that node is woken.
+- `POST /api/nodes/{id}/do` `{line, text}`: a `do:` of the page as code composes it from the
+  stored page (`page_acts.go`): `{line, text, tool, items: [{id, label, line, row, title, detail,
+  external, misleading, unread}], acts, verbs, tainted}`, its items read by their server for its
+  words, or `refused` (`place`, `tool`, `author`, `compose`, `grid`) and `why`. A line gone, there
+  twice, or no `do:` is `409`.
+- `POST /api/nodes/{id}/do/yes` `{line, text, items}`: the user's yes on it, on the ids ticked: the
+  page read again, the items still under the heading run as one calls card on the node, said yes to
+  at once; `200` `{card}`. `403` refused, `409` its line gone or none of the items still there,
+  `410` archived.
 - `POST /api/nodes/{id}/open` `{ref}`: an item a page references opened in place
   (`item_open.go`), the user's gesture: the reference is found by its label in the page as stored
   (`409` `open.ref` when there is none, or its server declares no read of one item by id: a tool

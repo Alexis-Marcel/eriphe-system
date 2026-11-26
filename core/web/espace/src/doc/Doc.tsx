@@ -156,7 +156,7 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
   // What eriphe-core places on its lines: cards on the rows of the items
   // it references, cards placed by card: links, the original of an item
   // opened below its row (page/items.tsx).
-  const slots = usePageSlots(page, latest);
+  const slots = usePageSlots(page, latest, live);
   if (!page.body.trim())
     return (
       <>

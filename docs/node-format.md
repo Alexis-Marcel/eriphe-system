@@ -278,7 +278,7 @@ it (core/page_acts.go):
   `…_id`, `…_ids`). A list of strings takes all the items in one call; a string takes one, in a call
   for each item. A tool that requires anything else has no `do:`: code fills in nothing else.
 - **Its author must have the tool**: whoever wrote its line, by the node's versions (the oldest of
-  the last versions that all hold it). The user has every tool; the brain, those of the catalog; a
+  the last versions that all hold it under the same heading: a copy elsewhere is its copier's). The user has every tool; the brain, those of the catalog; a
   task, those its grant lends; a skill, those its last run was lent; code, none. A tick of the user
   since does not change who wrote it.
 - **The access grid** applies to every call: a tool it never allows (or one that must name its
