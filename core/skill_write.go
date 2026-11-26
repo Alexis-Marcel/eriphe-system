@@ -171,7 +171,21 @@ func (c *core) proposeSkillVersion(files []skillFile, tainted []string, mon *ski
 		kept = string(raw)
 	}
 	c.store.set(skillMonitorKey(k.Name, k.Pending), kept)
+	c.skillCardUnlinked(k.Name)
 	return k, true, nil
+}
+
+// skillCardUnlinked takes a skill's card off the nodes it was linked to:
+// its ref names the skill, not one version, so a new version waits only
+// in the node of the turn or task that proposes it (cardRaisedFor), never
+// where an earlier one was.
+func (c *core) skillCardUnlinked(name string) {
+	ref := proposalRef(cardSkill, c.skillRowID(name))
+	nodes := c.cardNodes(ref)
+	c.store.db.Exec(`DELETE FROM node_cards WHERE ref = ?`, ref)
+	for _, id := range nodes {
+		c.nodeMoved(id, false)
+	}
 }
 
 func skillTaintKey(name, sha string) string { return "skill_taint:" + name + ":" + sha }
@@ -204,19 +218,6 @@ func (c *core) checkSkillMonitor(in writeMonitorIn, m skillManifest) (*skillMoni
 		return nil, fmt.Errorf("the skill runs on its events: when keys on it (monitor.new key=%s, or monitor.changed …)", name)
 	}
 	return &skillMonitorSpec{Name: name, Spec: spec}, nil
-}
-
-// skillHomeOf is the home node of the version skill card id proposes,
-// "" for none: its card waits on it.
-func (c *core) skillHomeOf(id int64) string {
-	var pending string
-	if c.store.db.QueryRow(`SELECT pending FROM skills WHERE rowid = ?`, id).Scan(&pending) != nil || pending == "" {
-		return ""
-	}
-	if v, err := c.store.skillVersion(pending); err == nil {
-		return v.Manifest.Node
-	}
-	return ""
 }
 
 // skillMonitorOf is the monitor a skill's version brings, nil for none.

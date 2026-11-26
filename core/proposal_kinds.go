@@ -112,8 +112,7 @@ func init() {
 				return ""
 			}},
 		cardSkill: {read: (*core).skillProposal, waiting: (*core).proposedSkills, outcome: told("le skill est en place", "cette version est écartée"), // skill_write.go
-			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideSkill(id, yes) },
-			node:    (*core).skillHomeOf}, // its card waits on the node it will maintain
+			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideSkill(id, yes) }},
 		cardCalls: {read: (*core).callsProposal, waiting: (*core).proposedBatches, decides: (*core).decideCalls, outcome: callsTold, // item_cards.go
 			withdraw: func(c *core, ctx context.Context, id int64) error {
 				for _, a := range c.batchAsks(id) {

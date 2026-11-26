@@ -49,7 +49,7 @@ func mailPage(t *testing.T, c *core, instructions string) (string, proposal) {
 	if len(cards) != 1 || len(cardsOf(c, cardMonitor)) != 0 {
 		t.Fatalf("cards %+v", c.pendingProposals())
 	}
-	if !cardWaitsOn(c, node) { // its card waits on the node it will maintain
+	if !cardWaitsOn(c, node) { // its card waits in the node of the turn that wrote it
 		t.Fatal("the skill's card is not on its home")
 	}
 	return node, cards[0]
@@ -189,6 +189,39 @@ func cardsOf(c *core, kind string) []proposal {
 // node: it notes the mail, opens « Répondre à Sam » with a draft, and its
 // send is kept for a « Send? » card on the mail. Nothing is sent before
 // that yes.
+// TestSkillCardWaitsWhereProposed: a skill's version waits in the node
+// of the turn that proposed it, like any card; never on the page the
+// skill maintains, nor where an earlier version of it waited (#784).
+func TestSkillCardWaitsWhereProposed(t *testing.T) {
+	c, _, _ := viewCore(t)
+	home, _ := mailPage(t, c, "Note chaque mail.")
+	out, isErr := callBrainTool(t, c, "node_open", map[string]any{"title": "Améliorer Mes mails",
+		"goal": "Décider avec l'utilisateur comment trier mieux ses mails."})
+	if isErr {
+		t.Fatalf("node_open: %v", out)
+	}
+	talk := out["id"].(string)
+	c.turn.about(talk) // the owner decides here
+	sk := mailSkill("Note chaque mail ; propose d'archiver ce qui ne compte pas.")
+	sk["node"] = home
+	if out, isErr := callBrainTool(t, c, "write_skill", sk); isErr {
+		t.Fatalf("write_skill: %v", out)
+	}
+	cards := cardsOf(c, cardSkill)
+	if len(cards) != 1 {
+		t.Fatalf("cards %+v", c.pendingProposals())
+	}
+	if !cardWaitsOn(c, talk) {
+		t.Fatal("the new version's card does not wait in the node it was proposed from")
+	}
+	if cardWaitsOn(c, home) {
+		t.Fatal("the new version's card waits on the page the skill maintains")
+	}
+	if got := c.cardNodes(proposalRef(cardSkill, cards[0].ID)); !slices.Equal(got, []string{talk}) {
+		t.Fatalf("linked to %v, want only %s", got, talk)
+	}
+}
+
 func TestMailViewOneYes(t *testing.T) {
 	c, fm, now := viewCore(t)
 	node, v := mailPage(t, c, "Note chaque mail. Pour un mail qui attend une réponse, ouvre un node « Répondre à … » avec un brouillon, et appelle l'envoi : il attend le oui.")

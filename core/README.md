@@ -1106,7 +1106,10 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   a proposal) is linked to it (`node_cards`), and the node waits for the user while one waits
   (`cardRaisedFor`; its status, `node_status.go`). A decided card stays linked (a card block still
   places it, the page lists it as settled): the status reads only the cards still pending, in one
-  query. The card's state is the one truth of what waits: a proposal that moves other than on its
+  query. A skill's version is such a proposal: its card waits in the node of the turn or task that
+  wrote it (where the user decides), not on the page the skill maintains; its ref names the skill,
+  so a new version first unlinks it from where an earlier one waited (`skillCardUnlinked`). The
+  card's state is the one truth of what waits: a proposal that moves other than on its
   card (its task stopped, a page, the user's own change, the memory's expiry) moves its card the
   moment it moves (`settleCards`, called by the task's state, the memory's store and the pages
   that change a proposal; `decideProposal` settles its own), never on a timer; the cards are put
@@ -1558,7 +1561,7 @@ a page: the brain composes each one from the catalog.
   (write_skill's `monitor`, write_monitor's fields, checked by `checkSkillMonitor`: a new name its
   `when` keys on): kept beside the pending version (kv `skill_monitor:<name>:<sha>`, said again by
   each write: written again without it, the version brings none), shown first on the skill's card
-  (« Moniteur <name> »; the card waits on its home node, `skillHomeOf`), and made on by the same yes, on the card
+  (« Moniteur <name> »), and made on by the same yes, on the card
   (`decideSkill`) or in Settings (`approveSkill`), through `skillMonitorMade`; an approval that then
   fails takes the monitor back, and the card waits still. No makes neither. Until the monitor is
   on, a block reads its tool or resource itself: `nodeSourceOK` accepts only a monitor the user
