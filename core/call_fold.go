@@ -376,12 +376,6 @@ func (c *core) refuseCalls(ctx context.Context, id int64, left []int64, by strin
 	cardMu.Unlock()
 	c.proposalMoved(x.Ref)
 	log.Printf("cards: %s: %d of its calls refused by %s", x.Ref, len(named), by)
-	for _, a := range asks {
-		if a.Node != "" && a.Source != "" {
-			c.readNodeLater(context.Background(), a.Node, []string{a.Source})
-			break
-		}
-	}
 	return nil
 }
 

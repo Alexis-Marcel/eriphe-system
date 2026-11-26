@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -31,11 +30,6 @@ const (
 	// nodeGoalMax is how much of a node's goal node_find and the brain's
 	// node list give.
 	nodeGoalMax = 200
-	// coreServer is eriphe-core's own name as a source's server: no
-	// catalog server may take it (reserved).
-	coreServer = "eriphe-core"
-	// nodeFindSource is node_find as a block's source.
-	nodeFindSource = nodefile.NodeFindTool
 	// nodeFindTaint is what node_find makes the turn when it quotes words
 	// that may be someone else's.
 	nodeFindTaint = "node_find.external"
@@ -194,110 +188,4 @@ func (c *core) nodeFindFor(in nodeFindIn, taint func(string), note string) (map[
 		taint(nodeFindTaint) // someone else's words, quoted
 	}
 	return map[string]any{"nodes": found, "note": note}, nil
-}
-
-// nodeFindArgs reads a source's arguments as node_find's.
-func nodeFindArgs(args map[string]any) (nodeFindIn, error) {
-	var in nodeFindIn
-	raw, _ := json.Marshal(args)
-	dec := json.NewDecoder(strings.NewReader(string(raw)))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&in); err != nil {
-		return in, fmt.Errorf("%s: its args are node_find's: %w", nodeFindSource, err)
-	}
-	return in, nil
-}
-
-// readNodeFind is a block's node_find source read: {"nodes": [...]}.
-func (c *core) readNodeFind(args map[string]any) sourceRead {
-	c.findSources.Store(true) // a node's change reads them again (nodesChanged)
-	in, err := nodeFindArgs(args)
-	if err != nil {
-		return sourceRead{err: err.Error()}
-	}
-	found, _, err := c.findNodes(in)
-	if err != nil {
-		return sourceRead{err: truncate(err.Error(), 300)}
-	}
-	// As JSON, as any source's value is kept.
-	raw, err := json.Marshal(map[string]any{"nodes": found})
-	if err != nil {
-		return sourceRead{err: err.Error()}
-	}
-	var v any
-	json.Unmarshal(raw, &v)
-	return sourceRead{value: v}
-}
-
-// nodeFindMedia makes each node found's media:<name> columns (a photo
-// kept with node_set) the address of that node's own file on eriphe-core,
-// as a Table of the page loads it: a thumbnail of each node. A node whose
-// columns are withheld gives none.
-func (c *core) nodeFindMedia(value any) {
-	v, _ := value.(map[string]any)
-	rows, _ := v["nodes"].([]any)
-	for _, x := range rows {
-		row, _ := x.(map[string]any)
-		id, _ := row["id"].(string)
-		if id == "" {
-			continue
-		}
-		for k, col := range row {
-			if slices.Contains(fixedFound, k) {
-				continue
-			}
-			row[k] = swapMedia(col, func(s string) string {
-				if src := c.nodeFileSrc(id, s); src != "" {
-					return src
-				}
-				return s
-			})
-		}
-	}
-}
-
-// swapMedia is a value, or each value of a list, through fn when a text.
-func swapMedia(v any, fn func(string) string) any {
-	switch x := v.(type) {
-	case string:
-		return fn(x)
-	case []any:
-		for i := range x {
-			if s, ok := x[i].(string); ok {
-				x[i] = fn(s)
-			}
-		}
-	}
-	return v
-}
-
-// nodeFindExternal tells a node_find source that quotes what may be
-// someone else's words: its block is external.
-func nodeFindExternal(src nodefile.Source) bool {
-	if src.Tool != nodeFindSource {
-		return false
-	}
-	in, err := nodeFindArgs(src.Args)
-	return err == nil && in.IncludeExternal
-}
-
-// checkNodeFindSource refuses a node_find source whose arguments do not
-// read.
-func checkNodeFindSource(src nodefile.Source) error {
-	if src.Tool != nodeFindSource {
-		return nil
-	}
-	if _, err := nodeFindArgs(src.Args); err != nil {
-		return err
-	}
-	return nil
-}
-
-// nodesChanged is a node that changed: the blocks that read node_find are
-// read again soon (source_fresh.go), once a block reads it at all. It
-// never reads the store: the store calls it with its lock held.
-func (c *core) nodesChanged() {
-	if c.findSources.Load() {
-		c.readServerSoon(coreServer, "")
-	}
 }

@@ -18,6 +18,12 @@ import (
 // secret is refused by the memory's filter (scanSecrets); the nightly
 // backup goes with the memory's, into its backup folder, at its hour.
 
+// nodeByCode is the author of code's own writes of a node.
+const nodeByCode = "eriphe"
+
+// nodeRef is how a record names a node.
+func nodeRef(id string) string { return "node:" + id }
+
 // nodesPaths are the graph's repository and its index, next to core.db.
 func (c *Config) nodesPaths() (dir, index string) {
 	data := filepath.Dir(c.DB)

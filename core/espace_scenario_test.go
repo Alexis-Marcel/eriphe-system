@@ -1405,7 +1405,7 @@ func (sc *scenario) handleRows(rw http.ResponseWriter, r *http.Request) {
   {"id": "root", "component": "List", "children": {"path": "/boite/messages", "componentId": "row"}},
   {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
  "sources": {"boite": {"tool": "mail/boite", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1516,7 +1516,7 @@ func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
   {"id": "info", "component": "List", "children": {"path": "/tri/messages[_group=Pour info]", "componentId": "row"}},
   {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
  "sources": {"tri": {"tool": "mail/tri", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1556,7 +1556,7 @@ func (sc *scenario) handleBlocks(rw http.ResponseWriter, r *http.Request) {
 	body := "Le courrier.\n\n```eriphe:block chiffres\n" + `{"components": {"component": "Figures", "items": [{"label": "Reçus", "value": 5}, {"label": "À jeter", "value": 3}]}}` + "\n```\n\n" +
 		"```eriphe:block courrier\n" + `{"components": {"component": "Sections", "title": "Courrier", "items": "courrier"},
  "sources": {"courrier": {"tool": "mail/du_jour", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1603,7 +1603,7 @@ func (sc *scenario) handleOpen(rw http.ResponseWriter, r *http.Request) {
   {"id": "root", "component": "List", "children": {"path": "/lus/messages", "componentId": "row"}},
   {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
  "sources": {"lus": {"tool": "mail/lus", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from", "open": {"tool": "mail/lire", "id": "id"}}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1643,7 +1643,7 @@ func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
   {"id": "infos", "component": "List", "children": {"path": "/mails/messages[_group=Pour info]", "componentId": "info_row"}},
   {"id": "info_row", "component": "Item", "level": "low", "title": {"@path": "subject"}, "detail": {"@path": "from"}, "note": {"@path": "_note"}}],
  "sources": {"mails": {"tool": "mail/bilan", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from", "open": {"tool": "mail/lettre", "id": "id"}}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, true, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, true, func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1770,7 +1770,7 @@ func (sc *scenario) handlePurge(rw http.ResponseWriter, r *http.Request) {
   {"id": "root", "component": "List", "children": {"path": "/promos/messages", "componentId": "row"}},
   {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
  "sources": {"promos": {"tool": "mail/promos", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1819,7 +1819,7 @@ func (sc *scenario) handleCourrier(rw http.ResponseWriter, r *http.Request) {
   {"id": "root", "component": "List", "children": {"path": "/mails/messages", "componentId": "row"}},
   {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
  "sources": {"mails": {"tool": "mail/courrier", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
-	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, true, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, true, func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}

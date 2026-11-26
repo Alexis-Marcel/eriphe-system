@@ -391,15 +391,6 @@ func (c *core) startSkillRun(ctx context.Context, sk triggeredSkill, key string,
 			external, kinds = true, append(kinds, nodeRef(node))
 			c.store.db.Exec(`UPDATE skill_runs SET external = 1 WHERE id = ?`, runID)
 		}
-		// Its sources read now: a call on an item that just came finds it
-		// listed (callItem).
-		var names []string
-		for _, r := range c.nodeReads(node) {
-			names = append(names, r.Name)
-		}
-		if len(names) > 0 {
-			c.readNode(ctx, node, names, time.Now())
-		}
 	}
 	// It writes its node's items as the user wants to see them.
 	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, home, events, now, c.seePreferences()), Agent: sk.Manifest.Uses.Model, about: alias,
@@ -649,9 +640,6 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 	if weight == 0 && text != "" {
 		note += "\n· no attention entry: not told"
 	}
-	if s := c.runNodeWork(r); s != "" {
-		note += "\n· " + s
-	}
 	cards := c.store.ids(`SELECT DISTINCT batch FROM access_asks WHERE run = ? AND batch != 0 AND state = ? ORDER BY batch`, r.ID, startProposed)
 	if len(cards) > 0 {
 		note += fmt.Sprintf("\n· %d card(s) kept for the user's yes", len(cards))
@@ -714,22 +702,6 @@ func raisesNodes(s attentionSignal) bool {
 		}
 	}
 	return true
-}
-
-// runNodeWork says what a run did in its node: the items it noted.
-func (c *core) runNodeWork(r *skillRun) string {
-	node := c.taskNode(r.Task)
-	if node == "" || c.nodes == nil {
-		return ""
-	}
-	items, _ := c.nodeItems(node)
-	n := 0
-	for _, it := range items {
-		if it.Author == "skill:"+r.Skill {
-			n++
-		}
-	}
-	return fmt.Sprintf("node %s: %d item note(s) of its skill's", node, n)
 }
 
 // runSignal is the queue's item for an attention entry of a skill's run

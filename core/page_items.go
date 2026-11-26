@@ -61,8 +61,8 @@ func (c *core) refItems(p *nodefile.Page) []refItem {
 		if d.Scheme == "" || d.ID == "" {
 			continue
 		}
-		if _, ok := servers[d.Scheme]; !ok {
-			continue
+		if _, ok := servers[d.Scheme]; !ok && !providedServer(d.Scheme) {
+			continue // a catalog server's, or one Eriphe provides (tool_review.go)
 		}
 		out = append(out, refItem{Label: d.Label, Server: d.Scheme, ID: d.ID})
 	}
@@ -203,7 +203,7 @@ func (c *core) itemWaits(node string) []itemWait {
 			continue
 		}
 		for _, l := range askItems(a) {
-			key := l.Source + "\x00" + l.Server + "\x00" + l.ID
+			key := l.Server + "\x00" + l.ID
 			if !seen[key] {
 				seen[key] = true
 				out = append(out, itemWait{card: proposalRef(cardCalls, a.Batch), item: l})

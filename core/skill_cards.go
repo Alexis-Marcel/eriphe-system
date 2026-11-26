@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -24,67 +22,6 @@ import (
 //     enters it. Its own message goes as any weight 5's, under the rules.
 
 const urgentSkillWhy = "Ton skill « %s » est urgent : tu as approuvé ce message pour être prévenu à toute heure."
-
-// itemCall puts a call a run kept (call, the id its answer gave) on an
-// item of its node (item_note's call): it acts on that item without
-// naming it (an event made from a mail). Only a call of this very run,
-// still waiting, on no other item; the item one its node's source lists.
-// Its card then waits on the item's row, its words naming the item.
-func (c *core) itemCall(task, node, source, item string, call int64) error {
-	r := c.runOfTask(task)
-	if r == nil {
-		return errors.New("call: only a skill's run keeps calls for a card")
-	}
-	a, err := c.accessAskOf(call)
-	if err != nil || a.Run != r.ID {
-		return fmt.Errorf("call: %d is not a call this run kept", call)
-	}
-	if a.State != startProposed {
-		return fmt.Errorf("call: %d was already decided", call)
-	}
-	if a.Item != "" && (a.Source != source || a.Item != item) {
-		return fmt.Errorf("call: %d is on another item (%s)", call, a.Item)
-	}
-	label := c.listedItem(node, source, item)
-	if label == nil {
-		return fmt.Errorf("call: %s is not an item the source %s of your node lists", item, source)
-	}
-	label.Source = source
-	raw, _ := json.Marshal([]itemLabel{*label})
-	// On the card its other calls on that item are on, else its own.
-	batch := a.Batch
-	if b := c.runItemBatch(r.ID, node, source, "", item); b != 0 && b != a.Batch {
-		batch = b
-	}
-	c.store.db.Exec(`UPDATE access_asks SET node = ?, source = ?, item = ?, labels = ?, batch = ? WHERE id = ?`, node, source, item, string(raw), batch, call)
-	if batch != a.Batch && len(c.batchAsks(a.Batch)) == 0 {
-		c.store.db.Exec(`DELETE FROM node_cards WHERE ref = ?`, proposalRef(cardCalls, a.Batch))
-	}
-	c.cardRaisedFor("", proposalRef(cardCalls, batch))
-	return nil
-}
-
-// listedItem is the item a source of node lists now, by its id, as a
-// card names it; nil when it lists none so named.
-func (c *core) listedItem(node, source, item string) *itemLabel {
-	var label *itemLabel
-	for _, rd := range c.nodeReads(node) {
-		if rd.Name != source || rd.Source.Items == nil {
-			continue
-		}
-		for _, it := range sourceItems(rd.Name, rd.Source, rd.Value, 0) {
-			if id, _ := it["id"].(string); id == item {
-				l := itemLabel{ID: id}
-				if t, _ := it["title"].(string); t != id {
-					l.Title = t
-				}
-				l.Detail, _ = it["detail"].(string)
-				label = &l
-			}
-		}
-	}
-	return label
-}
 
 // askRunCall keeps a run's call for its card (keepCall) and answers the
 // task: not run.

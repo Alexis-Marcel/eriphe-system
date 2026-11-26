@@ -241,13 +241,13 @@ func TestWaitingWithdrawRacesDelivery(t *testing.T) {
 // block's are the user's own.
 func TestExternalAskTaintsItsTurn(t *testing.T) {
 	c, _, _ := waitingCore(t)
-	if err := c.addAsk("Ajoute mes mails", "n1", "changer", false); err != nil {
+	if err := c.addAsk("Ajoute mes mails", "n1", false); err != nil {
 		t.Fatal(err)
 	}
 	if turn := deliverNow(t, c); !strings.Contains(turn, "Ajoute mes mails") || len(c.turnTaint()) != 0 {
 		t.Fatalf("a clean block's ask: taint %v; turn:\n%s", c.turnTaint(), turn)
 	}
-	if err := c.addAsk("Ajoute mes mails", "n1", "changer", true); err != nil {
+	if err := c.addAsk("Ajoute mes mails", "n1", true); err != nil {
 		t.Fatal(err)
 	}
 	turn := deliverNow(t, c)

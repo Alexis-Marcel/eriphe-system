@@ -32,7 +32,7 @@ func openWeb(t *testing.T, open string) (*testWeb, string, *fakeMonitor, string)
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	id := mustNode(t, c, nodestore.New{Title: "Mails", Body: "Les mails.\n"})
-	if _, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error {
+	if _, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, func(n *nodefile.Node) error {
 		return n.AuthorBody("Les mails.\n\n" + openBlock(open))
 	}); err != nil {
 		t.Fatal(err)
@@ -53,7 +53,7 @@ func TestItemOpenChecked(t *testing.T) {
 	c, _, _ := viewCore(t)
 	id := mustNode(t, c, nodestore.New{Title: "Mails", Body: "Les mails.\n"})
 	write := func(open string) error {
-		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error {
+		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, func(n *nodefile.Node) error {
 			return n.AuthorBody("Les mails.\n\n" + openBlock(open))
 		})
 		return err

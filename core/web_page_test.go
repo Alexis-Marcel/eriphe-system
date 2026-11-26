@@ -56,7 +56,7 @@ func TestNodeTask(t *testing.T) {
 	}
 	// Another author wrote meanwhile: the line moved, found by its text.
 	moved := "Une ligne de plus.\n\n" + body
-	if _, err := c.authorWriteOn(id, onLast, byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error { return n.AuthorBody(moved) }); err != nil {
+	if _, err := c.authorWriteOn(id, onLast, byBrain, false, func(n *nodefile.Node) error { return n.AuthorBody(moved) }); err != nil {
 		t.Fatal(err)
 	}
 	before, _ := c.nodes.Versions(id)

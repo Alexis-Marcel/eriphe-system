@@ -394,7 +394,6 @@ func (c *core) cardQueued(kind string, id int64) {
 // apart; and what was queued waits in the attention queue again. Past
 // that, each proposal moves its card the moment it moves (settleCards).
 func (c *core) reconcileCards() {
-	c.migrateDemands(context.Background()) // the demands an older Eriphe kept (demand.go)
 	c.syncCards()
 	c.settleCards()
 	c.attendQueuedCards()

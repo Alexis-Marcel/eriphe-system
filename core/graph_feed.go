@@ -9,14 +9,13 @@ import (
 
 // What changes on the graph, for the workspaces that watch it (#633): the
 // workspace's stream (web_sse.go) sends it as its "node", "doc",
-// "progress", "source" and "show" events.
+// "progress" and "show" events.
 //
 //   - node: a node's row changed (its title, status, parent, links,
 //     version): the store tells (nodestore.Watch), and whatever its status
 //     is computed from (nodeMoved, node_status.go);
 //   - doc: a new version of its file, or its trace grew;
 //   - progress: a task said where its work is (task_nodes.go);
-//   - source: a live block's source gave a new value (node_live.go);
 //   - show: the brain asks the user's screen to open a node's page
 //     (node_show.go).
 //
@@ -31,19 +30,16 @@ const (
 	graphEvDoc      = "doc"
 	graphEvTrace    = "trace" // sent as a doc event, its trace grew
 	graphEvProgress = "progress"
-	graphEvSource   = "source"
 	graphEvShow     = "show"
 )
 
 // graphEvent is one change of the graph.
 type graphEvent struct {
-	Seq   int64
-	Kind  string
-	Node  string
-	Block string // source: the block and the source's name
-	Name  string
-	Text  string // progress: its line
-	At    time.Time
+	Seq  int64
+	Kind string
+	Node string
+	Text string // progress: its line
+	At   time.Time
 }
 
 // graphFeed is the graph's last changes and who waits for the next one.
@@ -82,9 +78,6 @@ func (c *core) useNodes(s *nodestore.Store) {
 // graphSaid adds an event and wakes who waits. It never reads the graph:
 // the store calls it with its lock held.
 func (c *core) graphSaid(ev graphEvent) {
-	if ev.Kind == graphEvNode {
-		c.nodesChanged() // the blocks that read node_find, soon (node_find.go)
-	}
 	f := &c.graph
 	f.mu.Lock()
 	defer f.mu.Unlock()

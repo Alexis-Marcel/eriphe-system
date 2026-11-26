@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -80,15 +79,7 @@ func (c *core) newDemand(ctx context.Context, k keeper, node string, labels []it
 	fields, _ := json.Marshal(cardFields(c.callContext(cctx, tool, input), input))
 	cancel()
 	n := c.callNeed(tool, input, c.pool.facts(tool, input))
-	source, item, ls := "", "", ""
-	for i, l := range labels {
-		if i == 0 {
-			source = l.Source
-		} else if l.Source != source {
-			source = ""
-			break
-		}
-	}
+	item, ls := "", ""
 	if len(labels) == 1 {
 		item = labels[0].ID
 	}
@@ -96,9 +87,9 @@ func (c *core) newDemand(ctx context.Context, k keeper, node string, labels []it
 		b, _ := json.Marshal(labels)
 		ls = string(b)
 	}
-	res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, permission_id, server, category, account, call, input, tainted, created, run, node, source, item, labels)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, k.task, k.pid, n.Server, n.Category, n.Account, tool+" "+string(fields), raw,
-		k.taint, time.Now().Unix(), k.run, node, source, item, ls)
+	res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, permission_id, server, category, account, call, input, tainted, created, run, node, item, labels)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, k.task, k.pid, n.Server, n.Category, n.Account, tool+" "+string(fields), raw,
+		k.taint, time.Now().Unix(), k.run, node, item, ls)
 	id, err := rowsID(res, err)
 	if err != nil {
 		log.Printf("demand: %s: %v", tool, err)
@@ -106,7 +97,7 @@ func (c *core) newDemand(ctx context.Context, k keeper, node string, labels []it
 	}
 	batch := id
 	if k.run != 0 && item != "" {
-		if b := c.runItemBatch(k.run, node, source, n.Server, item); b != 0 {
+		if b := c.runItemBatch(k.run, node, n.Server, item); b != 0 {
 			batch = b
 		}
 	}
@@ -156,24 +147,20 @@ func (c *core) keptSay(k keeper, a accessQuestion) string {
 	return s
 }
 
-// askItems are the items a kept call acts on, each with the source of
-// its node that lists it: those kept with it (its labels), and the item
-// it is on.
+// askItems are the items a kept call acts on: those kept with it (its
+// labels), and the item it is on.
 func askItems(a accessQuestion) []itemLabel {
 	var out []itemLabel
 	add := func(l itemLabel) {
 		if l.ID == "" || slices.ContainsFunc(out, func(x itemLabel) bool { return x.ID == l.ID }) {
 			return
 		}
-		if l.Source == "" {
-			l.Source = a.Source
-		}
 		out = append(out, l)
 	}
 	for _, l := range a.Labels {
 		add(l)
 	}
-	add(itemLabel{ID: a.Item, Source: a.Source})
+	add(itemLabel{ID: a.Item, Server: a.Need.Server})
 	return out
 }
 
@@ -240,60 +227,6 @@ func (c *core) narrowCall(a accessQuestion, drop map[string]bool) (empty bool) {
 	return false
 }
 
-// staleDemands takes out of the demands of a node the items a read of
-// one of its sources no longer lists: a call left with none is withdrawn,
-// and a card left with no call waiting, by code. Only the brain's and
-// the runs' calls: those code keeps for itself (a tools review) follow
-// their own source (tool_review.go).
-func (c *core) staleDemands(ctx context.Context, node string, r nodeRead) {
-	if r.Source.Items == nil || r.Source.Monitor != "" || r.Value == nil {
-		return
-	}
-	listed := map[string]bool{}
-	for _, it := range sourceItems(r.Name, r.Source, r.Value, 0) {
-		if id, _ := it["id"].(string); id != "" {
-			listed[id] = true
-		}
-	}
-	cardMu.Lock()
-	moved := map[int64]bool{}
-	for _, a := range c.asksWhere(`node = ? AND state = ? AND batch != 0 AND task_id != '' AND (item != '' OR labels != '') ORDER BY id`, node, startProposed) {
-		drop := map[string]bool{}
-		for _, l := range askItems(a) {
-			if l.Source == r.Name && !listed[l.ID] {
-				drop[l.ID] = true
-			}
-		}
-		if len(drop) == 0 {
-			continue
-		}
-		if len(drop) == len(askItems(a)) || c.narrowCall(a, drop) {
-			c.withdrawAsk(ctx, a)
-		}
-		moved[a.Batch] = true
-	}
-	var left []int64
-	for _, batch := range slices.Sorted(maps.Keys(moved)) {
-		ref := proposalRef(cardCalls, batch)
-		if len(c.asksWhere(`batch = ? AND state = ?`, batch, startProposed)) == 0 {
-			c.withdrawRef(ctx, ref, cardByCode) // nothing left to ask
-			continue
-		}
-		left = append(left, batch)
-		p := c.proposalOf(cardCalls, batch)
-		c.store.db.Exec(`UPDATE convo_cards SET text = ? WHERE ref = ? AND state = ?`, p.Text(c.userLang()), ref, cardPending)
-		c.proposalMoved(ref)
-	}
-	cardMu.Unlock()
-	for _, batch := range left {
-		c.itemCardMoved(batch)
-	}
-	if len(moved) > 0 {
-		log.Printf("demand: node %s: %d card(s) lost items no longer in %s", node, len(moved), r.Name)
-		c.bump()
-	}
-}
-
 // answerCall is a page's yes or no on one call of a card (a skill's
 // page): yes runs it alone, as kept; no refuses it; the card's other
 // calls wait on.
@@ -316,82 +249,4 @@ func (c *core) answerCall(ctx context.Context, id int64, approve bool, by string
 		return err
 	}
 	return c.refuseCalls(ctx, xs[0].ID, []int64{id}, by)
-}
-
-// migrateDemands puts the demands an older Eriphe kept in step with these
-// rules, once at start, before the cards are synced: nothing runs and
-// nothing waiting is lost. The brain's calls waiting on an access card and
-// a run's on its run's card (runcalls) each get a card of its own (calls),
-// the first of a run's taking its old card; then the cards fold, lose the
-// items their sources no longer list, and those on no item are placed.
-// Each step finds nothing the second time.
-func (c *core) migrateDemands(ctx context.Context) {
-	firstOfRun := map[int64]int64{}
-	for _, a := range c.asksWhere(`state = ? AND batch = 0 AND call != '' AND refs = '' ORDER BY id`, startProposed) {
-		if !catalogAsk(a) {
-			continue // a page read the brain asks: its own card (access)
-		}
-		node := a.Node
-		switch {
-		case node != "":
-		case a.Run != 0:
-			if r := c.runByID(a.Run); r != nil {
-				node = c.taskNode(r.Task)
-			}
-		default:
-			if ids := c.cardNodes(proposalRef(cardAccess, a.ID)); len(ids) > 0 {
-				node = ids[0]
-			}
-		}
-		source, item, labels := a.Source, a.Item, ""
-		if len(a.Labels) == 0 && node != "" {
-			name, _, _ := strings.Cut(a.Call, " ")
-			var input map[string]any
-			json.Unmarshal([]byte(a.Input), &input)
-			if ls := c.callItemLabels(node, name, input); len(ls) > 0 {
-				b, _ := json.Marshal(ls)
-				labels, source = string(b), ls[0].Source
-				if len(ls) == 1 {
-					item = ls[0].ID
-				}
-			}
-		}
-		if labels == "" && len(a.Labels) > 0 {
-			b, _ := json.Marshal(a.Labels)
-			labels = string(b)
-		}
-		c.store.db.Exec(`UPDATE access_asks SET batch = ?, node = ?, source = ?, item = ?, labels = ? WHERE id = ?`, a.ID, node, source, item, labels, a.ID)
-		from, to := proposalRef(cardAccess, a.ID), proposalRef(cardCalls, a.ID)
-		if a.Run != 0 {
-			if _, ok := firstOfRun[a.Run]; ok {
-				continue
-			}
-			firstOfRun[a.Run] = a.ID
-			from = "runcalls:" + fmt.Sprint(a.Run)
-		}
-		c.store.db.Exec(`UPDATE convo_cards SET ref = ?, kind = ? WHERE ref = ?`, to, cardCalls, from)
-		c.store.db.Exec(`UPDATE OR IGNORE node_cards SET ref = ? WHERE ref = ?`, to, from)
-		log.Printf("demand: %s is now %s", from, to)
-	}
-	// A run's card left waiting with no call to take it: gone.
-	if xs, err := c.cardsWhere(`kind = 'runcalls' AND state = ?`, cardPending); err == nil {
-		for _, x := range xs {
-			c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = ? WHERE id = ?`, cardGone, time.Now().Unix(), cardByCode, x.ID)
-			c.attentionDone(cardItemRef(x.ID))
-		}
-	}
-	c.store.db.Exec(`DELETE FROM node_cards WHERE ref LIKE 'runcalls:%'`)
-	for _, batch := range c.proposedBatches() {
-		c.cardRaisedFor("", proposalRef(cardCalls, batch))
-	}
-	c.foldCalls()
-	nodes := c.store.column(`SELECT DISTINCT node FROM access_asks WHERE state = ? AND batch != 0 AND task_id != '' AND node != ''`, startProposed)
-	for _, node := range nodes {
-		if c.nodes == nil {
-			break
-		}
-		for _, r := range c.nodeReads(node) {
-			c.staleDemands(ctx, node, r)
-		}
-	}
 }

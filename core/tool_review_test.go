@@ -585,7 +585,7 @@ func TestToolReviewNeverForAgents(t *testing.T) {
 		t.Error("a monitor may look at the changes")
 	}
 	id := mustNode(t, c, nodestore.New{Title: "Ailleurs", Body: "x\n"})
-	_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.nodeSourceOK(), func(n *nodefile.Node) error {
+	_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, func(n *nodefile.Node) error {
 		return n.AuthorBody("x\n\n" + listBlock("b", "ch", map[string]any{"tool": reviewServer + "/catalog_changes", "items": map[string]any{"path": "changes", "id": "id"}}))
 	})
 	if err == nil {

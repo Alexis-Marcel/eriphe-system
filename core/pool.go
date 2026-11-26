@@ -50,9 +50,6 @@ type pool struct {
 	// again (a connection its provider refused, connections.go): why, and where the
 	// user does it; "" when it does not wait.
 	authHold func(name string) (why, where string)
-	// resourceUpdated is told when a server says one of the resources
-	// followed changed (pool_follow.go); it must return fast.
-	resourceUpdated func(server, uri string)
 	// toolsListed is told when what a server lists, lent or held, changed
 	// (tool_pins.go listingSig); it must return fast.
 	toolsListed func(server string)
@@ -81,7 +78,6 @@ type upstream struct {
 	tools      []*mcp.Tool
 	unaccepted []*mcp.Tool // tools listed with a definition the user has not accepted (tool_pins.go)
 	resources  []string    // its resources' URIs, which a monitor may read (monitors.go)
-	followed   []string    // the resources whose updates eriphe-core wants (pool_follow.go)
 	needsAuth  string      // why the server wants an authorization, set by the OAuth gate
 	flow       *authFlow   // a `eriphe connect` in progress
 	// The OAuth client typed in the form of a pending server, in memory
@@ -101,11 +97,8 @@ type providedUpstream struct {
 	server func() *mcp.Server
 	facts  func(t *mcp.Tool, input map[string]any) catalogFacts
 	// offered tells whether it has anything to offer now: lent to the
-	// brain and read for blocks' sources only then.
+	// brain only then.
 	offered func() bool
-	// codeReads: lent to no agent (offered says no), its free reads are
-	// still blocks' sources, read by code (tool_review.go).
-	codeReads bool
 }
 
 // providedServers are the servers Eriphe provides itself, in this process
@@ -420,11 +413,6 @@ func (u *upstream) open(ctx context.Context) (*mcp.ClientSession, error) {
 		ResourceListChangedHandler: func(context.Context, *mcp.ResourceListChangedRequest) {
 			go u.refreshResources()
 		},
-		ResourceUpdatedHandler: func(_ context.Context, r *mcp.ResourceUpdatedNotificationRequest) {
-			if r != nil && r.Params != nil {
-				u.updated(r.Params.URI)
-			}
-		},
 	})
 	sess, err := client.Connect(ctx, tr, nil)
 	if err != nil {
@@ -442,7 +430,6 @@ func (u *upstream) open(ctx context.Context) (*mcp.ClientSession, error) {
 	u.mu.Unlock()
 	u.listed(was, tools, held)
 	go u.refreshResources()
-	go u.resubscribe()
 	return sess, nil
 }
 

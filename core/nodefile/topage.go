@@ -753,6 +753,13 @@ func esc(s string) string {
 // last mark is escaped.
 var leadRe = regexp.MustCompile(`^(#{1,6}|[-+]|\d+[.)])(?:\s|$)`)
 
+// Words are someone else's words as a line's text of a page, escaped as
+// the conversion writes them (esc).
+func Words(s string) string { return esc(s) }
+
+// LinkWords are someone else's words as a link's text: Words, no bracket.
+func LinkWords(s string) string { return label(esc(s)) }
+
 // linkIn tells whether words hold a link: a bracket not escaped.
 func linkIn(s string) bool {
 	for i := 0; i < len(s); i++ {

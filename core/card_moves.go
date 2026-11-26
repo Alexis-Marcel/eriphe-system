@@ -8,9 +8,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
-	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
 
 // Proposals in the blocks they concern (#428).
@@ -209,37 +206,6 @@ func spanOf(ds []datedValue) (proposalSpan, bool) {
 		s.End = last.At
 	}
 	return s, true
-}
-
-// shownDays are the days a block's components draw the dated proposals
-// of (a2ui.DaysShown: an Agenda), each the start of its day in now's zone.
-func shownDays(b *nodefile.Block, now time.Time) []time.Time {
-	var comps []map[string]any
-	json.Unmarshal(b.Components, &comps)
-	var out []time.Time
-	for _, comp := range comps {
-		from, n, ok := a2ui.DaysShown(comp, now)
-		for i := 0; ok && i < n; i++ {
-			out = append(out, from.AddDate(0, 0, i))
-		}
-	}
-	return out
-}
-
-// datedOn tells whether the proposal a card carries takes place on one of
-// days (its spans in loc, as GET /api/proposals?day= finds them): an
-// Agenda of the page draws it there, as a ghost with its Oui.
-func (c *core) datedOn(ref string, days []time.Time, loc *time.Location) bool {
-	kind, id, ok := parseProposalRef(ref)
-	if !ok || len(days) == 0 {
-		return false
-	}
-	for _, s := range c.proposalSpans(kind, id, loc) {
-		if slices.ContainsFunc(days, s.on) {
-			return true
-		}
-	}
-	return false
 }
 
 // on tells whether the span touches the day that starts at from.

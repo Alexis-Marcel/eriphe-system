@@ -180,7 +180,7 @@ func (c *core) fileTaskReport(task string, r *checkedReceipt) string {
 		return ""
 	}
 	c.store.db.Exec(`UPDATE task_nodes SET filed = ? WHERE task = ?`, hash, task)
-	traceErr, docErr := c.fileText(id, c.taskAuthor(task), report, c.writeTaint(task) != "", true, c.lentTo(nil))
+	traceErr, docErr := c.fileText(id, c.taskAuthor(task), report, c.writeTaint(task) != "", true)
 	problem := ""
 	switch {
 	case traceErr != nil:
