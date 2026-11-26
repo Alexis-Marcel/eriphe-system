@@ -79,6 +79,7 @@ type core struct {
 	routeMu     sync.Mutex             // one escalation pass at a time (route_send.go)
 	props       proposalFeed           // the proposals that moved, for the workspace (card_moves.go)
 	yeses       sync.WaitGroup         // the calls a card's yes runs, under way (runApprovedCall)
+	reviewing   sync.WaitGroup         // « Outils à revoir » written again, under way (toolsMoved)
 	glances     sync.Map               // node id → its glance as the graph shows it, nil for none (node_glance.go)
 	actAuthors  sync.Map               // a node's do: line → who wrote it, as known through a version (page_acts.go)
 	actMu       sync.Mutex             // one yes on a do: at a time (page_acts.go)

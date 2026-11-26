@@ -311,12 +311,12 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 	// Every way the text writes a name is a key of its own, an embed's
 	// (![[Name]]) too.
 	var names []string
-	for _, l := range d.Node.WikiLinks() {
-		names = append(names, l.Name)
-	}
 	p.Items, p.Placed = []pageItem{}, []string{}
 	if body, err := d.Node.Body(); err == nil {
 		p.Body = body
+		for _, l := range nodefile.WikiLinks(body) {
+			names = append(names, l.Name)
+		}
 		pg := nodefile.ReadPage(body)
 		names = append(names, embedNames(pg.Blocks)...)
 		p.Items = c.pageItems(id, pg)

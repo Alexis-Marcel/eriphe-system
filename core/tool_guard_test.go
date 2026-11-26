@@ -99,9 +99,9 @@ func f(p string) bool { return p == "github" || len(mailService.ID) > 0 }
 }
 
 // workspaceFiles are the graph workspace and what it stands on: no
-// tool or server is known there, so a tool linked tomorrow is a source
+// tool or server is known there, so a tool linked tomorrow is referenced
 // with no code (#415). Patterns, so that a file added there is guarded.
-var workspaceFiles = []string{"graph_feed.go", "web_graph.go", "web_gestures.go", "source_reads.go", "web_text_espace.go", "node_live.go", "node_items.go", "item_cards.go", "node_home.go", "pool_follow.go", "a2ui/*.go"}
+var workspaceFiles = []string{"graph_feed.go", "web_graph.go", "web_gestures.go", "web_text_espace.go", "page_items.go", "item_open.go", "item_cards.go", "node_home.go"}
 
 // toolWords are the names a tool goes by in eriphe-core's own data, taken
 // from the data so a preset added is guarded too: words, the names of
@@ -152,7 +152,7 @@ func identWords(s string) []string {
 }
 
 // The workspace's code names no tool, server or provider, in code or
-// strings (comments aside): what a source reads is the author's data.
+// strings (comments aside): what a page references is the author's data.
 func TestNoToolInWorkspace(t *testing.T) {
 	words, names := toolWords()
 	if !words["mail"] || !names["github"] || !names["buffer"] || len(words) < 5 {

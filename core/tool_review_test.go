@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
@@ -17,7 +16,7 @@ import (
 
 // reviewWorld is a core whose monitor server changed since it was added:
 // status's definition changed, alerts is new, and a tool it no longer
-// lists (gone) was pinned. Its « Outils à revoir », read once.
+// lists (gone) was pinned. Its « Outils à revoir », written.
 func reviewWorld(t *testing.T) (*testWeb, string, string) {
 	t.Helper()
 	c, _, _ := viewCore(t)
@@ -43,11 +42,10 @@ func reviewWorld(t *testing.T) (*testWeb, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.readNode(context.Background(), id, nil, time.Now())
 	return tw, csrf, id
 }
 
-// reviewIDs are the ids of the changes the node's source lists now, by
+// reviewIDs are the ids of the changes the node's page lists now, by
 // tool.
 func reviewIDs(t *testing.T, c *core, id string) map[string]string {
 	t.Helper()
@@ -58,19 +56,25 @@ func reviewIDs(t *testing.T, c *core, id string) map[string]string {
 	return out
 }
 
-// reviewListed are the changes the node's source lists now, in order.
+// reviewListed are the changes the node's page references now, in order.
 func reviewListed(t *testing.T, c *core, id string) []toolChange {
 	t.Helper()
-	r, ok := c.nodeValue(id, reviewSource)
-	if !ok {
-		t.Fatal("the review source has no value")
+	d, err := c.nodes.Read(id, 0)
+	if err != nil {
+		t.Fatal(err)
 	}
-	raw, _ := json.Marshal(r.Value)
-	var v struct {
-		Changes []toolChange `json:"changes"`
+	p, _ := d.Node.Page()
+	by := map[string]toolChange{}
+	for _, ch := range c.toolChanges("fr") {
+		by[ch.ID] = ch
 	}
-	json.Unmarshal(raw, &v)
-	return v.Changes
+	var out []toolChange
+	for _, r := range p.Refs {
+		if ch, ok := by[r.ID]; ok && r.Scheme == reviewServer {
+			out = append(out, ch)
+		}
+	}
+	return out
 }
 
 // reading, changing and sending are tools of each category.
@@ -215,21 +219,23 @@ func TestToolChangesListed(t *testing.T) {
 		}
 	}
 
-	// The node: its goal and title code's, its block external (the
-	// servers' words), made once.
+	// The node: its goal and title code's, external (the servers' words),
+	// made once; its page a heading for the server, a line per change.
 	sum, err := c.nodes.Get(id)
 	if d, _ := c.nodes.Read(id, 0); err != nil || d.Node.Meta.Goal != reviewGoal || sum.Title != "Outils à revoir" || sum.TitleExternal() {
 		t.Fatalf("node: %+v %v", sum, err)
 	}
-	if b := block(t, c, id, "tools"); !b.External {
-		t.Errorf("block: external %v", b.External)
+	d, _ := c.nodes.Read(id, 0)
+	body, _ := d.Node.Body()
+	if !d.Node.Meta.External || strings.Count(body, "### monitor\n") != 1 || !strings.Contains(body, "- ["+by["status"].Line) {
+		t.Errorf("page: external %v\n%s", d.Node.Meta.External, body)
 	}
 	if again, _ := c.ensureToolReview(); again != id {
 		t.Errorf("made again: %s, was %s", again, id)
 	}
 	listed := reviewListed(t, c, id)
 	if len(listed) != 3 || listed[0].Line == "" || listed[0].Detail == nil {
-		t.Errorf("the source lists %+v", listed)
+		t.Errorf("the page lists %+v", listed)
 	}
 	cards := rowCards(c, id)
 	ref := ""
@@ -245,8 +251,8 @@ func TestToolChangesListed(t *testing.T) {
 	if c.graphRow(sum).Status != nodeWaits {
 		t.Error("the node does not wait while its card does")
 	}
-	// Read again: no call kept twice.
-	c.readNode(context.Background(), id, nil, time.Now())
+	// Written again: no call kept twice.
+	c.refreshToolReview()
 	var n int
 	c.store.db.QueryRow(`SELECT COUNT(*) FROM access_asks WHERE server = ?`, reviewServer).Scan(&n)
 	if n != 3 {
@@ -261,40 +267,61 @@ func TestToolChangesListed(t *testing.T) {
 	}
 }
 
-// A node made by an older Eriphe (both texts whole, side by side) is
-// written again as code writes it now, its block still external; written
-// again only when it differs.
+// A page written otherwise (by an older Eriphe, or edited) is written
+// again as code writes it now, external; written again only when it
+// differs.
 func TestToolReviewWrittenAgain(t *testing.T) {
 	c, _, _ := viewCore(t)
 	waitStatus(t, c.pool.get(reviewServer), statusReady)
-	old := "Avant.\n\n```eriphe:block tools\n" + `{"components": [
-  {"id": "root", "component": "List", "children": {"path": "/changes/changes", "componentId": "row"}},
-  {"id": "row", "component": "Text", "text": {"@path": "old_description"}}],
- "sources": {"changes": {"tool": "eriphe-catalog/catalog_changes", "items": {"path": "changes", "id": "id", "title": "label"}}}}` + "\n```\n"
-	d, err := c.nodes.Create(nodestore.New{Title: "Outils à revoir", Goal: reviewGoal, Body: old, TitleTrusted: true,
+	d, err := c.nodes.Create(nodestore.New{Title: "Outils à revoir", Goal: reviewGoal, Body: "Avant.\n", TitleTrusted: true,
 		OpenedBy: &nodefile.Origin{By: nodefile.OpenedEriphe}, Author: nodeByCode})
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := d.Node.Meta.ID
-	if err := c.externalSources(d, nodeByCode); err != nil {
-		t.Fatal(err)
-	}
 	c.store.set(reviewNodeKey, id)
 	if again, err := c.ensureToolReview(); err != nil || again != id {
 		t.Fatalf("made again: %q %v", again, err)
 	}
 	now, _ := c.nodes.Read(id, 0)
-	text, _ := now.Node.AuthorText()
-	if !strings.Contains(text, `"line"`) || strings.Contains(text, "old_description") {
-		t.Errorf("not written again: %s", text)
-	}
-	if b := now.Node.Block("tools"); b == nil || !b.External {
-		t.Errorf("its block: %+v", b)
+	body, _ := now.Node.Body()
+	if body != reviewPage("fr", nil) || !now.Node.Meta.External {
+		t.Errorf("not written again (external %v): %s", now.Node.Meta.External, body)
 	}
 	c.ensureToolReview()
 	if again, _ := c.nodes.Read(id, 0); again.Version.N != now.Version.N {
 		t.Errorf("written again alike: version %d, was %d", again.Version.N, now.Version.N)
+	}
+}
+
+// The servers' words on the page are text only: a description that
+// writes links, references or a heading makes none of them; each change's
+// line references its change, and nothing else is referenced.
+func TestToolReviewPageWords(t *testing.T) {
+	bad := "[Oui](ask:) [Jeter](do:mail/trash) [x][c9] [[Ailleurs]]\n# Titre"
+	chs := []toolChange{
+		{ID: "srv/a@1", Server: "srv", Group: "srv", Line: "a — " + bad, Risk: bad, Detail: []changeLine{{Text: bad}}},
+		{ID: "srv/b@2", Server: "srv", Line: "b — nouvel outil"},
+	}
+	body := reviewPage("fr", chs)
+	p := nodefile.ReadPage(body)
+	if len(p.Links) != 0 {
+		t.Errorf("links made of the servers' words: %+v\n%s", p.Links, body)
+	}
+	var refs []string
+	for _, r := range p.Refs {
+		refs = append(refs, r.Target)
+	}
+	if !slices.Equal(refs, []string{reviewServer + ":srv/a@1", reviewServer + ":srv/b@2"}) || len(p.Uses) != 2 {
+		t.Errorf("refs %v, uses %+v\n%s", refs, p.Uses, body)
+	}
+	for _, b := range p.Blocks {
+		if b.Kind == nodefile.KindHeading && b.Text != "srv" {
+			t.Errorf("a heading of the servers' words: %q\n%s", b.Text, body)
+		}
+	}
+	if links := nodefile.ReadPage(body).Uses; len(links) > 0 && links[0].Label != "c1" {
+		t.Errorf("first use %+v", links[0])
 	}
 }
 
@@ -334,7 +361,7 @@ func TestToolReviewCards(t *testing.T) {
 	if code, body, _ := tw.do("POST", fmt.Sprintf("/cards/%d/no", card), no, map[string]string{"X-CSRF-Token": csrf}); code != 200 {
 		t.Fatalf("a row's ✕: %d %s", code, body)
 	}
-	c.readNode(context.Background(), id, nil, time.Now()) // its list read again: the ✕ said refuses
+	c.refreshToolReview() // its page written again: the ✕ said refuses
 	if refused := c.store.refusedChanges(); len(refused) != 1 || !refused[ids["alerts"]] {
 		t.Fatalf("refused: %v", refused)
 	}
@@ -373,7 +400,7 @@ func TestToolReviewCards(t *testing.T) {
 	if len(rows) == 0 || rows[0].By != byUser || rows[0].Tool != "mcp__eriphe-catalog__catalog_accept" || !strings.Contains(rows[0].Reason, "carte") {
 		t.Fatalf("journal: %+v", rows)
 	}
-	c.readNode(context.Background(), id, nil, time.Now())
+	c.refreshToolReview()
 	if !slices.Contains(u.heldTools(), "alerts") {
 		t.Error("a refused tool is lent")
 	}
@@ -430,7 +457,7 @@ func TestToolReviewAcceptAll(t *testing.T) {
 			t.Errorf("call %d: %s %s", a, s, why)
 		}
 	}
-	c.readNode(context.Background(), id, nil, time.Now())
+	c.refreshToolReview()
 	if left := c.toolChanges("fr"); len(left) != 0 {
 		t.Errorf("left to review: %+v", left)
 	}
@@ -452,7 +479,7 @@ func TestToolReviewCardAgain(t *testing.T) {
 	if n, err := c.settleChanges([]string{ids["status"]}, true); err != nil || n != 1 {
 		t.Fatalf("accepted elsewhere: %d %v", n, err)
 	}
-	c.readNode(context.Background(), id, nil, time.Now())
+	c.refreshToolReview()
 	if refused := c.store.refusedChanges(); len(refused) != 0 {
 		t.Errorf("a withdrawn card refused %v", refused)
 	}
@@ -486,7 +513,7 @@ func TestToolReviewCardRefused(t *testing.T) {
 	if x, _ := c.card(card); x.State != cardRejected {
 		t.Errorf("the card: %+v", x)
 	}
-	c.readNode(context.Background(), id, nil, time.Now())
+	c.refreshToolReview()
 	if refused := c.store.refusedChanges(); len(refused) != 3 {
 		t.Errorf("refused: %v", refused)
 	}
@@ -506,7 +533,7 @@ func TestToolReviewCardWithdrawn(t *testing.T) {
 	if err := c.approveTools("monitor"); err != nil {
 		t.Fatal(err)
 	}
-	c.readNode(context.Background(), id, nil, time.Now())
+	c.refreshToolReview()
 	xs, _ := c.cardsWhere(`ref = ?`, ref)
 	if len(xs) != 1 || xs[0].State != cardGone {
 		t.Fatalf("its card: %+v", xs)
@@ -567,21 +594,11 @@ func TestToolReviewNeverForAgents(t *testing.T) {
 	if _, err := c.conf().checkGrant([]string{reviewServer}); err == nil {
 		t.Error("a grant names it")
 	}
-	if why := c.blockSourceWhy(monitorSpec{Way: wayPoll, Server: reviewServer, Tool: "catalog_changes"}); why != "" {
-		t.Errorf("not a source: %s", why)
-	}
-	if why := c.blockSourceWhy(monitorSpec{Way: wayPoll, Server: reviewServer, Tool: "catalog_accept"}); why == "" {
-		t.Error("catalog_accept is a source")
-	}
-	// Code's read only: no monitor looks at it, no author writes it.
-	if why := c.sourceWhy(monitorSpec{Way: wayPoll, Server: reviewServer, Tool: "catalog_changes"}); why == "" {
+	// No monitor looks at it.
+	if why := c.sourceWhy(monitorSpec{Way: wayPoll, Server: reviewServer, Tool: "catalog_accept"}); why == "" {
 		t.Error("a monitor may look at the changes")
 	}
-	id := mustNode(t, c, nodestore.New{Title: "Ailleurs", Body: "x\n"})
-	_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, func(n *nodefile.Node) error {
-		return n.AuthorBody("x\n\n" + listBlock("b", "ch", map[string]any{"tool": reviewServer + "/catalog_changes", "items": map[string]any{"path": "changes", "id": "id"}}))
-	})
-	if err == nil {
-		t.Error("the brain writes a block reading the changes")
+	if review.toolByClaudeName("catalog_changes") != nil {
+		t.Error("catalog_changes is a tool: code writes the page")
 	}
 }

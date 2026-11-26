@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log"
 	"os"
@@ -41,12 +42,23 @@ func refuseSecret(text string) error {
 
 // openNodes opens the graph, and logs what its start found: the files
 // changed or removed outside Eriphe, those that do not read as a node, those
-// converted to today's format (with what snaps gives of their blocks).
-func openNodes(cfg *Config, snaps nodefile.Snapshots) (*nodestore.Store, error) {
+// converted to today's format (with what core.db, db, kept of their
+// blocks). Once every node reads (none broken), what core.db kept of the
+// blocks is dropped: nothing reads it again.
+func openNodes(cfg *Config, db *sql.DB) (*nodestore.Store, error) {
 	dir, index := cfg.nodesPaths()
+	var snaps nodefile.Snapshots
+	if db != nil {
+		snaps = blockSnapshots(db)
+	}
 	s, rep, err := nodestore.Open(dir, index, nodestore.Options{Refuse: refuseSecret, Snapshots: snaps})
 	if err != nil {
 		return nil, err
+	}
+	if db != nil && len(rep.Broken) == 0 {
+		if err := dropBlockTables(db); err != nil {
+			log.Printf("nodes: %v", err)
+		}
 	}
 	switch {
 	case rep.OldSchema != 0:

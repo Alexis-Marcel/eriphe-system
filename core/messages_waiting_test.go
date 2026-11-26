@@ -236,22 +236,22 @@ func TestWaitingWithdrawRacesDelivery(t *testing.T) {
 	}
 }
 
-// The words of a button of a block marked external, delivered, taint the
-// turn as an untrusted channel's message does, and say so; a clean
-// block's are the user's own.
+// The words of an ask: link of a page marked external, delivered, taint
+// the turn as an untrusted channel's message does, and say so; a clean
+// page's are the user's own.
 func TestExternalAskTaintsItsTurn(t *testing.T) {
 	c, _, _ := waitingCore(t)
 	if err := c.addAsk("Ajoute mes mails", "n1", false); err != nil {
 		t.Fatal(err)
 	}
 	if turn := deliverNow(t, c); !strings.Contains(turn, "Ajoute mes mails") || len(c.turnTaint()) != 0 {
-		t.Fatalf("a clean block's ask: taint %v; turn:\n%s", c.turnTaint(), turn)
+		t.Fatalf("a clean page's ask: taint %v; turn:\n%s", c.turnTaint(), turn)
 	}
 	if err := c.addAsk("Ajoute mes mails", "n1", true); err != nil {
 		t.Fatal(err)
 	}
 	turn := deliverNow(t, c)
-	if !strings.Contains(turn, "bouton d'un bloc extérieur") || !containsStr(c.turnTaint(), askTaintPrefix+"n1/changer") {
-		t.Fatalf("an external block's ask: taint %v; turn:\n%s", c.turnTaint(), turn)
+	if !strings.Contains(turn, "lien d'une page extérieure") || !containsStr(c.turnTaint(), askTaintPrefix+"n1") {
+		t.Fatalf("an external page's ask: taint %v; turn:\n%s", c.turnTaint(), turn)
 	}
 }

@@ -46,7 +46,7 @@ func TestTaskWritesWhereItWorks(t *testing.T) {
 	// The node it works for, by the version it read: a stale one refused;
 	// the trace's author is the task.
 	read := mustNodes(t, c.core, task.ID, "node_read", map[string]any{"id": parent})
-	mustNodes(t, c.core, task.ID, "node_edit", map[string]any{"id": parent, "expect": read["hash"], "old": "Voir", "new": "Lire"})
+	mustNodes(t, c.core, task.ID, "node_edit", map[string]any{"id": parent, "old": "Voir", "new": "Lire"})
 	if _, err := callNodes(t, c.core, task.ID, "node_write", map[string]any{"id": parent, "body": "x", "expect": read["hash"]}); !strings.Contains(err, "changed since") {
 		t.Fatalf("a stale write: %q", err)
 	}
@@ -75,8 +75,7 @@ func TestTaskWritesWhereItWorks(t *testing.T) {
 	// What it opened there is its own work: it writes it, and what is
 	// under it; another task under the same node does not.
 	besideKid := mustNodes(t, c.core, task.ID, "node_open", map[string]any{"parent": beside["id"], "title": "Idée 1", "goal": "Une idée.", "body": "x"})
-	rb := mustNodes(t, c.core, task.ID, "node_read", map[string]any{"id": beside["id"]})
-	mustNodes(t, c.core, task.ID, "node_edit", map[string]any{"id": beside["id"], "expect": rb["hash"], "old": "x", "new": "Trois idées."})
+	mustNodes(t, c.core, task.ID, "node_edit", map[string]any{"id": beside["id"], "old": "x", "new": "Trois idées."})
 	if err := appendAs(t, c.core, task.ID, besideKid["id"].(string)); err != "" {
 		t.Fatalf("under a node it opened: %s", err)
 	}

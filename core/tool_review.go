@@ -459,7 +459,7 @@ func (c *core) settleChanges(ids []string, accept bool) (int, error) {
 		}
 	}
 	if gone > 0 {
-		return 0, fmt.Errorf("%d of these changes no longer wait for review (list catalog_changes again): nothing was done", gone)
+		return 0, fmt.Errorf("%d of these changes no longer wait for review: nothing was done", gone)
 	}
 	servers := map[string]bool{}
 	for _, ch := range picked {
@@ -491,7 +491,7 @@ func (c *core) settleChanges(ids []string, accept bool) (int, error) {
 
 // changeIDsIn names the changes a call settles.
 type changeIDsIn struct {
-	IDs []string `json:"ids" jsonschema:"the changes' ids, as catalog_changes gives them"`
+	IDs []string `json:"ids" jsonschema:"the changes' ids, as « Outils à revoir » references them"`
 }
 
 // reviewMCP is eriphe-catalog's MCP server.
@@ -516,7 +516,7 @@ func (c *core) toolsMoved(string) {
 	if c.nodes == nil || c.store.get(reviewNodeKey) == "" {
 		return
 	}
-	go c.refreshToolReview()
+	c.reviewing.Go(c.refreshToolReview)
 }
 
 // cardsMovedOn is a card on items of node that moved: « Outils à revoir »

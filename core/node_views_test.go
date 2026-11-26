@@ -380,15 +380,6 @@ func TestSkillMonitorAllOrNothing(t *testing.T) {
 			t.Errorf("%s: %q, want %q", tc.want, msg, tc.want)
 		}
 	}
-	for src, want := range map[string]string{
-		`{"m": {"monitor": "cpu2"}}`:      "not a monitor the user approved: read its tool or resource directly",
-		`{"x": {"tool": "nowhere/read"}}`: "nowhere/read",
-	} {
-		body := "```eriphe:block etat\n" + `{"components": {"component": "Text", "text": "x"}, "sources": ` + src + "}\n```\n"
-		if _, msg := callOn(t, srv, "node_open", map[string]any{"goal": "Un but.", "title": "Ailleurs", "body": body}); !strings.Contains(msg, want) {
-			t.Errorf("%s: %q", src, msg)
-		}
-	}
 }
 
 // A skill's card that brings its monitor reads alone in both languages:

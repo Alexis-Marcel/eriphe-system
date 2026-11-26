@@ -38,7 +38,10 @@ import (
 // no card: its Agenda showing the day, its choices adjustable after (ask
 // buttons, in a tainted turn too), no questionnaire. Until a run records
 // it, it is written by hand after a real case: the page written after a
-// recall that read a mail's fact, the turn tainted. Turn 13 writes the
+// recall that read a mail's fact, the turn tainted. The pages the run
+// wrote as blocks were converted by hand to Markdown, a refusal of the
+// blocks' grammar (an ask bound to read data) made one of the page's (a
+// callout marked external by its author). Turn 13 writes the
 // mails' page at once, then proposes the skill that maintains it, its
 // monitor on the same card (edited by hand too, from the views they were).
 
@@ -273,7 +276,8 @@ func TestNodesReplay(t *testing.T) {
 // replayDay checks the recording's last turn, the day asked to be
 // followed: its first call opens the subject, untainted; the page is
 // written in it in that very turn, no card, no questionnaire written
-// before it. Nothing waits for a yes.
+// before it: its ask: links offer the changes, the node marked external
+// when the turn read someone else's words. Nothing waits for a yes.
 func replayDay(t *testing.T, c *core, calls []replayCall, names *replayNames) {
 	t.Helper()
 	last := calls[len(calls)-1].Turn
@@ -296,8 +300,15 @@ func replayDay(t *testing.T, c *core, calls []replayCall, names *replayNames) {
 			}
 		}
 	}
-	if d, err := c.nodes.Read(subject, 0); err != nil || d.Version.N < 2 {
-		t.Fatalf("the day's page is not written: %v", err)
+	d, err := c.nodes.Read(subject, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ := d.Node.Page()
+	asks := slices.ContainsFunc(p.Links, func(l nodefile.PageLink) bool { return l.Kind == nodefile.LinkAsk })
+	marked := nodeExternal(d.Node) || !calls[len(calls)-1].Tainted
+	if !asks || !marked {
+		t.Errorf("the day's page: asks %v, marked %v:\n%s", asks, marked, d.Raw)
 	}
 	if cardWaitsOn(c, subject) {
 		t.Error("the day's page waits on a card")
@@ -308,9 +319,9 @@ func replayDay(t *testing.T, c *core, calls []replayCall, names *replayNames) {
 // TestNodesReplay plays it in memory, as a client that is not the brain,
 // for the rules on what a node may hold, which a task's writes keep too.
 // Played turn by turn through the budget, as the brain would make them
-// now: the pages it wrote whole (turn 12's mails page, turn 13's page
-// opened with its blocks) are refused with the hint to launch a task; its
-// other writes, short, pass.
+// now: the page it wrote whole (turn 12's mails page) is refused with the
+// hint to launch a task; its other writes, short, pass (turn 13's page,
+// opened with a block then, is a few lines of Markdown now).
 func TestNodesReplayBudget(t *testing.T) {
 	raw, err := os.ReadFile("testdata/nodes_replay.json")
 	if err != nil {
@@ -337,7 +348,7 @@ func TestNodesReplayBudget(t *testing.T) {
 			b.refund(took) // refused by code then: it changed nothing
 		}
 	}
-	want := map[string]bool{"12 node_write": true, "13 node_open": true}
+	want := map[string]bool{"12 node_write": true}
 	if !maps.Equal(refused, want) {
 		t.Errorf("refused by the budget: %v, want %v", refused, want)
 	}

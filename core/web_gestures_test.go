@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
@@ -45,33 +45,36 @@ func lastHash(t *testing.T, c *core, id string) string {
 	return d.Version.Hash
 }
 
-// The .md tab saves the author's view of the body on the version it was
-// read at: a save alike makes no version, a newer author's version is a
-// conflict that gives it back, a version of code's in between (its
-// external mark) is not one, and code's fields are kept.
+// The .md tab saves the body on the version it was read at: a save alike
+// makes no version, a newer author's version is a conflict that gives it
+// back, and code's marks are kept: a callout an event someone else wrote
+// in is marked external by code, and a save that takes the mark off is
+// refused.
 func TestNodeSave(t *testing.T) {
 	tw, csrf := graphWeb(t)
 	c := tw.c
-	id := mustNode(t, c, nodestore.New{Title: "Plan", Body: "Trois titres.\n\n" + planPage})
+	id := mustNode(t, c, nodestore.New{Title: "Plan", Body: "Trois titres.\n\n> [!figures]\n> - PEA : [100 €](on:monitor.changed/pea)\n"})
 	if code, _ := gesture(t, tw, "", "PUT", "/api/nodes/"+id+"/md", nodeSaveIn{Body: "x", Expect: lastHash(t, c, id)}); code != http.StatusForbidden {
 		t.Fatalf("without CSRF: %d", code)
 	}
+	// An event someone else wrote, in the callout: code marks it.
+	c.heard(journalEvent{Kind: evMonitorChanged, Key: "pea", Source: "monitor:pea", At: time.Now(), External: true, Payload: map[string]any{"value": 98.0}})
 	code, body, _ := tw.do("GET", "/api/nodes/"+id+"/md", nil, nil)
 	var md struct {
 		Body string `json:"body"`
 		Hash string `json:"hash"`
 	}
 	json.Unmarshal([]byte(body), &md)
-	if code != 200 || !strings.HasPrefix(md.Body, "Trois titres.") || strings.Contains(md.Body, "marks") {
+	if code != 200 || !strings.HasPrefix(md.Body, "Trois titres.") || !strings.Contains(md.Body, "> [!figures|external]") {
 		t.Fatalf("md: %d %q", code, md.Body)
 	}
-	// Code's version in between: the node marked external.
-	d, _ := c.nodes.Change(id, md.Hash, nodeByCode, func(n *nodefile.Node) error {
-		n.Meta.External = true
-		return nil
-	})
+	d, _ := c.nodes.Read(id, 0)
 	if code, out := gesture(t, tw, csrf, "PUT", "/api/nodes/"+id+"/md", nodeSaveIn{Body: md.Body, Expect: md.Hash}); code != 200 || out["version"] != float64(d.Version.N) {
 		t.Fatalf("a save alike: %d %v", code, out)
+	}
+	unmarked := strings.Replace(md.Body, "|external", "", 1)
+	if code, _ := gesture(t, tw, csrf, "PUT", "/api/nodes/"+id+"/md", nodeSaveIn{Body: unmarked, Expect: md.Hash}); code != http.StatusBadRequest {
+		t.Fatalf("the mark taken off: %d", code)
 	}
 	changed := strings.Replace(md.Body, "Trois titres.", "Deux titres.", 1)
 	code, out := gesture(t, tw, csrf, "PUT", "/api/nodes/"+id+"/md", nodeSaveIn{Body: changed, Expect: md.Hash})
@@ -80,8 +83,8 @@ func TestNodeSave(t *testing.T) {
 		t.Fatalf("a save: %d %v", code, out)
 	}
 	saved, _ := c.nodes.Read(id, int(n))
-	if saved.Version.Author != byUser || !saved.Node.Meta.External || !strings.Contains(string(saved.Raw), "Deux titres.") {
-		t.Fatalf("saved by %s, external %v", saved.Version.Author, saved.Node.Meta.External)
+	if b, _ := saved.Node.Body(); saved.Version.Author != byUser || !strings.Contains(b, "> [!figures|external]") || !strings.Contains(b, "Deux titres.") {
+		t.Fatalf("saved by %s:\n%s", saved.Version.Author, b)
 	}
 	saved, _ = c.nodes.Read(id, 0)
 	// The brain writes meanwhile: the user's save on the old version is a

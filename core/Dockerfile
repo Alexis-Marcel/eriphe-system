@@ -7,7 +7,6 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY *.go *-prompt.md ./
 COPY web ./web
-COPY a2ui ./a2ui
 COPY nodefile ./nodefile
 COPY nodestore ./nodestore
 

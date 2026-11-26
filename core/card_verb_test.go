@@ -2,8 +2,6 @@ package main
 
 import (
 	"testing"
-
-	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
 // Every yes button says what it does, its verb first, never a bare
@@ -18,7 +16,7 @@ func TestEveryCardHasItsVerb(t *testing.T) {
 		}
 		for _, lang := range []string{"fr", "en"} {
 			v := proposal{Kind: kind}.VerbIn(lang)
-			if v == "" || v == key || a2ui.BareYes(v) {
+			if v == "" || v == key || bareYes(v) {
 				t.Errorf("kind %s in %s: yes says %q", kind, lang, v)
 			}
 			if _, ok := webStrings[lang][key]; !ok {

@@ -88,7 +88,7 @@ func main() {
 		c.mem.mirrorSync()
 	}
 	// The graph's nodes, in their own repository (nodes.go).
-	if nodes, err := openNodes(cfg, blockSnapshots(store.db)); err != nil {
+	if nodes, err := openNodes(cfg, store.db); err != nil {
 		log.Printf("nodes: %v", err)
 	} else {
 		c.useNodes(nodes)
