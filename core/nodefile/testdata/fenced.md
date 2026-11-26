@@ -1,5 +1,5 @@
 ---
-format: 2
+format: 3
 id: doc1
 title: How to write a block
 created: 2026-11-17T09:00:00Z

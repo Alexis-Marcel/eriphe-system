@@ -1,5 +1,5 @@
 ---
-format: 2
+format: 3
 id: m4ilx7q2
 title: "Reply to Sam: the production app"
 parent: k3v9q2m7
@@ -25,18 +25,8 @@ Sam wrote at 10:02: the app answers 500 since the deploy.
 
 A rule above, then a block:
 
-```eriphe:block errors
-{"components": [{"id": "root", "component": "Card", "title": "5xx per minute", "child": "c"},
-                {"id": "c", "component": "Chart", "kind": "line", "series": {"@path": "/errors_5xx/series"}}],
- "data": {},
- "sources": {"errors_5xx": {"tool": "grafana.query", "args": {"q": "errors_5xx"}, "every": 1}},
- "external": false}
-```
+### 5xx per minute
 
 Between the blocks.
 
-```eriphe:block draft
-{"components": [{"id": "root", "component": "Markdown", "text": {"@path": "/text"}}],
- "data": {"text": "I am looking at it within the hour."},
- "external": true}
-```
+I am looking at it within the hour.

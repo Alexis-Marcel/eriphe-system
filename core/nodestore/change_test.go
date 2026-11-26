@@ -1,7 +1,6 @@
 package nodestore
 
 import (
-	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -9,11 +8,11 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
 
-// A node created external holds external blocks.
+// A node created external says so.
 func TestCreateExternal(t *testing.T) {
 	s, _ := newEnv(t).open(t)
 	d := mustCreate(t, s, New{Title: "Mail", Body: "From Sam." + statusBlock, External: true})
-	if !d.Node.Meta.External || !d.Node.Block("status").External {
+	if !d.Node.Meta.External {
 		t.Fatalf("not external:\n%s", d.Raw)
 	}
 }
@@ -27,12 +26,12 @@ func TestChange(t *testing.T) {
 	d2, err := s.Change("n1", d.Version.Hash, "task:t1", func(n *nodefile.Node) error {
 		n.Meta.External = true
 		n.Meta.Title = "Le plan"
-		return n.SetBlockExternal("status", true)
+		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d2.Version.N != 2 || !d2.Node.Meta.External || !d2.Node.Block("status").External || d2.Version.Author != "task:t1" {
+	if d2.Version.N != 2 || !d2.Node.Meta.External || d2.Version.Author != "task:t1" {
 		t.Fatalf("changed: v%d\n%s", d2.Version.N, d2.Raw)
 	}
 	if sum, _ := s.Get("n1"); !sum.External || sum.Title != "Le plan" {
@@ -87,14 +86,15 @@ func TestChangeLast(t *testing.T) {
 }
 
 // A write made on a version code changed since, its code's fields only
-// (a block marked external), applies on the last version with them kept;
+// (the node marked external), applies on the last version with them kept;
 // one made on a version an author changed since is stale.
 func TestWriteOverCodeChange(t *testing.T) {
 	s, _ := newEnv(t).open(t)
-	block := "\n```eriphe:block mails\n{\"components\": {\"component\": \"Text\", \"text\": \"Mails\"}, \"sources\": {\"inbox\": {\"tool\": \"mail/list\"}}}\n```\n"
+	block := statusBlock
 	d := mustCreate(t, s, New{Title: "Mails", Body: "Inbox." + block})
 	snap, err := s.Change("n1", d.Version.Hash, "eriphe", func(n *nodefile.Node) error {
-		return n.SetBlockExternal("mails", true)
+		n.Meta.External = true
+		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +103,7 @@ func TestWriteOverCodeChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a write over code's change refused: %v", err)
 	}
-	if d3.Version.N != 3 || !d3.Node.Block("mails").External || !strings.Contains(d3.Node.Text(), "sorted") {
+	if d3.Version.N != 3 || !d3.Node.Meta.External || !strings.Contains(d3.Node.Text(), "sorted") {
 		t.Fatalf("written: v%d\n%s", d3.Version.N, d3.Raw)
 	}
 	if _, err := write(s, "n1", "Again."+block, snap.Version.Hash, "task:t2"); err == nil {
@@ -144,12 +144,8 @@ func TestCheckMakesNothing(t *testing.T) {
 	if err := s.Check(New{Title: "Keys", Author: "user", Body: "ghp_0123456789abcdefghij"}); err == nil {
 		t.Fatal("a secret passed")
 	}
-	var many strings.Builder
-	for i := 0; i <= MaxBlocks; i++ {
-		fmt.Fprintf(&many, "```eriphe:block b%d\n{\"components\": {\"component\": \"Text\", \"text\": \"x\"}}\n```\n\n", i)
-	}
-	if err := s.Check(New{Title: "Many", Author: "user", Body: many.String()}); err == nil || !strings.Contains(err.Error(), "blocks at most") {
-		t.Fatalf("too many blocks: %v", err)
+	if err := s.Check(New{Title: "Big", Author: "user", Body: strings.Repeat("x", MaxBytes)}); err == nil || !strings.Contains(err.Error(), "KiB at most") {
+		t.Fatalf("too big: %v", err)
 	}
 	mustCreate(t, s, New{ID: id, Title: "Mails"})
 	if err := s.Check(New{ID: id, Title: "Again", Author: "user"}); err == nil {
@@ -206,7 +202,7 @@ func TestTitleTrust(t *testing.T) {
 	if tr, idx := titled(view); !tr || !idx {
 		t.Fatalf("a vouched title is not trusted: %v %v", tr, idx)
 	}
-	change(view, func(n *nodefile.Node) { n.SetBlockExternal("status", true) })
+	change(view, func(n *nodefile.Node) { n.Meta.External = true })
 	if _, err := write(s, view, "Other text."+statusBlock, mustRead(t, s, view).Version.Hash, "task:t1"); err != nil {
 		t.Fatal(err)
 	}

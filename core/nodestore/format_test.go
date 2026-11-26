@@ -289,7 +289,7 @@ func TestFormat2BlockSnapshotAtStart(t *testing.T) {
 	}
 	got := mustRead(t, s2, id)
 	text := got.Node.Text()
-	if got.Node.Meta.Format != 3 || len(got.Node.Blocks()) != 0 || got.Version.Author != Convert ||
+	if got.Node.Meta.Format != 3 || strings.Contains(string(got.Raw), "eriphe:block") || got.Version.Author != Convert ||
 		!strings.Contains(text, "- [ ] [Devis][m1] : à lire") || !strings.Contains(text, "[m1]: mail:aWQtMQ") || !strings.Contains(text, "Écrit le 26/11/2026 à 8 h 00.") {
 		t.Fatalf("converted v%d by %s:\n%s", got.Version.N, got.Version.Author, got.Raw)
 	}
@@ -297,7 +297,7 @@ func TestFormat2BlockSnapshotAtStart(t *testing.T) {
 	// values.
 	vs, _ := s2.Versions(id)
 	past, err := s2.Read(id, vs[len(vs)-2].N)
-	if err != nil || strings.Contains(past.Node.Text(), "Devis") || len(past.Node.Blocks()) != 0 {
+	if err != nil || strings.Contains(past.Node.Text(), "Devis") || strings.Contains(string(past.Raw), "eriphe:block") {
 		t.Fatalf("its older version: %v\n%s", err, past.Raw)
 	}
 }
