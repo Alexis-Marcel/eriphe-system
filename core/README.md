@@ -1570,11 +1570,12 @@ a page: the brain composes each one from the catalog.
   input names its id, is kept on that item, in the keeper's node (`access_asks.labels`, each with
   its `server`): its card waits on the row that references it (the outermost item holding the
   line, `nodefile.Page.Row`), never on another server's reference of the same id; one in a
-  paragraph waits at the foot. Its words are the item as its server reads it (`itemWords`: the
+  paragraph, a folded callout or one drawn its own way (figures, agenda…) waits at the foot. Its words are the item as its server reads it (`itemWords`: the
   server's declared read, `eriphe/open`, a free read only, at the moment the call is kept), never
   the link's; one not read is counted. A reference whose words say nothing of the item read is
   `misleading` (`misleading`: none of its words of three letters or more in the item's title or
-  sender): the page warns there. `nodePageOf` sends `items` (each reference of an item where it is
+  sender): the page warns there, the item as read beside it; one not read is `unread` (« non
+  vérifié »). `nodePageOf` sends `items` (each reference of an item where it is
   written, with its card and the item as kept) and `placed`; it reads no server.
 - **Calls on an item** (`item_cards.go`): a skill run's call kept for the user that names exactly
   one item of a source of the run's node, on the call's own server, is kept on that item

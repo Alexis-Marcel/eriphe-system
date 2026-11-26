@@ -182,7 +182,8 @@ problems as JSON). Lines are counted from 1 in the body, what follows the front 
     one. Its author must have the tool. Anywhere else it acts on nothing.
   - `[Envoyer la réponse](card:<ref>)` places a card already proposed on that line, one of the
     node's own (another node's is drawn as its words): alone on its line, the whole card; in a
-    sentence, its Oui. A card no line places waits at the foot of the page; code writes nothing in
+    sentence, its Oui. Not in a folded callout or a chart, which no reader sees as written. A card
+    no line places waits at the foot of the page; code writes nothing in
     the page for it.
   - `[Montre la semaine](ask:)` is a probable reply, sent to Eriphe as a message.
   - `[18 385 €](on:monitor.changed/pea)` is a value an event of the journal rewrites
@@ -229,21 +230,25 @@ A reference whose target's scheme is a catalog server's name names an **item** o
 (`[m1]: mail:<id>`; core/page_items.go). A call kept for the user's yes whose server is the
 reference's, and whose input names the reference's id (as a value, or in a list of them), acts on
 that item: its card waits on the line that references it, on the item's row the reader sees (the
-outermost item holding the line: a reference in a detail puts the card on its row). A reference to
+outermost item holding the line: a reference in a detail puts the card on its row; in a callout,
+only an open one drawing its lists as rows, a note or an alert). A reference to
 another server's id is not the item, whatever its id. Calls that do the same thing to other items of
-the node fold into one card, shown on each of their rows. A reference in a paragraph or a table
-carries no card: it waits at the page's foot.
+the node fold into one card, shown on each of their rows. A reference in a paragraph, a table, a folded
+callout or one drawn its own way (figures, steps, agenda, person, chart) carries no card: it waits
+at the page's foot.
 
 The card's words come from the item as its server reads it, never from the link's words: when the
 call is kept, code reads each item with the tool the server declares (below), a free read only, and
 keeps its title and sender with the call. An item it cannot read freely is counted, never named.
 Where a reference's words say nothing of the item read (none of their words of three letters or
-more is in its title or sender), the page shows them with a warning, the item in its tooltip: a
-line « Pub Maison Lune » pointing at a mail of Sam's.
+more is in its title or sender), the page shows them with a warning and the item as read beside
+them: a line « Pub Maison Lune » pointing at a mail of Sam's shows « Les clés pour samedi » · Sam.
+A reference whose item could not be read (no free read, a failure) says « non vérifié »: its words
+are not checked.
 
 The page's JSON (`GET /api/nodes/{id}`) carries this beside its body: `items` (each reference of an
 item where it is written: its line, label, words, row, id, whether it opens, the card that waits on
-it and the item as read, `misleading`) and `placed` (the cards its lines carry), Go's placement,
+it and the item as read, `misleading`, `unread`) and `placed` (the cards its lines carry), Go's placement,
 which the workspace draws where it says.
 
 ### Lines that follow events
