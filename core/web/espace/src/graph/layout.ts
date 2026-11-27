@@ -14,6 +14,12 @@
 // subject and the page it links to end up side by side because they are
 // linked.
 //
+// An open page is big: a body linked to something on its far side would
+// be pulled straight into it and held there by the collision, its link
+// drawn behind the page. So a link's pull goes round an open page that is
+// neither of its ends: the body heads for the page's corner that starts
+// the shortest way round, then the next, and rejoins what it is linked to.
+//
 // One energy (alpha) drives it all, as in d3: any change (a node come or
 // gone, a link, a page opened, closed or resized, the forces tuned, a
 // drag) warms the graph, the forces adapt everything as it cools, and once
@@ -27,7 +33,10 @@
 // the forces again from where they were let go, as if born there, so they
 // stay on the side the user chose while the centre keeps them in the disc.
 // The node in focus (focus) can be the centre: the centre force pulls to
-// it and it stays where it is. Nothing here knows a node by its name.
+// it and it stays where it is, and what belongs to it is spread all round
+// it (what is linked to it, and each group that hangs nowhere on it, by
+// its root); a body that hangs on it through another follows that one.
+// Nothing here knows a node by its name.
 
 export type Pt = [number, number];
 export type Pos = Record<string, Pt>;
@@ -174,6 +183,39 @@ function reach(x: LNode, ux: number, uy: number): number {
   const half: Pt | undefined = x.box ? [x.box[0] / 2 + 24, x.box[1] / 2 + 24] : x.tile ? [x.tile[0] / 2 + 6, x.tile[1] / 2 + 6] : undefined;
   if (!half) return x.r + 6;
   return Math.min(Math.abs(ux) > 1e-6 ? half[0] / Math.abs(ux) : Infinity, Math.abs(uy) > 1e-6 ? half[1] / Math.abs(uy) : Infinity);
+}
+
+// rect is an open page's box with its margin (extent): left, top, right,
+// bottom.
+function rect(o: LNode & { x: number; y: number }): [number, number, number, number] {
+  const [h, t, b] = extent(o, [o.x, o.y]);
+  return [o.x - h, t, o.x + h, b];
+}
+
+function inside([x, y]: Pt, [l, t, r, b]: number[]): boolean {
+  return x > l && x < r && y > t && y < b;
+}
+
+// enters is where the segment from a to b enters the box (0 at a, 1 at b),
+// Infinity when it misses it or only grazes its edge (Liang-Barsky).
+function enters(a: Pt, b: Pt, [l, t, r, bt]: number[]): number {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  let lo = 0, hi = 1;
+  for (const [p, q] of [
+    [-dx, a[0] - l],
+    [dx, r - a[0]],
+    [-dy, a[1] - t],
+    [dy, bt - a[1]],
+  ]) {
+    if (Math.abs(p) < 1e-9) {
+      if (q <= 0) return Infinity;
+      continue;
+    }
+    const u = q / p;
+    if (p < 0) lo = Math.max(lo, u);
+    else hi = Math.min(hi, u);
+  }
+  return hi - lo > 1e-6 ? lo : Infinity;
 }
 
 // A body of the simulation: a node, where it is and how fast it goes.
@@ -326,23 +368,47 @@ export class Sim {
     this.reheat();
   }
 
-  // spreadRound gives each other body a place to head for while the graph
-  // is warm, so that they stand all round the node in focus, not on the
-  // side they came from: the same order round it as now (a cluster stays
-  // together), evenly spread, each as far as now or just past its edge.
-  // A glide: the forces and the collision settle the rest.
+  // spreadRound gives the bodies that belong to the node in focus a place
+  // to head for while the graph is warm, so that they stand all round it,
+  // not on the side they came from. What belongs to it: each body linked to
+  // it, and the root of each group that hangs nowhere on it (bodies linked
+  // among themselves, or one alone). Any other body hangs on the page
+  // through another (a bubble of its bubble, a subject's bubble) and gets
+  // no place: its spring keeps it by what it hangs on, round the page if
+  // need be (aim), so it is never sent to the far side of the page. The
+  // places: the same order round it as now, evenly spread, each as far as
+  // now or just past its edge. A glide: the forces and the collision settle
+  // the rest.
   private spreadRound(f: Body): void {
-    const others = this.list
-      .filter((b) => b !== f)
-      .map((b) => ({ b, t: Math.atan2(b.y - f.y, b.x - f.x), d: Math.hypot(b.x - f.x, b.y - f.y) }))
-      .sort((p, q) => p.t - q.t);
-    const n = others.length;
+    const kin = new Set<Body>();
+    for (const [p, q] of this.edges) {
+      if (p === f) kin.add(q);
+      if (q === f) kin.add(p);
+    }
+    // the groups of the others, by their links that do not go through f
+    const group = new Map<Body, Body[]>();
+    for (const b of this.list) if (b !== f) group.set(b, [b]);
+    for (const [p, q] of this.edges) {
+      if (p === f || q === f) continue;
+      const gp = group.get(p)!, gq = group.get(q)!;
+      if (gp === gq) continue;
+      for (const b of gq) {
+        gp.push(b);
+        group.set(b, gp);
+      }
+    }
+    // what is spread: what is linked to f, and the root of each group
+    // hanging nowhere on it (its subject, not its bubbles)
+    const heads = [...kin];
+    for (const g of new Set(group.values())) if (!g.some((b) => kin.has(b))) heads.push(g.reduce((r, b) => (this.depth(b) < this.depth(r) ? b : r)));
+    const round = heads.map((b) => ({ b, t: Math.atan2(b.y - f.y, b.x - f.x), d: Math.hypot(b.x - f.x, b.y - f.y) })).sort((p, q) => p.t - q.t);
+    const n = round.length;
     if (n < 2) return;
     // the even angles, turned to move the bodies least
     let turn = 0;
-    for (let i = 0; i < n; i++) turn += Math.atan2(Math.sin(others[i].t - (i / n) * Math.PI * 2), Math.cos(others[i].t - (i / n) * Math.PI * 2));
+    for (let i = 0; i < n; i++) turn += Math.atan2(Math.sin(round[i].t - (i / n) * Math.PI * 2), Math.cos(round[i].t - (i / n) * Math.PI * 2));
     turn /= n;
-    others.forEach(({ b, d }, i) => {
+    round.forEach(({ b, d }, i) => {
       const t = turn + (i / n) * Math.PI * 2, ux = Math.cos(t), uy = Math.sin(t);
       const r = Math.max(d, reach(f, ux, uy) + reach(b, ux, uy) + this.forces.distance);
       this.spread.set(b.id, [t, r]);
@@ -424,17 +490,32 @@ export class Sim {
         q.vy += dy * f;
       }
     // links: two linked bodies are held at the link distance, shape to
-    // shape; the one with fewer links moves more (d3's bias)
+    // shape; the one with fewer links moves more (d3's bias). Pulled
+    // together, each heads for the other the shortest way that does not go
+    // through an open page (aim): round it, not stuck behind it.
+    const pages = L.filter((b) => b.box);
     for (const [p, q] of this.edges) {
       const dx = q.x - p.x, dy = q.y - p.y, d = Math.max(0.01, Math.hypot(dx, dy));
       const ux = dx / d, uy = dy / d;
       const rest = reach(p, ux, uy) + reach(q, ux, uy) + F.distance;
       const l = ((d - rest) / d) * F.link * a;
       const dp = this.degree.get(p.id) ?? 1, dq = this.degree.get(q.id) ?? 1, bias = dp / (dp + dq);
-      q.vx -= dx * l * bias;
-      q.vy -= dy * l * bias;
-      p.vx += dx * l * (1 - bias);
-      p.vy += dy * l * (1 - bias);
+      const round = l > 0 && pages.length > 0;
+      const wq = round ? this.aim(q, p, pages) : null, wp = round ? this.aim(p, q, pages) : null;
+      if (wq) {
+        q.vx += wq[0] * d * l * bias;
+        q.vy += wq[1] * d * l * bias;
+      } else {
+        q.vx -= dx * l * bias;
+        q.vy -= dy * l * bias;
+      }
+      if (wp) {
+        p.vx += wp[0] * d * l * (1 - bias);
+        p.vy += wp[1] * d * l * (1 - bias);
+      } else {
+        p.vx += dx * l * (1 - bias);
+        p.vy += dy * l * (1 - bias);
+      }
     }
     // centre: every body is pulled to the middle (the node in focus)
     for (const x of L) {
@@ -515,6 +596,55 @@ export class Sim {
         }
       }
     return most;
+  }
+
+  // aim is the way x goes to join to (a unit vector) when the straight
+  // line between them crosses an open page that is neither (the first one
+  // on that line): toward the corner that starts the shortest way round
+  // the page. x goes round it as the collision lets it, its whole box
+  // clear of the page's: the page widened by x's box (room), the corners
+  // just past it, x heading only for a corner it can reach without
+  // touching the page; the last stretch, from a corner to the other end,
+  // is a link line, it only has to miss the page. Null when the line is
+  // clear (or x is on the page: the collision sets it off first):
+  // straight to it.
+  private aim(x: Body, to: Body, pages: Body[]): Pt | null {
+    const from: Pt = [x.x, x.y], goal: Pt = [to.x, to.y];
+    let page: Body | null = null, first = Infinity;
+    for (const o of pages) {
+      if (o === x || o === to) continue;
+      const r = rect(o);
+      if (inside(from, r)) return null;
+      const t = enters(from, goal, r);
+      if (t < first) [first, page] = [t, o];
+    }
+    if (!page) return null;
+    const r = rect(page), [h, top, bottom] = extent(x, from);
+    const room = [r[0] - h, r[1] - (bottom - x.y), r[2] + h, r[3] + (x.y - top)];
+    const corners: Pt[] = [
+      [room[0] - 4, room[1] - 4],
+      [room[2] + 4, room[1] - 4],
+      [room[2] + 4, room[3] + 4],
+      [room[0] - 4, room[3] + 4],
+    ];
+    // x in the room already (two bodies jammed): its first stretch only
+    // has to miss the page
+    const near = inside(from, room) ? r : room;
+    const free = (a: Pt, b: Pt, box: number[]) => enters(a, b, box) === Infinity;
+    const len = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    // the ways round a box: by one corner, or by two that share a side
+    let best = null as Pt | null, shortest = Infinity;
+    corners.forEach((c, i) => {
+      if (!free(from, c, near)) return;
+      if (free(c, goal, r) && len(from, c) + len(c, goal) < shortest) [shortest, best] = [len(from, c) + len(c, goal), c];
+      for (const k of [corners[(i + 1) % 4], corners[(i + 3) % 4]]) {
+        const s = len(from, c) + len(c, k) + len(k, goal);
+        if (free(k, goal, r) && s < shortest) [shortest, best] = [s, c];
+      }
+    });
+    if (!best) return null;
+    const ex = best[0] - x.x, ey = best[1] - x.y, e = Math.hypot(ex, ey);
+    return e > 0.01 ? [ex / e, ey / e] : null;
   }
 
   private fixed(x: Body): boolean {
