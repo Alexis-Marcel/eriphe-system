@@ -605,7 +605,7 @@ button, input, select, textarea { font: inherit; }
   box-shadow: 0 0 0 1px var(--glass-line), 0 0 24px -4px color-mix(in oklab, var(--accent) 40%, transparent);
   transition: transform 0.25s, box-shadow 0.3s, opacity 0.6s, width var(--morph), height var(--morph), border-radius var(--morph); }
 /* The core's morph to a tile and back: the spring the bubble had (stiffness
-   170, damping 24), as a curve (glance.test.ts); at once with less motion. */
+   170, damping 24), as a curve (glance.test.tsx); at once with less motion. */
 :root { --morph: 0.565s linear(0, 0.015, 0.054, 0.109, 0.174, 0.244, 0.315, 0.386, 0.454, 0.518, 0.577, 0.632, 0.681, 0.725, 0.765, 0.8, 0.83, 0.857, 0.88, 0.9, 0.917, 0.931, 0.944, 0.954, 0.963, 0.97, 0.976, 0.981, 0.985, 0.989, 0.991, 0.994, 0.995, 0.997, 0.998, 0.999, 0.999, 1, 1, 1, 1); }
 .gr-node:hover .gr-core { transform: scale(1.06); box-shadow: 0 0 0 1px var(--link-on), 0 0 30px -2px color-mix(in oklab, var(--accent) 55%, transparent); }
 .gr-node.d1 .gr-core, .gr-node.d2 .gr-core { background: var(--card); box-shadow: 0 0 0 1px var(--line-strong), 0 0 14px -6px var(--accent); }

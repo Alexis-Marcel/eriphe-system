@@ -1156,9 +1156,11 @@ const Bubble = memo(function Bubble(p: {
 // Face is a core's face, its code or ✓ (one element, cls), or its
 // glance's tile; none, no element. As the core becomes a tile or a circle
 // again (k), the faces cross-fade (espace.css, .gl-in): the one going out
-// in 0.1 s, kept for it, the one coming in after it. The face a bubble is
-// born with is there at once.
+// in 0.1 s, kept for it, the one coming in after it (marked for its
+// fade's 0.4 s). Any other face, the one a bubble is born with or a ✓
+// once done, is there at once.
 type FaceOf = { k: "tile" | "code"; cls?: string; c?: ReactNode };
+const FACE_OUT = 100, FACE_IN = 400;
 function Face(f: FaceOf) {
   const [at, setAt] = useState<{ k: string; out: FaceOf | null; moved: boolean }>({ k: f.k, out: null, moved: false });
   const last = useRef(f);
@@ -1166,9 +1168,14 @@ function Face(f: FaceOf) {
   useEffect(() => void (last.current = f));
   useEffect(() => {
     if (!at.out) return;
-    const t = setTimeout(() => setAt((a) => ({ ...a, out: null })), 100);
+    const t = setTimeout(() => setAt((a) => ({ ...a, out: null })), FACE_OUT);
     return () => clearTimeout(t);
   }, [at.out]);
+  useEffect(() => {
+    if (!at.moved) return;
+    const t = setTimeout(() => setAt((a) => ({ ...a, moved: false })), FACE_IN);
+    return () => clearTimeout(t);
+  }, [at.moved, at.k]);
   const one = (x: FaceOf, how: string) => (
     <span key={x.k} className={[x.cls, "gl-in", how].filter(Boolean).join(" ")}>
       {x.c}

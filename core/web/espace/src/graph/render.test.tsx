@@ -179,3 +179,92 @@ describe("the satellite", () => {
     store.setState(empty(), true);
   });
 });
+
+// A bubble draws only the elements that show something: a node with
+// nothing running and no code has no ring and no face; a root has its
+// orbit and its code, a done node its ✓, each one element. Its motion is
+// CSS's: a hover draws no bubble again.
+describe("a light bubble", () => {
+  const mount = async () => {
+    const el = document.createElement("div");
+    document.body.append(el);
+    const root = createRoot(el);
+    await act(async () =>
+      root.render(
+        <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}>
+          <OrbProvider>
+            <Graph live />
+          </OrbProvider>
+        </WordsContext.Provider>,
+      ),
+    );
+    frame();
+    const bubble = (id: string) => el.querySelector<HTMLElement>(`.gr-node[data-node="${id}"]`)!;
+    const done = () => {
+      act(() => root.unmount());
+      el.remove();
+      store.setState(empty(), true);
+    };
+    return { bubble, done };
+  };
+  // (born or not: a node seen by an earlier test is not born again)
+  const shape = (b: HTMLElement) => [...b.querySelectorAll("*")].map((e) => e.tagName.toLowerCase() + [...e.classList].filter((c) => c !== "fresh").map((c) => `.${c}`).join(""));
+
+  it("draws only what shows", async () => {
+    store.setState(empty(), true);
+    step(store, applyNodes, { reset: true, nodes: [node("a"), node("a1", "a"), { ...node("a2", "a"), status: "done" }, { ...node("a3", "a"), status: "running" }] });
+    const { bubble, done } = await mount();
+    expect(shape(bubble("a1"))).toEqual(["div.gr-bub", "button.gr-core", "span.gr-label", "b"]);
+    expect(shape(bubble("a"))).toEqual(["div.gr-bub", "svg.gr-ring", "circle.gr-orbit", "button.gr-core", "span.gr-code.gl-in", "span.gr-label", "b"]);
+    expect(shape(bubble("a2"))).toEqual(["div.gr-bub", "button.gr-core", "span.gr-glyph.gl-in", "span.gr-label", "b"]);
+    expect(bubble("a2").querySelector(".gr-glyph")?.textContent).toBe("✓");
+    expect(shape(bubble("a3"))).toEqual(["div.gr-bub", "svg.gr-ring", "circle.gr-ring-run", "button.gr-core", "span.gr-label", "b"]);
+    // the core's shape, written on it (CSS morphs it)
+    const core = bubble("a1").querySelector<HTMLElement>(".gr-core")!;
+    expect(core.style.width).toBe(core.style.height);
+    expect(core.style.borderRadius).toBe(`${parseFloat(core.style.width) / 2}px`);
+
+    // A hover fades the others by their classes: no bubble drawn again.
+    const drawn = vi.mocked(coreShape).mock.calls.length;
+    expect(drawn).toBeGreaterThan(0);
+    act(() => void core.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+    expect(document.querySelector(".gr-viewport")?.classList.contains("hovering")).toBe(true);
+    act(() => void core.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: document.body })));
+    expect(vi.mocked(coreShape).mock.calls.length).toBe(drawn);
+    done();
+  });
+
+  it("cross-fades its face as it becomes a tile and back; a ✓ come later shows at once", async () => {
+    store.setState(empty(), true);
+    step(store, applyNodes, { reset: true, nodes: [node("a"), node("a1", "a")] });
+    const { bubble, done } = await mount();
+    const faces = () => [...bubble("a").querySelectorAll(".gl-in")].map((e) => e.className);
+    // born with its code: no fade
+    expect(faces()).toEqual(["gr-code gl-in"]);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const glance = { label: "Conso", unit: "percent" as const, value: 2.6, ref: 2, delta: 30, threshold: 10, series: [2, 2.6], shown: true };
+      await act(async () => step(store, applyNodes, { nodes: [{ ...node("a"), version: 2, glance }] }));
+      expect(bubble("a").classList.contains("tiled")).toBe(true);
+      expect(faces()).toEqual(["gr-code gl-in out", "gl-in in tile"]);
+      act(() => void vi.advanceTimersByTime(100));
+      expect(faces()).toEqual(["gl-in in tile"]);
+      act(() => void vi.advanceTimersByTime(300));
+      expect(faces()).toEqual(["gl-in"]);
+      // and back
+      await act(async () => step(store, applyNodes, { nodes: [{ ...node("a"), version: 3 }] }));
+      expect(faces()).toEqual(["gl-in out", "gr-code gl-in in code"]);
+      act(() => void vi.advanceTimersByTime(400));
+      expect(faces()).toEqual(["gr-code gl-in"]);
+      // a child that was a tile, done later: its ✓ at once
+      await act(async () => step(store, applyNodes, { nodes: [{ ...node("a1", "a"), version: 2, glance }] }));
+      await act(async () => step(store, applyNodes, { nodes: [{ ...node("a1", "a"), version: 3 }] }));
+      act(() => void vi.advanceTimersByTime(400));
+      await act(async () => step(store, applyNodes, { nodes: [{ ...node("a1", "a"), version: 4, status: "done" }] }));
+      expect([...bubble("a1").querySelectorAll(".gl-in")].map((e) => e.className)).toEqual(["gr-glyph gl-in"]);
+    } finally {
+      vi.useRealTimers();
+      done();
+    }
+  });
+});
