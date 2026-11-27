@@ -95,8 +95,8 @@ try {
 }
 
 const s = (x) => (x === null ? "no rest" : `${(x / 1000).toFixed(1)} s`);
-const cell = (p) => `${p.task} (${p.layouts}) · ${p.fps}`;
-console.log("Each phase: main-thread busy ms over 3 s (layouts) · frames per second.\n");
+const cell = (p) => `${p.task} · ${(p.task / Math.max(1, p.frames)).toFixed(1)} · ${p.fps}`;
+console.log("Each phase (3 s): main-thread busy ms · busy ms per frame · frames per second.\n");
 console.log("| nodes | first frame | to rest | scale at rest | bubbles in DOM (at 1) | settle | pan | pan at scale 1 | zoom |");
 console.log("|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
 for (const r of rows)
