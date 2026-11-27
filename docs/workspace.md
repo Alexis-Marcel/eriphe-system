@@ -212,8 +212,9 @@ Once a voice service is set in **Settings → Voice** (Groq, OpenAI, or a Whispe
 own), a microphone shows in the bar. Tap it and speak; tap it again when you are done (Escape
 cancels). What you said is written into the bar, after what you had typed: you read it, fix it if
 needed, and send it yourself. Nothing listens without that tap, and the microphone is let go as soon
-as you stop. With Groq or OpenAI your voice goes to that service; with a server of your own it stays
-at home.
+as you stop. With Groq or OpenAI your voice goes to that service, with your assistant's name and the
+titles of your recent pages (so that names are spelled right); with a server of your own it all
+stays at home.
 
 ## Follow something: a page kept up
 

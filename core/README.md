@@ -2616,13 +2616,16 @@ own.
   model server's (`checkBaseURL`: http(s), on the network, not localhost).
 - **Kept**: the setting in the kv table (`voice_listen`), the key in the vault (`voice.listen.key`,
   outside the catalog's prefixes, so `dropOrphanSecrets` leaves it). A save without a key keeps the
-  one kept for the same service; another service, or off, removes it. « Tester » asks the service
+  one kept for the same service at the same address; another service, another address (the page
+  says the key was removed), or off, removes it: a key never goes to an address it was not given
+  for, the test's included. « Tester » asks the service
   for its models (`GET <base>/models`) with the key.
 - **Dictation**: the workspace sends what it records to `POST /api/voice/transcribe` (multipart
   `audio`, and `type`, the recorder's MIME type: WebM from Chrome and Firefox, MP4 from Safari;
   10 MiB at most), which answers `{"text"}` or `{"error"}` in the user's words (404 when nothing is
   set). With the audio goes a vocabulary: the assistant's name and the titles of the nodes changed
-  last, so that the names come out right. A redirect is never followed (the key would go along);
+  last, so that the names come out right (400 characters at most, under Whisper's 224 tokens; the
+  page tells the user these go with the voice). A redirect is never followed (the key would go along);
   neither the audio, the text nor the key is logged.
 - **The microphone**: `/espace/boot` says `voice.listen` when a service is set, and the bar then
   shows a microphone (`orb/dictate.ts`): a tap records, a tap stops, the words join the draft and

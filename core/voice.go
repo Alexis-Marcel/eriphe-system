@@ -37,9 +37,10 @@ const (
 	maxVoiceAudio = 10 << 20
 	// voiceTimeout bounds one transcription, the provider's answer included.
 	voiceTimeout = 60 * time.Second
-	// voicePromptRunes bounds the vocabulary given with the audio: Whisper
-	// reads about 224 tokens of prompt, a name is a few.
-	voicePromptRunes = 600
+	// voicePromptRunes bounds the vocabulary given with the audio, well
+	// under the 224 tokens of prompt Whisper takes (Groq's and OpenAI's
+	// documentation): OpenAI rejects the whole request past its limit.
+	voicePromptRunes = 400
 )
 
 // A voice service the page offers: its address and model filled in.
@@ -48,10 +49,13 @@ type voicePreset struct {
 	Keyless                           bool // a server of one's own may need no key
 }
 
-// voicePresets were checked against each service's documentation
-// (November 2026): https://console.groq.com/docs/speech-to-text,
-// https://platform.openai.com/docs/guides/speech-to-text. "server" is a
-// Whisper server of one's own, on the network.
+// voicePresets were checked against each service's documentation on
+// 2026-11-27: https://console.groq.com/docs/speech-to-text (the endpoint,
+// whisper-large-v3-turbo, WebM and M4A/MP4 read) and
+// https://developers.openai.com/api/docs/guides/speech-to-text (the same
+// formats; gpt-4o-transcribe still served, deprecated for gpt-transcribe
+// and shut down on 2027-02-26: the user may change the model). "server" is
+// a Whisper server of one's own, on the network.
 var voicePresets = []voicePreset{
 	{ID: "groq", Name: "Groq", BaseURL: "https://api.groq.com/openai/v1", Model: "whisper-large-v3-turbo", KeyPage: "https://console.groq.com/keys"},
 	{ID: "openai", Name: "OpenAI", BaseURL: "https://api.openai.com/v1", Model: "gpt-4o-transcribe", KeyPage: "https://platform.openai.com/api-keys"},
@@ -78,6 +82,13 @@ type voiceListen struct {
 }
 
 func (v voiceListen) on() bool { return v.Preset != "" && v.BaseURL != "" && v.Model != "" }
+
+// keyFor tells whether the key kept goes with the setting l: the same
+// service at the same address. A key never goes to an address it was not
+// given for.
+func (v voiceListen) keyFor(l voiceListen) bool {
+	return v.Key && l.Preset != "" && v.Preset == l.Preset && v.BaseURL == l.BaseURL
+}
 
 // check tells what is wrong with a setting, as a text key of the page.
 func (v voiceListen) check() string {
@@ -140,7 +151,7 @@ func (c *core) setVoiceListen(v voiceListen, key string) error {
 			return err
 		}
 		v.Key = true
-	case v.Preset != "" && old.Key && old.Preset == v.Preset && old.BaseURL == v.BaseURL:
+	case old.keyFor(v):
 		v.Key = true
 	default:
 		v.Key = false
@@ -285,6 +296,11 @@ func (c *core) voicePrompt() string {
 			}
 		}
 	}
+	return promptOf(words)
+}
+
+// promptOf joins the words, the first ones first, within voicePromptRunes.
+func promptOf(words []string) string {
 	var b strings.Builder
 	for _, w := range words {
 		if utf8.RuneCountInString(b.String())+utf8.RuneCountInString(w)+2 > voicePromptRunes {

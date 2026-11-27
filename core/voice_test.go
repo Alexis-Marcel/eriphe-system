@@ -149,6 +149,49 @@ func TestVoiceTest(t *testing.T) {
 	}
 }
 
+// A key goes only to the address it was given for: the test does not send
+// it elsewhere, and a save at another address removes it and says so.
+func TestVoiceKeyStaysWithItsAddress(t *testing.T) {
+	f := newFakeWhisper(t)
+	tw, csrf := voiceWeb(t)
+	old := url.Values{"preset": {"server"}, "base_url": {"http://192.168.1.20:8000/v1"}, "model_server": {"large-v3"}}
+	form := url.Values{"key": {"sk-home"}}
+	for k, v := range old {
+		form[k] = v
+	}
+	tw.post("/settings/voice", form, csrf)
+	if !tw.c.voiceListen().Key {
+		t.Fatal("the key was not kept")
+	}
+	moved := url.Values{"preset": {"server"}, "base_url": {"http://192.168.1.30:8000/v1"}, "model_server": {"large-v3"}}
+	tw.post("/settings/voice/test", moved, csrf)
+	if f.auth != "" {
+		t.Fatalf("the key went to another address: %q", f.auth)
+	}
+	tw.post("/settings/voice/test", old, csrf)
+	if f.auth != "Bearer sk-home" {
+		t.Fatalf("the key did not go to its own address: %q", f.auth)
+	}
+	_, _, h := tw.post("/settings/voice", moved, csrf)
+	if h.Get("HX-Redirect") != "/settings/voice?saved=1&dropped=1" || tw.c.voiceListen().Key {
+		t.Fatalf("moved: %v, key %v", h.Get("HX-Redirect"), tw.c.voiceListen().Key)
+	}
+	if _, body, _ := tw.do("GET", "/settings/voice?saved=1&dropped=1", nil, nil); !strings.Contains(body, "a été retirée") {
+		t.Error("the page does not say the key was removed")
+	}
+}
+
+func TestVoicePromptBounded(t *testing.T) {
+	long := []string{"Eriphe"}
+	for range 200 {
+		long = append(long, "Une page au titre assez long")
+	}
+	p := promptOf(long)
+	if n := len([]rune(p)); n > voicePromptRunes+1 || !strings.HasPrefix(p, "Eriphe, Une page") || !strings.HasSuffix(p, "long.") {
+		t.Fatalf("prompt (%d): %q", n, p)
+	}
+}
+
 // postAudio sends a recording as the workspace does.
 func postAudio(tw *testWeb, csrf, typ string, audio []byte) (int, map[string]string) {
 	var b bytes.Buffer

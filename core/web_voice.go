@@ -28,6 +28,7 @@ type voiceView struct {
 	Server  string // the address of a server of one's own, as typed
 	Error   string
 	Saved   bool
+	Dropped bool // the key kept was for another address, and was removed
 	NoVault bool // a key cannot be kept
 }
 
@@ -45,6 +46,7 @@ func (w *web) voiceView() voiceView {
 func (w *web) handleVoice(rw http.ResponseWriter, r *http.Request, s *session) {
 	v := w.voiceView()
 	v.Saved = r.URL.Query().Get("saved") != ""
+	v.Dropped = r.URL.Query().Get("dropped") != ""
 	w.render(rw, r, s, "settings", "", page{Title: "settings.voice", Nav: "settings", Tab: "voice", Data: v})
 }
 
@@ -86,7 +88,7 @@ func (w *web) handleSaveVoice(rw http.ResponseWriter, r *http.Request, s *sessio
 		fail(k)
 		return
 	}
-	if p, _ := voicePresetOf(l.Preset); l.Preset != "" && !p.Keyless && key == "" && !(old.Key && old.Preset == l.Preset) {
+	if p, _ := voicePresetOf(l.Preset); l.Preset != "" && !p.Keyless && key == "" && !old.keyFor(l) {
 		fail("voice.err.nokey")
 		return
 	}
@@ -100,7 +102,11 @@ func (w *web) handleSaveVoice(rw http.ResponseWriter, r *http.Request, s *sessio
 		return
 	}
 	log.Printf("web: voice: listen %q", l.Preset) // never the key
-	rw.Header().Set("HX-Redirect", "/settings/voice?saved=1")
+	to := "/settings/voice?saved=1"
+	if key == "" && old.Key && l.Preset != "" && !old.keyFor(l) {
+		to += "&dropped=1" // the key kept was for another address: it is gone, and the page says so
+	}
+	rw.Header().Set("HX-Redirect", to)
 	rw.WriteHeader(http.StatusOK)
 }
 
@@ -123,7 +129,7 @@ func (w *web) handleTestVoice(rw http.ResponseWriter, r *http.Request, s *sessio
 		show(testView{State: "err", Text: tr(lang, "voice.err.baseurl")})
 		return
 	}
-	if key == "" && old.Key && old.Preset == l.Preset {
+	if key == "" && old.keyFor(l) {
 		key, _ = vaultSecret(voiceListenKey)
 	}
 	v := checkSelfHosted(r.Context(), lang, l.BaseURL, key)

@@ -8,6 +8,7 @@
 {{define "voice"}}
 <header class="page-head"><h2>{{t "settings.voice"}}</h2><p>{{t "voice.lead"}}</p></header>
 {{if .Data.Saved}}<p class="ok-note" role="status">{{if .Data.Listen.Preset}}{{t "voice.saved"}}{{else}}{{t "voice.savedoff"}}{{end}}</p>{{end}}
+{{if .Data.Dropped}}<p class="alert" role="status">{{t "voice.keydropped"}}</p>{{end}}
 <h3 class="section-title">{{template "i-mic"}}{{t "voice.listen"}}</h3>
 <p class="small muted">{{t "voice.listenlead"}}</p>
 {{template "voice-form" .}}
