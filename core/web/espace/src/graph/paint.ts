@@ -71,6 +71,7 @@ export type State = {
   mounted: ReadonlyMap<string, unknown>; // the nodes drawn as bubbles now
   swapped: ReadonlyMap<string, number>; // when each became a bubble: its disc fades as its bubble comes
   open: ReadonlySet<string>; // covered by their page
+  hover?: string | null; // the node hovered: too small to be a bubble, its label is painted readable
   near: ReadonlySet<string> | null; // a hover: these stay sharp, the rest fades
   nearLinks: ReadonlySet<number> | null; // ... and these links, by index
 };
@@ -391,6 +392,27 @@ export class Painter {
         ctx.textBaseline = "top";
       }
       labels++;
+    }
+    // the node hovered, a disc still: ringed, its label readable
+    const hi = st.hover ? s.index.get(st.hover) : undefined;
+    if (hi !== undefined && show[hi] > 0) {
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = T.fg;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(sx[hi], sy[hi], Math.max(3, sr[hi]) + 2, 0, Math.PI * 2);
+      ctx.stroke();
+      const root = s.depth[hi] === 0;
+      const fs = Math.max(12, (root ? 14.5 : 12.5) * k);
+      ctx.font = font = `${root ? 600 : 500} ${fs}px ${T.font}`;
+      ctx.textBaseline = "top";
+      ctx.strokeStyle = T.bg;
+      ctx.lineWidth = 4;
+      const y = sy[hi] + Math.max(3, sr[hi]) + 6;
+      ctx.strokeText(s.titles[hi], sx[hi], y);
+      ctx.fillStyle = T.fg;
+      ctx.fillText(s.titles[hi], sx[hi], y);
+      ctx.lineWidth = 1;
     }
     ctx.globalAlpha = 1;
 

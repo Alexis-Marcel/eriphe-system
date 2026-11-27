@@ -294,6 +294,8 @@ export function Graph({ live }: { live: boolean }) {
         if (kind === "nodes" && lodNow.current) {
           if (el) swaps.current.set(key, performance.now());
           else swaps.current.delete(key);
+          // come in while a hover is on: sharp if it is near
+          if (el && nearBy.current?.ids.has(key)) el.classList.add("near");
           paintSoon();
         }
         if (!el) return void m.delete(key);
@@ -448,7 +450,11 @@ export function Graph({ live }: { live: boolean }) {
     if (xy.length !== S.items.length * 2) return;
     pickedFor.current = v;
     const focused = document.activeElement?.closest?.(".gr-node")?.getAttribute("data-node");
-    const { ids, more } = decide(S.items, xy, v, shown.get(), [sim.heldId(), focused, hovered.current]);
+    // The node hovered is a bubble once its label shows; smaller, the
+    // canvas paints its label readable (paint.ts).
+    const h = hovered.current, hi = h ? S.index.get(h) : undefined;
+    const hover = hi !== undefined && S.items[hi].r * v.k >= LOD.labelAt ? h : null;
+    const { ids, more } = decide(S.items, xy, v, shown.get(), [sim.heldId(), focused, hover]);
     shown.set(ids);
     if (more) pickSoon(true);
   };
@@ -480,7 +486,7 @@ export function Graph({ live }: { live: boolean }) {
     const xy = xyNow();
     if (xy.length !== S.items.length * 2) return;
     P.resize(sizeNow.current.w, sizeNow.current.h);
-    const fading = P.paint(S, xy, view(), { mounted: els.current.nodes, swapped: swaps.current, open: openSetNow.current, near: nearBy.current?.ids ?? null, nearLinks: nearBy.current?.links ?? null }, performance.now());
+    const fading = P.paint(S, xy, view(), { mounted: els.current.nodes, swapped: swaps.current, open: openSetNow.current, hover: hovered.current, near: nearBy.current?.ids ?? null, nearLinks: nearBy.current?.links ?? null }, performance.now());
     if (fading) paintSoon();
   };
   const paintNow = useRef(paint);
