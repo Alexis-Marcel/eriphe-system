@@ -13,3 +13,8 @@
 .dev-phys-row button:disabled { opacity: 0.45; cursor: default; }
 .dev-phys-pages { display: grid; gap: 2px; max-height: 180px; overflow-y: auto; }
 .dev-phys-pages label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+/* The ?leger overlay (dev-leger.tsx). */
+.dev-leger { width: 300px; }
+.dev-leger-out { margin: 0; font: 12px/1.45 var(--mono); color: var(--fg); white-space: pre; }
+.dev-leger .dev-phys-row button[aria-pressed="true"] { border-color: var(--accent); }
+.dev-leger input[type="range"] { width: 100%; accent-color: var(--accent); }
