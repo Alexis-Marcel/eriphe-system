@@ -167,6 +167,14 @@ function sample(ms: number, move?: (t: number) => void): Promise<{ fps: number; 
   });
 }
 
+// pan moves the camera across the graph through the wheel, steadily: what
+// comes into view is drawn as it comes.
+function pan(t: number) {
+  const v = viewport();
+  if (!v) return;
+  v.dispatchEvent(new WheelEvent("wheel", { deltaX: 12, deltaY: 4 * Math.sin(t / 400), clientX: innerWidth / 2, clientY: innerHeight / 2, bubbles: true, cancelable: true }));
+}
+
 // panZoom moves the camera as a hand would, through the wheel: a pan, then
 // a zoom in and out, again.
 function panZoom(t: number) {
@@ -182,13 +190,13 @@ function panZoom(t: number) {
 
 declare global {
   interface Window {
-    leger?: { load(n: number): void; add(k: number): void; remove(k: number): void; resize(): void; stats(): Stats; sample: typeof sample; panZoom: typeof panZoom };
+    leger?: { load(n: number): void; add(k: number): void; remove(k: number): void; resize(): void; stats(): Stats; sample: typeof sample; pan: typeof pan; panZoom: typeof panZoom };
   }
 }
 
 export function startLeger() {
   const asked = Number(new URLSearchParams(location.search).get("n"));
-  window.leger = { load, add, remove, resize, stats, sample, panZoom };
+  window.leger = { load, add, remove, resize, stats, sample, pan, panZoom };
   load(asked > 0 ? asked : 100);
   let raf = 0;
   const loop = (t: number) => {

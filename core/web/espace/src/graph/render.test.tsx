@@ -64,7 +64,7 @@ describe("the graph's frames", () => {
     );
     for (let i = 0; i < 5; i++) frame();
     const bubble = (id: string) => el.querySelector<HTMLElement>(`.gr-node[data-node="${id}"]`)!;
-    expect(bubble("c").style.transform).toMatch(/^translate3d\(/);
+    expect(bubble("c").style.transform).toMatch(/^translate\(/);
     expect(bubble("c").style.left).toBe("");
 
     // A page opens: the graph moves for a while; the bubbles are drawn
@@ -121,7 +121,7 @@ describe("a big graph", () => {
     wheel(-1e6);
     frame();
     expect(drawn()).toBeGreaterThan(0);
-    for (const b of el.querySelectorAll<HTMLElement>(".gr-node")) expect(b.style.transform).toMatch(/^translate3d\(/);
+    for (const b of el.querySelectorAll<HTMLElement>(".gr-node")) expect(b.style.transform).toMatch(/^translate\(/);
 
     act(() => root.unmount());
     el.remove();

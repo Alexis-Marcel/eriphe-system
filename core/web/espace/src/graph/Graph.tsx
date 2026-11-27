@@ -7,7 +7,7 @@ import { Orb } from "../orb/Orb";
 import { Page } from "../page/Page";
 import { onReads, readsUnderWay } from "../page/usePage";
 import { bigBox, bigRoom, boxAt, edgeMark, frameAll, frameAlone, frameAround, framePages, pageMax, type Box, type Cam } from "./camera";
-import { CULL_FROM, culled, same } from "./cull";
+import { covered, CULL_FROM, culled, same, type View } from "./cull";
 import { CENTRING, edgePush, edgeStep, extent, onForces, pairs, Sim, type LNode, type Pos, type Pt } from "./layout";
 import { coreShape, pickTiles, TILE, variation } from "./glance";
 import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits } from "./model";
@@ -69,8 +69,9 @@ type Grab = { id: string; sx: number; sy: number; px: number; py: number; ox: nu
 type Link = { key: string; a: string; b: string };
 
 // putNode and putLink place a bubble and a link where the simulation has
-// them: a bubble by its transform, which moves it without a layout.
-const putNode = (el: HTMLElement, p: Pt) => void (el.style.transform = `translate3d(${p[0]}px, ${p[1]}px, 0)`);
+// them: a bubble by its transform, which moves it without a layout (a 2D
+// one: a 3D one gives each bubble a layer of its own, measured no faster).
+const putNode = (el: HTMLElement, p: Pt) => void (el.style.transform = `translate(${p[0]}px, ${p[1]}px)`);
 const putLink = (el: Element, a: Pt, b: Pt) => {
   el.setAttribute("x1", String(a[0]));
   el.setAttribute("y1", String(a[1]));
@@ -230,6 +231,7 @@ export function Graph({ live }: { live: boolean }) {
   const els = useRef({ nodes: new Map<string, HTMLElement>(), pages: new Map<string, HTMLElement>(), links: new Map<string, SVGElement>() });
   const linksNow = useRef(links);
   linksNow.current = links;
+  const placed = useRef(0);
   const linkByNow = useRef(linkBy);
   linkByNow.current = linkBy;
   const place = () => {
@@ -249,7 +251,8 @@ export function Graph({ live }: { live: boolean }) {
       const a = l && pos[l.a], b = l && pos[l.b];
       if (a && b) putLink(el, a, b);
     }
-    cull(pos);
+    // The bodies moving (the loop), they are looked at every few frames.
+    if (raf.current === null || ++placed.current % 6 === 0) cull(pos, true);
     for (const f of framed) f();
   };
   const regs = useRef(new Map<string, (el: Element | null) => void>());
@@ -396,18 +399,35 @@ export function Graph({ live }: { live: boolean }) {
   bodiesNow.current = bodies;
   const sizeNow = useRef(size);
   sizeNow.current = size;
-  const cull = (pos?: Pos) => {
-    const focused = document.activeElement?.closest?.(".gr-node")?.getAttribute("data-node");
+  // A camera still within what was drawn for it changes nothing (covered);
+  // the bodies moving, they are looked at every few frames; some new ones
+  // left for the next frame (the budget), it comes.
+  const culledFor = useRef<View | null>(null);
+  const cull = (pos?: Pos, force = false) => {
     const view = { x: camX.get(), y: camY.get(), k: camK.get(), ...sizeNow.current };
-    shown.set(culled(bodiesNow.current, pos ? (id) => pos[id] : where, view, shown.get(), [sim.heldId(), focused, hovered.current]));
+    if (!force && culledFor.current && covered(culledFor.current, view)) return;
+    culledFor.current = view;
+    const focused = document.activeElement?.closest?.(".gr-node")?.getAttribute("data-node");
+    const { ids, more } = culled(bodiesNow.current, pos ? (id) => pos[id] : where, view, shown.get(), [sim.heldId(), focused, hovered.current]);
+    shown.set(ids);
+    if (more) cullSoon(true);
   };
   const cullRaf = useRef<number | null>(null);
-  const cullSoon = () => {
-    if (cullRaf.current === null) cullRaf.current = requestAnimationFrame(() => ((cullRaf.current = null), cull()));
+  const cullForce = useRef(false);
+  const cullSoon = (force = false) => {
+    cullForce.current ||= force;
+    if (cullRaf.current === null)
+      cullRaf.current = requestAnimationFrame(() => {
+        cullRaf.current = null;
+        const f = cullForce.current;
+        cullForce.current = false;
+        cull(undefined, f);
+      });
   };
-  useMotionValueEvent(camX, "change", cullSoon);
-  useMotionValueEvent(camY, "change", cullSoon);
-  useMotionValueEvent(camK, "change", cullSoon);
+  const onCam = () => cullSoon();
+  useMotionValueEvent(camX, "change", onCam);
+  useMotionValueEvent(camY, "change", onCam);
+  useMotionValueEvent(camK, "change", onCam);
   useEffect(() => () => void (cullRaf.current !== null && cancelAnimationFrame(cullRaf.current)), []);
   const [manual, setManual] = useState(false);
   useEffect(() => setManual(false), [openKey, talk]);
