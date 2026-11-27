@@ -315,3 +315,9 @@ func dateWords(s, lang string, loc *time.Location) string {
 	}
 	return ""
 }
+
+// frDays and frMonths name a day and a month in French.
+var (
+	frDays   = []string{"dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"}
+	frMonths = []string{"janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"}
+)

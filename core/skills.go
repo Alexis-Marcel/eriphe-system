@@ -659,3 +659,6 @@ func (c *core) activeSkills() []Skill {
 	}
 	return out
 }
+
+// shortSHA is a version's short name.
+func shortSHA(s string) string { return s[:min(12, len(s))] }

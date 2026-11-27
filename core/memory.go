@@ -100,22 +100,12 @@ func ownerKind(kind string) bool {
 	return kind == kindProfile || kind == kindPreference || kind == kindLesson
 }
 
-// Statuses, trust levels and where a memory comes from.
+// Statuses of a memory.
 const (
 	memActive   = "active"
 	memProposed = "proposed" // waits for my approval
 	memArchived = "archived"
 	memDeleted  = "deleted" // forgotten, purged after memoryPurgeAfter
-
-	trustOwner      = "owner"
-	trustFirstParty = "first_party"
-	trustExternal   = "external"
-
-	srcOwner      = "owner"
-	srcBrain      = "brain"
-	srcExtraction = "extraction"
-	srcTask       = "task"
-	srcImport     = "import"
 )
 
 const (
@@ -393,21 +383,6 @@ func (m *memStore) set(key, value string) {
 	m.db.Exec(`INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
 }
 
-// Times are unix seconds; a zero time is NULL.
-func unixOrNil(t time.Time) any {
-	if t.IsZero() {
-		return nil
-	}
-	return t.Unix()
-}
-
-func fromNull(n sql.NullInt64) time.Time {
-	if !n.Valid {
-		return time.Time{}
-	}
-	return time.Unix(n.Int64, 0)
-}
-
 const memColumns = `id, kind, about, text, links, occurred_at, valid_from, valid_to, recorded_at, superseded_by, supersedes,
 	due_at, state, source_kind, source_ref, trust, status, pinned, use_count, last_used_at, flags, deleted_at, updated_at,
 	keywords, importance, basis`
@@ -438,11 +413,6 @@ func (m *memStore) memory(id int64) (*Memory, error) {
 		return nil, errNoMemory
 	}
 	return x, err
-}
-
-type querier interface {
-	Exec(string, ...any) (sql.Result, error)
-	QueryRow(string, ...any) *sql.Row
 }
 
 func memoryJSON(x *Memory) string {
@@ -541,15 +511,6 @@ func (m *memStore) normalize(x *Memory) error {
 	return nil
 }
 
-func containsStr(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
-}
-
 // profileChars is the size of the profile, without the memory except.
 func (m *memStore) profileChars(q querier, except int64) int {
 	var n int
@@ -599,13 +560,6 @@ func (m *memStore) insert(q querier, x *Memory, who string, except int64) error 
 		op = "propose"
 	}
 	return m.log(q, x.ID, who, op, nil, x, "")
-}
-
-func nullID(id int64) any {
-	if id == 0 {
-		return nil
-	}
-	return id
 }
 
 // add writes a new memory, or replaces one (x.Supersedes) when it is active.
@@ -1241,14 +1195,6 @@ func queryWords(q string) []string {
 	return out
 }
 
-// foldAccents lowers and strips the accents of Latin letters, like the FTS tokenizer.
-func foldAccents(s string) string {
-	r := strings.NewReplacer("à", "a", "â", "a", "ä", "a", "á", "a", "ç", "c", "é", "e", "è", "e", "ê", "e", "ë", "e",
-		"î", "i", "ï", "i", "í", "i", "ô", "o", "ö", "o", "ó", "o", "ù", "u", "û", "u", "ü", "u", "ú", "u", "ÿ", "y", "ñ", "n",
-		"œ", "oe", "æ", "ae")
-	return r.Replace(strings.ToLower(s))
-}
-
 func scanMemoryWith(rows *sql.Rows, extra ...any) (*Memory, error) {
 	var x Memory
 	var links string
@@ -1265,10 +1211,6 @@ func scanMemoryWith(rows *sql.Rows, extra ...any) (*Memory, error) {
 	x.ValidFrom, x.RecordedAt, x.UpdatedAt = time.Unix(from, 0), time.Unix(recorded, 0), time.Unix(updated, 0)
 	x.SupersededBy, x.Supersedes = superseded.Int64, supersedes.Int64
 	return &x, nil
-}
-
-func placeholders(n int) string {
-	return strings.TrimSuffix(strings.Repeat("?, ", n), ", ")
 }
 
 func likeEscape(s string) string {

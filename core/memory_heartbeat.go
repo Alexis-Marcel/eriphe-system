@@ -131,7 +131,7 @@ func (m *memStore) recordHeartbeat(decision string) (*Memory, error) {
 	if decision == "" {
 		decision = "Rien à faire."
 	}
-	if scan := scanMemoryText(decision); scan.Reject != "" {
+	if scan := scanText(decision); scan.Reject != "" {
 		return nil, fmt.Errorf("refused: %s", scan.Reject)
 	}
 	x := &Memory{Kind: kindEpisode, About: heartbeatEntity, Text: truncate(decision, episodeTextMax-1),

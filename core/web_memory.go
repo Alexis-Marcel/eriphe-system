@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf16"
 	"unicode/utf8"
 )
 
@@ -101,11 +99,6 @@ type memDay struct {
 	Label string
 	Items []memCard
 }
-
-var (
-	frDays   = []string{"dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"}
-	frMonths = []string{"janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"}
-)
 
 // dayLabel names a day: today, yesterday, or its date in words.
 func dayLabel(lang string, d, now time.Time) string {
@@ -339,7 +332,7 @@ func (w *web) handleMemoryEditForm(rw http.ResponseWriter, r *http.Request, s *s
 // ownerScan checks what I type: the same scanner, but only its refusals
 // count (my imperative lessons are mine).
 func ownerScan(parts ...string) error {
-	if res := scanMemoryText(parts...); res.Reject != "" {
+	if res := scanText(parts...); res.Reject != "" {
 		return fmt.Errorf("%s", res.Reject)
 	}
 	return nil
@@ -577,39 +570,6 @@ func memoryQuery(p memoryPage, kind string) string {
 		return "/memory"
 	}
 	return "/memory?" + v.Encode()
-}
-
-// hxTrigger is the HX-Trigger header of a toast: JSON with every non-ASCII
-// character escaped, since browsers read headers as Latin-1.
-func hxTrigger(msg string, ok, changed bool) string {
-	kind := "ok"
-	if !ok {
-		kind = "error"
-	}
-	v := map[string]any{"toast": map[string]string{"message": msg, "kind": kind}}
-	if changed {
-		v["memory-changed"] = true
-	}
-	return hxEvents(v)
-}
-
-// hxEvents is an HX-Trigger header of events and their details, every
-// non-ASCII character escaped.
-func hxEvents(v map[string]any) string {
-	raw, _ := json.Marshal(v)
-	var b strings.Builder
-	for _, r := range string(raw) {
-		switch {
-		case r < 0x80:
-			b.WriteRune(r)
-		case r > 0xFFFF:
-			r1, r2 := utf16.EncodeRune(r)
-			fmt.Fprintf(&b, `\u%04x\u%04x`, r1, r2)
-		default:
-			fmt.Fprintf(&b, `\u%04x`, r)
-		}
-	}
-	return b.String()
 }
 
 func init() {

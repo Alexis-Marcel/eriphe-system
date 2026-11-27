@@ -305,7 +305,7 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 			return toolError(why) // the brain's budget (brain_budget.go)
 		}
 	}
-	c.calledCatalog(taskID, u.name, tool) // what a task reads taints it, and the brain's turn (memory_trust.go)
+	c.calledCatalog(taskID, u.name, tool) // what a task reads taints it, and the brain's turn (turn_taint.go)
 	start := time.Now()
 	res, err := u.call(ctx, tool, args)
 	log.Printf("task %s: %s.%s %dms err=%v", taskID, u.name, tool, time.Since(start).Milliseconds(), err != nil)
