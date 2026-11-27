@@ -211,13 +211,13 @@ func TestLaunchSurroundingsBeside(t *testing.T) {
 // A task's start card leaves out the line of a node its surroundings give
 // (its own or an ancestor), and keeps the rest.
 func TestStartCardWithoutAroundLine(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	id := siteNode(t, c)
 	child := mustNode(t, c, nodestore.New{Title: "Certificat", Parent: id})
 	key := nodeRef(id)
 	full, _ := c.aboutCard(key, aboutCardChars)
 	short, _ := c.aboutCardOf(key, aboutCardChars, false)
-	if !strings.Contains(full, "Site en ligne") || strings.Contains(short, "Site en ligne") || !strings.Contains(short, "Décision 4 du site") {
+	if !strings.Contains(full, "Site en ligne") || strings.Contains(short, "Site en ligne") || !strings.Contains(short, "Relancer Lina pour le site, point 4") {
 		t.Fatalf("full:\n%s\nwithout its line:\n%s", full, short)
 	}
 	if !c.aroundHolds(child, key) || !c.aroundHolds(id, key) || c.aroundHolds(child, "person:lina") || c.aroundHolds(id, nodeRef(child)) {

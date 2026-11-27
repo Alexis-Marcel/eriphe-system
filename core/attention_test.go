@@ -73,12 +73,12 @@ func TestAttentionMergeByRef(t *testing.T) {
 // the small things, 1. Decided, it leaves.
 func TestAttentionWeightByKind(t *testing.T) {
 	for kind, want := range map[string]int{cardTaskStart: 4, cardAccess: 4, cardSkill: 3, cardMonitor: 3, cardCalls: 3,
-		cardIntention: 2, cardRule: 1, cardMemory: 1, cardSetting: 1} {
+		cardIntention: 2, cardRule: 1, cardSetting: 1} {
 		if got := cardWeight(kind); got != want {
 			t.Errorf("%s: weight %d, want %d", kind, got, want)
 		}
 	}
-	tw, _ := newMemoryWeb(t)
+	tw, _ := newIntentsWeb(t)
 	c := tw.c
 	r := proposedRule(t, c, "facture", "")
 	brainSays(c, "Je ne te préviens plus des factures avant le brief ?")

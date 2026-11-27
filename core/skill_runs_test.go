@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestSkillTriggerParse(t *testing.T) {
@@ -161,6 +162,49 @@ func TestSkillRunBatches(t *testing.T) {
 	c.tickSkills(ctx, now.Add(16*time.Minute))
 	if rs := runsOfSkill(t, c, "mails-rdv"); len(rs) != 1 {
 		t.Fatalf("started again: %+v", rs)
+	}
+}
+
+// A skill's run calls since on eriphe-nodes, allowed in advance, from its
+// previous run; a task that follows no skill has no since.
+func TestSkillRunCallsSince(t *testing.T) {
+	c, now := skillCore(t, func(c *core) { openGraph(t, c) })
+	addTriggered(t, c, "---\nname: brief\ndescription: le brief\nwhen: monitor.new\n---\nFais le brief.\n")
+	c.emit(journalEvent{Kind: "monitor.new", Key: "perso", Source: "monitor:mails", At: *now})
+	c.tickSkills(context.Background(), *now)
+	rs := runsOfSkill(t, c, "brief")
+	if len(rs) != 1 || rs[0].Task == "" {
+		t.Fatalf("runs %+v", rs)
+	}
+	// Its task, as its device gets it: eriphe-nodes, since allowed in advance.
+	task, _ := c.store.task(rs[0].Task)
+	c.store.registerDevice(task.Device, hashSecret("x"))
+	spec := assignedSpec(t, c, task.Device, task.ID)
+	if !slices.Contains(spec.Servers, nodesServer) || !slices.Contains(spec.AllowedTools, "mcp__eriphe-nodes__since") {
+		t.Fatalf("the run's task: servers %v, allowed %v", spec.Servers, spec.AllowedTools)
+	}
+	out := mustNodes(t, c, rs[0].Task, "since", map[string]any{"t": "last_run"})
+	if _, ok := out["from"]; !ok {
+		t.Fatalf("since: %v", out)
+	}
+	ctx := context.Background()
+	ct, st := mcp.NewInMemoryTransports()
+	if _, err := c.taskNodesServer(&TaskRow{ID: "t-plain"}).Connect(ctx, st, nil); err != nil {
+		t.Fatal(err)
+	}
+	sess, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	res, err := sess.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range res.Tools {
+		if tl.Name == "since" {
+			t.Fatal("a task that follows no skill has since")
+		}
 	}
 }
 

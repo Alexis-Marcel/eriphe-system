@@ -13,9 +13,9 @@ import (
 // itself and a task's start are refused, and a card no longer waiting too.
 func TestBrainWithdrawsHisCard(t *testing.T) {
 	c, node := outcomeCore(t)
-	x := mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Le garage ferme lundi", Status: memProposed, SourceKind: srcTask})
-	ref := proposalRef(cardMemory, x.ID)
-	c.cardNow(cardMemory, x.ID, "", nodeRef(node))
+	x := mustIntend(t, c.intents, &Intention{Text: "Appeler le garage lundi", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustFirstParty})
+	ref := proposalRef(cardIntention, x.ID)
+	c.cardNow(cardIntention, x.ID, "", nodeRef(node))
 	before := c.store.lastMessageSeq()
 
 	out, isErr := callBrainTool(t, c, "withdraw_proposal", map[string]any{"ref": ref})
@@ -25,10 +25,10 @@ func TestBrainWithdrawsHisCard(t *testing.T) {
 	if y := cardOfRef(t, c, ref); y.State != cardGone || y.By != cardByEriphe {
 		t.Errorf("the card: %s by %q", y.State, y.By)
 	}
-	if c.proposalOf(cardMemory, x.ID).Pending {
-		t.Error("the memory still waits")
+	if c.proposalOf(cardIntention, x.ID).Pending {
+		t.Error("the intention still waits")
 	}
-	if got, _ := c.mem.memory(x.ID); got.Status == memActive {
+	if got, _ := c.intents.intention(x.ID); got.State == intentOpen {
 		t.Error("withdrawing approved it")
 	}
 	if c.store.lastMessageSeq() != before {

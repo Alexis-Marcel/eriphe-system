@@ -31,12 +31,6 @@ func intendCall(text, kind, remind string) benchCall {
 	}
 }
 
-func rememberCall(kind, text string) benchCall {
-	return func(c *core, seq int) (map[string]any, error) {
-		return c.brainRemember(rememberIn{Text: text, Kind: kind, About: "owner", SourceRef: ref(seq)})
-	}
-}
-
 func ruleCall(in ruleIn) benchCall {
 	return func(c *core, seq int) (map[string]any, error) {
 		in.SourceRef, in.Why = ref(seq), "Demandé."
@@ -59,22 +53,22 @@ var conceptBench = []benchRow{
 		nil, ""},
 	{"Ne me dérange pas après 23 h", "rule",
 		ruleCall(ruleIn{Kind: ruleQuiet, From: "23:00", To: "08:00"}),
-		rememberCall(kindPreference, "Ne veut pas être dérangé après 23 h"), "rule"},
+		nil, ""},
 	{"Ne me préviens plus des factures avant le brief", "rule",
 		ruleCall(ruleIn{Match: "facture", Ceiling: ptr(2)}),
-		rememberCall(kindLesson, "Ne pas le prévenir des factures avant le brief"), "rule"},
+		nil, ""},
 	{"Pour Getout, préviens-moi aussi sur Telegram", "rule",
 		ruleCall(ruleIn{Match: "project:getout", Floor: 5, Also: "telegram"}),
-		rememberCall(kindPreference, "Veut les notifications de Getout aussi sur Telegram"), "rule"},
+		nil, ""},
 	{"Ne me préviens de Lina qu'à mon retour", "rule",
 		ruleCall(ruleIn{Match: "person:lina", Ceiling: ptr(2)}),
-		rememberCall(kindPreference, "Ne le prévenir de Lina qu'à son retour"), "rule"},
+		nil, ""},
 	{"Ne me préviens plus jamais de la newsletter", "rule",
 		ruleCall(ruleIn{Match: "topic:newsletter", Ceiling: ptr(0)}),
-		rememberCall(kindLesson, "Ne plus le prévenir de la newsletter"), "rule"},
+		nil, ""},
 	{"Pour tous mes projets, préviens-moi tout de suite, même la nuit", "rule",
 		ruleCall(ruleIn{Match: "project:", Floor: 5, Night: true}),
-		rememberCall(kindPreference, "Veut être prévenu de ses projets même la nuit"), "rule"},
+		nil, ""},
 	{"Mets le téléphone en premier pour me prévenir", "setting",
 		settingCall(setOrder, "phone,computer"),
 		ruleCall(ruleIn{Kind: "order", Match: "phone"}), "setting"},
@@ -83,20 +77,17 @@ var conceptBench = []benchRow{
 		ruleCall(ruleIn{Kind: "cap", Match: "2"}), "setting"},
 	{"Sur Telegram, envoie juste un signal, pas le texte", "setting",
 		settingCall(setDetail, "telegram alert"),
-		rememberCall(kindPreference, "Sur Telegram, seulement un signal, pas le texte des notifications"), "setting"},
-	{"Je préfère des réponses courtes, sans emoji", "memory",
-		rememberCall(kindPreference, "Préfère des réponses courtes, sans emoji"),
 		nil, ""},
 	{"Je dois rendre le rapport à Lina vendredi", "intention",
 		func(c *core, seq int) (map[string]any, error) {
 			return c.brainIntend(intendIn{Text: "Rendre le rapport à Lina", Kind: intentPromise, OwedTo: "person:lina", DueAt: "2026-11-06", SourceRef: ref(seq)})
 		},
-		rememberCall("promise", "Doit rendre le rapport à Lina vendredi"), "intend"},
+		nil, ""},
 	{"Rappelle-moi vendredi que je t'ai promis le compte rendu", "intention",
 		func(c *core, seq int) (map[string]any, error) {
 			return c.brainIntend(intendIn{Text: "Envoyer le compte rendu", Kind: intentCommitment, DueAt: "2026-11-06", SourceRef: ref(seq)})
 		},
-		rememberCall("commitment", "Doit envoyer le compte rendu vendredi"), "intend"},
+		nil, ""},
 }
 
 func TestConceptBench(t *testing.T) {
@@ -136,8 +127,7 @@ func TestScheduleHintNamesTimedSkill(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	seq := ownerSays(c, "Tous les matins, donne-moi la météo")
 	for name, call := range map[string]benchCall{
-		"intend":   intendCall("Tous les matins, donner la météo", "reminder", ""),
-		"remember": rememberCall("routine", "Donner la météo chaque matin"),
+		"intend": intendCall("Tous les matins, donner la météo", "reminder", ""),
 	} {
 		_, err := call(c, seq)
 		if err == nil || !strings.Contains(err.Error(), "write_skill") || !strings.Contains(err.Error(), "when: time") {
@@ -171,65 +161,6 @@ func TestConceptMapGiven(t *testing.T) {
 		if !strings.Contains(prompt, safety) {
 			t.Errorf("the prompt lost %q", safety)
 		}
-	}
-}
-
-// A preference about the conversation that only sounds like one about
-// notifications is kept when the brain says so.
-func TestRememberAboutConversation(t *testing.T) {
-	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
-	seq := ownerSays(c, "Préviens-moi avant de lancer une tâche longue")
-	in := rememberIn{Text: "Veut être prévenu avant une tâche longue", Kind: kindPreference, About: "owner", SourceRef: ref(seq)}
-	if _, err := c.brainRemember(in); err == nil || !strings.Contains(err.Error(), "about_conversation") {
-		t.Fatalf("not redirected: %v", err)
-	}
-	in.AboutConversation = true
-	if out, err := c.brainRemember(in); err != nil || out["status"] != memActive {
-		t.Fatalf("%v %v", out, err)
-	}
-}
-
-// recall shows the rules about the question, typed as rules, without a
-// copy in the memory.
-func TestRecallShowsRules(t *testing.T) {
-	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
-	ownerSays(c, "ok")
-	c.addNotifyRule(notifyRule{Kind: ruleQuiet, Days: daysAll, From: 23 * 60, To: 7 * 60, State: ruleActive, By: "user", Why: "Demandé."})
-	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:getout", Floor: 5, Ceiling: 5, Night: true, State: ruleActive, By: "user", Why: "La prod compte."})
-	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "facture", Ceiling: 0, State: ruleProposed, By: "brain", Why: "Pas utile."})
-
-	rules := func(in recallIn) []recalledRule {
-		t.Helper()
-		out, err := c.brainRecall(in)
-		if err != nil {
-			t.Fatal(err)
-		}
-		rs, _ := out["rules"].([]recalledRule)
-		if len(rs) > 0 && !strings.Contains(out["rules_note"].(string), "not memories") {
-			t.Error("rules not flagged as rules")
-		}
-		return rs
-	}
-	if rs := rules(recallIn{Query: "quand ne pas le déranger"}); len(rs) != 3 {
-		t.Errorf("a question about being told shows every rule: %+v", rs)
-	}
-	if rs := rules(recallIn{Query: "getout"}); len(rs) != 1 || rs[0].Kind != kindRule || !strings.Contains(rs[0].Rule, "even at night") {
-		t.Errorf("getout: %+v", rs)
-	}
-	if rs := rules(recallIn{About: "project:getout"}); len(rs) != 1 {
-		t.Errorf("subject project:getout: %+v", rs)
-	}
-	if rs := rules(recallIn{Query: "factures"}); len(rs) != 1 || rs[0].State != ruleProposed {
-		t.Errorf("factures: %+v", rs)
-	}
-	if rs := rules(recallIn{Query: "anniversaire de Lina"}); len(rs) != 0 {
-		t.Errorf("an unrelated question shows rules: %+v", rs)
-	}
-	if rs := rules(recallIn{Query: "getout", Kinds: []string{kindPerson}}); len(rs) != 0 {
-		t.Errorf("kinds without rule show rules: %+v", rs)
-	}
-	if rs := rules(recallIn{Kinds: []string{kindRule}}); len(rs) != 3 {
-		t.Errorf("kinds rule: %+v", rs)
 	}
 }
 
@@ -290,7 +221,7 @@ func TestSettingAppliedOrProposed(t *testing.T) {
 
 // « À valider » lists a proposed setting, and its buttons apply or drop it.
 func TestApprovalsSettings(t *testing.T) {
-	tw, csrf := newMemoryWeb(t)
+	tw, csrf := newIntentsWeb(t)
 	c := tw.c
 	id, err := c.proposeSetting(settingProposal{Name: setCap, Value: "6", Why: "Trop de messages gardés."})
 	if err != nil {
@@ -303,7 +234,7 @@ func TestApprovalsSettings(t *testing.T) {
 		}
 	}
 	h := map[string]string{"X-CSRF-Token": csrf}
-	if _, _, hd := tw.do("POST", "/settings/proposals/"+idText(id)+"/approve", url.Values{}, h); !strings.Contains(hd.Get("HX-Trigger"), "memory-changed") {
+	if _, _, hd := tw.do("POST", "/settings/proposals/"+idText(id)+"/approve", url.Values{}, h); !strings.Contains(hd.Get("HX-Trigger"), "data-changed") {
 		t.Error("approving a setting does not reload À valider")
 	}
 	if c.notifyCap() != 6 {

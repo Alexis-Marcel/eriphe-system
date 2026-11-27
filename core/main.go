@@ -24,6 +24,7 @@ import (
 	"net/http"
 	neturl "net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	_ "time/tzdata" // the calendar form checks time zones; the image has no zoneinfo
@@ -73,16 +74,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("token: %v", err)
 	}
+	// The intentions an older eriphe-core kept in memory.db, copied once
+	// into core.db before anything reads them (intentions_import.go).
+	if got, err := importIntentions(store, cfg.memoryDB()); err != nil {
+		log.Fatalf("intentions: importing %s: %v (move it aside to start without its intentions)", cfg.memoryDB(), err)
+	} else if got.Intentions > 0 || got.Log > 0 {
+		log.Printf("intentions: %d intentions and %d log entries imported from %s into core.db; %s is kept, no longer read",
+			got.Intentions, got.Log, cfg.memoryDB(), filepath.Base(cfg.memoryDB()))
+	}
 	c := newCore(cfg, store)
 	c.token = token
 	c.startMachineTLS() // machine_tls.go
-	// Eriphe's memory, in its own file: without it, the rest still works.
-	if mem, err := openMemory(cfg.memoryConfig().DB); err != nil {
-		log.Printf("memory: %v", err)
-	} else {
-		c.useMemory(mem) // its abouts are kept by the names of core.db (names.go)
-		c.mem.owner = func() string { return c.conf().User }
-	}
 	// The graph's nodes, in their own repository (nodes.go).
 	if nodes, err := openNodes(cfg, store.db); err != nil {
 		log.Printf("nodes: %v", err)

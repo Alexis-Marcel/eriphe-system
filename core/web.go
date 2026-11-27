@@ -239,7 +239,7 @@ func (w *web) routes() http.Handler {
 
 	// The settings' list of entries: the first level on a phone. A wide
 	// screen has the list as its sidebar and opens the first entry, the
-	// memory, instead (early.js).
+	// agents, instead (early.js).
 	mux.Handle("GET /settings", w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
 		w.render(rw, r, s, "settings", "", page{Title: "settings.title", Nav: "settings", View: "index"})
 	}))
@@ -292,7 +292,7 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /settings/address", w.auth(w.handleSaveAddress)) // web_address.go
 	mux.Handle("POST /settings/signin/issuer", w.auth(w.handleTestIssuer))
 	mux.Handle("POST /settings/signin/try", w.auth(w.handleTrySignin))
-	w.memoryRoutes(mux)     // web_memory.go
+	w.intentionRoutes(mux)  // web_intentions.go
 	w.remoteRoutes(mux)     // web_remote.go
 	w.appRoutes(mux)        // connection_apps.go
 	w.connectionRoutes(mux) // web_connections.go
@@ -618,7 +618,7 @@ func hxTrigger(msg string, ok, changed bool) string {
 	}
 	v := map[string]any{"toast": map[string]string{"message": msg, "kind": kind}}
 	if changed {
-		v["memory-changed"] = true
+		v["data-changed"] = true
 	}
 	return hxEvents(v)
 }

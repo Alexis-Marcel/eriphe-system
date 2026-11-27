@@ -11,7 +11,7 @@ import (
 )
 
 // siteNode is a node at work with all a card holds, some of it drawn from
-// external content, and things about others. It opens the graph when c
+// external content, and an intention about another. It opens the graph when c
 // has none.
 func siteNode(t *testing.T, c *core) string {
 	t.Helper()
@@ -24,47 +24,39 @@ func siteNode(t *testing.T, c *core) string {
 	}
 	id := d.Node.Meta.ID
 	setStatus(t, c, id, nodeRunning)
-	key, m := nodeRef(id), c.mem
+	key, m := nodeRef(id), c.intents
 	for i := 1; i <= 4; i++ {
-		mustAdd(t, m, &Memory{Kind: kindDecision, About: key, Text: fmt.Sprintf("Décision %d du site", i)})
+		mustIntend(t, m, &Intention{Text: fmt.Sprintf("Relancer Lina pour le site, point %d", i), About: key, OwedTo: "person:lina", DueAt: m.now().Add(time.Hour)})
 	}
-	mustAdd(t, m, &Memory{Kind: kindFact, About: key, Text: "Le domaine est example.org"})
-	mustAdd(t, m, &Memory{Kind: kindFact, About: key, Text: "LU DANS UNE PAGE WEB",
-		SourceKind: srcBrain, Trust: trustExternal, SourceRef: "web:example.org"})
-	mustAdd(t, m, &Memory{Kind: kindPerson, About: "person:lina", Text: "Lina relit les pages du site"})
-	mustAdd(t, m, &Memory{Kind: kindPreference, About: key, Text: "Le site reste sobre"})
-	mustAdd(t, m, &Memory{Kind: kindFact, About: "project:other", Text: "UN FAIT SANS RAPPORT"})
-	mustAdd(t, m, &Memory{Kind: kindFact, About: key, Text: "Une idée à valider", Status: memProposed})
-	mustIntend(t, m, &Intention{Text: "Relancer Lina pour le site", About: key, OwedTo: "person:lina", DueAt: m.now().Add(time.Hour)})
+	mustIntend(t, m, &Intention{Text: "Une idée à valider", About: key, State: intentProposed, SourceKind: srcBrain, Trust: trustFirstParty})
+	mustIntend(t, m, &Intention{Text: "PAYER CE QUE DIT LE MAIL", About: key, State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-mail", Trust: trustExternal})
 	mustIntend(t, m, &Intention{Text: "Rendre le livre", OwedTo: "person:paul", DueAt: m.now().Add(time.Hour)})
 	return id
 }
 
 // A node's card holds the node (its state, title, goal and the first line of
-// its doc), its last three decisions, its facts and people, its
-// intentions, its cards and its preferences; an external line is named,
-// not quoted; nothing of another; and reading it taints nothing.
+// its doc), its intentions and its cards; an external line is named, not
+// quoted; nothing of another; and reading it taints nothing.
 func TestAboutCard(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	id := siteNode(t, c)
 	key := nodeRef(id)
 	card, st := c.aboutCard(key, 4000)
 	for _, want := range []string{
 		"Fiche de " + key, "- nœud " + id + " [running", "« Site en ligne » (but : « Le site répond en https. ») : Il reste le certificat.",
-		"Décision 4 du site", "Décision 2 du site",
-		"Le domaine est example.org", "fact tiré d'un contenu extérieur", "Lina relit les pages du site",
-		"Relancer Lina pour le site", "carte memory:", "Une idée à valider", "Le site reste sobre",
+		"Relancer Lina pour le site, point 1", "Relancer Lina pour le site, point 4",
+		"carte intention:", "Une idée à valider", "tirée d'un contenu extérieur, non citée",
 	} {
 		if !strings.Contains(card, want) {
 			t.Errorf("card misses %q:\n%s", want, card)
 		}
 	}
-	for _, not := range []string{"Décision 1 du site", "LU DANS UNE PAGE WEB", "UN FAIT SANS RAPPORT", "Rendre le livre", "Le reste du doc"} {
+	for _, not := range []string{"PAYER CE QUE DIT LE MAIL", "Rendre le livre", "Le reste du doc"} {
 		if strings.Contains(card, not) {
 			t.Errorf("card has %q", not)
 		}
 	}
-	if strings.Index(card, "nœud ") > strings.Index(card, "Décision 4") || strings.Index(card, "Décision 4") > strings.Index(card, "Le site reste sobre") {
+	if strings.Index(card, "nœud ") > strings.Index(card, "point 1") || strings.Index(card, "point 1") > strings.Index(card, "Une idée à valider") {
 		t.Errorf("order:\n%s", card)
 	}
 	if st.Dropped != 0 || st.Chars != runeLen(card) || strings.Count(card, "```") != 2 {
@@ -84,7 +76,7 @@ func TestAboutCard(t *testing.T) {
 // A card keeps to its budget, shared in rounds: what does not fit is left
 // out, and said.
 func TestAboutCardBudget(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	key := nodeRef(siteNode(t, c))
 	card, st := c.aboutCard(key, aboutCardChars)
 	if st.Chars > aboutCardChars || runeLen(card) != st.Chars {
@@ -94,7 +86,7 @@ func TestAboutCardBudget(t *testing.T) {
 		t.Errorf("the node first:\n%s", card)
 	}
 	small, st := c.aboutCard(key, 500)
-	if st.Dropped == 0 || !strings.Contains(small, "de plus : recall") || runeLen(small) > 500 || strings.Count(small, "```") != 2 {
+	if st.Dropped == 0 || !strings.Contains(small, "de plus : intentions") || runeLen(small) > 500 || strings.Count(small, "```") != 2 {
 		t.Errorf("cut %+v:\n%s", st, small)
 	}
 }
@@ -102,7 +94,7 @@ func TestAboutCardBudget(t *testing.T) {
 // A node that may carry someone else's words is named, its title not
 // quoted.
 func TestAboutCardExternal(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	openGraph(t, c)
 	d, err := c.nodes.Create(nodestore.New{Title: "PLAN EXTÉRIEUR", Body: "SUIVRE LE MAIL", External: true, Author: byBrain})
 	if err != nil {
@@ -118,7 +110,7 @@ func TestAboutCardExternal(t *testing.T) {
 // The card of the turn's node goes with the turn when the session does
 // not hold it as it is now: once, then again only when it changed.
 func TestAboutCardPushedToTurn(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	id := siteNode(t, c)
 	key := nodeRef(id)
@@ -171,7 +163,7 @@ func TestAboutCardPushedToTurn(t *testing.T) {
 // A fresh session holds the cards of its pack: they are not given again
 // with its first turn.
 func TestAboutCardInFreshSession(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	key := nodeRef(siteNode(t, c))
 	task := startedBrain(t, c, false)
 	card, _ := c.aboutCard(key, aboutCardChars)
@@ -210,7 +202,7 @@ func pushRows(t *testing.T, c *core) string {
 // A worker task about a node starts with its card, after what it is
 // asked; its prompt as shown is what it was asked.
 func TestAboutCardAtStart(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	key := nodeRef(siteNode(t, c))
 	card, _ := c.aboutCard(key, aboutCardChars)
 	task, err := c.runTask(context.Background(), runRequest{Prompt: "Pose le certificat", about: key})
@@ -231,19 +223,16 @@ func TestAboutCardAtStart(t *testing.T) {
 }
 
 // The pack lists the nodes at work and waiting with their cards, and
-// leaves out only what a card shows: a decision past the card's last
-// three is still in its section.
+// leaves out only what a card shows: an intention about another is still
+// in its section.
 func TestContextPackLeavesOutWhatCardsShow(t *testing.T) {
-	c, _ := testMemoryCore(t)
-	siteNode(t, c) // four decisions: the card shows the last three
+	c, _ := testIntentsCore(t)
+	siteNode(t, c)
 	pack, st := c.contextPack()
-	if strings.Count(pack, "Décision 4 du site") != 1 || strings.Count(pack, "Décision 2 du site") != 1 {
-		t.Errorf("a decision a card shows said again:\n%s", pack)
+	if !strings.Contains(pack, "Rendre le livre") {
+		t.Errorf("an intention the card does not show is left out:\n%s", pack)
 	}
-	if !strings.Contains(pack, "Décision 1 du site") {
-		t.Errorf("a decision the card does not show is left out:\n%s", pack)
-	}
-	if strings.Count(pack, "Relancer Lina pour le site") != 1 || strings.Count(pack, "Une idée à valider") != 1 {
+	if strings.Count(pack, "Relancer Lina pour le site, point 1") != 1 || strings.Count(pack, "Une idée à valider") != 1 {
 		t.Errorf("an intention or a card said twice:\n%s", pack)
 	}
 	if len(st.Cards) != 1 || len(st.Cards[0].Stats.Refs) == 0 {
@@ -255,11 +244,11 @@ func TestContextPackLeavesOutWhatCardsShow(t *testing.T) {
 // title, state and the first line of its doc; a card that does not fit
 // leaves its node in a line; an idle or a done node is not listed.
 func TestContextPackListsActiveNodes(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	openGraph(t, c)
 	c.conf().Providers["p"] = Provider{Kind: selfHostedKind, BaseURL: "http://192.0.2.10:11434/v1"}
 	var ids []string
-	for i := range 4 {
+	for i := range 6 {
 		d, err := c.nodes.Create(nodestore.New{Title: fmt.Sprintf("Travail %d", i), Body: fmt.Sprintf("Où en est le travail %d.", i), Author: byBrain})
 		if err != nil {
 			t.Fatal(err)
@@ -271,15 +260,14 @@ func TestContextPackListsActiveNodes(t *testing.T) {
 		}
 		setStatus(t, c, id, state)
 		ids = append(ids, id)
-		for range 3 {
-			mustAdd(t, c.mem, &Memory{Kind: kindDecision, About: nodeRef(id), Text: strings.Repeat("une décision ", 15)})
-			mustAdd(t, c.mem, &Memory{Kind: kindFact, About: nodeRef(id), Text: strings.Repeat("un fait ", 25)})
+		for k := range 5 { // cards that wait on it, which its card shows
+			mustIntend(t, c.intents, &Intention{Text: fmt.Sprintf("%s %d.%d", strings.Repeat("une idée à valider ", 15), i, k), About: nodeRef(id), State: intentProposed, SourceKind: srcBrain, Trust: trustFirstParty})
 		}
 	}
 	idle, _ := c.nodes.Create(nodestore.New{Title: "Au repos", Author: byBrain})
 	pack, st := c.contextPack()
-	if len(st.Cards) == 0 || len(st.Cards) == 4 {
-		t.Fatalf("%d cards of 4: %s", len(st.Cards), st)
+	if len(st.Cards) == 0 || len(st.Cards) == 6 {
+		t.Fatalf("%d cards of 6: %s", len(st.Cards), st)
 	}
 	for i, id := range ids {
 		state := "running"

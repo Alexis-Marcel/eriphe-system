@@ -19,22 +19,23 @@ func (f *fakeClock) now() time.Time      { return f.t }
 func (f *fakeClock) add(d time.Duration) { f.t = f.t.Add(d) }
 func newClock() *fakeClock               { return &fakeClock{t: time.Date(2026, 10, 26, 14, 0, 0, 0, time.Local)} }
 
-func testMemory(t *testing.T) (*memStore, *fakeClock) {
+// testIntents is an intentions store of its own, in a core.db of its
+// own, its abouts kept as given.
+func testIntents(t *testing.T) (*intentStore, *fakeClock) {
 	t.Helper()
-	m, err := openMemory(filepath.Join(t.TempDir(), "memory.db"))
+	s, err := openStore(filepath.Join(t.TempDir(), "core.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { m.db.Close() })
+	t.Cleanup(func() { s.db.Close() })
 	clock := newClock()
-	m.now = clock.now
-	return m, clock
+	return &intentStore{db: s.db, now: clock.now}, clock
 }
 
-// testMemoryCore is a core with a store, a memory, a brain task and an
-// agent whose credential exists, so that tasks can be started (they wait
-// for a device).
-func testMemoryCore(t *testing.T) (*core, *fakeClock) {
+// testIntentsCore is a core with a store, its intentions on a fake clock,
+// a brain task and an agent whose credential exists, so that tasks can be
+// started (they wait for a device).
+func testIntentsCore(t *testing.T) (*core, *fakeClock) {
 	t.Helper()
 	dir := t.TempDir()
 	s, err := openStore(filepath.Join(dir, "core.db"))
@@ -47,15 +48,15 @@ func testMemoryCore(t *testing.T) (*core, *fakeClock) {
 		Providers: map[string]Provider{"p": {Kind: "claude-subscription", Secret: secret}},
 		Agents: map[string]Agent{"small": {Runtime: "claude-code", Provider: "p", Use: "quick things"},
 			"haiku": {Runtime: "claude-code", Provider: "p", Use: "cheap"}},
-		Memory: &MemoryConfig{}, Brain: &BrainConfig{}}
+		Brain: &BrainConfig{}}
 	c := newCore(cfg, s)
 	c.setServerTrust("vault", true, trustByUser)
 	// A device that has gone offline: tasks wait for it.
 	s.registerDevice("nas", hashSecret("a"))
 	s.setDeviceStatus("nas", true, []byte(`{"runtimes":["claude-code"]}`))
 	s.setDeviceStatus("nas", false, nil)
-	m, clock := testMemory(t)
-	c.useMemory(m)
+	clock := newClock()
+	c.intents.now = clock.now
 	s.insertTask(&TaskRow{ID: "t-brain", Kind: "brain", Runtime: "claude-code", State: stateIdle, Prompt: "brain"})
 	setBrainTask(c, "t-brain")
 	return c, clock
@@ -71,7 +72,7 @@ func ownerSays(c *core, text string) int {
 
 func ref(seq int) string { return "msg:" + strconv.Itoa(seq) }
 
-func mustIntend(t *testing.T, m *memStore, x *Intention) *Intention {
+func mustIntend(t *testing.T, m *intentStore, x *Intention) *Intention {
 	t.Helper()
 	if x.SourceKind == "" {
 		x.SourceKind, x.Trust = srcOwner, trustOwner
@@ -83,9 +84,9 @@ func mustIntend(t *testing.T, m *memStore, x *Intention) *Intention {
 	return got
 }
 
-func newMemoryWeb(t *testing.T) (*testWeb, string) {
+func newIntentsWeb(t *testing.T) (*testWeb, string) {
 	t.Helper()
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	tw := newTestWebFor(t, c)
 	return tw, tw.setup()
 }

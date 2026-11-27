@@ -134,7 +134,4 @@ func TestTemplateTextsResolve(t *testing.T) {
 	for _, k := range happenedKinds {
 		has("happened.kind." + k)
 	}
-	for _, k := range memoryKinds {
-		has("kind." + k)
-	}
 }

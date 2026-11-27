@@ -250,9 +250,8 @@ skill may use or when it runs, and nothing changes before you say yes.
 ## Shape it by talking
 
 "No more newsletters from news.example.org", "show me less of this" are **preferences**. Eriphe
-remembers them as memories about you, and whatever watches your mail or your agenda reads them
-before noting what it found. You manage them like any memory: ask Eriphe what it remembers, or to
-forget one. There is no rule to maintain: the workspace's only settings are how the graph moves
+writes them in the node of their subject (your mail, your agenda), where whatever watches it reads
+them before noting what it found. You change them like any page: ask Eriphe, or edit the node. There is no rule to maintain: the workspace's only settings are how the graph moves
 (see Move things).
 
 ## Proposals
@@ -311,7 +310,7 @@ forget one. There is no rule to maintain: the workspace's only settings are how 
 The workspace is the only place to talk to Eriphe on the web: there is no separate conversation
 page, and no history under the bar: the subject's page is the conversation, and Eriphe keeps it
 saying where things stand. The tasks at work, and how reliable they were lately, are in Settings → Journal; each task has its own
-page there, with its trace, **Stop**, and the answer it waits for. The settings and the memory have
+page there, with its trace, **Stop**, and the answer it waits for. The settings have
 no top bar: **Workspace**, at the top of their menu, leads back.
 
 While the workspace is open in front of you, Eriphe knows you are there: a notification shows as a

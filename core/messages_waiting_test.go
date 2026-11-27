@@ -16,7 +16,7 @@ import (
 // session's CSRF token.
 func waitingCore(t *testing.T) (*core, *testWeb, string) {
 	t.Helper()
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	tw := newTestWebFor(t, c)
 	return c, tw, tw.setup()

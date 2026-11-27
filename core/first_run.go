@@ -5,9 +5,10 @@ import "log"
 // The first-run interview: once the wizard is over and the user opens the
 // workspace, eriphe-core gives the brain one turn marked « premier
 // lancement », and the brain writes first, offering a short interview
-// (brain-prompt.md, « Premier lancement »). What it learns goes to its
-// memory. It is offered once per install, never on an install from before
-// this release; the Memory page sends the same turn again on demand.
+// (brain-prompt.md, « Premier lancement »). What it learns goes to the
+// nodes it picks. It is offered once per install, never on an install
+// from before this release; the user asks for it again in the
+// conversation.
 
 const (
 	// firstRunKey is "due" on a new install until the interview is
@@ -56,8 +57,7 @@ func (c *core) firstRun() {
 	}
 }
 
-// offerInterview sends the brain the first-run turn: at first run, or when
-// the user asks for the interview again from the Memory page.
+// offerInterview sends the brain the first-run turn, at first run.
 func (c *core) offerInterview() error {
 	if _, err := c.store.addMessageVia(roleUser, firstRunText, firstRunVia, false); err != nil {
 		return err

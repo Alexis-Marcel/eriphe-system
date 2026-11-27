@@ -24,7 +24,7 @@ import (
 // notification or a brain message written in a tainted turn, an intention
 // drawn from a mail, a task started on a tainted turn). An external item's
 // text is quoted only when asked for, and that taints the turn, as reading
-// an external memory does.
+// an external node does.
 
 // task_log is what happened to each worker task, as the brain was told:
 // a state, and for a turn that ended its receipt's verdict, in numbers.
@@ -286,10 +286,7 @@ func notificationHappenings(c *core, from time.Time, limit int) ([]happening, er
 var intentionEvents = map[string]string{intentDue: "due", intentDone: "done", intentSnoozed: "snoozed", intentCancelled: "cancelled"}
 
 func intentionHappenings(c *core, from time.Time, limit int) ([]happening, error) {
-	if c.mem == nil {
-		return nil, nil
-	}
-	rows, err := c.mem.db.Query(`SELECT l.time, l.intention_id, l.to_state, i.text, i.trust
+	rows, err := c.intents.db.Query(`SELECT l.time, l.intention_id, l.to_state, i.text, i.trust
 		FROM intention_log l JOIN intentions i ON i.id = l.intention_id
 		WHERE l.time >= ? AND l.from_state != l.to_state AND l.to_state IN ('due', 'done', 'snoozed', 'cancelled')
 		ORDER BY l.seq LIMIT ?`, from.Unix(), limit)

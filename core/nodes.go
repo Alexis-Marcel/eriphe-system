@@ -17,8 +17,8 @@ import (
 
 // The graph's nodes (package nodestore): a git repository of markdown
 // files, nodes/ next to core.db, and its index nodes.db beside it. A
-// secret is refused by the memory's filter (scanSecrets); the nightly
-// backup goes with the memory's, into its backup folder, at its hour.
+// secret is refused (scanSecrets); the nightly backup goes into its
+// backup folder, at its hour (BackupConfig).
 
 // nodeByCode is the author of code's own writes of a node.
 const nodeByCode = "eriphe"
@@ -112,18 +112,20 @@ func openNodes(cfg *Config, db *sql.DB) (*nodestore.Store, error) {
 }
 
 // BackupConfig is the nightly backup's hour, folder and days kept; it
-// works without one. Its keys are read in the "memory" object of core.json
-// (MemoryConfig).
+// works without one. Its keys are read in the "memory" object of core.json,
+// a name kept from when the memory had a file of its own; so is db, that
+// file, read once to import the intentions (intentions_import.go).
 type BackupConfig struct {
 	ExtractAt  string `json:"extract_at,omitempty"`  // local time of the nightly run, 03:00 by default
 	BackupDir  string `json:"backup_dir,omitempty"`  // nightly copies; memory-backups next to eriphe-core's database by default
 	BackupKeep int    `json:"backup_keep,omitempty"` // nightly copies kept, 14 by default
+	MemoryDB   string `json:"db,omitempty"`          // an older eriphe-core's memory.db; next to eriphe-core's database by default
 }
 
 func (c *Config) backupConfig() BackupConfig {
 	var b BackupConfig
 	if c.Memory != nil {
-		b = c.Memory.BackupConfig
+		b = *c.Memory
 	}
 	if b.ExtractAt == "" {
 		b.ExtractAt = "03:00"

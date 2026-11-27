@@ -105,7 +105,7 @@ func TestTurnBudget(t *testing.T) {
 
 	b := newTurnBudget(1)
 	for range 50 {
-		for _, read := range []string{"node_read", "node_find", "recall", "list_skills", "since", "task_status", "page_format"} {
+		for _, read := range []string{"node_read", "node_find", "intentions", "list_skills", "since", "task_status", "page_format"} {
 			if why := refusal(b.charge(read, map[string]any{"id": "n1"})); why != "" {
 				t.Fatalf("%s refused: %s", read, why)
 			}
@@ -135,13 +135,13 @@ func TestTurnBudget(t *testing.T) {
 		t.Fatalf("a skill refused: %s", why)
 	}
 	refusedFor(t, refusal(b.charge("write_skill", map[string]any{"name": "jour"})))
-	for _, name := range []string{"try_monitor", "write_monitor", "remember", "node_set", "notify"} {
+	for _, name := range []string{"try_monitor", "write_monitor", "intend", "node_set", "notify"} {
 		if why := refusal(b.charge(name, nil)); why != "" {
 			t.Fatalf("%s refused: %s", name, why)
 		}
 	}
 	// Six changes made: the seventh, of any kind, catalog included, is work.
-	refusedFor(t, refusal(b.charge("remember", nil)))
+	refusedFor(t, refusal(b.charge("intend", nil)))
 	refusedFor(t, refusal(b.chargeCatalog()))
 	// The way out is always open.
 	for _, name := range []string{"run_task", "node_show", "turn_home", "answer_task", "stop_task", "withdraw_proposal", "node_settle"} {
@@ -194,7 +194,7 @@ func TestTurnBudget(t *testing.T) {
 // A delivery's budget is scaled by the messages it brings: three tasks'
 // ends delivered together may update their three nodes.
 func TestBrainDeliveryScalesBudget(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	ctx := context.Background()
 	if err := tendBrain(ctx, c); err != nil {

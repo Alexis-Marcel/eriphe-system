@@ -4,7 +4,7 @@
      are for looking back: the tasks at work, the feed of what happened, by
      period and kind (the tool accesses are the decisions' journal), and
      every proposal and permission still waiting. A proposal's buttons call
-     its own page's actions; the list then reloads itself (memory-changed). */}}
+     its own page's actions; the list then reloads itself (data-changed). */}}
 {{define "journal-page"}}{{with .Data}}
 <div class="activity" id="activity">
   <header class="page-head"><h2>{{t "settings.journal"}}</h2><p>{{t "journal.pagelead"}}</p></header>
@@ -34,9 +34,9 @@
   </div>
 </header>
 {{/* The page follows its task: every 5 s while it works (no field to lose
-     then), and after an action of its own (memory-changed). */}}
+     then), and after an action of its own (data-changed). */}}
 <div class="task-page" id="task-page" hx-get="/tasks/{{.Card.ID}}" hx-select="#task-page" hx-target="this" hx-swap="outerHTML"
-  hx-trigger="{{if or (eq .Card.State "running") (eq .Card.State "pending")}}every 5s, {{end}}memory-changed from:body">{{template "task-body" $}}</div>
+  hx-trigger="{{if or (eq .Card.State "running") (eq .Card.State "pending")}}every 5s, {{end}}data-changed from:body">{{template "task-body" $}}</div>
 {{end}}{{end}}
 
 {{define "approve-page"}}{{with .Data}}
@@ -95,16 +95,16 @@
 {{end}}
 
 {{define "approvals"}}
-<div hidden hx-get="/settings/approve" hx-trigger="memory-changed from:body" hx-select="#activity" hx-target="#activity" hx-swap="outerHTML"></div>
+<div hidden hx-get="/settings/approve" hx-trigger="data-changed from:body" hx-select="#activity" hx-target="#activity" hx-swap="outerHTML"></div>
 <p class="muted small">{{t "approve.lead"}}</p>
 {{if .Perms}}<section class="approve-group" id="permissions" aria-labelledby="ap-perms">
   <h3 id="ap-perms">{{t "approve.perms"}} <span class="count">{{len .Perms}}</span></h3>
   {{range .Perms}}{{template "permission" .}}{{end}}
 </section>{{end}}
-{{if or .Memories .Intents}}<section class="approve-group memory" id="memory" aria-labelledby="ap-mem">
-  <h3 id="ap-mem">{{t "approve.memory"}} <span class="count">{{.Remember}}</span></h3>
-  <p class="muted small">{{t "mem.inboxlead"}}</p>
-  <div class="mem-list">{{range .Intents}}{{template "intent-card" .}}{{end}}{{range .Memories}}{{template "mem-card" .}}{{end}}</div>
+{{if .Intents}}<section class="approve-group intentions" id="intentions" aria-labelledby="ap-intents">
+  <h3 id="ap-intents">{{t "approve.intentions"}} <span class="count">{{len .Intents}}</span></h3>
+  <p class="muted small">{{t "intent.inboxlead"}}</p>
+  <div class="intent-list">{{range .Intents}}{{template "intent-card" .}}{{end}}</div>
 </section>{{end}}
 {{if .Rules}}<section class="approve-group" id="rules" aria-labelledby="ap-rules">
   <h3 id="ap-rules">{{t "approve.rules"}} <span class="count">{{len .Rules}}</span></h3>

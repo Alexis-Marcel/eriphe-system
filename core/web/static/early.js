@@ -9,5 +9,5 @@ if (matchMedia("(display-mode: standalone)").matches || navigator.standalone ===
 // screen has it as the sidebar of every page and opens the first entry
 // instead, in place of the list (no step added to the history).
 if (location.pathname === "/settings" && matchMedia("(min-width: 861px)").matches) {
-  location.replace("/memory");
+  location.replace("/settings/agents");
 }

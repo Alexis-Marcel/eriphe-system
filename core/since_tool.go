@@ -13,7 +13,7 @@ import (
 // own (the user's words, the brain's in a clean turn, what eriphe-core
 // recorded), and names an external item by its kind, its event and its ref
 // without quoting it. include_external quotes those too, and then taints
-// the turn like reading an external memory; so does reading an external
+// the turn like reading an external node; so does reading an external
 // notification or intention through notifications or intentions.
 
 type sinceIn struct {
