@@ -84,13 +84,15 @@ empty field, is kept but not indexed. The workspace shows them under the node's 
 
 An author may also write them as Obsidian does, in a front matter of the page's own at its top (a
 `---` line, a YAML mapping, a `---` line, after blank lines at most), in `node_open`, `node_write`,
-`node_edit` or `node_append`: its fields are set as `node_set` sets them (a field written wins
+`node_edit` or `node_append` (and the user's own edit of the page): its fields are set as `node_set` sets them (a field written wins
 over the property's value, a field without a value is skipped) and the block leaves the page, so
 that the file keeps one front matter. All of the block or nothing: a block one of whose fields is
 not a property (a field of the table above, a name starting with `_`, a mapping as a value, a tag
 that is not one) stays in the page as text, nothing lost, and the check says so (`front-block`).
 A block the page already held before the write is not written by it: it stays as it is. A `---`
-rule followed by text that is not a YAML mapping is the page's own.
+rule followed by text that is not a YAML mapping, or by a line starting with `#` (a heading, a
+YAML comment), is the page's own. A value is written as `node_set` writes it, an attachment's id
+(`att_…`) as text.
 
 Any other field is kept with its value. While the front matter does not change, it keeps its bytes,
 comments included. When code writes it again (a new title, say), the known fields come first in the

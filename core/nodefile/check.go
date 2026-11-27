@@ -87,7 +87,7 @@ func (p *Page) Check(hasTool func(tool string) bool) []Problem {
 			continue
 		}
 		if _, _, _, ok := frontBlock(strings.Join(p.lines[i:], "\n")); ok {
-			add(i+1, ProblemFrontBlock, "this block at the top stays text: each of its fields must be a property (not title, goal, parent, id nor another field node_set or code writes, no name starting with _; a text, a number, a date, a [[link]] or a list of them); fix it, or set the properties with node_set (props)")
+			add(i+1, ProblemFrontBlock, "this block at the top stays text: each of its fields must be a property (not title, goal, parent, id nor another field node_set or code writes, no name starting with _; a text, a number, a date, a [[link]] or a list of them): fix it, and change the title or the goal with node_set if you have it")
 		}
 		break
 	}

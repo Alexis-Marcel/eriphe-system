@@ -15,6 +15,11 @@ import (
 // whose fields is not a property (title, id, parent and the other fields
 // code or node_set writes, a name starting with _, a mapping as a value)
 // stays in the page as text, nothing lost, and Check tells its author.
+// A --- rule above lines that read as a YAML mapping (« Note: à revoir »)
+// then a --- rule is taken as such a block: a page's text rarely does,
+// and Obsidian reads it the same way at the top of a note. A line
+// starting with # in it (a heading, or a YAML comment) leaves it the
+// page's: dropped, those words would be lost.
 
 // frontBlock cuts a front-matter block at the top of a body, after blank
 // lines: its fields, the block as written, and the body after it, the
@@ -35,6 +40,11 @@ func frontBlock(body string) (fields []Field, block, rest string, ok bool) {
 	front, yml, after, err := splitFront([]byte(body[at:]))
 	if err != nil {
 		return nil, "", "", false
+	}
+	for _, l := range strings.Split(string(yml), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(l), "#") {
+			return nil, "", "", false // a heading, or a comment: the page's words, never dropped
+		}
 	}
 	var doc yaml.Node
 	if yaml.Unmarshal(yml, &doc) != nil || len(doc.Content) == 0 {

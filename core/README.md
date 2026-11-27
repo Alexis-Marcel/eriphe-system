@@ -1345,7 +1345,8 @@ decided), and a run or a step that ends, or the node archived, drops its progres
   tool the task is not lent included. `node_open`
   opens a child (title, goal, body) of its node, or of a node where it works (`parent`); with `steps`, its work cut in steps ([below](#work-in-steps-node_stepsgo)). `page_format` gives how a page is written ([below](#the-page-format-tool-page_formatgo)). `progress` adds one line to its trace. A task that follows a skill has
   `skill_propose` too ([Skills improve with use](#skills)). It never starts a task, and never
-  archives, approves or closes a node (no `node_set`).
+  archives, approves or closes a node (no `node_set`); it sets a node's properties and tags with a
+  front matter at the top of the page it writes, folded into the node's (`nodefile.AuthorBody`).
 - **Where it writes** (#768, `writable` in `task_write.go`, read at each call): its node and every
   node under it; the node it was launched for, its node's parent, when its node was opened for it
   (the brain's launches: a skill's run works in its home node, a step in its step node, and

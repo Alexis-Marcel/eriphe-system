@@ -130,6 +130,8 @@ func TestFrontBlockRuleLeftAlone(t *testing.T) {
 		"---\n- une liste\n---\n",
 		"---\n---\nRien.\n",
 		"Texte.\n---\ntags: [x]\n---\n",
+		"---\n# Titre\ntags: [x]\n---\n",
+		"---\ntags: [x] # mes tags\n# note: 3\n---\n",
 	} {
 		n := recipeNode(t)
 		if err := n.AuthorBody(body); err != nil {
@@ -143,6 +145,18 @@ func TestFrontBlockRuleLeftAlone(t *testing.T) {
 				t.Errorf("%q: %v", body, p)
 			}
 		}
+	}
+}
+
+// Lines between two --- rules that read as a YAML mapping are a block,
+// as Obsidian reads them at the top of a note.
+func TestFrontBlockProseAsMapping(t *testing.T) {
+	n := recipeNode(t)
+	if err := n.AuthorBody("---\nNote: à revoir\n---\nLa suite.\n"); err != nil {
+		t.Fatal(err)
+	}
+	if got := propsOf(n.Meta); !slices.Equal(got, []string{"Note=à revoir"}) || n.Text() != "La suite.\n" {
+		t.Fatalf("props %v, body %q", got, n.Text())
 	}
 }
 
