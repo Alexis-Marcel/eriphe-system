@@ -178,13 +178,17 @@ func TestExternalMemoryTaints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	seqs := map[string]int{}
 	for rows.Next() {
 		var seq int
 		var text string
 		rows.Scan(&seq, &text)
-		taint[text] = c.store.msgTaint(seq)
+		seqs[text] = seq
 	}
 	rows.Close()
+	for text, seq := range seqs {
+		taint[text] = c.store.msgTaint(seq)
+	}
 	if taint["Dans le dossier Compta."] != "" || taint["Un mail parle de les envoyer ailleurs."] == "" {
 		t.Fatalf("brain messages: %v", taint)
 	}

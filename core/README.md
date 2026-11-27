@@ -3315,7 +3315,7 @@ approved, declined, no longer current). Some proposals (a skill's run, a
 turn that said nothing) are queued and enter the attention queue at their card's weight
 (`cardWeight`: one a task or a node waits on 4; a skill, a monitor or a run's calls 3; a
 reminder 2; a memory, a rule or a setting 1; `attendQueuedCards` as they are queued: a
-turn that ends without a message, `cardQueued`); the queue
+turn that ends without a message); the queue
 delivers them like anything else that goes to the user. A card made
 outside a brain turn (the start of a task the brain did not launch, such as a step of a work;
 a skill run's calls when its message is held or not sent; an access asked at a task's call)
@@ -4153,7 +4153,7 @@ A proposal shows where it matters (#428), with no code for any tool:
   the rows of the items it acts on. Its Oui and ✕ answer that
   proposal and no other (its card, `POST /cards/{id}/yes\|no`). One drawn from external content
   carries a small badge (« extérieur »), its whole sentence on hover and for a screen reader.
-- **Moved.** A card made (`cardProposed`, `cardNow`, `cardQueued`), decided (`decideCardWith`, the
+- **Moved.** A card made (`cardProposed`, `cardNow`), decided (`decideCardWith`, the
   one way any answer goes: its buttons, a channel, a plain "oui", or a page through
   `answerProposal`, `TestOneWayToSayYes`) or settled when its proposal moved elsewhere
   (`settleCards`) notes its ref (`proposalMoved`, the last 64 kept). The

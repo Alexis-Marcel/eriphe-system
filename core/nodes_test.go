@@ -124,6 +124,9 @@ func TestNodesNightKeepsItsHourAndFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
+	if _, err := s.Create(nodestore.New{Title: "Courses", Author: "brain", Body: "Du pain."}); err != nil {
+		t.Fatal(err)
+	}
 	c := &core{base: &cfg, nodes: s}
 	c.snap.Store(&cfg)
 	done := ""
@@ -135,6 +138,9 @@ func TestNodesNightKeepsItsHourAndFolder(t *testing.T) {
 	}
 	if files, _ := filepath.Glob(filepath.Join(backups, "nodes-*.db")); len(files) != 1 || files[0] != filepath.Join(backups, "nodes-2026-11-17.db") {
 		t.Fatalf("backups: %v", files)
+	}
+	if _, err := os.Stat(filepath.Join(backups, "nodes-2026-11-17.bundle")); err != nil {
+		t.Fatalf("the night's bundle: %v", err)
 	}
 	if mem, _ := filepath.Glob(filepath.Join(backups, "memo*")); len(mem) != 0 {
 		t.Fatalf("the memory backed up: %v", mem)

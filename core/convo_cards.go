@@ -373,18 +373,6 @@ func (c *core) syncCards() {
 	}
 }
 
-// cardQueued gives a proposal made outside a turn, by no one who shows it,
-// its card, queued: the attention queue
-// delivers it at its card's weight (attendQueuedCards).
-func (c *core) cardQueued(kind string, id int64) {
-	p := c.proposalOf(kind, id)
-	if !p.Pending {
-		return
-	}
-	c.syncCard(p)
-	c.attendQueuedCards()
-}
-
 // reconcileCards puts the cards in step with their proposals once, when
 // eriphe-core starts: a proposal and its card are written one after the
 // other, not in one transaction, so a stop between the two leaves them

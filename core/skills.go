@@ -518,52 +518,6 @@ func keepSkillVersion(tx *sql.Tx, name, sha string) error {
 	return err
 }
 
-// setSkillApproved puts a skill back to version to ("" for none) from
-// version from ("" for none), as the learning journal undoes a change: it
-// refuses when the skill changed since.
-func (s *Store) setSkillApproved(name, from, to string) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var current string
-	err = tx.QueryRow(`SELECT approved FROM skills WHERE name = ?`, name).Scan(&current)
-	missing := err == sql.ErrNoRows
-	if err != nil && !missing {
-		return err
-	}
-	if current != from {
-		return fmt.Errorf("skill %s changed since: undo its newer change first", name)
-	}
-	if to != "" {
-		var n int
-		tx.QueryRow(`SELECT COUNT(*) FROM skill_bundles WHERE sha = ?`, to).Scan(&n)
-		if n == 0 {
-			return fmt.Errorf("the version %s of skill %s is no longer kept", shortSHA(to), name)
-		}
-	}
-	now := time.Now().Unix()
-	switch {
-	case to == "":
-		_, err = tx.Exec(`DELETE FROM skills WHERE name = ?`, name)
-	case missing:
-		_, err = tx.Exec(`INSERT INTO skills (name, approved, approved_at, updated) VALUES (?, ?, ?, ?)`, name, to, now, now)
-	default:
-		_, err = tx.Exec(`UPDATE skills SET approved = ?, approved_at = ?, updated = ? WHERE name = ?`, to, now, now, name)
-	}
-	if err != nil {
-		return err
-	}
-	if err := keepSkillVersion(tx, name, from); err != nil {
-		return err
-	}
-	if err := gcSkillBundles(tx); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
 // rejectSkill drops the pending version; a skill never approved goes.
 func (s *Store) rejectSkill(name string) error {
 	if _, err := s.db.Exec(`DELETE FROM skills WHERE name = ? AND approved = ''`, name); err != nil {
@@ -649,6 +603,3 @@ func (c *core) activeSkills() []Skill {
 	}
 	return out
 }
-
-// shortSHA is a version's short name.
-func shortSHA(s string) string { return s[:min(12, len(s))] }
