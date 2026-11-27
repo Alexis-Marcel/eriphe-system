@@ -43,12 +43,18 @@ export function listOrder(nodes: Record<string, GraphNode>): GraphNode[] {
   const kids = new Map<string, GraphNode[]>();
   const roots: GraphNode[] = [];
   for (const x of Object.values(nodes)) {
-    if (x.parent && nodes[x.parent]) kids.set(x.parent, [...(kids.get(x.parent) ?? []), x]);
-    else roots.push(x);
+    if (!x.parent || !nodes[x.parent]) roots.push(x);
+    else {
+      const k = kids.get(x.parent);
+      if (k) k.push(x);
+      else kids.set(x.parent, [x]);
+    }
   }
   const out: GraphNode[] = [];
+  const seen = new Set<string>();
   const walk = (x: GraphNode) => {
-    if (out.includes(x)) return;
+    if (seen.has(x.id)) return;
+    seen.add(x.id);
     out.push(x);
     for (const k of (kids.get(x.id) ?? []).sort(made)) walk(k);
   };
