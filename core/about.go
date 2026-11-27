@@ -10,9 +10,8 @@ import (
 // (which record): a node, node:<id>, or an entity's key (person:lina,
 // owner, topic:workspace). The code sets it by inheritance: what the brain
 // makes in a turn takes the turn's (turnAbout: its node), a task its
-// node's or its skill's, a card its maker's (sourceAbout),
-// a task's memories its own (the extraction). The model may give one; it
-// no longer has to.
+// node's or its skill's, a card its maker's (sourceAbout). The model may
+// give one; it no longer has to.
 
 // aboutTables are the core.db tables that carry an about column.
 var aboutTables = []string{"notifications", "attention", "convo_cards", "tasks", "card_pushes"}
@@ -175,26 +174,4 @@ func (c *core) taskAbout(id string) string {
 // something else.
 func inheritsAbout(kind string) bool {
 	return kind == kindFact || kind == kindDecision
-}
-
-// opAbout is what the extraction adds from a task is about (its first
-// source with an about): a decision of the task is the task's about
-// whatever was guessed, anything else takes it when none was
-// given. Otherwise the one given. A replacement keeps its own.
-func (c *core) opAbout(op extractionOp, ref string) string {
-	var task string
-	for _, p := range strings.Split(ref, ",") {
-		if id, ok := strings.CutPrefix(p, "task:"); ok {
-			if task = c.taskAbout(id); task != "" {
-				break
-			}
-		}
-	}
-	switch {
-	case task == "" || op.About == journalEntity:
-		return op.About
-	case op.Kind == kindDecision || strings.TrimSpace(op.About) == "":
-		return task
-	}
-	return op.About
 }

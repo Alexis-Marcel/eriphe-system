@@ -35,7 +35,6 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		{"/settings/account", "account", ""},
 		{"/settings/journal", "journal", ""},
 		{"/settings/approve", "approve", ""},
-		{"/settings/learned", "learned", ""},
 	} {
 		code, body, _ := tw.do("GET", tc.path, nil, nil)
 		if code != 200 {

@@ -242,7 +242,7 @@ func TestCardAnsweredElsewhereMovesAtOnce(t *testing.T) {
 			_, id, _ := parseProposalRef(ref)
 			var name string
 			c.store.db.QueryRow(`SELECT name FROM skills WHERE rowid = ?`, id).Scan(&name)
-			if err := c.deleteSkill(name, "owner"); err != nil {
+			if err := c.deleteSkill(name); err != nil {
 				t.Fatal(err)
 			}
 		}, cardGone},

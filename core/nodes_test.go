@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -64,11 +66,11 @@ func TestNodesRefuseSecretsOnly(t *testing.T) {
 	}
 }
 
-// The graph is backed up once a night, at the memory's hour, into its
+// The graph is backed up once a night, at the backup's hour, into its
 // backup folder.
 func TestNodesNight(t *testing.T) {
 	backups := filepath.Join(t.TempDir(), "backups")
-	cfg := &Config{DB: filepath.Join(t.TempDir(), "core.db"), Memory: &MemoryConfig{ExtractAt: "03:00", BackupDir: backups}}
+	cfg := &Config{DB: filepath.Join(t.TempDir(), "core.db"), Memory: &MemoryConfig{BackupConfig: BackupConfig{ExtractAt: "03:00", BackupDir: backups}}}
 	day := time.Date(2026, 11, 17, 2, 59, 0, 0, time.Local)
 	dir, index := cfg.nodesPaths()
 	s, _, err := nodestore.Open(dir, index, nodestore.Options{Now: func() time.Time { return day }})
@@ -98,11 +100,52 @@ func TestNodesNight(t *testing.T) {
 	}
 }
 
+// With no memory extraction, the graph's backup keeps its night: by
+// default at 03:00 into memory-backups next to core.db, else at the hour,
+// folder and days core.json's "memory" object gives (extract_at,
+// backup_dir, backup_keep), once a night.
+func TestNodesNightKeepsItsHourAndFolder(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "core.db")
+	if b := (&Config{DB: db}).backupConfig(); b.ExtractAt != "03:00" || b.BackupDir != filepath.Join(filepath.Dir(db), "memory-backups") || b.BackupKeep != 14 {
+		t.Fatalf("defaults: %+v", b)
+	}
+	backups := filepath.Join(t.TempDir(), "copies")
+	var cfg Config
+	if err := json.Unmarshal([]byte(`{"db": `+strconv.Quote(db)+`, "memory": {"extract_at": "05:30", "backup_dir": `+strconv.Quote(backups)+`, "backup_keep": 3}}`), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if b := cfg.backupConfig(); b.ExtractAt != "05:30" || b.BackupDir != backups || b.BackupKeep != 3 {
+		t.Fatalf("from core.json: %+v", b)
+	}
+	day := time.Date(2026, 11, 17, 5, 29, 0, 0, time.Local)
+	dir, index := cfg.nodesPaths()
+	s, _, err := nodestore.Open(dir, index, nodestore.Options{Now: func() time.Time { return day }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	c := &core{base: &cfg, nodes: s}
+	c.snap.Store(&cfg)
+	done := ""
+	for _, now := range []time.Time{day, day.Add(2 * time.Minute), day.Add(time.Hour), day.Add(20 * time.Hour)} {
+		done = c.nodesNight(done, now)
+	}
+	if done != "2026-11-17" {
+		t.Fatalf("the night: %q", done)
+	}
+	if files, _ := filepath.Glob(filepath.Join(backups, "nodes-*.db")); len(files) != 1 || files[0] != filepath.Join(backups, "nodes-2026-11-17.db") {
+		t.Fatalf("backups: %v", files)
+	}
+	if mem, _ := filepath.Glob(filepath.Join(backups, "memo*")); len(mem) != 0 {
+		t.Fatalf("the memory backed up: %v", mem)
+	}
+}
+
 // A backup that failed is tried again at the next tick, not the next
 // night.
 func TestNodesNightRetriesAFailedBackup(t *testing.T) {
 	backups := filepath.Join(t.TempDir(), "backups")
-	cfg := &Config{DB: filepath.Join(t.TempDir(), "core.db"), Memory: &MemoryConfig{ExtractAt: "03:00", BackupDir: backups}}
+	cfg := &Config{DB: filepath.Join(t.TempDir(), "core.db"), Memory: &MemoryConfig{BackupConfig: BackupConfig{ExtractAt: "03:00", BackupDir: backups}}}
 	day := time.Date(2026, 11, 17, 3, 1, 0, 0, time.Local)
 	dir, index := cfg.nodesPaths()
 	s, _, err := nodestore.Open(dir, index, nodestore.Options{Now: func() time.Time { return day }})

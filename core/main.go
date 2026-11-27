@@ -82,10 +82,6 @@ func main() {
 	} else {
 		c.useMemory(mem) // its abouts are kept by the names of core.db (names.go)
 		c.mem.owner = func() string { return c.conf().User }
-		// The readable mirror, outside git (memory_mirror.go), made again
-		// from memory.db at start.
-		c.mem.mirror = &memMirror{dir: cfg.memoirePath(), lang: c.userLang}
-		c.mem.mirrorSync()
 	}
 	// The graph's nodes, in their own repository (nodes.go).
 	if nodes, err := openNodes(cfg, store.db); err != nil {
@@ -153,7 +149,7 @@ func main() {
 		c.remote.clientCAs = c.machines.pool
 	}
 	go c.runAssistants(context.Background(), token)
-	go c.runMemory(context.Background())
+	go c.runIntentions(context.Background()) // brain_wake.go
 	go c.runNodes(context.Background())
 	go c.runEvents(context.Background())   // event_sources.go
 	go c.runSkills(context.Background())   // skill_runs.go

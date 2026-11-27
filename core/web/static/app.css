@@ -656,7 +656,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .tint-green, .nav-group > a[href="/settings/approve"] { --tint: #16a34a; }
 .tint-amber, .nav-group > a[href="/settings/folders"] { --tint: #d97706; }
 .tint-orange, .nav-group > a[href="/settings/skills"] { --tint: #ea580c; }
-.tint-pink, .nav-group > a[href="/settings/learned"] { --tint: #db2777; }
+.tint-pink { --tint: #db2777; }
 .tint-red, .nav-group > a[href="/settings/notifications"] { --tint: #dc2626; }
 .tint-slate, .nav-group > a[href="/settings/devices"], .nav-group > a[href="/settings/journal"] { --tint: #64748b; }
 

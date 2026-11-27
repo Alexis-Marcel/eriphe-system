@@ -170,7 +170,6 @@ func newMCPServer(c *core) *mcp.Server {
 			return map[string]string{"result": "stopping"}, c.stopByBrain(ctx, in.TaskID)
 		})
 	registerMemoryTools(s, c)      // remember, recall, update_memory, forget; intend, intentions, update_intention (memory_intention_tools.go)
-	registerLearningTools(s, c)    // learned, unlearn
 	registerAttachmentTools(s, c)  // read_attachment
 	registerSkillTools(s, c)       // list_skills, read_skill
 	registerSkillWriteTool(s, c)   // write_skill (skill_write.go)

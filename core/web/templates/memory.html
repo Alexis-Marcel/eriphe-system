@@ -103,12 +103,7 @@
 {{define "mem-journal"}}
 <div class="mem-journal-head">
   <p class="mem-lead">{{template "i-clock"}}{{t "mem.journallead"}}</p>
-  <form hx-post="/memory/extract" hx-disabled-elt="find button" class="inline"><button class="btn btn-soft sm" type="submit">{{t "mem.extract"}}</button></form>
 </div>
-{{if .Runs}}<details class="runs"><summary>{{t "mem.lastrun"}} · <span class="muted">{{tf "mem.agent" .Agent}}</span></summary>
-<ul class="runs-list">{{range .Runs}}<li><span class="tag {{if eq .State "done"}}tag-ok{{else if eq .State "failed"}}tag-no{{else}}tag-accent{{end}}">{{t (printf "mem.run.%s" .State)}}</span>
-  <span class="mono">{{.Day}}</span><span class="muted small">{{ago .Started}}{{if eq .State "done"}} · {{tf "mem.run.applied" .Applied}}{{end}}{{if .TaskID}} · {{.TaskID}}{{end}}</span>
-  {{if .Error}}<span class="small err-text">{{short .Error 300}}</span>{{end}}</li>{{end}}</ul></details>{{end}}
 {{if .Days}}
 <ol class="days">
 {{range .Days}}

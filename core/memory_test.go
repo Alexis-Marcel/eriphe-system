@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -286,7 +285,7 @@ func TestMemoryLimits(t *testing.T) {
 	}
 }
 
-func TestExportAndBackup(t *testing.T) {
+func TestExport(t *testing.T) {
 	m, _ := testMemory(t)
 	mustAdd(t, m, &Memory{Kind: kindFact, Text: "Premier"})
 	x := mustAdd(t, m, &Memory{Kind: kindFact, Text: "Oublié"})
@@ -299,31 +298,6 @@ func TestExportAndBackup(t *testing.T) {
 	var got Memory
 	if len(lines) != 1 || json.Unmarshal([]byte(lines[0]), &got) != nil || got.Text != "Premier" {
 		t.Fatalf("export: %q", buf.String())
-	}
-	dir := filepath.Join(t.TempDir(), "backups")
-	for i := 0; i < 3; i++ {
-		if err := m.backup(dir, 2); err != nil {
-			t.Fatal(err)
-		}
-		m.now = func(d int) func() time.Time {
-			return func() time.Time { return newClock().t.AddDate(0, 0, d) }
-		}(i + 1)
-	}
-	dbs, _ := filepath.Glob(filepath.Join(dir, "memory-*.db"))
-	jsonl, _ := filepath.Glob(filepath.Join(dir, "memory-*.jsonl"))
-	if len(dbs) != 2 || len(jsonl) != 2 {
-		t.Fatalf("kept %v %v", dbs, jsonl)
-	}
-	copyDB, err := openMemory(dbs[1])
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer copyDB.db.Close()
-	if n := copyDB.count(`status = 'active'`); n != 1 {
-		t.Fatalf("backup holds %d active memories", n)
-	}
-	if fi, _ := os.Stat(jsonl[0]); fi.Mode().Perm() != 0o600 {
-		t.Fatalf("export mode %v", fi.Mode())
 	}
 }
 

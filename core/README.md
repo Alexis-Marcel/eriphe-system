@@ -27,7 +27,7 @@ with the bridge's gateway address.
 
 At first start it makes what it lacks in the data directory, and reuses it after: the API token
 (`core-token`), the vault key (`vault.key`), the database (`core.db`, `memory.db`), the graph's
-nodes (`nodes/`, `nodes-trace/`, `nodes.db`), the memory's readable mirror (`memoire/`) and the
+nodes (`nodes/`, `nodes-trace/`, `nodes.db`) and the
 workspace's self-signed certificate (`web-cert.pem`, `web-key.pem`). An existing `core.db` that
 lacks a column added by hand (`convertedColumns` in `store.go`: `messages.taint`,
 `access_asks.settled`) is refused at start, the error naming the pull request whose SQL adds it:
@@ -939,9 +939,7 @@ is not asked. The brain then gets the checked receipt (in French, like its other
 the agent's last message; without one, the last message, truncated, as before. `task_status`
 returns it as `receipt`, the task's card shows its status and how much is verified, its drawer
 verified and not verified side by side, the checks with the end of a failed one's output, and the
-mismatches. The last receipt is kept in `task_harness`. The night's memory extraction reads a
-finished task's receipt instead of its last message (first party for a task that read nothing
-from outside; a task that did is left out of it).
+mismatches. The last receipt is kept in `task_harness`.
 
 ### Attention signals (`attention_signal.go`)
 
@@ -1129,9 +1127,7 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   hold it as it is. `since` lists the nodes changed (kind `node`: where each stands now, its title and its doc's first line; an external one's quoted only with `include_external`, the activity page quoting it marked « Contenu extérieur »), and `where_now` the nodes that wait for the user (`nodes_waiting`). The tasks panel lists the nodes
   running and waiting above the tasks (`/espace?open=node-<id>`).
 - **Memory.** Where a matter stands is its node's doc, never a memory: the `progress` kind is
-  gone. The nightly extraction reads the day's node traces (`nodeSegments`: what each node's trace
-  says that day, a segment `node:<id>`; an external node gives nothing) and keeps their decisions,
-  facts and people.
+  gone.
 - **Showing a node** (`node_show.go`): `node_show` keeps the request (kv `node_show`: `node`, `by`,
   `at`, `seq`, growing at each, and `talk` for a subject opened from the home) and wakes who
   watches (`watchShown`); the graph page (#633) opens the page beside the others, the bar
@@ -1232,7 +1228,7 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   entry), at the end of `<id>.trace.md` in `nodes-trace/`, beside the repository (`O_APPEND`): no
   commit, no version, the node's `updated` moved. Past 2 MiB (`MaxTraceFile`) the file becomes its
   older part, `<id>.trace.1.md`, the one before dropped. `Trace(id)` gives both parts, the older
-  first (the `.../trace` endpoint, `node_read`'s end of the trace, the nightly extraction). An
+  first (the `.../trace` endpoint, `node_read`'s end of the trace). An
   archived node keeps its trace.
 - **Status:** none in the store. A node's status (`running`, `waits`, `done`, `idle`) is computed
   by eriphe-core each time it is read (`node_status.go`, below).
@@ -1279,8 +1275,9 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   (`node_convert.go`: `node_reads`, `node_items`); once every node is converted without a broken
   file, those tables are dropped (`dropBlockTables`). A file of a newer format stops the graph (the log names it), untouched: update
   Eriphe.
-- **Nightly**, at the memory's hour (`memory.extract_at`), into its backup folder
-  (`memory.backup_dir`, `memory.backup_keep` days): `nodes-<day>.bundle` (a git bundle of `main`
+- **Nightly**, at the backup's hour (`memory.extract_at`, 03:00 by default), into its folder
+  (`memory.backup_dir`, `memory-backups/` next to `core.db` by default; `memory.backup_keep` days,
+  14; `BackupConfig`): `nodes-<day>.bundle` (a git bundle of `main`
   and `HEAD`: `git clone` reads it and checks it out), `nodes-<day>.trace.tar` (the traces, each as
   long as it was when the tar opened it) and `nodes-<day>.db` (a copy of the index, named last: it
   says the night's backup is whole).
@@ -1953,7 +1950,7 @@ Skills** (`web_skills.go`):
   proposal is refused. The brain is told, as an event of the task's node in code's words only,
   that a version waits.
 - **On or off**, and **delete**; only the user turns a skill off. A version that no longer
-  reads (its front matter refused) is shown still, with the reason. Bundles no skill points at any more are deleted, but for the last five versions a skill replaced or had when deleted (`skill_kept`), which the [learning journal](#what-eriphe-learned) needs to undo a change; they are never given to a task.
+  reads (its front matter refused) is shown still, with the reason. Bundles no skill points at any more are deleted, but for the last five versions a skill replaced or had when deleted (`skill_kept`); they are never given to a task.
 
 **In tasks.** Every worker task gets the skills that are approved and on when it starts, as its
 spec's `skills` (name and sha256 of each, `skills_tasks.go`). Its device fetches each bundle with its
@@ -2386,7 +2383,7 @@ never named it keeps Eriphe, with the same fingerprint: the upgrade restarts not
 
 The name is used wherever the assistant is a person: its instructions (`{{name}}` in
 `brain-prompt.md`, as `{{user}}`), the workers' standing instruction (their answer is relayed as
-its own), the memory's nightly extraction, the conversation's messages about it, the
+its own), the conversation's messages about it, the
 workspace's words (`{{name}}` in the texts of `web_text*.go`, French elision included: « Tâches
 de {{name}} » reads « Tâches d'Eriphe »), the pages' title suffix and the brand next to the logo,
 the login page, the installed app (`/manifest.webmanifest` is served with its `name` and
@@ -2500,7 +2497,7 @@ it in its node and the parent, sets it done, withdraws a card or launches the ne
 kept: a restart starts a fresh one. Only the brain is held: a call relayed by its device for a task of
 the brain's role (eriphe-core marks it, `Eriphe-Brain-Call`) or made at `self_url` with the assistant
 token, which only that role, the one that launches tasks, is given. The owner's own MCP client with
-the API token is never counted; the memory's extraction and workers, skills' runs among them, never
+the API token is never counted; workers, skills' runs among them, never
 reach eriphe-core's own tools (the relay refuses them), and a task's own `eriphe-nodes` is never
 budgeted (`TestBrainBudgetIsTheBrainsOnly`).
 
@@ -2577,7 +2574,7 @@ GET  /v1/channel/out?wait=50&places=Salon,Bureau  → {"messages": [{"id", "text
 The text joins the conversation like any of mine, marked with the channel and its place
 (`[Sam 12:00 #N · Home Assistant, Bureau]`, `· canal sans confiance` when not trusted: then it
 taints the turn, and is never cited as the user's own words, for a preference, a lesson or the
-profile, nor read as theirs by the nightly extraction), and the brain answers it in the same conversation; with a place, short and without markdown, as it is most often
+profile), and the brain answers it in the same conversation; with a place, short and without markdown, as it is most often
 read aloud. The answer streams back from the brain's draft as it writes; only what it says after
 reading the text counts. Without a word within `wait` seconds (10 by default, at most 80 for an
 automation that sends the answer on), it answers « Je m'en occupe, je te préviens » and the answer
@@ -3314,13 +3311,11 @@ user tells the brain, which proposes again. The kinds of proposals are one table
 a no applies, how it is withdrawn, which node it belongs to and whom a decision tells; reading,
 deciding, withdrawing and listing go through the same few functions for all of them. The event
 stream keeps cards up to date (`proposals`:
-approved, declined, no longer current). The memory's extraction makes no card for a memory (an
-intention it proposes gets one, queued, `cardQueued`): what it is not
-sure of waits in À valider and expires (see [Memory](#memory)). Other proposals (a skill's run, a
+approved, declined, no longer current). Some proposals (a skill's run, a
 turn that said nothing) are queued and enter the attention queue at their card's weight
 (`cardWeight`: one a task or a node waits on 4; a skill, a monitor or a run's calls 3; a
-reminder 2; a memory, a rule, a setting or an undo 1; `attendQueuedCards` as they are queued: a
-turn that ends without a message, an intention the extraction proposes, `cardQueued`); the queue
+reminder 2; a memory, a rule or a setting 1; `attendQueuedCards` as they are queued: a
+turn that ends without a message, `cardQueued`); the queue
 delivers them like anything else that goes to the user. A card made
 outside a brain turn (the start of a task the brain did not launch, such as a step of a work;
 a skill run's calls when its message is held or not sent; an access asked at a task's call)
@@ -3544,7 +3539,7 @@ under the access policy). How the user wants it is memory; what the brain can do
 tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspace.md).
 Preferences are [memories](#memory) of kind `preference` about `topic:workspace`, written as facts
 about the user. The brain remembers one from the user's words (`remember`; a workspace preference
-is never sent to `rule`, whatever its words); the nightly extraction never writes one. A
+is never sent to `rule`, whatever its words). A
 preference about content is read by whoever notes items: a triggered skill that tends a node with
 sources gets the active, current ones in its run (`seePreferences`, 12 at most, the latest first),
 and leaves out what the user no longer wants to see. A proposed preference is not read. The brain
@@ -3657,8 +3652,7 @@ token in `X-CSRF-Token`:
   words (marked external, or holding a callout an event wrote in) asks too, but its words may echo
   what was read: the message is stored tainted (`ask:<node>`), so the turn it starts is tainted as
   the one that wrote it, and it is never taken for the user's own words (`fromUntrusted`: no owner
-  memory cited from it, no text « oui » on a card, no lending, the extraction reads it as
-  external). It acts on nothing: a yes is a card's.
+  memory cited from it, no text « oui » on a card, no lending). It acts on nothing: a yes is a card's.
 - `POST /api/nodes/{id}/task` `{line, text, state}`: the user's tick on a page's task
   (`nodefile.SetTask`: `[ ]`, `[x]`, `[/]` or `[-]`), made on the last version (`nodes.ChangeLast`),
   a version by `user`. The line is found by its text (`line` a hint): a line gone, or written
@@ -4830,7 +4824,7 @@ are never shown back nor logged.
 
 What a record is about, its **about**, is a node (`node:<id>`) or a key: an entity of the memory
 (a person, `person:lina`; the user, `owner`; the home; a tool, `tool:x`; Eriphe's own topics,
-`topic:workspace`, `topic:journal`, `topic:heartbeat`) or a matter remembered (`project:site`,
+`topic:workspace`, `topic:heartbeat`) or a matter remembered (`project:site`,
 `pr:owner/repo#12`, `alert:backup`). Notifications, attention items, cards, tasks and
 card pushes (core.db), memories and intentions (memory.db) carry an `about` column next to their
 ref (which record: `intention:12`, `skill:<name>`).
@@ -4897,10 +4891,7 @@ ref (which record: `intention:12`, `skill:<name>`).
   - **a card** takes its proposal's first (a memory's, an intention's, a skill run's);
   - **a skill's run** takes its events' key where it names a thing: a monitor's (`monitor.*`:
     `topic:<name>`) or a key written `kind:slug`; a task's or a node's id gives none.
-    Its notifications, signals and cards follow its task;
-  - **the extraction** reuses a task's about (shown on its segment) and a node's trace's
-    (`node:<id>`): a decision added from a task is the task's whatever was guessed, anything else
-    takes it when none was given; a replacement keeps its own, the day's journal `topic:journal`.
+    Its notifications, signals and cards follow its task.
   Notification rules match what a notification is about, else its record's ref (`itemRule`).
 
 ## Memory
@@ -4913,14 +4904,14 @@ its node's doc, never a memory), an about (see [About and names](#about-and-name
 `node:<id>`, or an entity `owner`, `person:<slug>`, `client:<slug>`, `home`…), dates (`valid_from`, `valid_to` once no longer true, or planned for
 what is temporary; `occurred_at` for an episode), where it
 comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`, `node:<id>`), a trust level (`owner`,
-`first_party`, `external`), and for what the extraction derived a `basis`: `stated` (said in so
+`first_party`, `external`), and for what was derived a `basis`: `stated` (said in so
 many words), `inferred` (deduced) or `ambiguous`. A change over time supersedes the old memory,
 which stays, dated; every change is in `memory_log`. Forgotten memories are purged after 30 days.
-An episode is the day's journal (or a wake of the brain's, `topic:heartbeat`), never a task's: what
+An episode is a wake of the brain's (`topic:heartbeat`), never a task's: what
 a task did is its log and its node's. memory.db says its schema in `meta`
 (`schema_version`, 8): a new file is made at it, one at 7 is brought to it (`migrateAbout`), a file at another is refused, never changed.
 
-**Durable state.** Raw history is kept for audit (the conversation, `memory_log`, the journal
+**Durable state.** Raw history is kept for audit (the conversation, `memory_log`, the
 episodes); what the brain needs to act is compiled from it in facts, lessons, **decisions** (a
 choice and its reason, superseded when reversed; a node set done writes one). Where a project,
 client job or goal stands is not a memory: it is its node's doc (see [The brain on
@@ -4943,7 +4934,7 @@ lessons): `source_kind` `task`, `source_ref` `task:<id>`, first party when the t
 `external` and only proposed when it read someone else's content.
 
 The brain's tools (on `/mcp`): `remember`, `recall`, `update_memory`, `forget`, and for what is
-owed `intend`, `intentions`, `update_intention`; for what it learned `learned` and `unlearn` ([below](#what-eriphe-learned)). Results are data, quoted.
+owed `intend`, `intentions`, `update_intention`. Results are data, quoted.
 
 **Intentions** (prospective memory) are a table of their own, with a lifecycle kept by code: a
 kind (`promise`: the user owes someone; `commitment`: the assistant owes the user; `waiting_for`:
@@ -4951,9 +4942,9 @@ someone owes the user; `reminder`), who owes and to whom, a deadline (`due_at`),
 (`remind_at`, by default the deadline; a deadline given as a day lasts until that day's end and is
 reminded at 9:00) or a person `cue` ("the
 next time I talk about Hélène"), and a state: `proposed → open → due → done / cancelled`, `snoozed →
-due`. The brain and the nightly extraction form them and revise them with typed patches (done,
-cancelled, a new deadline); the extraction's patches never come from external content. Every
-minute, without a model, open intentions whose reminder has come and snoozed ones whose snooze is
+due`. The brain forms them and revises them with typed patches (done,
+cancelled, a new deadline). Every
+minute (`runIntentions`), without a model, open intentions whose reminder has come and snoozed ones whose snooze is
 over become due; a person cue becomes due when the user's message names them, and the delivery of
 that message carries the intention (`[mémoire]`). A due intention wakes the brain through the
 `clock` trigger (the brain has it with `conversation`): at its next idle, after the user's
@@ -4995,8 +4986,7 @@ does not lift this. Only a delivery holding a user message starts a clean turn: 
 events only (a task's permission, its end) goes on with the current turn and its taint, since
 what the brain read is still in its context; so does a resumed brain session. Every write goes through a scanner: instructions to a model, invisible
 characters, credentials and links carrying tokens are refused; imperative wording not from the
-user is only proposed. Proposals wait in the workspace (À valider, and a card in the conversation
-but for the extraction's); undecided after 14 days, a proposed memory is forgotten and a proposed
+user is only proposed. Proposals wait in the workspace (À valider, and a card in the conversation); undecided after 14 days, a proposed memory is forgotten and a proposed
 intention cancelled (the nightly run, `expireProposals`).
 
 **Reading back is reading too.** A memory of trust `external` (a skill run's fact read in a mail, a
@@ -5004,8 +4994,7 @@ proposal from a mail the user approved) summarises what was read outside: a turn
 returns one is tainted (`memory.external`), like a turn that read the mail
 itself. The context pack and the wake packet, which nobody asked for, name such a memory (its id,
 kind and source) without quoting its text. And what the brain writes during a tainted turn is
-marked: the extraction reads it as `external`, so a mail repeated by the brain is not learnt back
-as its own conclusion.
+marked tainted (`messages.taint`).
 
 **What it knows about the user.** The Memory page opens on "Ce que Jarvis sait de toi" (the
 assistant's name): the profile and the other current memories about the user (about `owner`,
@@ -5018,115 +5007,21 @@ appended to the brain's prompt when its session starts, and sent again, quoted, 
 messages whenever it changed. Claude Code's own auto-memory is turned off for the brain
 (`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`): one memory.
 
-**Extraction and journal.** Every night at `extract_at` (and once a busy day's conversation has
-been quiet `idle_minutes`), eriphe-core writes out the day's transcript (messages, finished
-tasks and what the day wrote in each node's trace, each labelled with its trust; a task that read
-someone else's content is left out, its log and its node keep what it found, and a clean one is
-first party; so is a node that may hold someone else's words) and starts a `memory` task (not listed, never the brain's)
-with a cheap agent and the memories it may touch. Its JSON answer (ADD, SUPERSEDE, NOOP, each
-citing a `source_ref` of the transcript, with `keywords`, an `importance` 1–5, a `basis` and,
-for what is temporary, a `valid_to`) is checked and applied. Its regime, kept for what serves the
-work:
-
-- **One episode a day**, the journal (about `topic:journal`); an episode for a task is refused.
-- **Never a profile, a preference nor a lesson**: only the user's own words make one, through the
-  brain's `remember` during the conversation.
-- **What it is sure of is applied on trial**: stated, not drawn from external content, not worded
-  as an instruction. It is active at once and recorded in the [learning journal](#what-eriphe-learned)
-  (status `trial`, provenance `extraction`), which is its digest: the wake and the brief tell it,
-  « Ce qu'Eriphe a appris » lists it with « Annuler », `unlearn` undoes it.
-- **The rest is proposed, without a card** (inferred, ambiguous, external, flagged): it waits in
-  À valider (the learned page says how many) and is dropped after 14 days undecided.
-
-What is owed is an intention (INTEND), as above. Each segment carries its date, against which the
-agent resolves "demain" or "vendredi". One run per day and window; a failure is retried the next night. The same night
-run purges and backs up (`VACUUM INTO` plus a JSONL export, also downloadable from the page, and
-the [readable mirror](#the-readable-mirror-memoire)).
+**The night.** Once a night, from the backup's hour (`extract_at`), eriphe-core erases the
+memories forgotten 30 days ago and drops what was proposed and left undecided for 14 days
+(`intentionsNight`, `brain_wake.go`); the same loop checks the intentions every minute
+(`runIntentions`). The memories can be downloaded from the page as JSONL.
 
 ```json
 "memory": {
   "db": "/data/memory.db",
-  "agent": "haiku",
   "extract_at": "03:00",
-  "idle_minutes": 30,
-  "busy_day": 20,
-  "extraction": true,
   "backup_dir": "/backups/memory",
   "backup_keep": 14
 }
 ```
 
-All keys are optional: `db` defaults to `memory.db` next to `db`, `agent` to the catalog's `haiku`
-if there is one, else the default agent. Trusted tools (whose results do not taint a turn) are
+All keys are optional: `db` defaults to `memory.db` next to `db`. `extract_at`, `backup_dir` and
+`backup_keep` are the [graph's nightly backup](#node-store-nodestore-nodesgo)'s hour, folder and days kept
+(`BackupConfig`, `nodes.go`). Trusted tools (whose results do not taint a turn) are
 marked in Settings → Tools (see the [one taint rule](#tool-catalog)).
-
-### The readable mirror (`memoire/`)
-
-`memory_mirror.go` keeps a readable copy of what Eriphe knows in `memoire/`, next to `core.db`
-(`/data/memoire/` on an install), so that it can be read, or copied into another program, outside
-Eriphe. `memory.db` stays the truth: the mirror is written by code only, again after every change
-committed (a memory added, changed, approved, superseded, forgotten, restored, purged, a learned
-change undone), each minute for what time changes (a `valid_to` that passed), and at start, from
-the database (a file changed by hand is written over, a file of its own removed). A file whose
-text did not change is not written; a file no memory is in any more is removed, and its folder
-when empty. Files are mode 0600, the folder 0700, in the user's language:
-
-- `profil.md`: the profile, the preferences, what is about the user (about `owner`), the
-  lessons, and the situations with their end;
-- `personnes/<name>.md`: one file per person (kind `person`, or about `person:<name>`);
-- `faits/<subject>.md`: the facts, by their about (`general.md` without one);
-- `decisions/<YYYY-MM>.md`: the decisions, by month;
-- `journal/<YYYY-MM-DD>.md`: the episodes, one journal a day.
-
-What is in it is what `recall` gives by default: the active memories true now, never a proposal
-nor a forgotten one. A line is one memory, its text on one line whatever it holds, ending with its
-id (`^m12`, Obsidian's block id); one read in someone else's content (trust `external`) is marked
-`(extérieur)`.
-
-It is **outside git**, so that « oublie ça » stays true: a forgotten memory leaves its file at
-once, and stays only in the nightly backups, which carry the mirror (`memoire-<day>.tar.gz`, with
-`memory-<day>.db`) for `backup_keep` days (14), as the database's copies already keep it. It is
-**not a node**: it is not in the graph's repository nor its index, and neither the brain's
-`node_read` and `node_find` nor a task's node tools reach it. The brain reads memory through
-`recall` only, which keeps the trust rules (an external memory read taints the turn). To
-read what Eriphe knows in the workspace, the user opens Settings → Mémoire.
-
-### What Eriphe learned
-
-The learning journal (`learning.go`, table `learning_log` in `memory.db`) records every
-change to what steers Eriphe: a memory of kind `lesson`, `preference`, `decision` or `profile` (or
-pinned), and any memory but an episode the nightly extraction wrote on its own (a fact, a person),
-made active, changed (superseded or edited in place) or forgotten, and every change of a
-skill's approved version (approved, replaced, deleted). A proposal is not learned until approved.
-Each entry says what it touched (`memory #N`, or the skill's name and versions), the action
-(`added`, `changed`, `removed`, `reverted`), a status (`trial`: in force, not confirmed;
-`confirmed`: the user's own words or hand, or approved by them; `dormant`; `reverted`), a
-provenance (`user`, `brain`, `task`, `external`, `extraction`, `consolidation`), a risk class
-(for now `high` for the profile, a lesson, or a skill with scripts; `low` otherwise), a reason
-and its evidence (`msg:N`, `task:<id>`, `learned:<id>`). Entries are fixed but for their status
-(a trigger refuses the rest). They point at the data rather than copying it: the memories
-themselves and `memory_log`'s before and after for a memory, the bundles for a skill.
-
-**Undo.** Undoing an entry forgets an added memory, puts a superseded one back as it was (current
-again, pinned again), restores the state before an edit or a forgotten memory, and for a skill
-puts the previous approved version back (or removes an added skill, or brings back a deleted
-one). Only the newest change of a thing still in force can be undone; the undo is an entry of its
-own (`reverted`, pointing at the one undone, which becomes `reverted`), never undone itself.
-
-**For the user**: Settings → « Ce qu'Eriphe a appris » (`/settings/learned`, `web_learned.go`),
-newest first, by kind and status, each entry with its source, date, status, what it changed
-(before and after) and « Annuler ». A skill shows its name and version, never its files.
-
-**For the brain**: `learned` (by kind, status, about, topic or period, with ids; a memory drawn
-from external content is named, not quoted) and `unlearn` (`id`, `reason`, `source_ref`). An
-undo needs the user's message; on a tainted turn it is only proposed, unless that message of the
-same turn asked for it (as for `remember`), and waits as a card (kind `unlearn`) or on the page.
-The wake packet (`learnedBlock`) carries what was learned since the last brief and not
-told yet, except what the user did by hand, for the brain to say in a sentence each (what the
-extraction kept on its own, in one sentence for the lot); `since`
-lists the entries (kind `learned`), and so does the Journal.
-
-The statuses `trial` and `dormant`, the provenance `consolidation`, the risk class and the
-evidence refs are there for the learning loop that comes next: fewer cards by provenance and
-risk, skills written by the brain, reflection and consolidation, helpful/harmful counters with
-automatic undo.

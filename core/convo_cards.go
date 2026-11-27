@@ -24,11 +24,11 @@ import (
 //   - A proposal the brain makes in a turn is attached to the message it
 //     writes in that turn (attachTurnCards), or, if it writes nothing after
 //     it, to its last message of the turn (cardsTurnEnded).
-//   - Any other proposal (the memory's extraction, a turn that said
-//     nothing) is queued, and enters the attention queue at its card's
-//     weight (cardWeight, attendQueuedCards): it is delivered like
-//     anything else that goes to the user, under a message of eriphe-core's,
-//     a few at a time (attention.go).
+//   - Any other proposal (a turn that said nothing) is queued, and enters
+//     the attention queue at its card's weight (cardWeight,
+//     attendQueuedCards): it is delivered like anything else that goes to
+//     the user, under a message of eriphe-core's, a few at a time
+//     (attention.go).
 //   - A card that stops a task (blocksATask) never waits for a good moment:
 //     if its turn wrote nothing, as when the turn failed, the queue
 //     delivers it at once, whatever the hour (its weight); one still queued
@@ -73,10 +73,6 @@ const (
 
 	cardTextAnswer = 30 * time.Minute // a plain yes or no answers a card this recent only
 )
-
-// cardUnlearn is an undo of the learning journal the brain proposed on a
-// tainted turn (learning_tools.go).
-const cardUnlearn = "unlearn"
 
 // cardMu makes deciding a card one thing at a time: a click and a "oui"
 // at the same moment decide it once.
@@ -377,8 +373,8 @@ func (c *core) syncCards() {
 	}
 }
 
-// cardQueued gives a proposal made outside a turn, by no one who shows it
-// (the memory's extraction), its card, queued: the attention queue
+// cardQueued gives a proposal made outside a turn, by no one who shows it,
+// its card, queued: the attention queue
 // delivers it at its card's weight (attendQueuedCards).
 func (c *core) cardQueued(kind string, id int64) {
 	p := c.proposalOf(kind, id)

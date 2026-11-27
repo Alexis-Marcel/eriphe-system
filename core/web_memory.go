@@ -24,7 +24,6 @@ func (w *web) memoryRoutes(mux *webMux) {
 	}))
 	mux.Handle("GET /memory/export.jsonl", w.auth(w.handleMemoryExport))
 	mux.Handle("POST /memory", w.auth(w.handleMemoryAdd))
-	mux.Handle("POST /memory/extract", w.auth(w.handleMemoryExtract))
 	mux.Handle("POST /memory/interview", w.auth(w.handleMemoryInterview))
 	mux.Handle("GET /memory/{id}/card", w.auth(w.handleMemoryCard))
 	mux.Handle("GET /memory/{id}/edit", w.auth(w.handleMemoryEditForm))
@@ -79,8 +78,6 @@ type memoryPage struct {
 	ProfileUsed int
 	Budget      int
 	Pct         int
-	Runs        []extractionRun
-	Agent       string
 	Now         time.Time
 	About       []memCard // what the assistant knows about me, pinned first
 	Interview   bool      // a brain to do the interview again
@@ -215,11 +212,6 @@ func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) 
 		}
 	case "journal":
 		xs, err = m.list(`kind = 'episode' AND status = 'active'`, nil, `occurred_at DESC, id DESC`, 300)
-		p.Runs, _ = m.runs(5)
-		p.Agent = w.c.extractionAgent()
-		if p.Agent == "" {
-			p.Agent = w.c.conf().DefaultAgent
-		}
 	case "commitments":
 		err = w.intentionsView(&p)
 	case "profile":
@@ -529,28 +521,6 @@ func (w *web) handleMemoryExport(rw http.ResponseWriter, r *http.Request, s *ses
 	}
 }
 
-// handleMemoryExtract runs the extraction of today now, as the night would.
-func (w *web) handleMemoryExtract(rw http.ResponseWriter, r *http.Request, s *session) {
-	lang := w.lang(r)
-	if w.c.mem == nil {
-		w.toast(rw, errMemoryOff.Error(), false)
-		return
-	}
-	day := r.PostFormValue("day")
-	if day == "" {
-		day = w.c.mem.now().Format("2006-01-02")
-	}
-	run, err := w.c.startExtraction(r.Context(), day, w.c.mem.now())
-	switch {
-	case err != nil:
-		w.toast(rw, err.Error(), false)
-	case run == nil:
-		w.toast(rw, tr(lang, "mem.nothing"), true)
-	default:
-		w.toast(rw, fmt.Sprintf(tr(lang, "mem.extracting"), run.TaskID), true)
-	}
-}
-
 // memoryQuery keeps the page's filters in its links.
 func memoryQuery(p memoryPage, kind string) string {
 	v := url.Values{}
@@ -615,8 +585,8 @@ var memoryStrings = map[string]map[string]string{
 		"mem.none":             "Rien ici pour l'instant. {{name}} retient ce que tu lui demandes, et ce qu'il tire de tes journées chaque nuit.",
 		"mem.nomatch":          "Aucun souvenir ne correspond.",
 		"mem.inboxlead":        "Ce que {{name}} a lu dans un mail, une page ou une tâche n'entre pas dans sa mémoire sans ton accord.",
-		"mem.journallead":      "Une entrée par conversation et par tâche terminée, écrite chaque nuit par l'extraction.",
-		"mem.journalnone":      "Le journal est vide. Il se remplit chaque nuit à partir de tes conversations.",
+		"mem.journallead":      "Ce qu'Eriphe a noté, jour par jour.",
+		"mem.journalnone":      "Le journal est vide.",
 		"mem.commitmentslead":  "Ce qui est dû, par qui, pour quand : tes promesses, celles de {{name}}, ce que tu attends des autres, tes rappels. {{name}} te le rappelle au bon moment.",
 		"mem.commitmentsnone":  "Rien en cours.",
 		"mem.donerecent":       "Terminés récemment",
@@ -656,16 +626,6 @@ var memoryStrings = map[string]map[string]string{
 		"mem.rejected":         "Rejeté.",
 		"mem.notactive":        "Seul un souvenir actif peut aller au profil.",
 		"mem.notproposed":      "Ce souvenir n'attend plus d'approbation.",
-		"mem.nothing":          "Rien de nouveau à extraire aujourd'hui.",
-		"mem.extracting":       "Extraction lancée (tâche %s).",
-		"mem.extract":          "Extraire aujourd'hui",
-		"mem.lastrun":          "Dernières extractions",
-		"mem.agent":            "Agent d'extraction : %s",
-		"mem.run.running":      "en cours",
-		"mem.run.applying":     "en cours",
-		"mem.run.done":         "faite",
-		"mem.run.failed":       "échouée",
-		"mem.run.applied":      "%d écrit(s)",
 		"mem.from":             "Source",
 		"mem.why":              "Pourquoi à approuver",
 		"mem.recorded":         "Noté %s",
@@ -743,8 +703,8 @@ var memoryStrings = map[string]map[string]string{
 		"mem.none":             "Nothing here yet. {{name}} remembers what you ask it to, and what it draws from your days every night.",
 		"mem.nomatch":          "No memory matches.",
 		"mem.inboxlead":        "What {{name}} read in a mail, a page or a task does not enter its memory without your approval.",
-		"mem.journallead":      "One entry per conversation and per finished task, written every night by the extraction.",
-		"mem.journalnone":      "The journal is empty. It fills up every night from your conversations.",
+		"mem.journallead":      "What Eriphe noted, day by day.",
+		"mem.journalnone":      "The journal is empty.",
 		"mem.commitmentslead":  "What is owed, by whom, by when: your promises, {{name}}'s, what you wait for from others, your reminders. {{name}} reminds you at the right time.",
 		"mem.commitmentsnone":  "Nothing under way.",
 		"mem.donerecent":       "Recently closed",
@@ -784,16 +744,6 @@ var memoryStrings = map[string]map[string]string{
 		"mem.rejected":         "Rejected.",
 		"mem.notactive":        "Only an active memory can go to the profile.",
 		"mem.notproposed":      "This memory no longer waits for approval.",
-		"mem.nothing":          "Nothing new to extract today.",
-		"mem.extracting":       "Extraction started (task %s).",
-		"mem.extract":          "Extract today",
-		"mem.lastrun":          "Recent extractions",
-		"mem.agent":            "Extraction agent: %s",
-		"mem.run.running":      "running",
-		"mem.run.applying":     "running",
-		"mem.run.done":         "done",
-		"mem.run.failed":       "failed",
-		"mem.run.applied":      "%d written",
 		"mem.from":             "Source",
 		"mem.why":              "Why it waits",
 		"mem.recorded":         "Noted %s",

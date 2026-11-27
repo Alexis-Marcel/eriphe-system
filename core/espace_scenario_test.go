@@ -163,7 +163,6 @@ func newScenarioWith(t *testing.T, ctx context.Context, live *liveBrain) *scenar
 	}
 	c := newCore(cfg, store)
 	m, _ := testMemory(t)
-	m.mirror = &memMirror{dir: cfg.memoirePath()}
 	c.useMemory(m)
 	openGraph(t, c)
 	c.useNodes(c.nodes)

@@ -144,7 +144,7 @@ func TestMemoryMigratesToAbout(t *testing.T) {
 		t.Fatal(err)
 	}
 	v7 := func(s string) string { return strings.ReplaceAll(s, "about", "subject") }
-	for _, q := range []string{`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`, v7(memorySchema), v7(intentionsSchema), learningSchema,
+	for _, q := range []string{`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`, v7(memorySchema), v7(intentionsSchema),
 		`INSERT INTO meta VALUES ('schema_version', '7')`,
 		`INSERT INTO memories (kind, subject, text, valid_from, recorded_at, source_kind, trust, status, updated_at)
 			VALUES ('fact', 'project:site', 'Le site est hébergé sur le NAS', 1, 1, 'user', 'first_party', 'active', 1)`,
