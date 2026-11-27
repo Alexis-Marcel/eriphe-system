@@ -152,6 +152,31 @@ func TestIntentionsImportedOnce(t *testing.T) {
 	}
 }
 
+// A memory.db closed cleanly (in WAL, its -wal and -shm gone) is read the
+// same, and left as it was.
+func TestIntentionsImportedFromAClosedFile(t *testing.T) {
+	dir := t.TempDir()
+	memPath := filepath.Join(dir, "memory.db")
+	oldMemory(t, memPath).Close()
+	for _, side := range []string{"-wal", "-shm"} {
+		if _, err := os.Stat(memPath + side); err == nil {
+			t.Fatalf("memory.db%s is still there", side)
+		}
+	}
+	sum := fileSum(t, memPath)
+	s, err := openStore(filepath.Join(dir, "core.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.db.Close()
+	if got, err := importIntentions(s, memPath); err != nil || got != (importedIntentions{Intentions: 3, Log: 4}) {
+		t.Fatalf("imported: %+v %v", got, err)
+	}
+	if fileSum(t, memPath) != sum {
+		t.Error("memory.db was written")
+	}
+}
+
 // Nothing is imported into a core.db that has intentions, nor from a
 // memory.db that is not there; "db" in core.json's "memory" object names
 // another file.

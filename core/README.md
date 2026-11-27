@@ -4899,7 +4899,8 @@ it before, eriphe-core opens that file read-only and copies its intentions and t
 `core.db` as they are (ids, states, dates, abouts; `intentions_import.go`), logging
 `intentions: N intentions and M log entries imported from …/memory.db into core.db; memory.db is
 kept, no longer read`. core.db's kv then says the import was made (`intentions_imported`), and the
-file is never opened again; it is never changed nor deleted, so it can be removed by hand. A file
+file is never opened again; it is never changed nor deleted (a read-only open may leave its
+`-shm` and `-wal` beside it), so it can be removed by hand, with them. A file
 that cannot be read stops the start, naming it: move it aside to start without its intentions.
 
 An intention has a kind (`promise`: the user owes someone; `commitment`: the assistant owes the
