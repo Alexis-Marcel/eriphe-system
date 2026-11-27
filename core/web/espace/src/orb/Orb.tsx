@@ -20,18 +20,18 @@ import { Words } from "./Words";
 // once. Each frame is written straight to its elements: no drawing again.
 // It looks where to go only when something moved: what it says, the graph
 // (onFrame), the camera, the screen, its words' size; still, it reads
-// nothing. Docked, it looks at nothing of the graph. It reads no page off
-// the screen: the bodies are where the simulation has them (positions),
-// an open page as big as the graph measured it (pageSize); the bar, the
-// corner and the notices are read once, again only when they or the screen
-// change size.
+// nothing. Docked, it looks at nothing of the graph. Out, the bubbles are
+// where the simulation has them (positions); an open page is read as drawn
+// (pageRect: its element, the graph's, no search of the page); the bar,
+// the corner and the notices are read once, again only when they or the
+// screen change size.
 
 const ARRIVED = 8; // px from its place: there, its words show
 
-export function Orb({ bodies, positions, pageSize, onFrame, cam, onOpen }: {
+export function Orb({ bodies, positions, pageRect, onFrame, cam, onOpen }: {
   bodies: LNode[];
   positions: () => Pos;
-  pageSize: (id: string) => Pt | undefined;
+  pageRect: (id: string) => DOMRect | undefined;
   onFrame: (f: () => void) => () => void;
   cam: [MotionValue<number>, MotionValue<number>, MotionValue<number>];
   onOpen: (id: string) => void;
@@ -85,8 +85,8 @@ export function Orb({ bodies, positions, pageSize, onFrame, cam, onOpen }: {
       // An open page as drawn (its height is its content's, not the room
       // the layout keeps for it); a bubble and its title as the layout has them.
       const rect = (b: LNode, p: Pt): Rect => {
-        const d = b.box ? pageSize(b.id) : undefined;
-        if (d && d[0] > 0) return { l: cx + (p[0] - d[0] / 2) * k, t: cy + (p[1] - d[1] / 2) * k, r: cx + (p[0] + d[0] / 2) * k, b: cy + (p[1] + d[1] / 2) * k };
+        const d = b.box ? pageRect(b.id) : undefined;
+        if (d && d.width > 0) return { l: d.left, t: d.top, r: d.right, b: d.bottom };
         const [h, top, bot] = extent(b, p);
         return { l: cx + (p[0] - h) * k, t: cy + top * k, r: cx + (p[0] + h) * k, b: cy + bot * k };
       };

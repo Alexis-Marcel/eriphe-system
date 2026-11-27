@@ -720,9 +720,13 @@ async function inView(el: Locator): Promise<boolean> {
   return !!b && b.x >= 0 && b.y >= 0 && b.x + b.width <= v.width && b.y + b.height <= v.height;
 }
 
-// at is where a bubble is in the graph's own space.
+// at is where a bubble is in the graph's own space (its transform, as the
+// graph places it).
 async function at(node: Locator): Promise<[number, number]> {
-  return node.evaluate((el) => [parseFloat((el as HTMLElement).style.left), parseFloat((el as HTMLElement).style.top)]);
+  return node.evaluate((el) => {
+    const m = new DOMMatrix(getComputedStyle(el).transform);
+    return [m.e, m.f] as [number, number];
+  });
 }
 
 // openMail opens the mail's page alone, from its bubble with the whole graph
@@ -772,7 +776,8 @@ async function expectBubblesApart(page: Page): Promise<void> {
       const bs = els.map((el) => {
         const e = el as HTMLElement;
         const core = e.querySelector(".gr-core") as HTMLElement;
-        return { id: e.dataset.node, x: parseFloat(e.style.left), y: parseFloat(e.style.top), r: core.offsetWidth / 2 };
+        const m = new DOMMatrix(getComputedStyle(e).transform);
+        return { id: e.dataset.node, x: m.e, y: m.f, r: core.offsetWidth / 2 };
       });
       const labels = els.filter((el) => el.classList.contains("d0")).map((el) => ({ id: (el as HTMLElement).dataset.node, b: el.querySelector(".gr-label b")!.getBoundingClientRect() }));
       const out: string[] = [];

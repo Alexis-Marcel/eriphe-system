@@ -169,9 +169,6 @@ export function Graph({ live }: { live: boolean }) {
   // (StillPage): their gestures read the boxes of now through this.
   const boxNow = useRef(boxOf);
   boxNow.current = boxOf;
-  // drawn: each open page's size as drawn, in the graph's units, kept as
-  // it changes: the orb reads it, not the page.
-  const drawn = useRef(new Map<string, Pt>());
   const sizers = useRef(new Map<string, (el: HTMLDivElement | null) => void>());
   const sizer = (id: string) => {
     let f = sizers.current.get(id);
@@ -182,10 +179,9 @@ export function Graph({ live }: { live: boolean }) {
         ro = null;
         if (el) els.current.pages.set(id, el);
         else els.current.pages.delete(id);
-        if (!el) return void drawn.current.delete(id);
+        if (!el) return;
         place();
         const read = () => {
-          drawn.current.set(id, [el.offsetWidth, el.offsetHeight]);
           const h = Math.ceil(Math.max(240, el.offsetHeight) / 20) * 20;
           setPageH((c) => (c[id] === h ? c : { ...c, [id]: h }));
         };
@@ -475,13 +471,15 @@ export function Graph({ live }: { live: boolean }) {
   };
   // Aimed again when what React draws changes (a page, the focus, the
   // screen), and when the graph rests or moves on (rested), unless the
-  // user moved the camera by hand.
+  // user moved the camera by hand. Each aim looks at where the graph rests
+  // now: one drawn before the graph came to rest must not take the camera
+  // back to where it was then.
   const target = aimAt();
   const aimNow = useRef(() => {});
   aimNow.current = () => void (!manual && aim(aimAt()));
   useEffect(() => {
-    if (!manual) aim(target);
-  }, [manual, reduced, target.k, target.x, target.y, camK, camX, camY]); // eslint-disable-line react-hooks/exhaustive-deps
+    aimNow.current();
+  }, [manual, reduced, target.k, target.x, target.y, camK, camX, camY]);
 
   const vp = useRef<HTMLDivElement>(null);
   // The pages springing open or shut (their motion), by node.
@@ -836,7 +834,7 @@ export function Graph({ live }: { live: boolean }) {
         marks={list.filter((x) => waits(x) && !openIds.includes(x.id)).map((x) => ({ id: x.id, title: titleOf(x, external) }))}
         onOpen={(id) => openNode(id, false)}
       />
-      <Orb bodies={bodies} positions={positions} pageSize={(id) => drawn.current.get(id)} onFrame={onFrame} cam={[camX, camY, camK]} onOpen={(id) => openNode(id, true)} />
+      <Orb bodies={bodies} positions={positions} pageRect={(id) => els.current.pages.get(id)?.getBoundingClientRect()} onFrame={onFrame} cam={[camX, camY, camK]} onOpen={(id) => openNode(id, true)} />
     </div>
   );
 }
