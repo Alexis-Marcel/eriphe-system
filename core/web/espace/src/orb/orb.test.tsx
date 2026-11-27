@@ -33,7 +33,7 @@ const draw = async (narrow = false) =>
   act(async () =>
     root.render(
       <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}><OrbProvider>
-        {!narrow && <Orb bodies={bodies} at={(id) => at[id as keyof typeof at]} onFrame={() => () => undefined} cam={[motionValue(300), motionValue(300), motionValue(1)]} onOpen={(id) => store.setState({ open: [id], talk: id })} />}
+        {!narrow && <Orb bodies={bodies} positions={() => at} pageSize={() => undefined} onFrame={() => () => undefined} cam={[motionValue(300), motionValue(300), motionValue(1)]} onOpen={(id) => store.setState({ open: [id], talk: id })} />}
         <Bar boot={boot} narrow={narrow} />
       </OrbProvider></WordsContext.Provider>,
     ),
@@ -229,7 +229,7 @@ describe("the orb", () => {
     await act(async () =>
       root.render(
         <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}><OrbProvider>
-          <Orb bodies={huge} at={(id) => at[id as keyof typeof at]} onFrame={() => () => undefined} cam={[motionValue(300), motionValue(300), motionValue(1)]} onOpen={() => undefined} />
+          <Orb bodies={huge} positions={() => at} pageSize={() => undefined} onFrame={() => () => undefined} cam={[motionValue(300), motionValue(300), motionValue(1)]} onOpen={() => undefined} />
           <Bar boot={boot} narrow={false} />
         </OrbProvider></WordsContext.Provider>,
       ),

@@ -20,13 +20,18 @@ import { Words } from "./Words";
 // once. Each frame is written straight to its elements: no drawing again.
 // It looks where to go only when something moved: what it says, the graph
 // (onFrame), the camera, the screen, its words' size; still, it reads
-// nothing.
+// nothing. Docked, it looks at nothing of the graph. It reads no page off
+// the screen: the bodies are where the simulation has them (positions),
+// an open page as big as the graph measured it (pageSize); the bar, the
+// corner and the notices are read once, again only when they or the screen
+// change size.
 
 const ARRIVED = 8; // px from its place: there, its words show
 
-export function Orb({ bodies, at: where, onFrame, cam, onOpen }: {
+export function Orb({ bodies, positions, pageSize, onFrame, cam, onOpen }: {
   bodies: LNode[];
-  at: (id: string) => Pt | undefined;
+  positions: () => Pos;
+  pageSize: (id: string) => Pt | undefined;
   onFrame: (f: () => void) => () => void;
   cam: [MotionValue<number>, MotionValue<number>, MotionValue<number>];
   onOpen: (id: string) => void;
@@ -41,28 +46,31 @@ export function Orb({ bodies, at: where, onFrame, cam, onOpen }: {
   const latest = useRef({ show, bodies, crowded });
   latest.current = { show, bodies, crowded };
 
+  // The fixed things on screen it gives way to, and its dock: their boxes
+  // kept until one of them, or the screen, changes size.
+  const fixed = useRef({ els: new Map<string, Element | null>(), rects: new Map<string, DOMRect>(), ro: null as ResizeObserver | null });
+  const rectOf = (sel: string): DOMRect | undefined => {
+    const f = fixed.current;
+    const el = document.querySelector(sel);
+    if (el !== f.els.get(sel)) {
+      const was = f.els.get(sel);
+      if (was) f.ro?.unobserve(was);
+      f.els.set(sel, el);
+      if (el) f.ro?.observe(el);
+      f.rects.delete(sel);
+    }
+    if (!el) return undefined;
+    let r = f.rects.get(sel);
+    if (!r) f.rects.set(sel, (r = el.getBoundingClientRect()));
+    return r;
+  };
+
   const frame = () => {
     const s = st.current;
     const { show, bodies, crowded } = latest.current;
-    const at: Pos = {};
-    for (const b of bodies) {
-      const p = where(b.id);
-      if (p) at[b.id] = p;
-    }
     const o = orb.current, w = say.current;
     if (!o || !w) return true;
-    const [cx, cy, k] = [cam[0].get(), cam[1].get(), cam[2].get()];
-    // An open page as drawn (its height is its content's, not the room
-    // the layout keeps for it); a bubble and its title as the layout has them.
-    const pages = new Map<string, DOMRect>();
-    for (const e of document.querySelectorAll<HTMLElement>("[data-page]")) pages.set(e.dataset.page!, e.getBoundingClientRect());
-    const rect = (b: LNode, p: Pt): Rect => {
-      const d = b.box ? pages.get(b.id) : undefined;
-      if (d && d.width > 0) return { l: d.left, t: d.top, r: d.right, b: d.bottom };
-      const [h, top, bot] = extent(b, p);
-      return { l: cx + (p[0] - h) * k, t: cy + top * k, r: cx + (p[0] + h) * k, b: cy + bot * k };
-    };
-    const dock = document.querySelector(".cs-dock")?.getBoundingClientRect();
+    const dock = rectOf(".cs-dock");
     const rest: Pt = dock ? [dock.left + dock.width / 2, dock.top + dock.height / 2] : [innerWidth / 2, innerHeight - 40];
     let docked = show.mode === "rest";
     let to: Pt = rest;
@@ -72,13 +80,31 @@ export function Orb({ bodies, at: where, onFrame, cam, onOpen }: {
       s.side = undefined;
       s.home = undefined;
     } else {
-      const obstacles: Rect[] = bodies.filter((b) => at[b.id]).map((b) => rect(b, at[b.id]));
+      const at = positions();
+      const [cx, cy, k] = [cam[0].get(), cam[1].get(), cam[2].get()];
+      // An open page as drawn (its height is its content's, not the room
+      // the layout keeps for it); a bubble and its title as the layout has them.
+      const rect = (b: LNode, p: Pt): Rect => {
+        const d = b.box ? pageSize(b.id) : undefined;
+        if (d && d[0] > 0) return { l: cx + (p[0] - d[0] / 2) * k, t: cy + (p[1] - d[1] / 2) * k, r: cx + (p[0] + d[0] / 2) * k, b: cy + (p[1] + d[1] / 2) * k };
+        const [h, top, bot] = extent(b, p);
+        return { l: cx + (p[0] - h) * k, t: cy + top * k, r: cx + (p[0] + h) * k, b: cy + bot * k };
+      };
+      const screen: Rect = { l: 8, t: TOP, r: innerWidth - 8, b: innerHeight - 8 };
+      // What is on screen only: a big graph's far bubbles are in no one's way.
+      const onScreen = (r: Rect) => r.r > screen.l - 40 && r.l < screen.r + 40 && r.b > screen.t - 40 && r.t < screen.b + 40;
+      const obstacles: Rect[] = [];
+      for (const b of bodies) {
+        const p = at[b.id];
+        if (!p) continue;
+        const r = rect(b, p);
+        if (onScreen(r) || b.id === show.node) obstacles.push(r);
+      }
       avoid = obstacles; // its subject among them
       for (const sel of [".cs", ".hud-corner", ".notices"]) {
-        const r = document.querySelector(sel)?.getBoundingClientRect();
+        const r = rectOf(sel);
         if (r && r.width > 0) obstacles.push({ l: r.left, t: r.top, r: r.right, b: r.bottom });
       }
-      const screen: Rect = { l: 8, t: TOP, r: innerWidth - 8, b: innerHeight - 8 };
       const words: [number, number] = w.childElementCount ? [Math.max(1, w.offsetWidth), w.offsetHeight] : [0, 0];
       if (s.key !== show.key) {
         s.key = show.key;
@@ -140,14 +166,24 @@ export function Orb({ bodies, at: where, onFrame, cam, onOpen }: {
   useMotionValueEvent(cam[2], "change", kick);
   useEffect(() => onFrame(kick), [onFrame]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    addEventListener("resize", kick);
+    // The bar, the corner, the notices or the dock grown or shrunk, or the
+    // screen: they are read again.
+    const f = fixed.current;
+    const stale = () => {
+      f.rects.clear();
+      kick();
+    };
+    f.ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(stale);
+    for (const el of f.els.values()) if (el) f.ro?.observe(el);
+    addEventListener("resize", stale);
     // Its words grown or shrunk (a font come late, a longer answer): it
     // looks again, so that they stay whole on screen.
     const ro = typeof ResizeObserver === "undefined" || !say.current ? null : new ResizeObserver(() => kick());
     if (ro && say.current) ro.observe(say.current);
     return () => {
       ro?.disconnect();
-      removeEventListener("resize", kick);
+      f.ro?.disconnect();
+      removeEventListener("resize", stale);
       if (st.current.raf !== null) cancelAnimationFrame(st.current.raf);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

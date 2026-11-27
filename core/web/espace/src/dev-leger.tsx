@@ -211,7 +211,7 @@ export function startLeger() {
 // straight on their elements, not drawn again), and the controls.
 export function LegerPanel() {
   const out = useRef<HTMLPreElement>(null);
-  const [n, setN] = useState(() => Object.keys(store.getState().nodes).length || 100);
+  const [n, setN] = useState(() => Number(new URLSearchParams(location.search).get("n")) || 100);
   const [shut, setShut] = useState(false);
   useEffect(() => {
     const id = setInterval(() => {
