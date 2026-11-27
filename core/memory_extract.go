@@ -732,7 +732,7 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 	if !x.ValidTo.IsZero() && !x.ValidTo.After(from) {
 		return "valid_to is not after the memory became true: give the day it stops being true", ""
 	}
-	scan := scanMemoryText(x.Text, x.About, strings.Join(x.Links, "\n"), x.Keywords)
+	scan := scanText(x.Text, x.About, strings.Join(x.Links, "\n"), x.Keywords)
 	d, err := extractionDecision(x.Kind, trust, scan, basis)
 	if err != nil {
 		return err.Error(), ""
@@ -995,7 +995,7 @@ func (c *core) applyIntend(op extractionOp, trust, ref, who string) (why, result
 	if x.RemindAt, err = parseWhen(op.RemindAt); err != nil {
 		return err.Error(), ""
 	}
-	scan := scanMemoryText(x.Text, x.Owner, x.OwedTo, x.About, x.Cue)
+	scan := scanText(x.Text, x.Owner, x.OwedTo, x.About, x.Cue)
 	if scan.Reject != "" {
 		return "refused: " + scan.Reject, ""
 	}

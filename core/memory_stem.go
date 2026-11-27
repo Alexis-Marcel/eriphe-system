@@ -2,8 +2,6 @@ package main
 
 import (
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/kljensen/snowball/english"
 	"github.com/kljensen/snowball/french"
@@ -15,26 +13,6 @@ import (
 // "anniversaires" finds "anniversaire", "grimper" finds "grimpe". A query
 // matches the words as typed or their stems. Snowball French, the stemmer
 // that did best for French in the CLEF campaigns (docs/memory-design.md).
-
-// memWords splits text into lower-case words of letters and digits: an
-// apostrophe splits (l'anniversaire: l, anniversaire), a hyphen too.
-func memWords(s string) []string {
-	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
-}
-
-// stemWord is a word's stem, accents folded like the index's tokenizer.
-func stemWord(w string) string {
-	if utf8.RuneCountInString(w) < 3 || strings.IndexFunc(w, unicode.IsDigit) >= 0 {
-		return foldAccents(w)
-	}
-	s := foldAccents(french.Stem(w, true))
-	// Snowball leaves the plural of a short word (vélos): a plural s goes,
-	// as Savoy's minimal stemmer does.
-	if utf8.RuneCountInString(s) > 3 && strings.HasSuffix(s, "s") && !strings.HasSuffix(s, "ss") {
-		s = s[:len(s)-1]
-	}
-	return s
-}
 
 // stemText is the stems of the parts, each once, for the stems column.
 func stemText(parts ...string) string {

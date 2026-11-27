@@ -217,7 +217,7 @@ func (c *core) brainSetting(in settingIn) (map[string]any, error) {
 	if why == "" {
 		return nil, errors.New("why is needed")
 	}
-	state, reason, err := c.askedWrite(in.SourceRef, scanMemoryText(in.Value, why), settingRequest(), "does not speak of how or where to be told")
+	state, reason, err := c.askedWrite(in.SourceRef, scanText(in.Value, why), settingRequest(), "does not speak of how or where to be told")
 	if err != nil {
 		return nil, err
 	}

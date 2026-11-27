@@ -131,7 +131,7 @@ func (w *web) handleRuleSave(rw http.ResponseWriter, r *http.Request, s *session
 			return
 		}
 	}
-	if scan := scanMemoryText(rule.Match, rule.Why); scan.Reject != "" {
+	if scan := scanText(rule.Match, rule.Why); scan.Reject != "" {
 		w.toast(rw, scan.Reject, false)
 		return
 	}

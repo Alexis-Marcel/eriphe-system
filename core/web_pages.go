@@ -435,7 +435,7 @@ func (w *web) changed(rw http.ResponseWriter, msg string) {
 
 // toast answers an htmx action with a short message the page shows.
 func (w *web) toast(rw http.ResponseWriter, msg string, ok bool) {
-	rw.Header().Set("HX-Trigger", hxTrigger(msg, ok, false)) // web_memory.go
+	rw.Header().Set("HX-Trigger", hxTrigger(msg, ok, false)) // web.go
 	rw.Header().Set("HX-Reswap", "none")
 	rw.WriteHeader(http.StatusOK)
 }

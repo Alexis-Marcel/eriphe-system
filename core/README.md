@@ -1205,8 +1205,8 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   author, fn)` writes the last version, an author's body through nodefile's author API (code's
   fields kept, a change to them refused); it is refused with `ErrConflict` when `expect` is not the
   last version's commit hash; a node alike makes no version. An archived node is not written (`ErrArchived`). A node is 512 KiB
-  at most. Secrets are refused by the memory's filter (`scanSecrets` in
-  `memory_trust.go`: credentials, long random strings, links with a password or a token); its
+  at most. Secrets are refused by the scanner (`scanSecrets` in
+  `scan.go`: credentials, long random strings, links with a password or a token); its
   injection rules are not applied, as a node may quote someone else's words. A link's path is not
   read as a random string (a pull request's `owner/repo/pull/640/files`, a document's id): a
   token's known shape anywhere, a query's or fragment's token key or long random value, and a

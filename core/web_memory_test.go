@@ -11,13 +11,6 @@ import (
 	"time"
 )
 
-func newMemoryWeb(t *testing.T) (*testWeb, string) {
-	t.Helper()
-	c, _ := testMemoryCore(t)
-	tw := newTestWebFor(t, c)
-	return tw, tw.setup()
-}
-
 func TestMemoryPageRenders(t *testing.T) {
 	tw, _ := newMemoryWeb(t)
 	m := tw.c.mem
@@ -64,8 +57,6 @@ func TestMemoryPageRenders(t *testing.T) {
 		t.Fatalf("export: %d %q", code, body)
 	}
 }
-
-func mustURL(s string) *url.URL { u, _ := url.Parse(s); return u }
 
 func TestMemoryPageNeedsLogin(t *testing.T) {
 	tw, _ := newMemoryWeb(t)

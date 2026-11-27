@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
 )
 
 // The workspace: Eriphe's own interface, served by eriphe-core on its own
@@ -607,4 +608,37 @@ func (tlsNoise) Write(p []byte) (int, error) {
 		log.Printf("web: %s", bytes.TrimSpace(p))
 	}
 	return len(p), nil
+}
+
+// hxTrigger is the HX-Trigger header of a toast: JSON with every non-ASCII
+// character escaped, since browsers read headers as Latin-1.
+func hxTrigger(msg string, ok, changed bool) string {
+	kind := "ok"
+	if !ok {
+		kind = "error"
+	}
+	v := map[string]any{"toast": map[string]string{"message": msg, "kind": kind}}
+	if changed {
+		v["memory-changed"] = true
+	}
+	return hxEvents(v)
+}
+
+// hxEvents is an HX-Trigger header of events and their details, every
+// non-ASCII character escaped.
+func hxEvents(v map[string]any) string {
+	raw, _ := json.Marshal(v)
+	var b strings.Builder
+	for _, r := range string(raw) {
+		switch {
+		case r < 0x80:
+			b.WriteRune(r)
+		case r > 0xFFFF:
+			r1, r2 := utf16.EncodeRune(r)
+			fmt.Fprintf(&b, `\u%04x\u%04x`, r1, r2)
+		default:
+			fmt.Fprintf(&b, `\u%04x`, r)
+		}
+	}
+	return b.String()
 }

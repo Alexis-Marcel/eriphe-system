@@ -125,5 +125,3 @@ func TestTaskMemory(t *testing.T) {
 		t.Fatalf("recall not allowed: %+v", items)
 	}
 }
-
-func mustJSON(v any) string { b, _ := json.Marshal(v); return string(b) }

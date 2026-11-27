@@ -567,10 +567,10 @@ func (c *core) nodeDoneDecision(id string) {
 	}
 	ref := nodeRef(id)
 	text = truncate(text, 600)
-	scan := scanMemoryText(text, ref)
+	scan := scanText(text, ref)
 	if scan.Reject != "" {
 		text = truncate(fmt.Sprintf("Nœud « %s » fini le %s", d.Node.Meta.Title, time.Now().Format("2006-01-02")), 600)
-		if scan = scanMemoryText(text, ref); scan.Reject != "" {
+		if scan = scanText(text, ref); scan.Reject != "" {
 			return
 		}
 	}

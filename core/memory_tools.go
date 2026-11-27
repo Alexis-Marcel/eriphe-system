@@ -68,20 +68,6 @@ func viewMemories(xs []*Memory, now time.Time) []memoryView {
 	return out
 }
 
-// parseWhen reads a date or a date and time, in local time.
-func parseWhen(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, nil
-	}
-	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02 15:04", "2006-01-02"} {
-		if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("%q is not a date: use YYYY-MM-DD or YYYY-MM-DDTHH:MM", s)
-}
-
 // parseEnd reads an end: a date alone is its whole day.
 func parseEnd(s string) (time.Time, error) {
 	t, err := parseWhen(s)
@@ -301,7 +287,7 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 	if x.OccurredAt, err = parseWhen(in.OccurredAt); err != nil {
 		return nil, err
 	}
-	scan := scanMemoryText(x.Text, x.About, strings.Join(x.Links, "\n"), x.Keywords)
+	scan := scanText(x.Text, x.About, strings.Join(x.Links, "\n"), x.Keywords)
 	d, err := c.decideBrainWrite(x.Kind, in.SourceRef, scan)
 	if err != nil {
 		return nil, err
@@ -353,7 +339,7 @@ func (c *core) brainUpdate(in updateIn) (map[string]any, error) {
 	if in.Pinned != nil {
 		kind = kindProfile // the profile is the user's
 	}
-	d, err := c.decideBrainWrite(kind, in.SourceRef, scanMemoryText(in.texts()...))
+	d, err := c.decideBrainWrite(kind, in.SourceRef, scanText(in.texts()...))
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +405,7 @@ func (c *core) brainForget(in forgetIn) (map[string]any, error) {
 	if strings.TrimSpace(in.Reason) == "" {
 		return nil, errors.New("reason is required")
 	}
-	d, err := c.decideBrainWrite(old.Kind, in.SourceRef, scanMemoryText(in.Reason))
+	d, err := c.decideBrainWrite(old.Kind, in.SourceRef, scanText(in.Reason))
 	if err != nil {
 		return nil, err
 	}

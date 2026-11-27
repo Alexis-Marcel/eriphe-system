@@ -130,7 +130,7 @@ func (c *core) brainUnlearn(in unlearnIn) (map[string]any, error) {
 	if why := c.mem.undoable(e); why != "" {
 		return nil, fmt.Errorf("learned #%d cannot be undone: %s", e.ID, why)
 	}
-	if scan := scanMemoryText(in.Reason); scan.Reject != "" {
+	if scan := scanText(in.Reason); scan.Reject != "" {
 		return nil, fmt.Errorf("refused: %s", scan.Reject)
 	}
 	msg, owner := c.ownerMessage(in.SourceRef)

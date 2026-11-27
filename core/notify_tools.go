@@ -102,7 +102,7 @@ func (c *core) notifyAs(in notifyIn, source string, tainted []string, conversati
 	case in.Where != "" && !slices.Contains(routeLines(), in.Where):
 		return nil, errors.New("where is one of " + linesText() + ", or empty")
 	}
-	scan := scanMemoryText(text, why, in.About, in.Ref)
+	scan := scanText(text, why, in.About, in.Ref)
 	if scan.Reject != "" {
 		return nil, fmt.Errorf("refused: %s", scan.Reject)
 	}
@@ -390,7 +390,7 @@ func (c *core) brainRule(in ruleIn) (map[string]any, error) {
 	if strings.TrimSpace(r.Why) == "" {
 		return nil, errors.New("why is needed")
 	}
-	state, why, err := c.ruleWrite(in.SourceRef, scanMemoryText(r.Match, r.Why))
+	state, why, err := c.ruleWrite(in.SourceRef, scanText(r.Match, r.Why))
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +418,7 @@ func (c *core) brainDeleteRule(in ruleIn) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	state, why, err := c.ruleWrite(in.SourceRef, scanMemoryText(in.Why))
+	state, why, err := c.ruleWrite(in.SourceRef, scanText(in.Why))
 	if err != nil {
 		return nil, err
 	}
