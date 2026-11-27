@@ -1,7 +1,6 @@
 package main
 
 import (
-	"strings"
 	"testing"
 	"time"
 )
@@ -33,16 +32,5 @@ func TestProposalsExpire(t *testing.T) {
 	}
 	if n, _ := m.expireProposals(); n != 0 {
 		t.Fatalf("expired again: %d", n)
-	}
-}
-
-// The extraction's proposals have no card: « Ce qu'Eriphe a appris » says
-// how many wait in À valider, and that they expire.
-func TestLearnedPageSaysWhatWaits(t *testing.T) {
-	tw, _ := newMemoryWeb(t)
-	mustAdd(t, tw.c.mem, &Memory{Kind: kindFact, Text: "Une rumeur", Status: memProposed, SourceKind: srcExtraction, Trust: trustExternal})
-	_, body, _ := tw.do("GET", "/settings/learned", nil, nil)
-	if !strings.Contains(body, "1 souvenir(s) proposé(s)") || !strings.Contains(body, `href="/settings/approve"`) {
-		t.Fatalf("page:\n%s", body)
 	}
 }

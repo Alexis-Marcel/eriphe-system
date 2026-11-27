@@ -41,9 +41,8 @@ const (
 	feedNotification = "notification"
 	feedIntention    = "intention"
 	feedMessage      = "message"
-	feedLearned      = "learned" // the learning journal (learning.go)
-	feedEvent        = "event"   // the event journal (event_journal.go)
-	feedNode         = "node"    // the nodes changed (nodestore)
+	feedEvent        = "event" // the event journal (event_journal.go)
+	feedNode         = "node"  // the nodes changed (nodestore)
 
 	feedOwn      = "own"
 	feedExternal = "external"
@@ -57,7 +56,7 @@ const (
 	taintSince     = "since.external"
 )
 
-var feedKinds = []string{feedTask, feedNotification, feedIntention, feedMessage, feedLearned, feedEvent, feedNode}
+var feedKinds = []string{feedTask, feedNotification, feedIntention, feedMessage, feedEvent, feedNode}
 
 // happening is one item of the feed.
 type happening struct {
@@ -109,7 +108,6 @@ var feedSources = map[string]feedSource{
 	feedNotification: notificationHappenings,
 	feedIntention:    intentionHappenings,
 	feedMessage:      messageHappenings,
-	feedLearned:      learnedHappenings,
 	feedEvent:        eventHappenings,
 	feedNode:         nodeHappenings,
 }

@@ -43,7 +43,7 @@ func TestTints(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range tints {
-		if !strings.Contains(string(css), ".tint-"+name+",") {
+		if !strings.Contains(string(css), ".tint-"+name+",") && !strings.Contains(string(css), ".tint-"+name+" {") {
 			t.Errorf("no .tint-%s in app.css", name)
 		}
 	}

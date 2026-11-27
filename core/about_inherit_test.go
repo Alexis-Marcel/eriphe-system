@@ -190,25 +190,3 @@ func TestSkillRunSubject(t *testing.T) {
 		t.Errorf("run's task under %q", got)
 	}
 }
-
-// What the extraction writes from a task takes the task's subject: an
-// episode whatever was guessed, a fact when none was given.
-func TestExtractionTakesTheTasksSubject(t *testing.T) {
-	c, _ := testMemoryCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Runtime: "claude-code", State: "stopped", Prompt: "x", About: "project:site"})
-	for _, tc := range []struct {
-		op   extractionOp
-		ref  string
-		want string
-	}{
-		{extractionOp{Kind: kindDecision, About: "topic:deploiement"}, "task:t-1", "project:site"},
-		{extractionOp{Kind: kindFact}, "msg:3,task:t-1", "project:site"},
-		{extractionOp{Kind: kindFact, About: "person:sam"}, "task:t-1", "person:sam"},
-		{extractionOp{Kind: kindEpisode, About: journalEntity}, "msg:3,task:t-1", journalEntity},
-		{extractionOp{Kind: kindFact, About: "topic:x"}, "msg:3", "topic:x"},
-	} {
-		if got := c.opAbout(tc.op, tc.ref); got != tc.want {
-			t.Errorf("%+v from %s: %q, want %q", tc.op, tc.ref, got, tc.want)
-		}
-	}
-}

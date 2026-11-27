@@ -111,10 +111,46 @@ func openNodes(cfg *Config, db *sql.DB) (*nodestore.Store, error) {
 	return s, nil
 }
 
+// BackupConfig is the nightly backup's hour, folder and days kept; it
+// works without one. Its keys are read in the "memory" object of core.json
+// (MemoryConfig).
+type BackupConfig struct {
+	ExtractAt  string `json:"extract_at,omitempty"`  // local time of the nightly run, 03:00 by default
+	BackupDir  string `json:"backup_dir,omitempty"`  // nightly copies; memory-backups next to eriphe-core's database by default
+	BackupKeep int    `json:"backup_keep,omitempty"` // nightly copies kept, 14 by default
+}
+
+func (c *Config) backupConfig() BackupConfig {
+	var b BackupConfig
+	if c.Memory != nil {
+		b = c.Memory.BackupConfig
+	}
+	if b.ExtractAt == "" {
+		b.ExtractAt = "03:00"
+	}
+	if b.BackupDir == "" {
+		b.BackupDir = filepath.Join(filepath.Dir(c.DB), "memory-backups")
+	}
+	if b.BackupKeep <= 0 {
+		b.BackupKeep = 14
+	}
+	return b
+}
+
+// nightly is the night's hour on now's day; one that does not parse is
+// 03:00.
+func (b BackupConfig) nightly(now time.Time) time.Time {
+	at, err := time.ParseInLocation("15:04", b.ExtractAt, time.Local)
+	if err != nil {
+		at, _ = time.ParseInLocation("15:04", "03:00", time.Local)
+	}
+	return time.Date(now.Year(), now.Month(), now.Day(), at.Hour(), at.Minute(), 0, 0, time.Local)
+}
+
 // runNodes writes the lines that follow the event journal, and the
 // glances of the nodes changed (node_listen.go), one at a time; and backs
-// the graph up once a night, at the memory's hour (extract_at), into the
-// memory's backup folder (nodesNight).
+// the graph up once a night, at the backup's hour (extract_at), into its
+// folder (nodesNight).
 func (c *core) runNodes(ctx context.Context) {
 	if c.nodes == nil {
 		return
@@ -147,14 +183,9 @@ func (c *core) runNodes(ctx context.Context) {
 // readings (nodestore's values.go): at most one a day; after it, the
 // repository is packed when its loose objects are many.
 func (c *core) nodesNight(done string, now time.Time) string {
-	mc := c.conf().memoryConfig()
+	mc := c.conf().backupConfig()
 	today := now.Format("2006-01-02")
-	at, err := time.ParseInLocation("15:04", mc.ExtractAt, time.Local)
-	if err != nil {
-		at, _ = time.ParseInLocation("15:04", "03:00", time.Local)
-	}
-	nightly := time.Date(now.Year(), now.Month(), now.Day(), at.Hour(), at.Minute(), 0, 0, time.Local)
-	if now.Before(nightly) || done == today {
+	if now.Before(mc.nightly(now)) || done == today {
 		return done
 	}
 	if _, err := os.Stat(filepath.Join(mc.BackupDir, "nodes-"+today+".db")); err == nil {

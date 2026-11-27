@@ -167,7 +167,7 @@ func cardWeight(kind string) int {
 		return weightBlocksATask
 	case kind == cardIntention:
 		return weightBrief
-	case kind == cardMemory || kind == cardUnlearn || kind == cardRule || kind == cardSetting:
+	case kind == cardMemory || kind == cardRule || kind == cardSetting:
 		return 1
 	}
 	return weightProposal
@@ -418,8 +418,8 @@ func (c *core) attentionBlock() string {
 		c.conf().User, strings.Join(lines, "\n"))
 }
 
-// A proposal waiting without a card in front of the user (the memory's
-// extraction, a turn that said nothing of it) enters the attention queue
+// A proposal waiting without a card in front of the user (a turn that
+// said nothing of it) enters the attention queue
 // at its card's weight (cardWeight), unless it is there already: the
 // queue delivers it like anything else.
 

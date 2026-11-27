@@ -92,7 +92,7 @@ func (c *core) taskMemoryServer(t *TaskRow) *mcp.Server {
 			return c.taskRecall(in)
 		})
 	if r := c.runOfTask(t.ID); r != nil {
-		tool(s, "since", "What happened since a time, oldest first: tasks, Eriphe's notifications (sent, held for later, dropped), intentions, messages, what Eriphe learned, the event journal. t: an RFC3339 time, YYYY-MM-DD or YYYY-MM-DDTHH:MM, away (since the user left) or last_run (since this skill's previous run). What someone else wrote is listed, not quoted. Use it for a brief: what waits for the user is there.",
+		tool(s, "since", "What happened since a time, oldest first: tasks, Eriphe's notifications (sent, held for later, dropped), intentions, messages, the event journal. t: an RFC3339 time, YYYY-MM-DD or YYYY-MM-DDTHH:MM, away (since the user left) or last_run (since this skill's previous run). What someone else wrote is listed, not quoted. Use it for a brief: what waits for the user is there.",
 			func(ctx context.Context, in sinceIn) (map[string]any, error) {
 				return c.runSince(r, in)
 			})

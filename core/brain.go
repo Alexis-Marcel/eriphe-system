@@ -65,9 +65,6 @@ func (c *core) notifyBrain(id, state string) {
 	if c.stepTaskChanged(id, state, outcome) {
 		return // a step's: the brain hears of it only as an exception (node_steps.go)
 	}
-	if c.memoryTaskChanged(id, state) {
-		return // the memory's own tasks are eriphe-core's (memory_extract.go)
-	}
 	if c.conf().brain() == nil {
 		return
 	}

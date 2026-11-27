@@ -117,7 +117,7 @@ func (c *core) useMemory(m *memStore) {
 	c.mem = m
 	if m != nil {
 		m.names = c.store
-		m.moved = func() { c.settleCards(cardMemory, cardIntention, cardUnlearn) } // its proposals' cards follow them
+		m.moved = func() { c.settleCards(cardMemory, cardIntention) } // its proposals' cards follow them
 	}
 }
 
@@ -141,10 +141,10 @@ func (m *memStore) resolveAbout(about string) string {
 // that names (project, person, client, tool, topic); Eriphe's own topics,
 // the user, the home and ids have none.
 
-// systemEntity tells an entity of Eriphe's own: the workspace, its wakes,
-// its journal. Never told in a message.
+// systemEntity tells an entity of Eriphe's own: the workspace, its wakes.
+// It is never told in a message.
 func systemEntity(key string) bool {
-	return key == workspaceEntity || key == heartbeatEntity || key == journalEntity
+	return key == workspaceEntity || key == heartbeatEntity
 }
 
 // keyWords is the slug of a key that is told in a message, "" if none.

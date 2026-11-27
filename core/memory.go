@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -22,18 +23,11 @@ import (
 // change is in memory_log. Who may write what is decided in code
 // (memory_trust.go), not by the brain.
 
-// MemoryConfig tunes the memory; it works without one.
+// MemoryConfig tunes the memory; it works without one. The nightly
+// backup's keys are read in it too (BackupConfig, nodes.go).
 type MemoryConfig struct {
 	DB string `json:"db,omitempty"` // memory.db next to eriphe-core's database by default
-	// The agent of the extraction task: the catalog's "haiku" if there is
-	// one, else the default agent.
-	Agent       string `json:"agent,omitempty"`
-	ExtractAt   string `json:"extract_at,omitempty"`   // local time of the nightly run, 03:00 by default
-	IdleMinutes int    `json:"idle_minutes,omitempty"` // a busy day is extracted once the conversation is idle this long, 30 by default
-	BusyDay     int    `json:"busy_day,omitempty"`     // messages that make a busy day, 20 by default
-	Extraction  *bool  `json:"extraction,omitempty"`   // false turns the automatic extraction off
-	BackupDir   string `json:"backup_dir,omitempty"`   // nightly copies; memory-backups next to memory.db by default
-	BackupKeep  int    `json:"backup_keep,omitempty"`  // nightly copies kept, 14 by default
+	BackupConfig
 }
 
 func (c *Config) memoryConfig() MemoryConfig {
@@ -43,21 +37,6 @@ func (c *Config) memoryConfig() MemoryConfig {
 	}
 	if m.DB == "" {
 		m.DB = filepath.Join(filepath.Dir(c.DB), "memory.db")
-	}
-	if m.ExtractAt == "" {
-		m.ExtractAt = "03:00"
-	}
-	if m.IdleMinutes <= 0 {
-		m.IdleMinutes = 30
-	}
-	if m.BusyDay <= 0 {
-		m.BusyDay = 20
-	}
-	if m.BackupDir == "" {
-		m.BackupDir = filepath.Join(filepath.Dir(m.DB), "memory-backups")
-	}
-	if m.BackupKeep <= 0 {
-		m.BackupKeep = 14
 	}
 	return m
 }
@@ -164,9 +143,6 @@ type memStore struct {
 	// The names (names.go): an about written is noted there, and kept
 	// under the target it names. nil: as given.
 	names aboutBook
-	// The readable mirror (memory_mirror.go), written after every change;
-	// nil: none.
-	mirror *memMirror
 	// moved is told after every change is committed: the cards of its
 	// proposals follow them (useMemory); nil: no one.
 	moved func()
@@ -177,8 +153,8 @@ type memStore struct {
 // (migrateAbout); a file at another is refused, never changed.
 const memorySchemaVersion = 8
 
-// memorySchema is memory.db's own tables; the intentions' and the
-// lessons' are with them (intentionsSchema, learningSchema).
+// memorySchema is memory.db's own tables; the intentions' are with them
+// (intentionsSchema).
 const memorySchema = `CREATE TABLE memories (
 	  id INTEGER PRIMARY KEY AUTOINCREMENT,
 	  kind TEXT NOT NULL, about TEXT NOT NULL DEFAULT '', text TEXT NOT NULL,
@@ -272,7 +248,7 @@ func (m *memStore) migrate() error {
 		return err
 	}
 	defer tx.Rollback()
-	for _, q := range []string{memorySchema, intentionsSchema, learningSchema} {
+	for _, q := range []string{memorySchema, intentionsSchema} {
 		if _, err := tx.Exec(q); err != nil {
 			return err
 		}
@@ -601,20 +577,14 @@ func (m *memStore) add(x *Memory, who string) error {
 			return err
 		}
 	}
-	if x.Status == memActive {
-		if err := m.learnWrite(tx, x, old, who, ""); err != nil {
-			return err
-		}
-	}
 	return m.commit(tx)
 }
 
-// commit commits a change of the memory, then writes the mirror again.
+// commit commits a change of the memory and tells who follows it.
 func (m *memStore) commit(tx *sql.Tx) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	m.mirrorSync()
 	m.changed()
 	return nil
 }
@@ -664,8 +634,6 @@ type memoryPatch struct {
 
 	Keywords   *string
 	Importance *int
-
-	Ref string // what asked for the change (msg:N), for the learning journal; not kept on the memory
 }
 
 func (m *memStore) update(id int64, p memoryPatch, who, reason string) (*Memory, error) {
@@ -749,9 +717,6 @@ func (m *memStore) updateTx(tx *sql.Tx, id int64, p memoryPatch, who, reason str
 	if err := m.log(tx, id, who, "update", before, &x, reason); err != nil {
 		return nil, err
 	}
-	if err := m.learnUpdate(tx, before, &x, who, reason, p.Ref); err != nil {
-		return nil, err
-	}
 	return &x, nil
 }
 
@@ -804,31 +769,23 @@ func (m *memStore) approve(id int64, who string) (*Memory, error) {
 			return nil, err
 		}
 	}
-	if err := m.learnWrite(tx, x, old, who, "approved"); err != nil {
-		return nil, err
-	}
 	return x, m.commit(tx)
 }
 
 // forget hides a memory at once and purges it after memoryPurgeAfter.
 func (m *memStore) forget(id int64, who, reason string) error {
-	return m.forgetRef(id, who, reason, "")
-}
-
-// forgetRef is forget, with what asked for it (msg:N) for the learning journal.
-func (m *memStore) forgetRef(id int64, who, reason, ref string) error {
 	tx, err := m.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if err := m.forgetTx(tx, id, who, reason, ref); err != nil {
+	if err := m.forgetTx(tx, id, who, reason); err != nil {
 		return err
 	}
 	return m.commit(tx)
 }
 
-func (m *memStore) forgetTx(tx *sql.Tx, id int64, who, reason, ref string) error {
+func (m *memStore) forgetTx(tx *sql.Tx, id int64, who, reason string) error {
 	before, err := scanMemory(tx.QueryRow(`SELECT `+memColumns+` FROM memories WHERE id = ?`, id))
 	if err != nil {
 		return errNoMemory
@@ -842,10 +799,7 @@ func (m *memStore) forgetTx(tx *sql.Tx, id int64, who, reason, ref string) error
 		x.DeletedAt.Unix(), x.UpdatedAt.Unix(), id); err != nil {
 		return err
 	}
-	if err := m.log(tx, id, who, "forget", before, nil, reason); err != nil {
-		return err
-	}
-	return m.learnForget(tx, before, who, reason, ref)
+	return m.log(tx, id, who, "forget", before, nil, reason)
 }
 
 // restore brings back a forgotten memory before it is purged.
@@ -874,10 +828,7 @@ func (m *memStore) restoreTx(tx *sql.Tx, x *Memory, who string) error {
 	}
 	after := *x
 	after.Status, after.DeletedAt = memActive, time.Time{}
-	if err := m.log(tx, x.ID, who, "restore", nil, &after, ""); err != nil {
-		return err
-	}
-	return m.learnWrite(tx, &after, nil, who, "restored")
+	return m.log(tx, x.ID, who, "restore", nil, &after, "")
 }
 
 // purge removes for good what was forgotten long enough ago, and its history.
@@ -1303,4 +1254,24 @@ func (m *memStore) count(where string, args ...any) int {
 	var n int
 	m.db.QueryRow(`SELECT COUNT(*) FROM memories WHERE `+where, args...).Scan(&n)
 	return n
+}
+
+// exportJSONL writes every memory not forgotten, one JSON object per line.
+func (m *memStore) exportJSONL(w io.Writer) error {
+	rows, err := m.db.Query(`SELECT ` + memColumns + ` FROM memories WHERE status != 'deleted' ORDER BY id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	enc := json.NewEncoder(w)
+	for rows.Next() {
+		x, err := scanMemoryWith(rows)
+		if err != nil {
+			return err
+		}
+		if err := enc.Encode(x); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
