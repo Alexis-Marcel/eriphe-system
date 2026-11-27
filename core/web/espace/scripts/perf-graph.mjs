@@ -21,7 +21,8 @@
 // before it. Options: --sizes 25,100,… --root <an espace folder> (another
 // checkout, to measure it with the same script) --json <file> --port <n>
 // --throttle <k> (Chromium's CPU slowed k times, as on a modest laptop)
-// --react dev (React's development build, several times slower).
+// --react dev (React's development build, several times slower)
+// --query <more of ?leger's query> (its knobs: knobs=life:0,sleep:0,zones:0).
 
 import { chromium } from "@playwright/test";
 import { writeFileSync } from "node:fs";
@@ -33,7 +34,8 @@ const arg = (name, def) => {
   return i > 0 ? process.argv[i + 1] : def;
 };
 const sizes = arg("sizes", "25,100,250,500,cerveau,1000,2000,3000").split(",");
-const url = (n) => `http://127.0.0.1:${port}/?leger&${/^\d+$/.test(n) ? `n=${n}` : `preset=${n}`}`;
+const url = (n) => `http://127.0.0.1:${port}/?leger&${/^\d+$/.test(n) ? `n=${n}` : `preset=${n}`}${query ? `&${query}` : ""}`;
+const query = arg("query", "");
 const root = resolve(arg("root", "."));
 const port = Number(arg("port", "5310"));
 const json = arg("json", "");

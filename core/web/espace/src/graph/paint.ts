@@ -97,7 +97,7 @@ export const LABELS = 300; // labels at most in a paint
 const STEPS = 16; // the discs' steps of opacity
 
 // paintStats: the last paints' cost, for the ?leger page.
-export const paintStats = { ms: 0, last: 0, paints: 0, discs: 0, labels: 0, links: 0 };
+export const paintStats = { ms: 0, last: 0, paints: 0, discs: 0, labels: 0, links: 0, zones: 0, zoneBuilds: 0 };
 
 type Theme = { bg: string; fg: string; fg3: string; ring: string; edge: string; edgeOn: string; accent: string; run: string; ok: string; neutral: string; sleep: string; fills: string[]; dots: string[]; zones: string[]; names: string[]; zoneA: number; font: string; mono: string };
 
@@ -121,7 +121,6 @@ function readTheme(): Theme {
   const c = (k: string, d: string) => hex(v(k, d)) ?? hex(d)!;
   const bg = c("--bg", "#f7f7f8"), card = c("--card", "#ffffff"), fg = c("--fg", "#18181b"), fill = c("--fill-strong", "#e9e9ec");
   const share = (parseFloat(v("--fam-mix", "38%")) || 38) / 100;
-  const dark = (bg[0] + bg[1] + bg[2]) / 3 < 128;
   const fams = Array.from({ length: FAMILIES }, (_, i) => c(`--fam${i}`, "#7b828c"));
   return {
     bg: rgb(bg),
@@ -140,7 +139,7 @@ function readTheme(): Theme {
     // a zone: its family's hue, greyed toward the page (low in saturation)
     zones: fams.map((f) => rgb(mix(f, 0.75, mix(fg, 0.5, bg)))),
     names: fams.map((f) => rgb(mix(f, 0.45, fg))),
-    zoneA: dark ? 0.2 : 0.24,
+    zoneA: 0.2,
     font: v("--font", "ui-sans-serif, system-ui, sans-serif"),
     mono: v("--mono", "ui-monospace, monospace"),
   };
@@ -178,6 +177,7 @@ export class Painter {
   private zone: { tex: HTMLCanvasElement; breath: HTMLCanvasElement | null; x0: number; y0: number; t: number; m: number; shapes: Shape[]; scene: Scene; theme: Theme; moved?: number; at: number } | null = null;
   private union: HTMLCanvasElement | null = null;
   private breathCtx: CanvasRenderingContext2D | null = null;
+  private breathing = true;
 
   // breath: a canvas under this one, for the zones of the families where
   // something waits, its opacity breathing in CSS (espace.css): no paint
@@ -293,6 +293,7 @@ export class Painter {
     const same = z && z.scene === s && z.theme === this.theme;
     if (same && z.moved === st.moved) return false;
     if (same && now - z.at < ZONES) return true;
+    const t0 = performance.now();
     const shapes = s.families.map((f) => zoneShape(f, xy));
     const cur = this.cur;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -311,7 +312,7 @@ export class Painter {
       return false;
     }
     const t = TEX / Math.max(x1 - x0, y1 - y0);
-    const blur = Math.max(2, PAD * t * 0.9);
+    const blur = Math.max(2, (pads.reduce((a, b) => a + b, 0) / pads.length) * t * 0.6);
     const m = Math.ceil(blur * 2.5);
     const W = Math.ceil((x1 - x0) * t) + m * 2, H = Math.ceil((y1 - y0) * t) + m * 2;
     const U = (this.union ??= document.createElement("canvas"));
@@ -364,6 +365,8 @@ export class Painter {
     }
     const breath = this.breathCtx ? draw((_, f) => f.waits, z?.breath ?? null) : null;
     this.zone = { tex, breath, x0, y0, t, m, shapes, scene: s, theme: this.theme, moved: st.moved, at: now };
+    paintStats.zones = performance.now() - t0;
+    paintStats.zoneBuilds++;
     return false;
   }
 
@@ -411,17 +414,23 @@ export class Painter {
 
     // the zones, under all: their picture, moved and scaled by the camera
     const Z = this.zone, za = Z ? T.zoneA * zoneAlpha(k) : 0;
-    const bc = this.breathCtx;
-    if (bc) {
+    // the breathing layer shows only while it has a zone to breathe: hidden,
+    // the page does not compose it at each frame
+    const bc = this.breathCtx, breathes = !!(bc && Z?.breath && za > 0.01);
+    if (bc && (breathes || this.breathing)) {
       bc.setTransform(1, 0, 0, 1, 0, 0);
       bc.clearRect(0, 0, this.canvas.width, this.canvas.height);
     }
-    if (Z) {
+    if (this.breath && breathes !== this.breathing) {
+      this.breath.style.visibility = breathes ? "" : "hidden";
+      this.breathing = breathes;
+    }
+    if (Z && za > 0.01) {
       const zx = (Z.x0 - Z.m / Z.t) * k + v.x, zy = (Z.y0 - Z.m / Z.t) * k + v.y, zw = (Z.tex.width / Z.t) * k, zh = (Z.tex.height / Z.t) * k;
       ctx.imageSmoothingEnabled = true;
       ctx.globalAlpha = za * (st.near ? 0.5 : 1);
       ctx.drawImage(Z.tex, zx, zy, zw, zh);
-      if (bc && Z.breath) {
+      if (bc && breathes && Z.breath) {
         bc.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
         bc.globalAlpha = Math.min(1, za * 1.6);
         bc.drawImage(Z.breath, zx, zy, zw, zh);
@@ -559,12 +568,15 @@ export class Painter {
     // the rings: violet for what waits (2 px, as its bubble's core), at
     // every scale; the run colour for what runs, once big enough not to
     // be taken for the violet
-    for (const [flag, style, lw] of [
-      [(i: number) => s.items[i].waits, T.accent, 2],
-      [(i: number) => s.run[i] === 1 && sr[i] >= 5, T.run, 1.5],
+    // (dashed, as its bubble's: never taken for the violet ring, however big
+    // its life makes it)
+    for (const [flag, style, lw, dash] of [
+      [(i: number) => s.items[i].waits, T.accent, 2, false],
+      [(i: number) => s.run[i] === 1 && sr[i] >= 5, T.run, 1.5, true],
     ] as const) {
       ctx.strokeStyle = style;
       ctx.lineWidth = lw;
+      ctx.setLineDash?.(dash ? [Math.max(2, 6 * k), Math.max(2, 5 * k)] : []);
       for (let i = 0; i < n; i++) {
         if (bucket[i] < 0 || !flag(i)) continue;
         ctx.globalAlpha = show[i];
@@ -574,6 +586,7 @@ export class Painter {
       }
     }
     ctx.lineWidth = 1;
+    ctx.setLineDash?.([]);
 
     // the labels, the biggest nodes first: in the bubble's font and place
     // (espace.css, .gr-label), in the graph's units; a root's short word in

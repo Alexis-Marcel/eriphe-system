@@ -414,6 +414,17 @@ export function startLeger() {
   const q = new URLSearchParams(location.search);
   const asked = Number(q.get("n"));
   const preset = q.get("preset");
+  // knobs=life:0,zones:1,sleepDays:30: the level of detail's knobs from the start
+  const knobs = q.get("knobs");
+  if (knobs)
+    setLod(
+      Object.fromEntries(
+        knobs.split(",").map((kv) => {
+          const [k, v] = kv.split(":");
+          return [k, typeof LOD[k as keyof Knobs] === "boolean" ? v === "1" || v === "true" : Number(v)];
+        }),
+      ),
+    );
   window.leger = { knobs: setLod, load, add, remove, resize, stats, sample, pan, panZoom, sweep, zoomTo };
   load(preset && PRESETS[preset] ? preset : asked > 0 ? asked : 100);
   let raf = 0;
@@ -509,6 +520,7 @@ export function LegerPanel() {
           `échelle  ${s.k}`,
           `canevas  ${s.paint.toFixed(2)} ms`,
           `         ${s.discs} disques, ${s.labels} titres`,
+          `zones    ${paintStats.zones.toFixed(1)} ms × ${paintStats.zoneBuilds}`,
         ].join("\n");
     }, 250);
     return () => clearInterval(id);
