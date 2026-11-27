@@ -68,8 +68,8 @@ under the same tags): the updaters of machines installed before pull it, and a d
   `fonts-liberation` through apt, and `/cache/apt` keeps the packages for the next task.
 - `eriphe-browser` (`/usr/local/bin`), the browser tool of a task: an MCP server over stdio
   ([Playwright MCP](https://github.com/microsoft/playwright-mcp), baked in at a pinned version,
-  `PLAYWRIGHT_MCP`, about 10 MB, no browser of its own). eriphe-core lends it as a catalog tool that
-  runs in the task (`{"task": {"command": "eriphe-browser"}}`, core/README.md, Tools that run in
+  `PLAYWRIGHT_MCP`, about 19 MB, no browser of its own; the build checks it lists its tools).
+  eriphe-core lends it as a catalog tool that runs in the task (`{"task": {"command": "eriphe-browser"}}`, core/README.md, Tools that run in
   the task): the agent starts it in its container, where it opens, clicks, types, reads the console
   and takes screenshots of the apps the task runs on `localhost`, and it goes with the task.
   Headless, a profile in memory (no cookie or sign-in kept), `--no-sandbox` (no capability to

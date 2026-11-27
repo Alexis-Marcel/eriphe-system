@@ -18,6 +18,8 @@ set -- --headless --isolated --no-sandbox --browser chromium \
   --output-dir /tmp/eriphe-browser "$@"
 proxy="${HTTPS_PROXY:-${https_proxy:-}}"
 if [ -n "$proxy" ]; then
-  set -- "$@" --proxy-server "$proxy" --proxy-bypass "${NO_PROXY:-${no_proxy:-localhost,127.0.0.1}}"
+  # localhost in the list also keeps Playwright from sending the loopback to
+  # the proxy (its "<-loopback>"), which the relay refuses.
+  set -- "$@" --proxy-server "$proxy" --proxy-bypass "localhost,127.0.0.1${NO_PROXY:+,$NO_PROXY}"
 fi
 exec playwright-mcp "$@"

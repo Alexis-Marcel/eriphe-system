@@ -23,13 +23,20 @@ COPY --from=uv /uv /uvx /usr/local/bin/
 COPY --chmod=755 eriphe-capture /usr/local/bin/eriphe-capture
 
 # eriphe-browser: the browser tool of a task (an MCP server over stdio, see
-# the script). Playwright MCP is baked in, pinned (about 10 MB, no browser:
+# the script). Playwright MCP is baked in, pinned (about 19 MB, no browser:
 # PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD); the browser is Debian's, installed on
-# first use by eriphe-chromium as for eriphe-capture.
+# first use by eriphe-chromium as for eriphe-capture. Checked here: it
+# answers MCP's initialize and lists its tools (no browser is needed for
+# that).
 ARG PLAYWRIGHT_MCP=0.0.86
 RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g --no-fund --no-audit @playwright/mcp@${PLAYWRIGHT_MCP} \
     && npm cache clean --force
 COPY --chmod=755 eriphe-browser eriphe-chromium /usr/local/bin/
+RUN (printf '%s\n' \
+      '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"build","version":"0"}}}' \
+      '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+      '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'; sleep 10) \
+    | timeout 30 eriphe-browser | grep -q -m1 '"browser_navigate"'
 
 # apt for a task: as root without capabilities (no sandbox user to switch
 # to), its downloads and lists in /cache, kept for the next task. The Debian

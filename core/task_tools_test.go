@@ -110,6 +110,9 @@ func TestTaskToolInTheSpec(t *testing.T) {
 		!strings.Contains(err.Error(), "Never") {
 		t.Errorf("lent at Never: %v", err)
 	}
+	if _, err := c.runTask(ctx, runRequest{Prompt: "x", Resources: []ResourceRef{{Kind: resTool, Ref: "navigateur", Hold: true}}}); err == nil {
+		t.Error("held back: it would be in the task from its start")
+	}
 	// Set to Never after it was lent: the task no longer gets it.
 	c.conf().Servers["navigateur"].Task.Off = true
 	if spec := assignedSpec(t, c, "nas", task.ID); len(spec.MCPServers) != 0 || !slices.Equal(spec.Servers, []string{"notes"}) {
