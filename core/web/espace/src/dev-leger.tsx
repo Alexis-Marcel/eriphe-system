@@ -4,6 +4,7 @@ import { applyNodes, step, store } from "./data/store";
 import { LOD, lodVersion, onLod, setLod, type Knobs } from "./graph/lod";
 import { DAY } from "./graph/life";
 import { paintStats } from "./graph/paint";
+import { isVault, vaultGraph, type VaultNote } from "./dev-vault";
 import "./dev.css";
 
 // The dev server's ?leger page: the graph at any size, to feel and measure
@@ -275,8 +276,50 @@ function stats(): Stats {
 
 function load(n: number | string) {
   restart();
+  if (n === "vault" && vault) return void step(store, applyNodes, { reset: true, nodes: vaultGraph(vault.notes, vault) });
   const preset = typeof n === "string" ? PRESETS[n] : undefined;
   step(store, applyNodes, { reset: true, nodes: preset ? preset.nodes() : legerGraph(Number(n)) });
+}
+
+// A vault's real shape (dev-vault.ts), read from a file on the machine
+// (?leger&from=<a path the dev server serves>, or the file picked on the
+// panel): kept in this page alone, as long as it is open. waits and runs:
+// how many of its notes are made to wait, to run (&waits=8&runs=3).
+let vault: { notes: VaultNote[]; waits: number; runs: number; seed: number } | null = null;
+const vaultTold = new Set<() => void>();
+const setVault = (v: typeof vault) => {
+  vault = v;
+  for (const f of vaultTold) f();
+};
+async function fromURL(url: string): Promise<boolean> {
+  try {
+    const r = await fetch(url);
+    const x: unknown = r.ok ? await r.json() : null;
+    if (!isVault(x)) throw new Error(r.ok ? "not a vault's export" : `HTTP ${r.status}`);
+    setVault({ notes: x, waits: vault?.waits ?? 0, runs: vault?.runs ?? 0, seed: 1 });
+    return true;
+  } catch (e) {
+    console.warn("?leger: the vault could not be read:", (e as Error).message);
+    return false;
+  }
+}
+async function fromFile(f: File): Promise<boolean> {
+  try {
+    const x: unknown = JSON.parse(await f.text());
+    if (!isVault(x)) throw new Error("not a vault's export");
+    setVault({ notes: x, waits: vault?.waits ?? 0, runs: vault?.runs ?? 0, seed: 1 });
+    return true;
+  } catch (e) {
+    console.warn("?leger: the vault could not be read:", (e as Error).message);
+    return false;
+  }
+}
+// mark makes w of the vault's notes wait and r run (another pick: seed),
+// the graph laid out again.
+function mark(w: number, r: number, seed = vault?.seed ?? 1) {
+  if (!vault) return;
+  setVault({ ...vault, waits: w, runs: r, seed });
+  load("vault");
 }
 
 let paintsAt = 0;
@@ -406,7 +449,7 @@ function sweep(t: number) {
 
 declare global {
   interface Window {
-    leger?: { knobs(k: Partial<Knobs>): void; load(n: number | string): void; add(k: number): void; remove(k: number): void; resize(): void; stats(): Stats; sample: typeof sample; pan: typeof pan; panZoom: typeof panZoom; sweep: typeof sweep; zoomTo: typeof zoomTo };
+    leger?: { knobs(k: Partial<Knobs>): void; load(n: number | string): void; add(k: number): void; remove(k: number): void; resize(): void; stats(): Stats; sample: typeof sample; pan: typeof pan; panZoom: typeof panZoom; sweep: typeof sweep; zoomTo: typeof zoomTo; mark: typeof mark };
   }
 }
 
@@ -425,8 +468,12 @@ export function startLeger() {
         }),
       ),
     );
-  window.leger = { knobs: setLod, load, add, remove, resize, stats, sample, pan, panZoom, sweep, zoomTo };
-  load(preset && PRESETS[preset] ? preset : asked > 0 ? asked : 100);
+  window.leger = { knobs: setLod, load, add, remove, resize, stats, sample, pan, panZoom, sweep, zoomTo, mark };
+  const from = q.get("from");
+  if (from) {
+    vault = { notes: [], waits: Number(q.get("waits")) || 0, runs: Number(q.get("runs")) || 0, seed: 1 };
+    void fromURL(from).then((ok) => load(ok ? "vault" : 100));
+  } else load(preset && PRESETS[preset] ? preset : asked > 0 ? asked : 100);
   let raf = 0;
   const loop = (t: number) => {
     frames.push(t);
@@ -503,8 +550,15 @@ export function LegerPanel() {
   const [n, setN] = useState<number | string>(() => {
     const q = new URLSearchParams(location.search);
     const p = q.get("preset");
-    return p && PRESETS[p] ? p : Number(q.get("n")) || 100;
+    return q.get("from") ? "vault" : p && PRESETS[p] ? p : Number(q.get("n")) || 100;
   });
+  const v = useSyncExternalStore(
+    (f) => {
+      vaultTold.add(f);
+      return () => void vaultTold.delete(f);
+    },
+    () => vault,
+  );
   const [shut, setShut] = useState(false);
   useEffect(() => {
     const id = setInterval(() => {
@@ -565,6 +619,46 @@ export function LegerPanel() {
               Changer une taille
             </button>
           </div>
+          <fieldset className="dev-leger-knobs">
+            <legend>Forme réelle</legend>
+            <label>
+              <span>coffre (JSON, lu ici seulement)</span>
+              <input
+                type="file"
+                accept=".json,application/json"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void fromFile(f).then((ok) => ok && go("vault"));
+                }}
+              />
+            </label>
+            {v && v.notes.length > 0 && (
+              <>
+                <div className="dev-phys-row">
+                  <button type="button" onClick={() => go("vault")} aria-pressed={n === "vault"}>
+                    coffre · {v.notes.length} notes
+                  </button>
+                </div>
+                <label>
+                  <span>
+                    en attente <output>{v.waits}</output>
+                  </span>
+                  <input type="range" min={0} max={30} step={1} value={v.waits} onChange={(e) => (setN("vault"), mark(Number(e.target.value), v.runs))} />
+                </label>
+                <label>
+                  <span>
+                    en cours <output>{v.runs}</output>
+                  </span>
+                  <input type="range" min={0} max={15} step={1} value={v.runs} onChange={(e) => (setN("vault"), mark(v.waits, Number(e.target.value)))} />
+                </label>
+                <div className="dev-phys-row">
+                  <button type="button" onClick={() => (setN("vault"), mark(v.waits, v.runs, v.seed + 1))}>
+                    Tirer d'autres notes
+                  </button>
+                </div>
+              </>
+            )}
+          </fieldset>
           <Knobs />
         </>
       )}
