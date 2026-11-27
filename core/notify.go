@@ -444,8 +444,8 @@ func (c *core) notifyWake(seq, eventSeq int, text string) {
 	// held back because the brain read a mail earlier in the turn; that
 	// turn's taint is still kept with it.
 	about := "" // the first intention's
-	if len(w.IDs) > 0 && c.mem != nil {
-		if x, err := c.mem.intention(w.IDs[0]); err == nil {
+	if len(w.IDs) > 0 {
+		if x, err := c.intents.intention(w.IDs[0]); err == nil {
 			about = x.About
 		}
 	}

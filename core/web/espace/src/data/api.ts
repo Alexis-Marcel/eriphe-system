@@ -48,6 +48,9 @@ export type Boot = {
   // What the bar may attach to one message (attachments.go): how many
   // files, and how large each, in bytes.
   attach: { many: number; size: number };
+  // Settings › Voice (voice.go): listen, a service hears the user, so the
+  // bar has a microphone. Absent from the dev server's boot.
+  voice?: { listen: boolean };
 };
 
 const json = { Accept: "application/json" };
@@ -436,6 +439,23 @@ export async function send(text: string, node?: string | null, files: readonly F
   return refused ? { ok: false, refused } : { ok: false };
 }
 
+// Transcribed is what POST /api/voice/transcribe answered (web_voice.go):
+// the words heard, or why not, in the user's words ("" when it could not
+// be reached).
+export type Transcribed = { text: string } | { error: string };
+
+// transcribe sends what the bar recorded (orb/dictate.ts) to be written as
+// text; type is the recorder's, with its codec.
+export async function transcribe(audio: Blob, type: string): Promise<Transcribed> {
+  const body = new FormData();
+  body.append("audio", audio, "speech");
+  body.append("type", type);
+  const r = signedOut(await fetch("/api/voice/transcribe", { method: "POST", credentials: "same-origin", headers: { "X-CSRF-Token": csrf, ...json }, body }));
+  const v = (await r.json().catch(() => null)) as { text?: unknown; error?: unknown } | null;
+  if (r.ok && typeof v?.text === "string") return { text: v.text };
+  return { error: typeof v?.error === "string" ? v.error : "" };
+}
+
 // withdraw takes back a message that waits for Eriphe: taken when Eriphe
 // had read it already.
 export async function withdraw(seq: number): Promise<"ok" | "taken" | "error"> {
@@ -452,7 +472,7 @@ export type Note = { id: number; body: Record<string, string>; url: string };
 export type ProposalView = {
   ref: string;
   card: number;
-  // kind is what the proposal is (memory, intention, access…): what its
+  // kind is what the proposal is (intention, access, rule…): what its
   // card asks depends on it.
   kind?: string;
   state: string; // pending, approved, rejected, gone

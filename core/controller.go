@@ -40,8 +40,8 @@ type core struct {
 
 	updates *updates // the latest versions on the registry (updates.go)
 
-	mem  *memStore // Eriphe's memory (memory.go); nil if it could not open
-	turn brainTurn // what the brain's current turn read (turn_taint.go)
+	intents *intentStore // what is owed and to remind, in core.db (intentions.go)
+	turn    brainTurn    // what the brain's current turn read (turn_taint.go)
 
 	nodes *nodestore.Store // the graph's nodes (nodes.go); nil if they could not open
 	steps stepStarts       // the tasks the step engine claimed, started once it lets go of stepMu (node_steps.go)
@@ -117,6 +117,7 @@ func newCore(cfg *Config, store *Store) *core {
 		m.validate()
 	}
 	c.snap.Store(m)
+	c.intents = c.newIntents()
 	setAssistantName(m.assistantName())
 	c.noteFirstRun(m)
 	c.loadAssistants()
@@ -504,7 +505,6 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra d
 	spec.AgentEnv, spec.MCPServers, spec.Servers, spec.AlwaysLoad = nil, nil, nil, nil // added when the device fetches the task
 	spec.Folders = nil                                                                 // the same
 	if kind == "worker" {
-		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + c.taskNowText()) // situations.go
 		// The skill it follows: a tool of its eriphe-nodes proposes a
 		// version of it (skill_propose.go).
 		if r.skill != "" {

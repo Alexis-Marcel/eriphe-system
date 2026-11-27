@@ -426,7 +426,7 @@ func (w *web) handleStop(rw http.ResponseWriter, r *http.Request, s *session) {
 }
 
 // changed answers an htmx action that worked: its message, and the pages
-// that follow what it changed (memory-changed) reload their part.
+// that follow what it changed (data-changed) reload their part.
 func (w *web) changed(rw http.ResponseWriter, msg string) {
 	rw.Header().Set("HX-Trigger", hxTrigger(msg, true, true))
 	rw.Header().Set("HX-Reswap", "none")

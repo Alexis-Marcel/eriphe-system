@@ -28,7 +28,7 @@ func heldCall(t *testing.T, c *core, input string) int64 {
 
 // Every way a proposal is decided says so to the workspace: a card's button, one found decided elsewhere; and a new card.
 func TestProposalMoves(t *testing.T) {
-	tw, _ := newMemoryWeb(t)
+	tw, _ := newIntentsWeb(t)
 	c := tw.c
 	_, seq, ch := c.watchProposals(0)
 	r := proposedRule(t, c, "facture", "")
@@ -79,7 +79,7 @@ func TestProposalMoves(t *testing.T) {
 // The workspace's stream sends the refs that moved, for the blocks that
 // show them to read them again.
 func TestProposalsEvent(t *testing.T) {
-	tw, csrf := newMemoryWeb(t)
+	tw, csrf := newIntentsWeb(t)
 	c := tw.c
 	r := proposedRule(t, c, "facture", "")
 	brainSays(c, "Je ne te préviens plus des factures ?")

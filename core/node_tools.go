@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"maps"
 	"slices"
 	"strings"
@@ -513,8 +512,7 @@ func (c *core) brainNodeSet(in brainNodeSetIn) (map[string]any, error) {
 }
 
 // setNodeDone marks a node done, or not done any more. A node done now
-// leaves its decision memory (nodeDoneDecision) and the event node.done,
-// once: done again, nothing changes. A node a skill maintains is not
+// leaves the event node.done, once: done again, nothing changes. A node a skill maintains is not
 // set done (node_home.go): the skill stops, or leaves it, first.
 func (c *core) setNodeDone(sum nodestore.Summary, done bool, by string) (bool, error) {
 	if ks := c.maintainers(sum.ID); done && len(ks) > 0 {
@@ -524,7 +522,6 @@ func (c *core) setNodeDone(sum nodestore.Summary, done bool, by string) (bool, e
 	if err != nil || !changed || !done {
 		return changed, err
 	}
-	c.nodeDoneDecision(sum.ID)
 	c.emitLogged(journalEvent{Kind: evNodeDone, Key: sum.ID, Source: "node", Payload: map[string]any{"node": sum.ID}})
 	return true, nil
 }
@@ -544,47 +541,6 @@ func (c *core) brainNodeShow(in nodeShowIn) (map[string]any, error) {
 		c.showNode(sum.ID, byBrain, false)
 	}
 	return map[string]any{"note": "Shown on the user's screen."}, nil
-}
-
-// srcNode is a memory a node wrote: the decision of its done.
-const srcNode = "node"
-
-// nodeDoneDecision writes, when a node is set done, a dated decision
-// memory about it, source node:<id>, from its title and its doc's first
-// line; one it wrote at an earlier done is superseded. A node whose words
-// may be someone else's writes it external: named, never quoted.
-func (c *core) nodeDoneDecision(id string) {
-	if c.mem == nil || c.nodes == nil {
-		return
-	}
-	d, err := c.nodes.Read(id, 0)
-	if err != nil {
-		return
-	}
-	text := fmt.Sprintf("Nœud « %s » fini le %s", d.Node.Meta.Title, time.Now().Format("2006-01-02"))
-	if line := firstLine(d.Node.Text()); line != "" {
-		text += " : " + line
-	}
-	ref := nodeRef(id)
-	text = truncate(text, 600)
-	scan := scanText(text, ref)
-	if scan.Reject != "" {
-		text = truncate(fmt.Sprintf("Nœud « %s » fini le %s", d.Node.Meta.Title, time.Now().Format("2006-01-02")), 600)
-		if scan = scanText(text, ref); scan.Reject != "" {
-			return
-		}
-	}
-	x := &Memory{Kind: kindDecision, About: ref, Text: text, SourceKind: srcNode, SourceRef: ref,
-		Trust: trustFirstParty, Status: memActive, Flags: strings.Join(scan.Flags, ",")}
-	if nodeExternal(d.Node) {
-		x.Trust = trustExternal
-	}
-	if old, _ := c.mem.list(`status = 'active' AND kind = ? AND source_ref = ? AND superseded_by IS NULL`, []any{kindDecision, ref}, `id DESC`, 1); len(old) == 1 {
-		x.Supersedes = old[0].ID
-	}
-	if err := c.mem.add(x, srcNode); err != nil {
-		log.Printf("node %s: its decision: %v", id, err)
-	}
 }
 
 // archiveNode archives a node and every node under it, the user's

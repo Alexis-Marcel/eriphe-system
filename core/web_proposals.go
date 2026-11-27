@@ -14,7 +14,7 @@ import (
 type proposalView struct {
 	Ref     string      `json:"ref"`
 	Card    int64       `json:"card"`  // the card that answers it
-	Kind    string      `json:"kind"`  // what it is: memory and intention only ask to keep something
+	Kind    string      `json:"kind"`  // what it is: an intention only asks to keep something
 	State   string      `json:"state"` // pending, approved, rejected, gone
 	Text    string      `json:"text"`
 	Context string      `json:"context,omitempty"` // where it acts, quietly beside its text (an account)

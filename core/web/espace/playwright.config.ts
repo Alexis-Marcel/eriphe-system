@@ -19,7 +19,9 @@ export default defineConfig({
   retries: 0,
   reporter: process.env.CI ? [["list"], ["html", { open: "never", outputFolder: "e2e-report" }]] : "list",
   outputDir: "e2e-results",
-  use: { baseURL: `http://${addr}`, locale: "fr-FR", colorScheme: "light", trace: "retain-on-failure", ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
+  use: { baseURL: `http://${addr}`, locale: "fr-FR", colorScheme: "light", trace: "retain-on-failure", ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 },
+    // A microphone that plays a tone, without asking (dictate.spec.ts).
+    launchOptions: { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] } },
   // The tests check what the workspace does, not how it moves: they ask
   // for less motion, so the graph and the camera are at rest at once (the
   // layout's and the camera's geometry are unit tests). The few tagged

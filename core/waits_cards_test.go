@@ -162,7 +162,7 @@ func TestHeldStartWaitsOnTheTasksNode(t *testing.T) {
 // reconcile. Each case changes the proposal only, then reads the card's
 // row and the graph's events straight away.
 func TestCardAnsweredElsewhereMovesAtOnce(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	openGraph(t, c)
 	c.useNodes(c.nodes)
 	for _, tc := range []struct {
@@ -171,23 +171,13 @@ func TestCardAnsweredElsewhereMovesAtOnce(t *testing.T) {
 		move func(ref string)         // answers it elsewhere
 		want string
 	}{
-		{"a memory forgotten on its page", func(node string) string {
-			x := mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Le garage ferme lundi", Status: memProposed, SourceKind: srcTask})
-			c.cardNow(cardMemory, x.ID, "", nodeRef(node))
-			return proposalRef(cardMemory, x.ID)
-		}, func(ref string) {
-			_, id, _ := parseProposalRef(ref)
-			if err := c.mem.forget(id, "owner", "not true"); err != nil {
-				t.Fatal(err)
-			}
-		}, cardRejected},
 		{"an intention cancelled on its page", func(node string) string {
-			x := mustIntend(t, c.mem, &Intention{Text: "Relancer Sam", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustOwner})
+			x := mustIntend(t, c.intents, &Intention{Text: "Relancer Sam", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustOwner})
 			c.cardNow(cardIntention, x.ID, "", nodeRef(node))
 			return proposalRef(cardIntention, x.ID)
 		}, func(ref string) {
 			_, id, _ := parseProposalRef(ref)
-			if _, err := c.mem.changeIntention(id, intentionChange{State: intentCancelled}, "owner", "page"); err != nil {
+			if _, err := c.intents.changeIntention(id, intentionChange{State: intentCancelled}, "owner", "page"); err != nil {
 				t.Fatal(err)
 			}
 		}, cardRejected},

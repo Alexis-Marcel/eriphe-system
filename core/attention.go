@@ -160,14 +160,14 @@ func noteItemRef(id int64) string { return "notification:" + strconv.FormatInt(i
 // cardWeight is a card's weight by its kind: what a task or a node waits
 // on, at once; what the user asked to be done (a skill, a monitor, a run's
 // calls), at the next breakpoint; a reminder to keep, and the small things
-// (a memory, a rule, a setting), at the return.
+// (a rule, a setting), at the return.
 func cardWeight(kind string) int {
 	switch {
 	case blocksATask(kind):
 		return weightBlocksATask
 	case kind == cardIntention:
 		return weightBrief
-	case kind == cardMemory || kind == cardRule || kind == cardSetting:
+	case kind == cardRule || kind == cardSetting:
 		return 1
 	}
 	return weightProposal

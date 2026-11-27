@@ -95,7 +95,7 @@ func (t *brainTurn) start(from, to, eventSeq int) {
 // goOn extends the turn over a delivery of events only (or a resumed
 // session): it keeps its taint, carried adds what the events showed so far
 // (turnTaint, read before eventSeq moves on), and my messages of the turn
-// stay its own for the memory.
+// stay its own for what it writes.
 func (t *brainTurn) goOn(from, to, eventSeq int, carried []string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

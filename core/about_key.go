@@ -11,10 +11,10 @@ import (
 )
 
 // What a record is about (#573): a node, node:<id>, or a key, kind:slug,
-// made by one function (aliasKey). A key names a matter remembered
+// made by one function (aliasKey). A key names a matter
 // (pr:owner/repo#12, project:site, alert:backup, topic:<monitor>) or an
-// entity of the memory: a person (person:lina), the user (owner), the
-// home, a tool (tool:x), Eriphe's own topics; it is kept as it is (names.go
+// entity: a person (person:lina), the user (owner), the home, a tool
+// (tool:x); it is kept as it is (names.go
 // indexes it). A ref names one record (card:12, task:t-…, intention:5): a
 // ref is never what a record is about, but node:<id>. A mail or an event
 // is an item of a node's source, never an about.
@@ -62,7 +62,7 @@ var aliasKindNames = map[string]string{
 
 // recordKinds name one record: a ref, never an about but node:<id>.
 var recordKinds = map[string]bool{"task": true, "intention": true, "notification": true, "msg": true, "skill": true,
-	"node": true, "card": true, "agenda": true, "memory": true, "run": true}
+	"node": true, "card": true, "agenda": true, "run": true}
 
 // aboutMax is the longest about kept.
 const aboutMax = 200

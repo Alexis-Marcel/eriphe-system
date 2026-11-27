@@ -10,7 +10,7 @@ import (
 // A tool taints unless it is marked trusted: the brain's turn through the
 // proxy and through its events.
 func TestUntrustedToolTaints(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	ownerSays(c, "Regarde mes notes")
 	c.calledCatalog("t-brain", "notes", "read_note")
 	if tainted := c.turnTaint(); !containsStr(tainted, "notes.read_note") {

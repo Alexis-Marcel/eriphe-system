@@ -20,7 +20,7 @@ import (
 // graphWeb is the workspace on a graph watched, as eriphe-core runs it.
 func graphWeb(t *testing.T) (*testWeb, string) {
 	t.Helper()
-	tw, csrf := newMemoryWeb(t)
+	tw, csrf := newIntentsWeb(t)
 	openGraph(t, tw.c)
 	tw.c.useNodes(tw.c.nodes)
 	return tw, csrf

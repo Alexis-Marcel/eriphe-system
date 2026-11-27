@@ -616,11 +616,10 @@ type AssistantStatus struct {
 	Tainted  []string         `json:"tainted,omitempty"`
 	TaintSeq int              `json:"taint_seq,omitempty"`
 
-	// The conversation's: its start answer kept quiet, the profile it has,
-	// the context pack owed to a session that was not resumed.
-	Quiet   bool   `json:"quiet,omitempty"`
-	Profile string `json:"profile,omitempty"`
-	PackDue bool   `json:"pack_due,omitempty"`
+	// The conversation's: its start answer kept quiet, the context pack
+	// owed to a session that was not resumed.
+	Quiet   bool `json:"quiet,omitempty"`
+	PackDue bool `json:"pack_due,omitempty"`
 	// Cards are the cards its session holds, each by its hash
 	// (about_card.go): one is given again only when it changed.
 	Cards map[string]string `json:"cards,omitempty"`

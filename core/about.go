@@ -5,10 +5,9 @@ import (
 	"strings"
 )
 
-// What a record is about. Notifications, attention items, cards, tasks,
-// memories and intentions carry an about next to their ref
-// (which record): a node, node:<id>, or an entity's key (person:lina,
-// owner, topic:workspace). The code sets it by inheritance: what the brain
+// What a record is about. Notifications, attention items, cards, tasks
+// and intentions carry an about next to their ref (which record): a node,
+// node:<id>, or an entity's key (person:lina, owner, topic:facture). The code sets it by inheritance: what the brain
 // makes in a turn takes the turn's (turnAbout: its node), a task its
 // node's or its skill's, a card its maker's (sourceAbout). The model may
 // give one; it no longer has to.
@@ -87,7 +86,7 @@ func (c *core) sourceAbout(source string) string {
 	return ""
 }
 
-// cardAbout sets a card's about once: its proposal's (a memory's, an
+// cardAbout sets a card's about once: its proposal's (an
 // intention's, a node's, a skill run's), else what its maker inherits
 // (nil: none); only a live node or a key (validAbout).
 func (c *core) cardAbout(kind string, id int64, inherit func() string) {
@@ -104,17 +103,9 @@ func (c *core) cardAbout(kind string, id int64, inherit func() string) {
 // proposalAbout is what a card proposes is about, if anything.
 func (c *core) proposalAbout(kind string, id int64) string {
 	switch kind {
-	case cardMemory:
-		if c.mem != nil {
-			if x, err := c.mem.memory(id); err == nil {
-				return x.About
-			}
-		}
 	case cardIntention:
-		if c.mem != nil {
-			if x, err := c.mem.intention(id); err == nil {
-				return x.About
-			}
+		if x, err := c.intents.intention(id); err == nil {
+			return x.About
 		}
 	case cardCalls:
 		// A run's calls are about the node they act in (its item's, its
@@ -165,13 +156,4 @@ func (c *core) taskAbout(id string) string {
 		return ""
 	}
 	return c.sourceAbout("task:" + id)
-}
-
-// inheritsAbout tells a kind of memory that takes the turn's about when it
-// is given none: what is known and decided of the matter (where it stands
-// is its node's doc). A profile, a preference, a
-// person, a lesson, a situation or the day's journal is about someone or
-// something else.
-func inheritsAbout(kind string) bool {
-	return kind == kindFact || kind == kindDecision
 }

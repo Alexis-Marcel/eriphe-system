@@ -66,6 +66,8 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/view", sc.handleView)
 	mux.HandleFunc("POST /e2e/page", sc.handlePage)
 	mux.HandleFunc("POST /e2e/do", sc.handleDo)
+	mux.HandleFunc("POST /e2e/voice", sc.handleVoice)
+	mux.HandleFunc("GET /e2e/voice", sc.handleVoiceHeard)
 	mux.Handle("/", sc.web.w.routes())
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -88,15 +90,17 @@ type scenario struct {
 	tools *scenarioTools
 	dev   string // the device API's URL
 
-	mu     sync.Mutex
-	nodes  map[string]string // the scenario's nodes, by a name of its own
-	seqs   map[string]int    // each task's last event
-	inbox  map[string]int    // each task's last inbox item handled
-	tasks  map[string]string // each worker task's role: style, plan, research, check
-	finish map[string]chan struct{}
-	turns  [][]string // the user's lines of each of the brain's turns (waiting.spec.ts)
-	given  []string   // the whole of each of those turns (attach.spec.ts)
-	failed bool       // the live bench: the plan's first try has failed (liveWork)
+	mu      sync.Mutex
+	nodes   map[string]string // the scenario's nodes, by a name of its own
+	seqs    map[string]int    // each task's last event
+	inbox   map[string]int    // each task's last inbox item handled
+	tasks   map[string]string // each worker task's role: style, plan, research, check
+	finish  map[string]chan struct{}
+	turns   [][]string       // the user's lines of each of the brain's turns (waiting.spec.ts)
+	given   []string         // the whole of each of those turns (attach.spec.ts)
+	failed  bool             // the live bench: the plan's first try has failed (liveWork)
+	whisper *httptest.Server // the dictation's service (dictate.spec.ts)
+	heard   []string         // what it was sent: each recording's file name and size
 
 	// live, for the nodes' bench (nodes_bench_live_test.go): the brain is
 	// a real model, started by eriphe-core as on an install, and the
@@ -150,7 +154,6 @@ func newScenarioWith(t *testing.T, ctx context.Context, live *liveBrain) *scenar
 		Providers: map[string]Provider{"p": {Kind: "claude-subscription", Secret: secret}},
 		Agents:    map[string]Agent{"small": {Runtime: "claude-code", Provider: "p", Use: "everything"}},
 		Brain:     &BrainConfig{Agent: "small", Tools: []string{"maison", "agenda", "mail", "prod"}},
-		Memory:    &MemoryConfig{},
 		Servers: map[string]Server{
 			"maison": {URL: "https://maison.example.org/mcp", Auth: &ServerAuth{None: true}, Use: "the house", Access: accessFree},
 			"agenda": {URL: "https://agenda.example.org/mcp", Auth: &ServerAuth{None: true}, Use: "the calendar", Access: accessReads},
@@ -162,8 +165,6 @@ func newScenarioWith(t *testing.T, ctx context.Context, live *liveBrain) *scenar
 		t.Fatal(err)
 	}
 	c := newCore(cfg, store)
-	m, _ := testMemory(t)
-	c.useMemory(m)
 	openGraph(t, c)
 	c.useNodes(c.nodes)
 	for _, s := range []string{"maison", "agenda", "prod"} {
@@ -1559,3 +1560,48 @@ func liveSummaries(t testing.TB, c *core) []nodestore.Summary {
 var prodNotes = strings.Repeat("Le service répond lentement depuis la mise à jour de ce matin ; les erreurs viennent surtout de la file des paiements, qui sature aux heures de pointe.\n\n", 6) +
 	"| Service | Erreurs | Latence |\n|---|---|---|\n| Paiements | 31 | 900 ms |\n| Comptes | 7 | 300 ms |\n| Recherche | 4 | 250 ms |\n| Notifications | 0 | 120 ms |\n\n" +
 	strings.Repeat("À suivre : la file des paiements, la base des comptes et le cache de la recherche, un par un, en notant ce qui change.\n\n", 6)
+
+// handleVoice is POST /e2e/voice?on=1 (or 0): Settings › Voice hears
+// through a fake service of the OpenAI audio API, on a LAN address the
+// dial brings back here, which writes « Rappelle-moi d'acheter du pain. »
+// (dictate.spec.ts). GET /e2e/voice says what it was sent.
+func (sc *scenario) handleVoice(rw http.ResponseWriter, r *http.Request) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	if r.URL.Query().Get("on") != "1" {
+		sc.c.setVoiceListen(voiceListen{}, "")
+		rw.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if sc.whisper == nil {
+		sc.whisper = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			f, h, err := r.FormFile("file")
+			if err != nil || r.URL.Path != "/v1/audio/transcriptions" {
+				http.Error(w, "no file", http.StatusBadRequest)
+				return
+			}
+			n, _ := io.Copy(io.Discard, f)
+			sc.mu.Lock()
+			sc.heard = append(sc.heard, fmt.Sprintf("%s %d", h.Filename, n))
+			sc.mu.Unlock()
+			w.Write([]byte(`{"text":"Rappelle-moi d'acheter du pain."}`))
+		}))
+		addr := sc.whisper.Listener.Addr().String()
+		voiceDial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, network, addr)
+		}
+		sc.t.Cleanup(func() { sc.whisper.Close(); voiceDial = nil })
+	}
+	if err := sc.c.setVoiceListen(voiceListen{Preset: "server", BaseURL: "http://192.0.2.10:8000/v1", Model: "large-v3", Language: "fr"}, ""); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	rw.WriteHeader(http.StatusNoContent)
+}
+
+func (sc *scenario) handleVoiceHeard(rw http.ResponseWriter, _ *http.Request) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	writeJSON(rw, http.StatusOK, map[string]any{"heard": sc.heard})
+}

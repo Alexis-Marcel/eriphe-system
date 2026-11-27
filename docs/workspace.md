@@ -206,6 +206,16 @@ What it writes on a page is of two kinds:
 A live block only reads what you let Eriphe read freely: a tool whose reading needs your approval
 each time, or that you blocked, cannot feed it. Eriphe tells you.
 
+## Dictate instead of typing
+
+Once a voice service is set in **Settings → Voice** (Groq, OpenAI, or a Whisper server of your
+own), a microphone shows in the bar. Tap it and speak; tap it again when you are done (Escape
+cancels). What you said is written into the bar, after what you had typed: you read it, fix it if
+needed, and send it yourself. Nothing listens without that tap, and the microphone is let go as soon
+as you stop. With Groq or OpenAI your voice goes to that service, with your assistant's name and the
+titles of your recent pages (so that names are spelled right); with a server of your own it all
+stays at home.
+
 ## Follow something: a page kept up
 
 There are only bubbles. What you want to follow all the time ("keep an eye on my mail", "follow
@@ -250,9 +260,8 @@ skill may use or when it runs, and nothing changes before you say yes.
 ## Shape it by talking
 
 "No more newsletters from news.example.org", "show me less of this" are **preferences**. Eriphe
-remembers them as memories about you, and whatever watches your mail or your agenda reads them
-before noting what it found. You manage them like any memory: ask Eriphe what it remembers, or to
-forget one. There is no rule to maintain: the workspace's only settings are how the graph moves
+writes them in the node of their subject (your mail, your agenda), where whatever watches it reads
+them before noting what it found. You change them like any page: ask Eriphe, or edit the node. There is no rule to maintain: the workspace's only settings are how the graph moves
 (see Move things).
 
 ## Proposals
@@ -311,7 +320,7 @@ forget one. There is no rule to maintain: the workspace's only settings are how 
 The workspace is the only place to talk to Eriphe on the web: there is no separate conversation
 page, and no history under the bar: the subject's page is the conversation, and Eriphe keeps it
 saying where things stand. The tasks at work, and how reliable they were lately, are in Settings → Journal; each task has its own
-page there, with its trace, **Stop**, and the answer it waits for. The settings and the memory have
+page there, with its trace, **Stop**, and the answer it waits for. The settings have
 no top bar: **Workspace**, at the top of their menu, leads back.
 
 While the workspace is open in front of you, Eriphe knows you are there: a notification shows as a

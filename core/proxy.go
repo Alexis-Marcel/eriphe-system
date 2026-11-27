@@ -72,10 +72,6 @@ func (c *core) taskMCPHandler() http.Handler {
 			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, s)))
 			return
 		}
-		if server == taskMemServer && !isRoleKind(t.Kind) && c.mem != nil {
-			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, c.taskMemoryServer(t)))) // situations.go
-			return
-		}
 		if server == nodesServer && t.Kind == "worker" && c.nodes != nil && c.taskNode(t.ID) != "" {
 			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, c.taskNodesServer(t)))) // task_nodes.go
 			return

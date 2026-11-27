@@ -14,7 +14,6 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	for _, tc := range []struct{ path, tab, up string }{ // up: a sub-page's page
-		{"/memory", "memory", ""},
 		{"/settings/devices", "devices", ""},
 		{"/settings/devices", "devices", ""},
 		{"/settings/agents", "agents", ""},
@@ -33,6 +32,7 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		{"/settings/access/app", "access", "/settings/access"},
 		{"/settings/notifications", "notifications", ""},
 		{"/settings/account", "account", ""},
+		{"/settings/intentions", "intentions", ""},
 		{"/settings/journal", "journal", ""},
 		{"/settings/approve", "approve", ""},
 	} {
@@ -42,9 +42,6 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 			continue
 		}
 		href := "/settings/" + tc.tab
-		if tc.tab == "memory" {
-			href = "/memory"
-		}
 		for _, want := range []string{`<nav class="settings-nav"`, `<a class="back to-espace" href="/espace">`,
 			`<a class="icon-btn settings-close" href="/espace"`, `<a href="` + href + `" aria-current="page">`} {
 			if !strings.Contains(body, want) {
@@ -79,7 +76,7 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 // /settings is the list of the settings alone, the first level on a phone:
 // its ✕ goes back to the workspace and no entry is current. A wide screen
 // opens the first entry in its place (early.js), without a step in the
-// history. /settings/memory leads to the memory, with its query.
+// history.
 func TestSettingsList(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
@@ -89,7 +86,7 @@ func TestSettingsList(t *testing.T) {
 	}
 	for _, want := range []string{`<div class="settings is-index">`, `<nav class="settings-nav"`,
 		`<a class="icon-btn settings-close" href="/espace" aria-label="Fermer les réglages"`, `<h1 class="settings-title">Réglages</h1>`,
-		`<a href="/memory" >`, `<a href="/settings/account" >`, `class="i chev"`} {
+		`<a href="/settings/agents" >`, `<a href="/settings/account" >`, `class="i chev"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the list lacks %q", want)
 		}
@@ -104,11 +101,8 @@ func TestSettingsList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(early), `location.pathname === "/settings"`) || !strings.Contains(string(early), `location.replace("/memory")`) {
+	if !strings.Contains(string(early), `location.pathname === "/settings"`) || !strings.Contains(string(early), `location.replace("/settings/agents")`) {
 		t.Error("a wide screen does not open the first entry in place of the list")
-	}
-	if code, _, h := tw.do("GET", "/settings/memory?view=inbox", nil, nil); code != 303 || h.Get("Location") != "/memory?view=inbox" {
-		t.Errorf("GET /settings/memory: %d to %q", code, h.Get("Location"))
 	}
 }
 
@@ -129,14 +123,14 @@ func TestSettingsBackIsHierarchical(t *testing.T) {
 }
 
 // The settings' entries come in four groups, in this order, each under its
-// title; the memory is the first entry of the first.
+// title; the agents are the first entry of the first.
 func TestSettingsNavGroups(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	_, body, _ := tw.do("GET", "/settings/tools", nil, nil)
 	nav := body[strings.Index(body, `<nav class="settings-nav"`):]
 	nav = nav[:strings.Index(nav, "</nav>")]
-	order := []string{"Assistant", `href="/memory"`, `href="/settings/agents"`, `href="/settings/skills"`, `href="/settings/monitors"`,
+	order := []string{"Assistant", `href="/settings/agents"`, `href="/settings/skills"`, `href="/settings/monitors"`,
 		"Connexions", `href="/settings/tools"`, `href="/settings/folders"`,
 		"Appareils &amp; accès", `href="/settings/devices"`, `href="/settings/access"`, `href="/settings/notifications"`,
 		"Mon espace", `href="/settings/account"`}
@@ -202,7 +196,7 @@ func TestSettingsNavAttention(t *testing.T) {
 func TestShellNeverScrolls(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	for _, path := range []string{"/settings/agents", "/settings/journal", "/memory"} {
+	for _, path := range []string{"/settings/agents", "/settings/journal", "/settings/intentions"} {
 		if _, body, _ := tw.do("GET", path, nil, nil); !strings.Contains(body, `<html lang="fr" class="shell">`) {
 			t.Errorf("GET %s: the html element is not marked as the shell", path)
 		}

@@ -72,6 +72,7 @@ func ConversionsWith(snap Snapshots) []Conversion {
 	return []Conversion{
 		dropLifetime, // 1 → 2: no more lifetime: only nodes, none standing
 		func(raw []byte) ([]byte, error) { return toPage(raw, snap) }, // 2 → 3: blocks become Markdown
+		foldFrontBlock, // 3 → 4: a front-matter block written in a page becomes the node's properties
 	}
 }
 

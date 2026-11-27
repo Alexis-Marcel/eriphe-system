@@ -188,7 +188,7 @@ func (p pageTemplates) in(lang string) (*template.Template, error) {
 }
 
 // sharedTemplates are the files of definitions every page has, not pages.
-var sharedTemplates = []string{"parts", "catalog", "tools", "apps", "connections", "places", "agents", "remote", "folders", "push", "skills", "cards", "activity", "access", "bot", "monitors"}
+var sharedTemplates = []string{"parts", "catalog", "tools", "apps", "connections", "places", "agents", "remote", "folders", "push", "skills", "cards", "activity", "access", "bot", "monitors", "voice"}
 
 // notify wakes the event streams at once, rather than at their next tick.
 func (w *web) notify() {
@@ -239,7 +239,7 @@ func (w *web) routes() http.Handler {
 
 	// The settings' list of entries: the first level on a phone. A wide
 	// screen has the list as its sidebar and opens the first entry, the
-	// memory, instead (early.js).
+	// agents, instead (early.js).
 	mux.Handle("GET /settings", w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
 		w.render(rw, r, s, "settings", "", page{Title: "settings.title", Nav: "settings", View: "index"})
 	}))
@@ -292,7 +292,7 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /settings/address", w.auth(w.handleSaveAddress)) // web_address.go
 	mux.Handle("POST /settings/signin/issuer", w.auth(w.handleTestIssuer))
 	mux.Handle("POST /settings/signin/try", w.auth(w.handleTrySignin))
-	w.memoryRoutes(mux)     // web_memory.go
+	w.intentionRoutes(mux)  // web_intentions.go
 	w.remoteRoutes(mux)     // web_remote.go
 	w.appRoutes(mux)        // connection_apps.go
 	w.connectionRoutes(mux) // web_connections.go
@@ -302,6 +302,7 @@ func (w *web) routes() http.Handler {
 	w.monitorRoutes(mux)    // web_monitors.go
 	w.welcomeRoutes(mux)    // web_welcome.go
 	w.pushRoutes(mux)       // web_push.go
+	w.voiceRoutes(mux)      // web_voice.go
 	w.channelRoutes(mux)    // web_channels.go
 	w.whereRoutes(mux)      // web_where.go
 	w.alertRoutes(mux)      // web_alerts.go
@@ -396,7 +397,8 @@ func (w *web) headers(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "same-origin") // "no-referrer" would make forms send Origin: null
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
 		h.Set("Cross-Origin-Resource-Policy", "same-origin")
-		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+		// The microphone is the workspace's own, for dictation (Settings → Voice).
+		h.Set("Permissions-Policy", "camera=(), microphone=(self), geolocation=(), payment=()")
 		if w.trusted {
 			h.Set("Strict-Transport-Security", "max-age=31536000")
 		}
@@ -618,7 +620,7 @@ func hxTrigger(msg string, ok, changed bool) string {
 	}
 	v := map[string]any{"toast": map[string]string{"message": msg, "kind": kind}}
 	if changed {
-		v["memory-changed"] = true
+		v["data-changed"] = true
 	}
 	return hxEvents(v)
 }
