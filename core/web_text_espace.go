@@ -132,6 +132,16 @@ var espaceStrings = map[string]map[string]string{
 		"espace.bar.file.remove": "Retirer %s",
 		"espace.bar.file.toobig": "« %s » dépasse %d Mo.",
 		"espace.bar.file.many":   "%d pièces jointes au plus par message.",
+		// La dictée (orb/Bar.tsx, orb/dictate.ts ; Réglages › Voix).
+		"espace.mic.start":       "Dicter",
+		"espace.mic.stop":        "Arrêter et écrire",
+		"espace.mic.cancel":      "Annuler la dictée",
+		"espace.mic.listening":   "Je t'écoute… touche le micro quand tu as fini",
+		"espace.mic.writing":     "J'écris ce que tu as dit…",
+		"espace.mic.denied":      "Le micro est refusé : autorise-le pour cette page dans le navigateur.",
+		"espace.mic.unsupported": "Ce navigateur ne permet pas d'enregistrer ici.",
+		"espace.mic.failed":      "La dictée n'a pas marché.",
+		"espace.mic.empty":       "Je n'ai rien entendu.",
 		// L'orbe : {{name}} dans l'espace, à côté du sujet dont il parle
 		// (orb/), et les notifications de l'onglet (hud/).
 		"espace.orb.words":      "Ce que dit {{name}}",
@@ -312,6 +322,16 @@ var espaceStrings = map[string]map[string]string{
 		"espace.bar.file.remove": "Remove %s",
 		"espace.bar.file.toobig": "“%s” is over %d MB.",
 		"espace.bar.file.many":   "%d attachments at most per message.",
+		// Dictation (orb/Bar.tsx, orb/dictate.ts; Settings › Voice).
+		"espace.mic.start":       "Dictate",
+		"espace.mic.stop":        "Stop and write",
+		"espace.mic.cancel":      "Cancel the dictation",
+		"espace.mic.listening":   "Listening… tap the microphone when you are done",
+		"espace.mic.writing":     "Writing what you said…",
+		"espace.mic.denied":      "The microphone is refused: allow it for this page in the browser.",
+		"espace.mic.unsupported": "This browser cannot record here.",
+		"espace.mic.failed":      "The dictation did not work.",
+		"espace.mic.empty":       "I heard nothing.",
 		// The orb: {{name}} in the space, beside the subject it talks
 		// about (orb/), and the tab's notifications (hud/).
 		"espace.orb.words":      "What {{name}} says",

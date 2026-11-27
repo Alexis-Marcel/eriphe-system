@@ -875,6 +875,17 @@ a.notice-text:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .cs-file { animation: none; } }
 .cs-attach { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; color: var(--fg3); cursor: pointer; }
 .cs-attach:hover, .cs-attach:focus-visible { color: var(--fg); background: var(--fill); }
+/* The microphone (orb/dictate.ts): while it listens, the time spoken on red. */
+.cs-mic { flex: none; display: grid; place-items: center; min-width: 34px; height: 34px; padding: 0 8px; border: 0; border-radius: 999px; background: none; color: var(--fg3); cursor: pointer; font-variant-numeric: tabular-nums; }
+.cs-mic:hover:not(:disabled), .cs-mic:focus-visible { color: var(--fg); background: var(--fill); }
+.cs-mic.is-listening { color: #fff; background: #dc2626; }
+.cs-mic.is-listening:hover { color: #fff; background: #b91c1c; }
+.cs-mic.is-writing, .cs-mic.is-asking { opacity: 0.5; cursor: progress; }
+.cs-mic-time { font-size: 0.8rem; font-weight: 600; }
+@media (prefers-reduced-motion: no-preference) {
+  .cs-mic.is-listening { animation: cs-mic-pulse 1.6s ease-in-out infinite; }
+}
+@keyframes cs-mic-pulse { 50% { box-shadow: 0 0 0 5px color-mix(in oklab, #dc2626 25%, transparent); } }
 .cs-bar.dropping { border-color: var(--link-on); border-style: dashed; }
 .cs-bar { width: 100%; display: flex; align-items: center; gap: 6px; padding: 5px 5px 5px 6px; border-radius: 999px; border: 1px solid var(--glass-line); background: var(--glass);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--lift); transition: border-color 0.2s, box-shadow 0.2s; }

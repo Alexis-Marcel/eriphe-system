@@ -397,7 +397,8 @@ func (w *web) headers(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "same-origin") // "no-referrer" would make forms send Origin: null
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
 		h.Set("Cross-Origin-Resource-Policy", "same-origin")
-		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+		// The microphone is the workspace's own, for dictation (Settings → Voice).
+		h.Set("Permissions-Policy", "camera=(), microphone=(self), geolocation=(), payment=()")
 		if w.trusted {
 			h.Set("Strict-Transport-Security", "max-age=31536000")
 		}

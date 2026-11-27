@@ -4,6 +4,7 @@ import { lastSeq, setSent, step, store, useGraph } from "../data/store";
 import { titleOf } from "../graph/model";
 import { useWords } from "../i18n";
 import { Cards } from "../page/Cards";
+import { clock, useDictation, withWords } from "./dictate";
 import { Line } from "./Line";
 import { orbText, useOrb } from "./useOrb";
 
@@ -18,6 +19,9 @@ import { orbText, useOrb } from "./useOrb";
 // that none waits out of sight; on the phone, the orb's words as a line
 // (Line.tsx). And what the bar itself has to say: a message that could
 // not go, one withdrawn too late, an Eriphe that cannot think yet.
+//
+// With Settings › Voice set (voice.go), a microphone beside the field:
+// what the user says is written into the draft (dictate.ts), never sent.
 //
 // A message may carry files (attachments.go): picked with the paperclip
 // (on a phone, the camera or the photo library), dropped on the bar or
@@ -58,6 +62,17 @@ export function Bar({ boot, narrow }: { boot: api.Boot; narrow: boolean }) {
   const field = useRef<HTMLInputElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const cards = x?.cards ?? [];
+  const dict = useDictation(t, (words) => {
+    setDraft((d) => withWords(d, words));
+    field.current?.focus();
+  });
+  const listening = dict.state === "listening";
+  useEffect(() => {
+    if (!listening) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && dict.cancel();
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [listening, dict.cancel]);
   const [gone, setGone] = useState<ReadonlySet<number>>(new Set());
   const [taken, setTaken] = useState(false);
   const { shown: waiting, more } = waitingShown(x, gone);
@@ -215,6 +230,11 @@ export function Bar({ boot, narrow }: { boot: api.Boot; narrow: boolean }) {
           {note}
         </p>
       )}
+      {dict.note && (
+        <p className="cs-note" role="alert">
+          {dict.note}
+        </p>
+      )}
       {files.length > 0 && (
         <ul className="cs-files" aria-label={t("espace.bar.attached")}>
           {files.map((f, i) => (
@@ -251,10 +271,24 @@ export function Bar({ boot, narrow }: { boot: api.Boot; narrow: boolean }) {
           onPaste={onPaste}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={place ? t("espace.input.about", place) : t("espace.input")}
+          placeholder={listening ? t("espace.mic.listening") : dict.state === "writing" ? t("espace.mic.writing") : place ? t("espace.input.about", place) : t("espace.input")}
           aria-label={place ? t("espace.input.about", place) : t("espace.input")}
+          readOnly={dict.state === "writing"}
           enterKeyHint="send"
         />
+        {boot.voice?.listen && (
+          <button
+            type="button"
+            className={`cs-mic is-${dict.state}`}
+            aria-label={listening ? t("espace.mic.stop") : t("espace.mic.start")}
+            title={listening ? t("espace.mic.stop") : t("espace.mic.start")}
+            aria-pressed={listening}
+            disabled={dict.state === "asking" || dict.state === "writing"}
+            onClick={listening ? dict.stop : dict.start}
+          >
+            {listening ? <span className="cs-mic-time">{clock(dict.seconds)}</span> : <Mic />}
+          </button>
+        )}
         {/* The orb's resting place: on the phone the orb stays in it. */}
         <span className="cs-dock">{narrow && <span className={`orb docked${show.mode === "work" ? " working" : ""}`} aria-hidden="true" />}</span>
       </form>
@@ -291,6 +325,16 @@ function Clip() {
   return (
     <svg className="cs-clip" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
       <path d="M20 11.5l-8.1 8.1a5 5 0 01-7.1-7.1l8.5-8.5a3.3 3.3 0 014.7 4.7l-8.5 8.5a1.7 1.7 0 01-2.4-2.4l7.8-7.8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// Mic is the microphone: dictating.
+function Mic() {
+  return (
+    <svg className="cs-mic-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }
