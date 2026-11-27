@@ -143,11 +143,26 @@ export class Painter {
   private sy = new Float32Array(0);
   private sr = new Float32Array(0);
   private bucket = new Int32Array(0);
+  // the font's ascent and descent, per px of its size: a label's baseline
+  // is where the page puts it (a line 1.5 times its size, the text in the
+  // middle of it)
+  private asc = 0.9;
+  private desc = 0.22;
 
   constructor(private canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
     this.theme = readTheme();
     this.halo = this.sprite();
+    this.metrics();
+  }
+
+  private metrics() {
+    this.ctx.font = `600 100px ${this.theme.font}`;
+    const m = this.ctx.measureText?.("Hg");
+    if (m?.fontBoundingBoxAscent) {
+      this.asc = m.fontBoundingBoxAscent / 100;
+      this.desc = m.fontBoundingBoxDescent / 100;
+    }
   }
 
   static on(canvas: HTMLCanvasElement): Painter | null {
@@ -164,6 +179,7 @@ export class Painter {
   retheme() {
     this.theme = readTheme();
     this.halo = this.sprite();
+    this.metrics();
   }
 
   // The halo, painted once: the bubble's (espace.css, .gr-halo), a violet
@@ -362,7 +378,8 @@ export class Painter {
     // its disc
     let labels = 0;
     ctx.textAlign = "center";
-    ctx.textBaseline = "top";
+    ctx.textBaseline = "alphabetic";
+    const base = (1.5 - this.asc - this.desc) / 2 + this.asc; // the baseline under the label's top, per px of its size
     ctx.lineJoin = "round";
     let font = "";
     for (let o = 0; o < n && labels < LABELS; o++) {
@@ -375,8 +392,8 @@ export class Painter {
       const fs = (root ? 14.5 : 12.5) * k;
       if (fs < 4) continue;
       const R = r + (root ? 12 : 6);
-      const y = sy[i] + (R + (root ? 14 : 8)) * k;
-      if (!seen(i, sr[i]) && (sx[i] < -300 || sx[i] > W + 300 || y > H || y < -fs * 2)) continue;
+      const y = sy[i] + (R + (root ? 14 : 8)) * k + fs * base;
+      if (!seen(i, sr[i]) && (sx[i] < -300 || sx[i] > W + 300 || y > H + fs || y < -fs)) continue;
       const f = `${root ? 600 : 500} ${fs.toFixed(1)}px ${T.font}`;
       if (f !== font) ctx.font = font = f;
       ctx.globalAlpha = la * show[i];
@@ -385,13 +402,15 @@ export class Painter {
       ctx.strokeText(s.titles[i], sx[i], y);
       ctx.fillStyle = s.done[i] ? T.fg3 : T.fg;
       ctx.fillText(s.titles[i], sx[i], y);
-      if (root && 10.5 * k >= 5 && seen(i, sr[i])) {
+      if (root && sr[i] >= 10 && seen(i, sr[i])) {
         ctx.font = font = `${(10.5 * k).toFixed(1)}px ${T.mono}`;
+        if ("letterSpacing" in ctx) ctx.letterSpacing = `${(10.5 * 0.14 * k).toFixed(2)}px`; // as .gr-code
         ctx.textBaseline = "middle";
         ctx.fillStyle = T.fg3;
         ctx.globalAlpha = show[i] * s.alpha[i];
         ctx.fillText(s.codes[i], sx[i], sy[i]);
-        ctx.textBaseline = "top";
+        if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+        ctx.textBaseline = "alphabetic";
       }
       labels++;
     }
@@ -407,10 +426,9 @@ export class Painter {
       const root = s.depth[hi] === 0;
       const fs = Math.max(12, (root ? 14.5 : 12.5) * k);
       ctx.font = font = `${root ? 600 : 500} ${fs}px ${T.font}`;
-      ctx.textBaseline = "top";
       ctx.strokeStyle = T.bg;
       ctx.lineWidth = 4;
-      const y = sy[hi] + Math.max(3, sr[hi]) + 6;
+      const y = sy[hi] + Math.max(3, sr[hi]) + 6 + fs * this.asc;
       ctx.strokeText(s.titles[hi], sx[hi], y);
       ctx.fillStyle = T.fg;
       ctx.fillText(s.titles[hi], sx[hi], y);
