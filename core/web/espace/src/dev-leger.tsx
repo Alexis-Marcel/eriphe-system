@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { GraphNode } from "./data/api";
 import { applyNodes, step, store } from "./data/store";
-import { LOD, setLod, type Knobs } from "./graph/lod";
+import { LOD, lodVersion, onLod, setLod, type Knobs } from "./graph/lod";
+import { DAY } from "./graph/life";
 import { paintStats } from "./graph/paint";
 import "./dev.css";
 
@@ -33,10 +34,69 @@ function rng(seed: number) {
 const WORDS = ["Voyage", "Maison", "Factures", "Lectures", "Projet", "Jardin", "Santé", "Banque", "Photos", "Recettes", "Vélo", "Cours", "Impôts", "Musique", "Famille", "Travaux"];
 const THINGS = ["devis", "billets", "plan", "liste", "relance", "rendez-vous", "notes", "budget", "contrat", "idées", "suivi", "brouillon"];
 
+// today is this day's midnight (UTC): the made-up graphs' dates are
+// relative to it, the same all day (two loads measure the same graph).
+export const today = () => Math.floor(Date.now() / DAY) * DAY;
+
+// lived gives the made-up nodes a life (graph/life.ts) as a real graph
+// has one: dates spread over months (a few nodes changed this week, many
+// asleep), active families and dormant ones; a handful that wait for the
+// user, in two or three families; some that run, some kept up by a skill.
+// family: each node's family (-1: alone); active: a family's activity,
+// 0 (dormant) to 1. Its own generator: the graph's shape stays the one
+// seeded.
+function lived(out: GraphNode[], family: (i: number) => number, active: (f: number) => number, now: number, seed: number) {
+  const r = rng(seed);
+  const at = (days: number) => new Date(now - days * DAY - Math.floor(r() * DAY)).toISOString();
+  const ages = out.map((_, i) => {
+    const f = family(i), a = f < 0 ? 0.05 : active(f), u = r();
+    // recent in proportion to the family's activity, else weeks, else months
+    if (u < a * 0.6) return r() * 7;
+    if (u < a * 0.6 + 0.25) return 7 + r() * 21;
+    return 28 + r() * 220;
+  });
+  out.forEach((x, i) => {
+    x.updated = at(ages[i]);
+    x.created = at(ages[i] + r() * 90);
+    x.status = r() < 0.15 ? "done" : "idle";
+    delete x.line;
+    delete x.maintained;
+  });
+  // the active families, the most active first
+  const fams = [...new Set(out.map((_, i) => family(i)).filter((f) => f >= 0))].sort((a, b) => active(b) - active(a) || a - b);
+  const of = (f: number) => out.map((_, i) => i).filter((i) => family(i) === f);
+  const pick = (xs: number[]) => xs[Math.floor(r() * xs.length)];
+  const set = (i: number, status: GraphNode["status"], days: number) => {
+    out[i].status = status;
+    out[i].updated = at(days);
+    if (status === "running") out[i].line = "en cours…";
+  };
+  // a handful that wait for the user, in the two or three most active families
+  const waiting = Math.max(2, Math.min(8, Math.round(out.length / 180)));
+  for (let k = 0; k < waiting; k++) {
+    const pool = of(fams[k % Math.min(3, fams.length)] ?? -1).filter((i) => out[i].status === "idle");
+    if (pool.length) set(pick(pool), "waits", r() * 2);
+  }
+  // some that run, in the active families
+  for (let k = 0; k < Math.round(out.length / 100); k++) {
+    const pool = of(fams[k % Math.min(5, fams.length)] ?? -1).filter((i) => out[i].status === "idle");
+    if (pool.length) set(pick(pool), "running", r() * 0.5);
+  }
+  // kept up by a skill: the roots of the active families, and a few notes
+  fams.slice(0, 4).forEach((f) => {
+    const root = of(f).find((i) => !out[i].parent);
+    if (root !== undefined) out[root].maintained = ["suivi"];
+  });
+  for (let k = 0; k < Math.round(out.length / 60); k++) {
+    const i = Math.floor(r() * out.length);
+    if (family(i) >= 0 && active(family(i)) > 0.3) out[i].maintained = ["veille"];
+  }
+}
+
 // legerGraph is n fictitious nodes: about one in seven a subject with its
 // children (some with children of their own), one in twelve alone, a link
-// across now and then; one in thirty waits for the user, one in six is done.
-export function legerGraph(n: number, seed = 7): GraphNode[] {
+// across now and then; their life (lived) as a real graph's.
+export function legerGraph(n: number, seed = 7, now = today()): GraphNode[] {
   const r = rng(seed + n);
   const pick = <T,>(xs: T[]) => xs[Math.floor(r() * xs.length)];
   const t0 = Date.parse("2026-11-01T08:00:00Z");
@@ -67,8 +127,19 @@ export function legerGraph(n: number, seed = 7): GraphNode[] {
     if (r() < 0.02) x.maintained = ["suivi"];
     out.push(x);
   }
+  // a node's family: its subject (the top of its parents), by its index
+  const index = new Map(out.map((x, i) => [x.id, i]));
+  const top = (i: number): number => {
+    let x = out[i];
+    for (let k = 0; x.parent && k < 64; k++) x = out[index.get(x.parent)!];
+    return x === out[i] && !subjects.includes(x.id) ? -1 : index.get(x.id)!;
+  };
+  const fam = out.map((_, i) => top(i));
+  lived(out, (i) => fam[i], (f) => [1, 0.7, 0.4, 0.1, 0.05][hash(f) % 5], now, seed + n + 1);
   return out;
 }
+
+const hash = (k: number) => Math.imul(k + 1, 2654435761) >>> 0;
 
 // PRESETS are graphs of a known shape, beside the sizes: "cerveau", a
 // second brain as people keep one, about 1,100 notes and 4,000 links.
@@ -83,7 +154,7 @@ export const PRESETS: Record<string, { label: string; nodes: () => GraphNode[] }
 // link mostly within their family, preferring the notes already much
 // linked; many leaves with one link or none; some notes alone. About
 // links links in all, a node and its parent counting as one.
-export function secondBrain(n = 1100, links = 4000, seed = 42): GraphNode[] {
+export function secondBrain(n = 1100, links = 4000, seed = 42, now = today()): GraphNode[] {
   const r = rng(seed);
   const pick = <T,>(xs: T[]) => xs[Math.floor(r() * xs.length)];
   const t0 = Date.parse("2026-11-01T08:00:00Z");
@@ -158,6 +229,11 @@ export function secondBrain(n = 1100, links = 4000, seed = 42): GraphNode[] {
     degree[b]++;
     made_++;
   }
+  // its life: a few families active, more half-asleep, most dormant
+  const activity = Array.from({ length: F }, (_, f) => [1, 0.8, 0.15, 0.6, 0.05, 0.3, 0.05, 0.4, 0.1, 0.02][f % 10]);
+  lived(out, (i) => fam[i], (f) => activity[f], now, seed + 1);
+  // the hubs are read often: changed lately
+  for (const h of hubs) if (out[h].status === "idle" && r() < 0.6) out[h].updated = new Date(now - r() * 5 * DAY).toISOString();
   return out;
 }
 
@@ -330,7 +406,7 @@ function sweep(t: number) {
 
 declare global {
   interface Window {
-    leger?: { load(n: number | string): void; add(k: number): void; remove(k: number): void; resize(): void; stats(): Stats; sample: typeof sample; pan: typeof pan; panZoom: typeof panZoom; sweep: typeof sweep; zoomTo: typeof zoomTo };
+    leger?: { knobs(k: Partial<Knobs>): void; load(n: number | string): void; add(k: number): void; remove(k: number): void; resize(): void; stats(): Stats; sample: typeof sample; pan: typeof pan; panZoom: typeof panZoom; sweep: typeof sweep; zoomTo: typeof zoomTo };
   }
 }
 
@@ -338,7 +414,7 @@ export function startLeger() {
   const q = new URLSearchParams(location.search);
   const asked = Number(q.get("n"));
   const preset = q.get("preset");
-  window.leger = { load, add, remove, resize, stats, sample, pan, panZoom, sweep, zoomTo };
+  window.leger = { knobs: setLod, load, add, remove, resize, stats, sample, pan, panZoom, sweep, zoomTo };
   load(preset && PRESETS[preset] ? preset : asked > 0 ? asked : 100);
   let raf = 0;
   const loop = (t: number) => {
@@ -360,7 +436,10 @@ export function startLeger() {
 
 // The level of detail's knobs (graph/lod.ts), live: what a node needs on
 // screen to be a bubble, to show its label; the discs' size, their colour.
-const KNOBS: { key: keyof Knobs; label: string; min: number; max: number; step: number }[] = [
+const KNOBS: { key: keyof Knobs; label: string; min: number; max: number; step: number; on?: keyof Knobs }[] = [
+  { key: "lifeStrength", label: "taille par la vie (force)", min: 0, max: 2, step: 0.05, on: "life" },
+  { key: "sleepDays", label: "endormi après (jours)", min: 1, max: 120, step: 1, on: "sleep" },
+  { key: "group", label: "familles groupées", min: 0, max: 10, step: 0.5, on: "zones" },
   { key: "bubbleAt", label: "bulle dès (rayon px)", min: 4, max: 60, step: 1 },
   { key: "labelAt", label: "titre dès (rayon px)", min: 1, max: 40, step: 0.5 },
   { key: "size", label: "taille des disques", min: 0.3, max: 3, step: 0.05 },
@@ -370,15 +449,23 @@ const KNOBS: { key: keyof Knobs; label: string; min: number; max: number; step: 
 const DEFAULTS = { ...LOD };
 
 function Knobs() {
-  const [, setV] = useState(0);
-  const set = (k: Partial<Knobs>) => {
-    setLod(k);
-    setV((v) => v + 1);
-  };
+  useSyncExternalStore(onLod, lodVersion);
+  const set = (k: Partial<Knobs>) => setLod(k);
   return (
     <fieldset className="dev-leger-knobs">
       <legend>Niveau de détail</legend>
-      {KNOBS.map((k) => (
+      {(
+        [
+          ["life", "taille par la vie"],
+          ["sleep", "nœuds endormis"],
+          ["zones", "continents"],
+        ] as const
+      ).map(([key, label]) => (
+        <label key={key} className="dev-leger-check">
+          <input type="checkbox" checked={!!LOD[key]} onChange={(e) => set({ [key]: e.target.checked })} /> {label}
+        </label>
+      ))}
+      {KNOBS.filter((k) => !k.on || LOD[k.on]).map((k) => (
         <label key={k.key}>
           <span>
             {k.label} <output>{String(LOD[k.key])}</output>

@@ -15,9 +15,15 @@ export type Knobs = {
   size: number; // the discs' size, times their radius (eased to 1 as they near bubbleAt)
   color: boolean; // a disc's colour by its family (its root)
   cap: number; // bubbles at most, those kept aside
+  life: boolean; // a node's size by its life (life.ts): what waits, runs, is kept up or fresh is bigger
+  lifeStrength: number; // ... how much (0: none, 1: as designed)
+  sleep: boolean; // a node idle for sleepDays days, nothing waiting, running or kept up, is a pale dot (life.ts)
+  sleepDays: number;
+  zones: boolean; // each family a soft zone behind its nodes, its name far out (zones.ts)
+  group: number; // ... and how much a family keeps together in the layout (layout.ts, FAMILY), with its zone
 };
 
-export const LOD: Knobs = { from: 200, bubbleAt: 16, labelAt: 7, size: 1, color: true, cap: 120 };
+export const LOD: Knobs = { from: 200, bubbleAt: 16, labelAt: 7, size: 1, color: true, cap: 120, life: true, lifeStrength: 1, sleep: true, sleepDays: 21, zones: true, group: 3 };
 
 const told = new Set<() => void>();
 let version = 0;
@@ -58,7 +64,10 @@ export const BUDGET = 40;
 // on a disc more often than not); pressed and let go, it opens.
 export const GRAB = 8;
 
-export type Item = { id: string; r: number; waits: boolean };
+export type Item = { id: string; r: number; waits: boolean; sleeps?: boolean };
+// A node asleep (life.ts) is a bubble only from SLEEPS times the threshold:
+// very close, or hovered, open, held.
+export const SLEEPS = 2.5;
 export type View = { x: number; y: number; k: number; w: number; h: number };
 
 // drawnRadius is a disc's radius in the graph's units: its radius times
@@ -107,7 +116,7 @@ export function decide(
     if (x !== x) continue; // NaN: not placed yet
     const rs = it.r * v.k, px = x * v.k + v.x, py = y * v.k + v.y;
     const old = !!was?.has(it.id);
-    const at = o.bubbleAt * (it.waits ? WAITS : 1) * (old ? HOLD : 1);
+    const at = o.bubbleAt * (it.waits ? WAITS : it.sleeps ? SLEEPS : 1) * (old ? HOLD : 1);
     if (rs < at || !within(px, py, rs, v, old ? FAR : NEAR)) continue;
     cand.push({ id: it.id, score: rs * (it.waits ? 2 : 1), old });
   }
@@ -168,6 +177,15 @@ export function hit(
 // n colours: its root's, the biggest families first, so that they differ;
 // a node alone (a root with nothing under it) has none (-1).
 export function families(nodes: readonly { id: string; parent?: string }[], n: number): Map<string, number> {
+  const { rootOf, size } = rootsOf(nodes);
+  const roots = [...size].filter(([, k]) => k > 1).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  const colour = new Map(roots.map(([id], i) => [id, i % n]));
+  return new Map(nodes.map((x) => [x.id, colour.get(rootOf.get(x.id)!) ?? -1]));
+}
+
+// rootsOf is each node's root (the top of its parents) and each root's
+// family's size, itself included.
+export function rootsOf(nodes: readonly { id: string; parent?: string }[]): { rootOf: Map<string, string>; size: Map<string, number> } {
   const parent = new Map(nodes.map((x) => [x.id, x.parent]));
   const rootOf = new Map<string, string>();
   const find = (id: string): string => {
@@ -193,7 +211,5 @@ export function families(nodes: readonly { id: string; parent?: string }[], n: n
     const r = find(x.id);
     size.set(r, (size.get(r) ?? 0) + 1);
   }
-  const roots = [...size].filter(([, k]) => k > 1).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
-  const colour = new Map(roots.map(([id], i) => [id, i % n]));
-  return new Map(nodes.map((x) => [x.id, colour.get(find(x.id)) ?? -1]));
+  return { rootOf, size };
 }

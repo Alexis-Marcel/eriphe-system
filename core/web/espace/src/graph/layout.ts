@@ -58,6 +58,7 @@ export const T = {
   decay: 0.0228, // the energy cools by this share a tick (about 300 ticks from 1, like d3)
   alphaMin: 0.004, // ... and below this it is none: the graph rests
   warm: 0.5, // a change warms the graph back to this at least
+  nudge: 0.12, // ... a change of sizes alone (a big graph's life, lod.ts) to this at most: the graph makes room, it does not move on
   dragWarm: 0.3, // the energy the graph keeps while a body is held
   friction: 0.6, // the velocity kept from one tick to the next
   chargeMin: 30, // the repulsion never counts a distance below this
@@ -142,6 +143,26 @@ export const CENTRING = { focus: true };
 export function setCentring(on: boolean): void {
   if (CENTRING.focus === on) return;
   CENTRING.focus = on;
+  for (const w of tuned) w();
+}
+
+// FAMILY is how much each body of a family (its root and what is under
+// it, MIN_GROUP bodies at least) is pulled to its family's middle, times
+// the energy: 0, none (a small graph); a big graph's continents (lod.ts,
+// zones) set it, so that a family is a region of the graph, not spread
+// through it by the links across.
+export const FAMILY = { pull: 0 };
+export const MIN_GROUP = 5;
+
+// setFamily sets the pull and warms every graph, as setForces.
+export function setFamily(pull: number): void {
+  if (FAMILY.pull === pull) return;
+  FAMILY.pull = pull;
+  for (const r of sims) {
+    const s = r.deref();
+    if (s) s.reheat();
+    else sims.delete(r);
+  }
   for (const w of tuned) w();
 }
 
@@ -637,6 +658,8 @@ export class Sim {
   private adjacent = new Map<Body, Body[]>(); // each body's linked ones, in the links' order
   private quad = new Quad();
   private grid = new Grid();
+  private group = new Int32Array(0); // each body's family, by index in list (-1: none, or too small)
+  private groups = 0;
 
   // slice: what draws the graph gives the most a frame may take (SLICE);
   // without one, the first layout and every hurry are done at once.
@@ -660,6 +683,7 @@ export class Sim {
         changed = true;
       }
     const first = this.list.length === 0 && nodes.length > 0;
+    let grown = 0; // a change of sizes alone: the largest, relative
     const fresh: Body[] = [];
     this.list = nodes.map((n) => {
       let b = this.byId.get(n.id);
@@ -670,14 +694,18 @@ export class Sim {
         fresh.push(b);
         return b;
       }
-      if (b.r !== n.r || b.lw !== n.lw || b.lh !== n.lh || String(b.tile) !== String(n.tile) || String(b.box) !== String(n.box) || b.parent !== n.parent || b.links.join() !== n.links.join()) {
+      if (b.lw !== n.lw || b.lh !== n.lh || String(b.tile) !== String(n.tile) || String(b.box) !== String(n.box) || b.parent !== n.parent || b.links.join() !== n.links.join()) {
         Object.assign(b, { parent: n.parent, links: [...n.links], r: n.r, lw: n.lw, lh: n.lh, tile: n.tile, box: n.box });
         changed = true;
+      } else if (b.r !== n.r) {
+        grown = Math.max(grown, Math.abs(n.r - b.r) / Math.max(1, b.r));
+        b.r = n.r;
       }
       return b;
     });
     for (const b of this.list) if (b.parent && !this.byId.has(b.parent)) b.parent = undefined;
     this.edges = pairs(this.list).map(([a, b]) => [this.byId.get(a)!, this.byId.get(b)!]);
+    this.families();
     this.degree = new Map();
     this.adjacent = new Map();
     for (const [a, b] of this.edges) {
@@ -704,6 +732,39 @@ export class Sim {
       this.alpha = 1;
       this.hurry();
     } else if (changed || fresh.length) this.reheat();
+    else if (grown > 0) this.reheat(Math.min(T.nudge, 0.03 + grown * 0.15));
+  }
+
+  // families works out each body's family (its root's), for FAMILY's pull.
+  private families(): void {
+    const L = this.list, n = L.length;
+    const index = new Map(L.map((b, i) => [b, i]));
+    const root = new Int32Array(n).fill(-1);
+    const find = (i: number): number => {
+      if (root[i] >= 0) return root[i];
+      let b = L[i];
+      for (let k = 0; b.parent && k < 64; k++) {
+        const p = this.byId.get(b.parent);
+        if (!p) break;
+        b = p;
+      }
+      return (root[i] = index.get(b)!);
+    };
+    const size = new Map<number, number>();
+    for (let i = 0; i < n; i++) size.set(find(i), (size.get(find(i)) ?? 0) + 1);
+    const id = new Map<number, number>();
+    this.group = new Int32Array(n);
+    for (let i = 0; i < n; i++) {
+      const r = root[i];
+      if ((size.get(r) ?? 0) < MIN_GROUP) {
+        this.group[i] = -1;
+        continue;
+      }
+      let g = id.get(r);
+      if (g === undefined) id.set(r, (g = id.size));
+      this.group[i] = g;
+    }
+    this.groups = id.size;
   }
 
   // reheat warms the graph (the forces changed, or the graph): it adapts,
@@ -998,6 +1059,24 @@ export class Sim {
     for (const x of L) {
       x.vx -= (x.x - cx) * F.centre * a;
       x.vy -= (x.y - cy) * F.centre * a;
+    }
+    // families: each body pulled to its family's middle
+    if (FAMILY.pull > 0 && this.groups > 0 && this.group.length === L.length) {
+      const G = this.groups, sx = new Float64Array(G), sy = new Float64Array(G), sn = new Float64Array(G);
+      for (let i = 0; i < L.length; i++) {
+        const g = this.group[i];
+        if (g < 0) continue;
+        sx[g] += L[i].x;
+        sy[g] += L[i].y;
+        sn[g]++;
+      }
+      const k = FAMILY.pull * F.centre * a;
+      for (let i = 0; i < L.length; i++) {
+        const g = this.group[i];
+        if (g < 0) continue;
+        L[i].vx -= (L[i].x - sx[g] / sn[g]) * k;
+        L[i].vy -= (L[i].y - sy[g] / sn[g]) * k;
+      }
     }
     // after a focus change, a gentle pull to the places round it
     // (spreadRound): round it, not through it

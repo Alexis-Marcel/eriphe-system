@@ -1,4 +1,5 @@
 import { drawnRadius, labelAlpha, LOD, type Item, type View } from "./lod";
+import { declutter, nameAlpha, padOf, zoneAlpha, zoneFamilies, zoneShape, type Family, type Shape } from "./zones";
 
 // The canvas of a big graph (lod.ts): every node a disc, every link a
 // line, painted again only when something moved (a frame of the layout,
@@ -21,6 +22,9 @@ export type Scene = {
   done: Uint8Array;
   run: Uint8Array;
   fam: Int16Array; // the family's colour (-1: none)
+  sleep: Uint8Array; // asleep (life.ts): a pale dot
+  root: Int32Array; // its root's index (-1: none placed)
+  families: Family[]; // the families drawn as zones (zones.ts)
   titles: string[];
   codes: string[]; // a root's short word, inside its disc
   order: Int32Array; // the nodes by radius, the biggest first: the labels' order
@@ -28,17 +32,20 @@ export type Scene = {
   index: Map<string, number>;
 };
 
-export type SceneNode = { id: string; r: number; depth: number; light: number; status: string; fam: number; title: string; code: string };
+export type SceneNode = { id: string; r: number; depth: number; light: number; status: string; fam: number; title: string; code: string; root?: string; sleeps?: boolean };
 
 export function scene(nodes: readonly SceneNode[], links: readonly [string, string][]): Scene {
   const n = nodes.length;
   const s: Scene = {
-    items: nodes.map((x) => ({ id: x.id, r: x.r, waits: x.status === "waits" })),
+    items: nodes.map((x) => ({ id: x.id, r: x.r, waits: x.status === "waits", sleeps: !!x.sleeps })),
     depth: new Uint8Array(n),
     alpha: new Float32Array(n),
     done: new Uint8Array(n),
     run: new Uint8Array(n),
     fam: new Int16Array(n),
+    sleep: new Uint8Array(n),
+    root: new Int32Array(n),
+    families: [],
     titles: nodes.map((x) => x.title),
     codes: nodes.map((x) => x.code),
     order: new Int32Array(n),
@@ -50,6 +57,8 @@ export function scene(nodes: readonly SceneNode[], links: readonly [string, stri
     s.done[i] = x.status === "done" ? 1 : 0;
     s.run[i] = x.status === "running" ? 1 : 0;
     s.fam[i] = x.fam;
+    s.sleep[i] = x.sleeps ? 1 : 0;
+    s.root[i] = x.root === undefined ? -1 : (s.index.get(x.root) ?? -1);
     // as a bubble's core (Graph.tsx, Bubble)
     s.alpha[i] = x.status === "done" ? Math.max(0.35, x.light * 0.8) : Math.max(0.5, x.light);
   });
@@ -63,6 +72,7 @@ export function scene(nodes: readonly SceneNode[], links: readonly [string, stri
     s.links[j++] = ib;
   }
   s.links = s.links.slice(0, j);
+  s.families = zoneFamilies(s.root, s.fam, (i) => s.items[i].waits);
   return s;
 }
 
@@ -74,7 +84,13 @@ export type State = {
   hover?: string | null; // the node hovered: too small to be a bubble, its label is painted readable
   near: ReadonlySet<string> | null; // a hover: these stay sharp, the rest fades
   nearLinks: ReadonlySet<number> | null; // ... and these links, by index
+  moved?: number; // changes as the layout moves: the zones are drawn again (at most every ZONES ms)
 };
+
+export const EASE = 160; // ms: a disc's radius eases to a new one (as a bubble's core, espace.css --morph)
+export const ZONES = 120; // ms: the zones drawn again at most this often while the layout moves
+const TEX = 420; // the zones' picture's longer side, in px
+const PAD = 40; // a zone's margin round each of its nodes, in the graph's units
 
 export const FADE = 180; // ms: a disc fades as its bubble fades in (espace.css, lod-in)
 export const LABELS = 300; // labels at most in a paint
@@ -83,7 +99,7 @@ const STEPS = 16; // the discs' steps of opacity
 // paintStats: the last paints' cost, for the ?leger page.
 export const paintStats = { ms: 0, last: 0, paints: 0, discs: 0, labels: 0, links: 0 };
 
-type Theme = { bg: string; fg: string; fg3: string; ring: string; edge: string; edgeOn: string; accent: string; run: string; ok: string; neutral: string; fills: string[]; dots: string[]; font: string; mono: string };
+type Theme = { bg: string; fg: string; fg3: string; ring: string; edge: string; edgeOn: string; accent: string; run: string; ok: string; neutral: string; sleep: string; fills: string[]; dots: string[]; zones: string[]; names: string[]; zoneA: number; font: string; mono: string };
 
 const hex = (s: string): [number, number, number] | null => {
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(s.trim());
@@ -105,6 +121,7 @@ function readTheme(): Theme {
   const c = (k: string, d: string) => hex(v(k, d)) ?? hex(d)!;
   const bg = c("--bg", "#f7f7f8"), card = c("--card", "#ffffff"), fg = c("--fg", "#18181b"), fill = c("--fill-strong", "#e9e9ec");
   const share = (parseFloat(v("--fam-mix", "38%")) || 38) / 100;
+  const dark = (bg[0] + bg[1] + bg[2]) / 3 < 128;
   const fams = Array.from({ length: FAMILIES }, (_, i) => c(`--fam${i}`, "#7b828c"));
   return {
     bg: rgb(bg),
@@ -117,8 +134,13 @@ function readTheme(): Theme {
     run: rgb(c("--run", "#3b6ea8")),
     ok: rgb(c("--ok", "#30a46c")),
     neutral: rgb(mix(card, 0.5, fill)),
+    sleep: rgb(mix(fg, 0.3, bg)),
     fills: fams.map((f) => rgb(mix(f, share, card))),
     dots: fams.map((f) => rgb(f)),
+    // a zone: its family's hue, greyed toward the page (low in saturation)
+    zones: fams.map((f) => rgb(mix(f, 0.75, mix(fg, 0.5, bg)))),
+    names: fams.map((f) => rgb(mix(f, 0.45, fg))),
+    zoneA: dark ? 0.2 : 0.24,
     font: v("--font", "ui-sans-serif, system-ui, sans-serif"),
     mono: v("--mono", "ui-monospace, monospace"),
   };
@@ -148,9 +170,25 @@ export class Painter {
   // middle of it)
   private asc = 0.9;
   private desc = 0.22;
+  // each disc's radius as drawn, easing to its node's (cur, for the scene curOf)
+  private cur = new Float32Array(0);
+  private curOf: Scene | null = null;
+  private lastT = 0;
+  // the zones as last drawn, in the graph's units (zones.ts)
+  private zone: { tex: HTMLCanvasElement; breath: HTMLCanvasElement | null; x0: number; y0: number; t: number; m: number; shapes: Shape[]; scene: Scene; theme: Theme; moved?: number; at: number } | null = null;
+  private union: HTMLCanvasElement | null = null;
+  private breathCtx: CanvasRenderingContext2D | null = null;
 
-  constructor(private canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
+  // breath: a canvas under this one, for the zones of the families where
+  // something waits, its opacity breathing in CSS (espace.css): no paint
+  // at rest for it.
+  constructor(private canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, private breath: HTMLCanvasElement | null = null) {
     this.ctx = ctx;
+    try {
+      this.breathCtx = breath?.getContext("2d") ?? null;
+    } catch {
+      this.breathCtx = null;
+    }
     this.theme = readTheme();
     this.halo = this.sprite();
     this.metrics();
@@ -165,14 +203,14 @@ export class Painter {
     }
   }
 
-  static on(canvas: HTMLCanvasElement): Painter | null {
+  static on(canvas: HTMLCanvasElement, breath: HTMLCanvasElement | null = null): Painter | null {
     let ctx: CanvasRenderingContext2D | null = null;
     try {
       ctx = canvas.getContext("2d");
     } catch {
       ctx = null;
     }
-    return ctx ? new Painter(canvas, ctx) : null;
+    return ctx ? new Painter(canvas, ctx, breath) : null;
   }
 
   // retheme reads the colours again (the theme changed).
@@ -206,6 +244,127 @@ export class Painter {
     this.dpr = dpr;
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
+    if (this.breath) {
+      this.breath.width = this.canvas.width;
+      this.breath.height = this.canvas.height;
+    }
+  }
+
+  // ease moves each disc's radius toward its node's, at now; it tells
+  // whether some still move.
+  private ease(s: Scene, now: number): boolean {
+    const n = s.items.length;
+    if (this.curOf !== s) {
+      const old = this.curOf, oc = this.cur, nc = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        const j = old?.index.get(s.items[i].id);
+        nc[i] = j !== undefined && old ? oc[j] : s.items[i].r;
+      }
+      this.cur = nc;
+      this.curOf = s;
+    }
+    const dt = this.lastT ? Math.max(0, Math.min(100, now - this.lastT)) : 0;
+    this.lastT = now;
+    const e = 1 - Math.exp(-dt / EASE);
+    let moving = false;
+    const cur = this.cur;
+    for (let i = 0; i < n; i++) {
+      const to = s.items[i].r;
+      let c = cur[i];
+      if (c === to) continue;
+      c += (to - c) * e;
+      if (Math.abs(to - c) < 0.05) c = to;
+      else moving = true;
+      cur[i] = c;
+    }
+    return moving;
+  }
+
+  // zones draws the families' zones again when the layout moved (at most
+  // every ZONES ms), the scene or the theme changed: the union of their
+  // nodes' discs widened by PAD, of their colour, blurred, in a picture of
+  // TEX px in the graph's units. It tells whether a drawing waits.
+  private zones(s: Scene, xy: ArrayLike<number>, st: State, now: number): boolean {
+    if (!LOD.zones || !s.families.length) {
+      this.zone = null;
+      return false;
+    }
+    const z = this.zone;
+    const same = z && z.scene === s && z.theme === this.theme;
+    if (same && z.moved === st.moved) return false;
+    if (same && now - z.at < ZONES) return true;
+    const shapes = s.families.map((f) => zoneShape(f, xy));
+    const cur = this.cur;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const pads = shapes.map((sh) => padOf(sh, PAD));
+    shapes.forEach((sh, j) => {
+      for (const i of sh.keep) {
+        const R = cur[i] + pads[j], x = xy[i * 2], y = xy[i * 2 + 1];
+        if (x - R < x0) x0 = x - R;
+        if (y - R < y0) y0 = y - R;
+        if (x + R > x1) x1 = x + R;
+        if (y + R > y1) y1 = y + R;
+      }
+    });
+    if (!(x1 > x0 && y1 > y0)) {
+      this.zone = null;
+      return false;
+    }
+    const t = TEX / Math.max(x1 - x0, y1 - y0);
+    const blur = Math.max(2, PAD * t * 0.9);
+    const m = Math.ceil(blur * 2.5);
+    const W = Math.ceil((x1 - x0) * t) + m * 2, H = Math.ceil((y1 - y0) * t) + m * 2;
+    const U = (this.union ??= document.createElement("canvas"));
+    const draw = (only: (sh: Shape, f: Family) => boolean, into: HTMLCanvasElement | null): HTMLCanvasElement | null => {
+      if (U.width !== W || U.height !== H) {
+        U.width = W;
+        U.height = H;
+      }
+      const u = U.getContext("2d");
+      if (!u) return null;
+      u.clearRect(0, 0, W, H);
+      let any = false;
+      shapes.forEach((sh, j) => {
+        const f = s.families[j];
+        if (!only(sh, f) || !sh.keep.length) return;
+        any = true;
+        u.fillStyle = this.theme.zones[f.fam % FAMILIES];
+        u.beginPath();
+        for (const i of sh.keep) {
+          const px = (xy[i * 2] - x0) * t + m, py = (xy[i * 2 + 1] - y0) * t + m, r = (cur[i] + pads[j]) * t;
+          u.moveTo(px + r, py);
+          u.arc(px, py, r, 0, Math.PI * 2);
+        }
+        u.fill();
+      });
+      if (!any) return null;
+      const out = into ?? document.createElement("canvas");
+      out.width = W;
+      out.height = H;
+      const o: CanvasRenderingContext2D | null = out.getContext("2d");
+      if (!o) return null;
+      if (typeof (o as { filter?: unknown }).filter === "string") {
+        o.filter = `blur(${blur.toFixed(1)}px)`;
+        o.drawImage(U, 0, 0);
+        o.filter = "none";
+      } else {
+        // no filter: drawn small and back, smoothed
+        o.imageSmoothingEnabled = true;
+        o.drawImage(U, 0, 0, W / 4, H / 4);
+        o.globalCompositeOperation = "copy";
+        o.drawImage(out, 0, 0, W / 4, H / 4, 0, 0, W, H);
+        o.globalCompositeOperation = "source-over";
+      }
+      return out;
+    };
+    const tex = draw(() => true, z?.tex ?? null);
+    if (!tex) {
+      this.zone = null;
+      return false;
+    }
+    const breath = this.breathCtx ? draw((_, f) => f.waits, z?.breath ?? null) : null;
+    this.zone = { tex, breath, x0, y0, t, m, shapes, scene: s, theme: this.theme, moved: st.moved, at: now };
+    return false;
   }
 
   // paint paints the scene for the camera v, the nodes where xy has them;
@@ -226,7 +385,9 @@ export class Painter {
     }
     const { sx, sy, sr, bucket } = this;
     const k = v.k, W = this.w, H = this.h;
-    let fading = false;
+    let fading = this.ease(s, now);
+    const cur = this.cur;
+    if (this.zones(s, xy, st, now)) fading = true;
     // each node on screen: where, how big, how much of its disc shows (0:
     // its bubble or its page in its place)
     const show = new Float32Array(n);
@@ -234,7 +395,7 @@ export class Painter {
       const id = s.items[i].id;
       sx[i] = xy[i * 2] * k + v.x;
       sy[i] = xy[i * 2 + 1] * k + v.y;
-      sr[i] = discR(s.items[i].r, s.done[i] === 1, k);
+      sr[i] = discR(cur[i], s.done[i] === 1, k);
       if (st.open.has(id)) continue;
       let a = 1;
       if (st.mounted.has(id)) {
@@ -247,6 +408,25 @@ export class Painter {
       show[i] = a;
     }
     const seen = (i: number, m: number) => sx[i] + m >= 0 && sx[i] - m <= W && sy[i] + m >= 0 && sy[i] - m <= H;
+
+    // the zones, under all: their picture, moved and scaled by the camera
+    const Z = this.zone, za = Z ? T.zoneA * zoneAlpha(k) : 0;
+    const bc = this.breathCtx;
+    if (bc) {
+      bc.setTransform(1, 0, 0, 1, 0, 0);
+      bc.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+    if (Z) {
+      const zx = (Z.x0 - Z.m / Z.t) * k + v.x, zy = (Z.y0 - Z.m / Z.t) * k + v.y, zw = (Z.tex.width / Z.t) * k, zh = (Z.tex.height / Z.t) * k;
+      ctx.imageSmoothingEnabled = true;
+      ctx.globalAlpha = za * (st.near ? 0.5 : 1);
+      ctx.drawImage(Z.tex, zx, zy, zw, zh);
+      if (bc && Z.breath) {
+        bc.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        bc.globalAlpha = Math.min(1, za * 1.6);
+        bc.drawImage(Z.breath, zx, zy, zw, zh);
+      }
+    }
 
     // the links: one stroke; those near a hover in a second
     let nl = 0;
@@ -297,9 +477,14 @@ export class Painter {
     const B = (FAMILIES + 1) * STEPS;
     const count = new Int32Array(B + 1);
     let discs = 0;
+    let sleeping = 0;
     for (let i = 0; i < n; i++) {
       bucket[i] = -1;
       if (show[i] === 0 || !seen(i, sr[i] + 2)) continue;
+      if (s.sleep[i]) {
+        sleeping++;
+        continue;
+      }
       const f = colour ? s.fam[i] + 1 : 0;
       const q = Math.min(STEPS - 1, Math.round(s.alpha[i] * show[i] * STEPS) - 1);
       bucket[i] = f * STEPS + Math.max(0, q);
@@ -307,7 +492,24 @@ export class Painter {
       discs++;
     }
     for (let b = 0; b < B; b++) count[b + 1] += count[b];
-    const sorted = new Int32Array(discs);
+    // the nodes asleep: small pale dots, under the others, one path
+    if (sleeping) {
+      ctx.globalAlpha = st.near ? 0.2 : 0.7;
+      ctx.fillStyle = T.sleep;
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        if (!s.sleep[i] || show[i] === 0 || !seen(i, sr[i] + 2)) continue;
+        const r = Math.max(0.9, sr[i]);
+        if (r < 2) ctx.rect(sx[i] - r, sy[i] - r, r * 2, r * 2);
+        else {
+          ctx.moveTo(sx[i] + r, sy[i]);
+          ctx.arc(sx[i], sy[i], r, 0, Math.PI * 2);
+        }
+      }
+      ctx.fill();
+      discs += sleeping;
+    }
+    const sorted = new Int32Array(discs - sleeping);
     const fill = count.slice(0, B);
     for (let i = 0; i < n; i++) if (bucket[i] >= 0) sorted[fill[bucket[i]]++] = i;
     for (let b = 0; b < B; b++) {
@@ -384,9 +586,12 @@ export class Painter {
     let font = "";
     for (let o = 0; o < n && labels < LABELS; o++) {
       const i = s.order[o];
-      const r = s.items[i].r;
-      const la = labelAlpha(r * k);
-      if (la <= 0) break; // the rest are smaller
+      const r = cur[i];
+      const la = labelAlpha(r * k) * (s.sleep[i] ? 0.6 : 1);
+      if (la <= 0) {
+        if (s.sleep[i]) continue;
+        break; // the rest are smaller
+      }
       if (show[i] === 0) continue;
       const root = s.depth[i] === 0;
       const fs = (root ? 14.5 : 12.5) * k;
@@ -400,7 +605,7 @@ export class Painter {
       ctx.strokeStyle = T.bg;
       ctx.lineWidth = Math.max(2, fs * 0.28);
       ctx.strokeText(s.titles[i], sx[i], y);
-      ctx.fillStyle = s.done[i] ? T.fg3 : T.fg;
+      ctx.fillStyle = s.done[i] || s.sleep[i] ? T.fg3 : T.fg;
       ctx.fillText(s.titles[i], sx[i], y);
       if (root && sr[i] >= 10 && seen(i, sr[i])) {
         ctx.font = font = `${(10.5 * k).toFixed(1)}px ${T.mono}`;
@@ -413,6 +618,43 @@ export class Painter {
         ctx.textBaseline = "alphabetic";
       }
       labels++;
+    }
+    // far out, each zone's family name, large in its middle; it fades as
+    // its root's own label comes (they cross-fade)
+    if (Z) {
+      const most = Z.shapes.reduce((a, sh) => Math.max(a, sh.keep.length), 1);
+      ctx.textBaseline = "middle";
+      const names: { j: number; px: number; py: number; fs: number; na: number }[] = [];
+      const boxes: [number, number, number, number][] = [];
+      for (let j = 0; j < Z.shapes.length; j++) {
+        const sh = Z.shapes[j], f = s.families[j];
+        if (sh.keep.length < 2) continue;
+        const na = nameAlpha(labelAlpha(cur[f.root] * k));
+        if (na <= 0.02) continue;
+        const px = sh.cx * k + v.x, py = sh.cy * k + v.y;
+        const fs = Math.round(12 + 9 * Math.sqrt(sh.keep.length / most));
+        if (px < -300 || px > W + 300 || py < -fs || py > H + fs) continue;
+        const fnt = `600 ${fs}px ${T.font}`;
+        if (fnt !== font) ctx.font = font = fnt;
+        const w = ctx.measureText(s.titles[f.root]).width / 2;
+        names.push({ j, px, py, fs, na });
+        boxes.push([px - w, py - fs * 0.6, px + w, py + fs * 0.6]);
+      }
+      const drawn = declutter(boxes);
+      for (let q = 0; q < names.length; q++) {
+        if (!drawn[q]) continue;
+        const { j, px, py, fs, na } = names[q], f = s.families[j];
+        const fnt = `600 ${fs}px ${T.font}`;
+        if (fnt !== font) ctx.font = font = fnt;
+        ctx.globalAlpha = na * 0.9 * (st.near ? 0.3 : 1);
+        ctx.strokeStyle = T.bg;
+        ctx.lineWidth = 4;
+        const title = s.titles[f.root];
+        ctx.strokeText(title, px, py);
+        ctx.fillStyle = T.names[f.fam % FAMILIES];
+        ctx.fillText(title, px, py);
+      }
+      ctx.textBaseline = "alphabetic";
     }
     // the node hovered, a disc still: ringed, its label readable
     const hi = st.hover ? s.index.get(st.hover) : undefined;

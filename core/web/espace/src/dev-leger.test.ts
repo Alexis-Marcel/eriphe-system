@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { GraphNode } from "./data/api";
 import { secondBrain } from "./dev-leger";
+import { DAY } from "./graph/life";
 import { pairs } from "./graph/layout";
 
 // The ?leger page's second brain is shaped as one: about 1,100 notes and
@@ -26,6 +28,21 @@ describe("the second brain preset", () => {
     expect(d.filter((k) => k === 0).length).toBeGreaterThan(50);
     expect(d.filter((k) => k <= 2).length).toBeGreaterThan(300);
     expect(nodes.filter((x) => !x.parent).length).toBeGreaterThan(20);
+  });
+
+  it("lives as a real one: a handful waiting in a few families, some running or kept up, many asleep", () => {
+    const now = Date.now();
+    const age = (x: GraphNode) => (now - Date.parse(x.updated)) / DAY;
+    const waiting = nodes.filter((x) => x.status === "waits");
+    expect(waiting.length).toBeGreaterThanOrEqual(2);
+    expect(waiting.length).toBeLessThanOrEqual(8);
+    const top = (x: GraphNode): string => (x.parent ? top(nodes.find((y) => y.id === x.parent)!) : x.id);
+    expect(new Set(waiting.map(top)).size).toBeLessThanOrEqual(3);
+    expect(nodes.filter((x) => x.status === "running").length).toBeGreaterThan(5);
+    expect(nodes.filter((x) => x.maintained?.length).length).toBeGreaterThan(5);
+    expect(nodes.filter((x) => age(x) < 7).length).toBeGreaterThan(50);
+    expect(nodes.filter((x) => age(x) > 21).length).toBeGreaterThan(nodes.length * 0.4);
+    expect(nodes.filter((x) => age(x) > 120).length).toBeGreaterThan(50);
   });
 
   it("is the same each time", () => {

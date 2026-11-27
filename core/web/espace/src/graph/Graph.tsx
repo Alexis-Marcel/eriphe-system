@@ -7,9 +7,10 @@ import { Orb } from "../orb/Orb";
 import { Page } from "../page/Page";
 import { onReads, readsUnderWay } from "../page/usePage";
 import { bigBox, bigRoom, boxAt, edgeMark, frameAll, MIN_K, frameAlone, frameAround, framePages, pageMax, type Box, type Cam } from "./camera";
-import { decide, drawnRadius, families, GRAB, hit, LOD, lodVersion, NEAR, onLod, same, type View } from "./lod";
+import { decide, drawnRadius, families, GRAB, hit, LOD, lodVersion, NEAR, onLod, rootsOf, same, type View } from "./lod";
+import { degrees, lifeRadius } from "./life";
 import { FAMILIES, Painter, scene, type Scene } from "./paint";
-import { CENTRING, edgePush, edgeStep, extent, FORCES, onForces, pairs, Sim, SLICE, type LNode, type Pos, type Pt } from "./layout";
+import { CENTRING, edgePush, edgeStep, extent, FORCES, onForces, pairs, setFamily, Sim, SLICE, type LNode, type Pos, type Pt } from "./layout";
 import { coreShape, pickTiles, TILE, variation } from "./glance";
 import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits } from "./model";
 import { TileFace } from "./Tile";
@@ -137,12 +138,35 @@ export function Graph({ live }: { live: boolean }) {
   const openKey = open.filter((id) => ids.has(id)).join(",");
   const openIds = useMemo(() => (openKey ? openKey.split(",") : []), [openKey]);
   const lit = useMemo(() => new Set(openIds.flatMap((id) => subtree(nodes, id))), [openIds, nodes]);
-  const rOf = (x: GraphNode) => radiusOf(x, nodes);
+  const rOf = (x: GraphNode) => (lod && life.get(x.id)?.r) || radiusOf(x, nodes);
   // The nodes drawn as tiles (graph/glance.ts): a tile's body is its
   // rounded rectangle, for the layout and the camera alike.
   const tilesWas = useRef<string[]>([]);
   const tiles = useMemo(() => pickTiles(list, openIds, tilesWas.current), [list, openIds]);
   useEffect(() => void (tilesWas.current = tiles), [tiles]);
+  // A big graph's sizes by life, and the nodes asleep (life.ts, the knobs
+  // of lod.ts): worked out again as the graph or the knobs change, and as
+  // time goes (now, every few minutes: what aged).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 5 * 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const lifeKey = `${LOD.life}:${LOD.lifeStrength}:${LOD.sleep}:${LOD.sleepDays}`;
+  const degree = useMemo(() => (lod ? degrees(list.map((x) => ({ id: x.id, parent: x.parent, links: x.links }))) : null), [lod, list]);
+  const life = useMemo(() => {
+    const out = new Map<string, { r: number; sleeps: boolean }>();
+    if (!lod || !degree) return out;
+    for (const x of list) {
+      const tile = !!(x.glance?.shown && !x.glance.seen);
+      out.set(x.id, lifeRadius(radiusOf(x, nodes), { status: x.status, updated: x.updated, maintained: x.maintained, tile }, degree.get(x.id) ?? 0, now, LOD));
+    }
+    return out;
+  }, [lod, degree, list, nodes, now, lifeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A big graph's continents keep each family together (layout.ts, FAMILY).
+  useEffect(() => setFamily(lod && LOD.zones ? LOD.group : 0), [lod, lodV]);
+  useEffect(() => () => setFamily(0), []);
+  const sleeps = (x: GraphNode) => lod && !!life.get(x.id)?.sleeps && !openIds.includes(x.id);
   const tileOf = (x: GraphNode) => (tiles.includes(x.id) ? TILE : undefined);
   const bodyOf = (x: GraphNode) => {
     const b = labelBox(x, titleOf(x, external), depthOf(nodes, x.id), rOf(x));
@@ -209,10 +233,10 @@ export function Graph({ live }: { live: boolean }) {
   const [held, setHeld] = useState<string | null>(null);
   const layoutKey = useMemo(
     () =>
-      list.map((x) => `${x.id}:${parentOf(x) ?? ""}:${(x.links ?? []).join("+")}:${Math.round(rOf(x))}:${titleOf(x, external).length}:${x.status}:${tileOf(x) ? "tile" : ""}`).join(",") +
+      list.map((x) => `${x.id}:${parentOf(x) ?? ""}:${(x.links ?? []).join("+")}:${rOf(x)}:${titleOf(x, external).length}:${x.status}:${tileOf(x) ? "tile" : ""}`).join(",") +
       "|" +
       openIds.map((id) => `${id}:${roomOf(id)[0]}x${roomOf(id)[1]}`).join(","),
-    [list, openIds, tiles, pageH, sized, size.w, size.h, foot, external], // eslint-disable-line react-hooks/exhaustive-deps
+    [list, openIds, tiles, pageH, sized, size.w, size.h, foot, external, life], // eslint-disable-line react-hooks/exhaustive-deps
   );
   // The bodies as the simulation has them, the same while the layout is.
   const bodies: LNode[] = useMemo(
@@ -232,17 +256,18 @@ export function Graph({ live }: { live: boolean }) {
   // colour, worked out once per graph; its nodes are born already, as
   // discs (a bubble come is not born again).
   const famOf = useMemo(() => families(list.map((x) => ({ id: x.id, parent: parentOf(x) })), FAMILIES), [list]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rootOf = useMemo(() => (lod ? rootsOf(list.map((x) => ({ id: x.id, parent: parentOf(x) }))).rootOf : null), [lod, list]); // eslint-disable-line react-hooks/exhaustive-deps
   const sceneOf: Scene | null = useMemo(() => {
     if (!lod) return null;
     return scene(
       list.map((x, i) => {
         const title = plainTitle(x, external), d = depthOf(nodes, x.id);
         born.add(x.id);
-        return { id: x.id, r: bodies[i]?.id === x.id ? bodies[i].r : rOf(x), depth: d, light: lightOf(x), status: x.status, fam: famOf.get(x.id) ?? -1, title, code: d === 0 ? codeOf(title) : "" };
+        return { id: x.id, r: bodies[i]?.id === x.id ? bodies[i].r : rOf(x), depth: d, light: lightOf(x), status: x.status, fam: famOf.get(x.id) ?? -1, title, code: d === 0 ? codeOf(title) : "", root: rootOf?.get(x.id), sleeps: sleeps(x) };
       }),
       links.map((l) => [l.a, l.b]),
     );
-  }, [lod, bodies, list, famOf]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lod, bodies, list, famOf, rootOf, life, openIds]); // eslint-disable-line react-hooks/exhaustive-deps
   const sceneNow = useRef(sceneOf);
   sceneNow.current = sceneOf;
   const lodNow = useRef(lod);
@@ -255,9 +280,11 @@ export function Graph({ live }: { live: boolean }) {
   const linksNow = useRef(links);
   linksNow.current = links;
   const placed = useRef(0);
+  const moved = useRef(0); // each place: the canvas's zones follow (paint.ts)
   const linkByNow = useRef(linkBy);
   linkByNow.current = linkBy;
   const place = () => {
+    moved.current++;
     const E = els.current;
     for (const [id, el] of E.nodes) {
       const p = sim.at(id);
@@ -485,7 +512,7 @@ export function Graph({ live }: { live: boolean }) {
     const xy = xyNow();
     if (xy.length !== S.items.length * 2) return;
     P.resize(sizeNow.current.w, sizeNow.current.h);
-    const fading = P.paint(S, xy, view(), { mounted: els.current.nodes, swapped: swaps.current, open: openSetNow.current, hover: hovered.current, near: nearBy.current?.ids ?? null, nearLinks: nearBy.current?.links ?? null }, performance.now());
+    const fading = P.paint(S, xy, view(), { mounted: els.current.nodes, swapped: swaps.current, open: openSetNow.current, hover: hovered.current, near: nearBy.current?.ids ?? null, nearLinks: nearBy.current?.links ?? null, moved: moved.current }, performance.now());
     if (fading) paintSoon();
   };
   const paintNow = useRef(paint);
@@ -494,9 +521,10 @@ export function Graph({ live }: { live: boolean }) {
     const go = () => paintNow.current();
     return () => void frame.render(go);
   });
+  const breath = useRef<HTMLCanvasElement | null>(null);
   const onCanvas = (el: HTMLCanvasElement | null) => {
     canvas.current = el;
-    painter.current = el ? Painter.on(el) : null;
+    painter.current = el ? Painter.on(el, breath.current) : null;
     if (el) paintSoon();
   };
   // The theme changed (the user's, or the system's), or the fonts came:
@@ -909,6 +937,7 @@ export function Graph({ live }: { live: boolean }) {
       onPointerCancel={onUp}
       onPointerLeave={() => lod && !grab.current && hovered.current && !openIds.includes(hovered.current) && hoverOn(null)}
     >
+      {lod && <canvas className="gr-canvas gr-breath" ref={breath} aria-hidden="true" />}
       {lod && <canvas className="gr-canvas" ref={onCanvas} aria-hidden="true" />}
       <motion.div className="gr-world" style={{ x: camX, y: camY, scale: camK }}>
         {!lod && (
@@ -943,7 +972,8 @@ export function Graph({ live }: { live: boolean }) {
               open={openIds.includes(x.id)}
               held={held === x.id}
               light={lightOf(x)}
-              fam={lod && LOD.color && (famOf.get(x.id) ?? -1) >= 0 ? `var(--fam${famOf.get(x.id)})` : undefined}
+              fam={lod && LOD.color && !sleeps(x) && (famOf.get(x.id) ?? -1) >= 0 ? `var(--fam${famOf.get(x.id)})` : undefined}
+              sleeps={sleeps(x)}
               waitsWord={t("espace.waits")}
               maintainedWord={x.maintained?.length ? t("espace.maintained", x.maintained.join(", ")) : ""}
               onGrab={onGrab}
@@ -1090,7 +1120,7 @@ const born = new Set<string>();
 const Bubble = memo(function Bubble(p: {
   place: (el: HTMLElement | null) => void;
   x: GraphNode; title: string; said: string; d: number; r: number; tile?: [number, number]; lang: Lang; glanceWord: string;
-  open: boolean; held: boolean; light: number; fam?: string; waitsWord: string; maintainedWord: string;
+  open: boolean; held: boolean; light: number; fam?: string; sleeps?: boolean; waitsWord: string; maintainedWord: string;
   onGrab: (id: string, e: PtrEvent) => void; onOpen: (id: string, beside: boolean) => void; onHover: (id: string | null) => void;
 }) {
   const { x, d, r, tile } = p;
@@ -1103,7 +1133,7 @@ const Bubble = memo(function Bubble(p: {
   // the same with pages open or not: only a hover fades (Graph, hoverOn)
   const light = tile ? 1 : x.status === "done" ? Math.max(0.35, p.light * 0.8) : Math.max(0.5, p.light);
   const ring = R + (d === 0 ? 9 : 7);
-  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.status, yours && "yours", p.held && "held", p.open && "open", p.maintainedWord && "maintained", x.external && "external", x.unasked && "unasked", tile && "tiled", p.fam && "fam"]
+  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.status, yours && "yours", p.held && "held", p.open && "open", p.maintainedWord && "maintained", x.external && "external", x.unasked && "unasked", tile && "tiled", p.fam && "fam", p.sleeps && "sleeps"]
     .filter(Boolean)
     .join(" ");
   const hide = tile ? " off" : "";

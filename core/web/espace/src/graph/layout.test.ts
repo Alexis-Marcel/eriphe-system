@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { boxAt, FLOOR, frameAround } from "./camera";
 import { graph, rng } from "./generated";
-import { DEFAULT_FORCES, EDGE_DELAY, EDGE_RAMP, EDGE_SPEED, EDGE_ZONE, edgePush, edgeStep, extent, FORCES, pairs, Quad, repelPairs, setForces, Sim, T, type LNode, type Pos, type Pt } from "./layout";
+import { DEFAULT_FORCES, FAMILY, setFamily, EDGE_DELAY, EDGE_RAMP, EDGE_SPEED, EDGE_ZONE, edgePush, edgeStep, extent, FORCES, pairs, Quad, repelPairs, setForces, Sim, T, type LNode, type Pos, type Pt } from "./layout";
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
@@ -518,6 +518,47 @@ describe.each([
     } finally {
       setForces(DEFAULT_FORCES);
     }
+  });
+
+  it("warms the graph gently when only sizes change (a big graph's life), and keeps it apart", () => {
+    const nodes = owner();
+    const sim = new Sim(FORCES);
+    sim.sync(nodes);
+    sim.settle();
+    sim.sync(nodes.map((n, i) => (i % 3 ? n : { ...n, r: n.r * 1.4 })));
+    expect(sim.asleep()).toBe(false);
+    expect(sim.energy()).toBeLessThanOrEqual(T.nudge);
+    sim.settle();
+    expect(overlaps(sim, nodes.map((n, i) => (i % 3 ? n : { ...n, r: n.r * 1.4 })))).toEqual([]);
+    // a link changed is a change of the graph: warmed as before
+    sim.sync(nodes.map((n, i) => (i === 1 ? { ...n, links: [...n.links, nodes[0].id] } : n)));
+    expect(sim.energy()).toBeGreaterThanOrEqual(T.warm);
+  });
+
+  it("keeps a family together when asked (a big graph's continents)", () => {
+    // two families, linked across by every node: they mix, unless pulled
+    const fam = (f: string, n: number): LNode[] => [{ id: f, links: [], r: 12, lw: 40, lh: 18 }, ...Array.from({ length: n }, (_, i) => ({ id: `${f}${i}`, parent: f, links: [`${f === "a" ? "b" : "a"}${i}`], r: 8, lw: 40, lh: 18 }))];
+    const nodes = [...fam("a", 12), ...fam("b", 12)];
+    const spread = (pull: number) => {
+      setFamily(pull);
+      const sim = new Sim(FORCES);
+      sim.sync(nodes);
+      sim.settle();
+      const p = sim.positions();
+      const mid = (f: string) => {
+        const m = nodes.filter((n) => n.id[0] === f).map((n) => p[n.id]);
+        return [m.reduce((s, q) => s + q[0], 0) / m.length, m.reduce((s, q) => s + q[1], 0) / m.length] as Pt;
+      };
+      const [ca, cb] = [mid("a"), mid("b")];
+      // how far each node is from its family's middle, on average
+      return nodes.reduce((s, n) => s + dist(p[n.id], n.id[0] === "a" ? ca : cb), 0) / nodes.length;
+    };
+    try {
+      expect(spread(5)).toBeLessThan(spread(0));
+    } finally {
+      setFamily(0);
+    }
+    expect(FAMILY.pull).toBe(0);
   });
 
   it("scrolls at the edge after a wait, speeding up gently", () => {
