@@ -74,6 +74,7 @@ export function legerGraph(n: number, seed = 7): GraphNode[] {
 // second brain as people keep one, about 1,100 notes and 4,000 links.
 export const PRESETS: Record<string, { label: string; nodes: () => GraphNode[] }> = {
   cerveau: { label: "second cerveau", nodes: () => secondBrain() },
+  cerveau3000: { label: "3000 · 10000 liens", nodes: () => secondBrain(3000, 10000) },
 };
 
 // secondBrain is n fictitious notes shaped like a second brain: a couple

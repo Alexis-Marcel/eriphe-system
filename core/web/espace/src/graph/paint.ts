@@ -78,6 +78,7 @@ export type State = {
 
 export const FADE = 180; // ms: a disc fades as its bubble fades in (espace.css, lod-in)
 export const LABELS = 300; // labels at most in a paint
+const STEPS = 16; // the discs' steps of opacity
 
 // paintStats: the last paints' cost, for the ?leger page.
 export const paintStats = { ms: 0, last: 0, paints: 0, discs: 0, labels: 0, links: 0 };
@@ -274,17 +275,18 @@ export class Painter {
     }
 
     // the discs, by colour and opacity: a bucket each (the family's colour,
-    // or none, then four steps of opacity)
+    // or none, then STEPS steps of opacity: close enough to the bubble's
+    // own that the swap does not show)
     const colour = LOD.color;
-    const B = (FAMILIES + 1) * 4;
+    const B = (FAMILIES + 1) * STEPS;
     const count = new Int32Array(B + 1);
     let discs = 0;
     for (let i = 0; i < n; i++) {
       bucket[i] = -1;
       if (show[i] === 0 || !seen(i, sr[i] + 2)) continue;
       const f = colour ? s.fam[i] + 1 : 0;
-      const q = Math.min(3, Math.floor(s.alpha[i] * show[i] * 4 - 0.001));
-      bucket[i] = f * 4 + Math.max(0, q);
+      const q = Math.min(STEPS - 1, Math.round(s.alpha[i] * show[i] * STEPS) - 1);
+      bucket[i] = f * STEPS + Math.max(0, q);
       count[bucket[i] + 1]++;
       discs++;
     }
@@ -295,8 +297,8 @@ export class Painter {
     for (let b = 0; b < B; b++) {
       const from = count[b], to = count[b + 1];
       if (from === to) continue;
-      const f = Math.floor(b / 4) - 1, q = b % 4;
-      ctx.globalAlpha = (q + 1) / 4;
+      const f = Math.floor(b / STEPS) - 1, q = b % STEPS;
+      ctx.globalAlpha = (q + 1) / STEPS;
       ctx.beginPath();
       let rings = false;
       for (let j = from; j < to; j++) {
@@ -321,11 +323,11 @@ export class Painter {
     // the dots of tiny discs: their family's colour, so that a family reads
     // from far
     if (colour && k < 0.6) {
-      for (let b = 4; b < B; b++) {
+      for (let b = STEPS; b < B; b++) {
         const from = count[b], to = count[b + 1];
         if (from === to) continue;
-        ctx.globalAlpha = 0.55 * (((b % 4) + 1) / 4);
-        ctx.fillStyle = T.dots[Math.floor(b / 4) - 1];
+        ctx.globalAlpha = 0.55 * (((b % STEPS) + 1) / STEPS);
+        ctx.fillStyle = T.dots[Math.floor(b / STEPS) - 1];
         ctx.beginPath();
         for (let j = from; j < to; j++) {
           const i = sorted[j], r = sr[i];

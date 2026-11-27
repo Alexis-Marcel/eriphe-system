@@ -53,6 +53,10 @@ export const WAITS = 0.5;
 // At most BUDGET bubbles new to the page in a frame: a zoom in draws the
 // rest in the frames after, and no frame waits for a hundred.
 export const BUDGET = 40;
+// A disc smaller than GRAB px on screen is not dragged: pressed and moved,
+// it is the view that moves (a press meant as a pan on a far graph lands
+// on a disc more often than not); pressed and let go, it opens.
+export const GRAB = 8;
 
 export type Item = { id: string; r: number; waits: boolean };
 export type View = { x: number; y: number; k: number; w: number; h: number };

@@ -7,7 +7,7 @@ import { Orb } from "../orb/Orb";
 import { Page } from "../page/Page";
 import { onReads, readsUnderWay } from "../page/usePage";
 import { bigBox, bigRoom, boxAt, edgeMark, frameAll, MIN_K, frameAlone, frameAround, framePages, pageMax, type Box, type Cam } from "./camera";
-import { decide, families, hit, LOD, lodVersion, NEAR, onLod, same, type View } from "./lod";
+import { decide, drawnRadius, families, GRAB, hit, LOD, lodVersion, NEAR, onLod, same, type View } from "./lod";
 import { FAMILIES, Painter, scene, type Scene } from "./paint";
 import { CENTRING, edgePush, edgeStep, extent, FORCES, onForces, pairs, Sim, SLICE, type LNode, type Pos, type Pt } from "./layout";
 import { coreShape, pickTiles, TILE, variation } from "./glance";
@@ -653,7 +653,7 @@ export function Graph({ live }: { live: boolean }) {
   }, [camK, camX, camY]);
 
   /* ---------- dragging: the view, a bubble, a page by its head ---------- */
-  const pan = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null);
+  const pan = useRef<{ x: number; y: number; cx: number; cy: number; disc?: string; moved?: boolean } | null>(null);
   const grab = useRef<Grab | null>(null);
   const sizing = useRef<Sizing | null>(null);
   const [resizing, setResizing] = useState<string | null>(null);
@@ -673,13 +673,15 @@ export function Graph({ live }: { live: boolean }) {
     if ((e.target as HTMLElement).closest("button, .pg")) return;
     // A disc pressed: held as its bubble would be; let go where it was, it
     // opens.
+    // A small one (GRAB): the view pans, a press without a move opens it.
     const d = discAt(e);
-    if (d) {
+    const S = sceneNow.current, i = d ? S?.index.get(d) : undefined;
+    if (d && S && i !== undefined && drawnRadius(S.items[i].r, camK.get()) * camK.get() >= GRAB) {
       grabNode(d, e);
       if (grab.current) grab.current.disc = true;
       return;
     }
-    pan.current = { x: e.clientX, y: e.clientY, cx: camX.get(), cy: camY.get() };
+    pan.current = { x: e.clientX, y: e.clientY, cx: camX.get(), cy: camY.get(), disc: d ?? undefined };
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
   const grabNode = (id: string, e: PtrEvent) => {
@@ -813,15 +815,19 @@ export function Graph({ live }: { live: boolean }) {
       }
       return;
     }
-    if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) > 3) setManual(true);
+    if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) > 3) {
+      d.moved = true;
+      setManual(true);
+    }
     camX.jump(d.cx + e.clientX - d.x);
     camY.jump(d.cy + e.clientY - d.y);
   };
   const onUp = (e?: PtrEvent) => {
     if (sizing.current) return endResize();
-    const g = grab.current;
+    const g = grab.current, p = pan.current;
     grab.current = null;
     pan.current = null;
+    if (p?.disc && !p.moved && e?.type === "pointerup") return openNode(p.disc, e.metaKey || e.ctrlKey || e.shiftKey);
     if (edgeRaf.current) cancelAnimationFrame(edgeRaf.current);
     edgeRaf.current = null;
     // A disc pressed and let go without a move: a click on it.
@@ -916,7 +922,7 @@ export function Graph({ live }: { live: boolean }) {
 
         {/* The bubbles: the graph as the keyboard and a screen reader
             reach it (the pages are documents of their own, beside it); in
-            a big graph, those the camera sees and near (cull.ts). */}
+            a big graph, those big on the screen (lod.ts). */}
         <div role="application" aria-label={t("espace.graph")}>
           <Drawn
             shown={shown}
@@ -1076,7 +1082,7 @@ function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, Motion
 // of the keyboard's reach.
 // Its core fades with its weight, and more once done; its label does not:
 // a done node's label is in the faint grey that still reads (--fg3, AA).
-// A bubble of a big graph come back into view (cull.ts) is drawn where it
+// A bubble of a big graph come back into view (lod.ts) is drawn where it
 // is, at once: only a node new to the page is born.
 const born = new Set<string>();
 const Bubble = memo(function Bubble(p: {
