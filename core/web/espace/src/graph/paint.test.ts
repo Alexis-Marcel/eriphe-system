@@ -25,7 +25,7 @@ function counting() {
 
 const node = (id: string, r: number, x: Partial<SceneNode> = {}): SceneNode => ({ id, r, depth: 1, light: 1, status: "idle", fam: 0, title: `t ${id}`, code: "", ...x });
 const view = { x: 0, y: 0, k: 1, w: 1000, h: 600 };
-const none: State = { mounted: new Map(), swapped: new Map(), open: new Set(), near: null, nearLinks: null };
+const none: State = { mounted: new Map(), swapped: new Map(), open: new Set(), near: null };
 
 describe("the canvas", () => {
   const s = scene([node("a", 30, { depth: 0 }), node("b", 10), node("c", 10, { status: "waits" }), node("far", 10)], [["a", "b"]]);
@@ -75,4 +75,35 @@ describe("the canvas", () => {
     p.paint(one(20), two, view, none, (t += 16));
     expect(radii[1]).toBe(20);
   });
+
+  it("strokes the links by their ends' life, each class once, those of a node open, held or hovered lit", () => {
+    const { n, ctx } = counting();
+    const alphas: number[] = [];
+    const c = ctx as unknown as { globalAlpha: number; stroke: () => void; strokeStyle: string };
+    c.stroke = () => void (n.strokes.push(String(c.strokeStyle)), alphas.push(c.globalAlpha));
+    // a living root r; a and b living, s and t asleep
+    const t = scene(
+      [node("r", 20, { depth: 0, end: null }), node("a", 10), node("b", 10), node("s", 10, { sleeps: true }), node("t", 10, { sleeps: true })],
+      [["a", "b"], ["s", "t"], ["a", "s"], ["r", "s"], ["r", "a"]],
+    );
+    // living–living, the root's to a: class 0; a–s: 1; s–t and the root's to s: 2
+    expect([...t.bands]).toEqual([0, 2, 3, 5]);
+    const xy = Float32Array.from([100, 100, 150, 100, 200, 100, 250, 100, 300, 100]); // none long on screen
+    const p = new Painter(document.createElement("canvas"), ctx);
+    p.resize(1000, 600);
+    p.paint(t, xy, view, none, 0);
+    const links = alphas.slice(0, 3);
+    expect(links[0]).toBeGreaterThan(links[1]);
+    expect(links[1]).toBeGreaterThan(links[2]);
+    // s open: its three links lit, in a stroke of their own, the rest as
+    // they were (only class 0's left)
+    alphas.length = 0;
+    p.paint(t, xy, view, { ...none, open: new Set(["s"]) }, 16);
+    expect(alphas.slice(0, 2)).toEqual([links[0], 1]);
+    // t held: its one link lit, after the three classes
+    alphas.length = 0;
+    p.paint(t, xy, view, { ...none, held: "t" }, 32);
+    expect(alphas.slice(0, 4)).toEqual([...links, 1]);
+  });
 });
+

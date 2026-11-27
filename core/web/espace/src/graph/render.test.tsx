@@ -89,6 +89,57 @@ describe("the graph's frames", () => {
   });
 });
 
+// A graph of bubbles alone (below LOD.from nodes) has its sizes by life
+// and its nodes asleep too: one idle for weeks is a smaller, pale bubble,
+// still a button the keyboard reaches; a root never sleeps; a link takes
+// its ends' life, those of a node open lit.
+describe("a small graph's life", () => {
+  it("draws a node asleep as a smaller, pale bubble, a root awake, its links faint", async () => {
+    store.setState(empty(), true);
+    const old = new Date(Date.now() - 90 * 86_400_000).toISOString();
+    const aged = (x: GraphNode): GraphNode => ({ ...x, updated: old });
+    step(store, applyNodes, { reset: true, nodes: [aged(node("r")), aged(node("r1", "r")), node("r2", "r"), aged(node("x", undefined, ["r1"])), node("y", undefined, ["r2"])] });
+    const el = document.createElement("div");
+    document.body.append(el);
+    const root = createRoot(el);
+    await act(async () =>
+      root.render(
+        <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}>
+          <OrbProvider>
+            <Graph live />
+          </OrbProvider>
+        </WordsContext.Provider>,
+      ),
+    );
+    for (let i = 0; i < 5; i++) frame();
+    const bubble = (id: string) => el.querySelector<HTMLElement>(`.gr-node[data-node="${id}"]`)!;
+    const size = (id: string) => parseFloat(bubble(id).querySelector<HTMLElement>(".gr-core")!.style.width);
+    expect(el.querySelector("canvas.gr-canvas")).toBeNull();
+    // r1 asleep: smaller than r2, its sister awake, and pale; still a button
+    expect(bubble("r1").classList.contains("sleeps")).toBe(true);
+    expect(bubble("r2").classList.contains("sleeps")).toBe(false);
+    expect(size("r1")).toBeLessThan(size("r2"));
+    expect(bubble("r1").querySelector<HTMLButtonElement>("button.gr-core")!.tabIndex).not.toBe(-1);
+    // the root, as old, awake, its size whole
+    expect(bubble("r").classList.contains("sleeps")).toBe(false);
+    // the links: r–r1 and x–r1 hardly there (the root takes r1's life),
+    // r–r2 and y–r2 drawn
+    const lines = (sel: string) => el.querySelectorAll(`line.gr-link${sel}`).length;
+    expect(lines("")).toBe(4);
+    expect(lines('[data-life="2"]')).toBe(2);
+    expect(lines(":not([data-life])")).toBe(2);
+    expect(lines("[data-lit]")).toBe(0);
+    // r1 open: its two links lit
+    await act(async () => step(store, openPage, "r1", false));
+    frame();
+    expect(lines("[data-lit]")).toBe(2);
+
+    act(() => root.unmount());
+    el.remove();
+    store.setState(empty(), true);
+  });
+});
+
 // A big graph paints its nodes on a canvas and draws as bubbles only
 // those big on the screen, and no line of its links in the page: framed
 // whole, a few; zoomed in, those the camera sees, the cap at most; the

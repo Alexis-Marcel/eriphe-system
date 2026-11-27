@@ -1,3 +1,4 @@
+import { LINK_ALPHA, linkLife, type End } from "./life";
 import { drawnRadius, labelAlpha, LOD, type Item, type View } from "./lod";
 import { declutter, nameAlpha, padOf, zoneAlpha, zoneFamilies, zoneShape, type Family, type Shape } from "./zones";
 
@@ -28,11 +29,12 @@ export type Scene = {
   titles: string[];
   codes: string[]; // a root's short word, inside its disc
   order: Int32Array; // the nodes by radius, the biggest first: the labels' order
-  links: Int32Array; // the links, two indices each
+  links: Int32Array; // the links, two indices each, by their life (life.ts, linkLife): both ends living first
+  bands: Int32Array; // where each class of links starts, and their end (in links, not indices)
   index: Map<string, number>;
 };
 
-export type SceneNode = { id: string; r: number; depth: number; light: number; status: string; fam: number; title: string; code: string; root?: string; sleeps?: boolean };
+export type SceneNode = { id: string; r: number; depth: number; light: number; status: string; fam: number; title: string; code: string; root?: string; sleeps?: boolean; end?: End };
 
 export function scene(nodes: readonly SceneNode[], links: readonly [string, string][]): Scene {
   const n = nodes.length;
@@ -50,6 +52,7 @@ export function scene(nodes: readonly SceneNode[], links: readonly [string, stri
     codes: nodes.map((x) => x.code),
     order: new Int32Array(n),
     links: new Int32Array(links.length * 2),
+    bands: new Int32Array(4),
     index: new Map(nodes.map((x, i) => [x.id, i])),
   };
   nodes.forEach((x, i) => {
@@ -64,13 +67,19 @@ export function scene(nodes: readonly SceneNode[], links: readonly [string, stri
   });
   const by = nodes.map((_, i) => i).sort((a, b) => nodes[b].r - nodes[a].r || a - b);
   s.order.set(by);
+  // the links by their ends' life: one stroke per class (paint)
+  const end = (i: number): End => (nodes[i].end === undefined ? !!nodes[i].sleeps : nodes[i].end);
   let j = 0;
-  for (const [a, b] of links) {
-    const ia = s.index.get(a), ib = s.index.get(b);
-    if (ia === undefined || ib === undefined) continue;
-    s.links[j++] = ia;
-    s.links[j++] = ib;
+  for (let c = 0; c < 3; c++) {
+    s.bands[c] = j >> 1;
+    for (const [a, b] of links) {
+      const ia = s.index.get(a), ib = s.index.get(b);
+      if (ia === undefined || ib === undefined || linkLife(end(ia), end(ib)) !== c) continue;
+      s.links[j++] = ia;
+      s.links[j++] = ib;
+    }
   }
+  s.bands[3] = j >> 1;
   s.links = s.links.slice(0, j);
   s.families = zoneFamilies(s.root, s.fam, (i) => s.items[i].waits);
   return s;
@@ -83,7 +92,7 @@ export type State = {
   open: ReadonlySet<string>; // covered by their page
   hover?: string | null; // the node hovered: too small to be a bubble, its label is painted readable
   near: ReadonlySet<string> | null; // a hover: these stay sharp, the rest fades
-  nearLinks: ReadonlySet<number> | null; // ... and these links, by index
+  held?: string | null; // the node held: its links lit, as an open node's and the hovered one's
   moved?: number; // changes as the layout moves: the zones are drawn again (at most every ZONES ms)
 };
 
@@ -94,6 +103,11 @@ const PAD = 40; // a zone's margin round each of its nodes, in the graph's units
 
 export const FADE = 180; // ms: a disc fades as its bubble fades in (espace.css, lod-in)
 export const LABELS = 300; // labels at most in a paint
+// A link longer than LONG px on screen is LONG_ALPHA as inked (it
+// crosses the graph: lit, it is whole).
+export const LONG = 260;
+export const LONG_ALPHA = 0.4;
+export const NEIGHBOURS = 24; // a hovered node's neighbours' labels at most
 const STEPS = 16; // the discs' steps of opacity
 
 // paintStats: the last paints' cost, for the ?leger page.
@@ -377,6 +391,25 @@ export class Painter {
   }
 
   // paint paints the scene for the camera v, the nodes where xy has them;
+  // litOf is the nodes whose links are lit: the one hovered, and while
+  // nothing is hovered, those open and the one held; null, none. Kept
+  // while they are the same (a pan paints without working it out again).
+  private lit: { s: Scene; key: string; on: Uint8Array | null } | null = null;
+  private litOf(s: Scene, st: State): Uint8Array | null {
+    const ids = st.near ? (st.hover ? [st.hover] : []) : [...st.open, ...(st.hover ? [st.hover] : []), ...(st.held ? [st.held] : [])];
+    const key = ids.join("\n");
+    if (this.lit && this.lit.s === s && this.lit.key === key) return this.lit.on;
+    let on: Uint8Array | null = null;
+    for (const id of ids) {
+      const i = s.index.get(id);
+      if (i === undefined) continue;
+      on ??= new Uint8Array(s.items.length);
+      on[i] = 1;
+    }
+    this.lit = { s, key, on };
+    return on;
+  }
+
   // it tells whether a fade goes on (paint again next frame).
   paint(s: Scene, xy: ArrayLike<number>, v: View, st: State, now: number): boolean {
     const t0 = performance.now();
@@ -443,36 +476,60 @@ export class Painter {
       }
     }
 
-    // the links: one stroke; those near a hover in a second
+    // the links: one stroke per class of life (life.ts, LINK_ALPHA), those
+    // of a node hovered, open or held lit, in a stroke of their own, over
     let nl = 0;
     const L = s.links;
+    const lit = this.litOf(s, st);
     ctx.lineWidth = 1;
     ctx.strokeStyle = T.edge;
     // far out, the links fade (a thousand lines are a grey cloud): a
     // third of their ink at the smallest scale, all of it from scale 1
-    ctx.globalAlpha = (st.near ? 0.12 : 1) * Math.max(0.35, Math.min(1, 0.35 + (0.65 * (k - 0.25)) / 0.75));
-    ctx.beginPath();
-    for (let j = 0; j < L.length; j += 2) {
-      const a = L[j], b = L[j + 1];
-      const ax = sx[a], ay = sy[a], bx = sx[b], by = sy[b];
-      if ((ax < 0 && bx < 0) || (ax > W && bx > W) || (ay < 0 && by < 0) || (ay > H && by > H)) continue;
-      if (st.nearLinks?.has(j >> 1)) continue;
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(bx, by);
-      nl++;
+    const ink = (st.near ? 0.12 : 1) * Math.max(0.35, Math.min(1, 0.35 + (0.65 * (k - 0.25)) / 0.75));
+    const lits: number[] = [];
+    // a link long on screen crosses everything on its way: fainter (LONG)
+    const long2 = LONG * LONG;
+    for (let c = 0; c < 3; c++) {
+      const from = s.bands[c], to = s.bands[c + 1];
+      if (from === to) continue;
+      const a0 = ink * LINK_ALPHA[c];
+      // too faint to see: only the lit ones are looked for
+      const faint = a0 < 0.01;
+      if (faint && !lit) continue;
+      // the short ones, then the long ones
+      for (const far of [false, true]) {
+        if (far && faint) break;
+        ctx.globalAlpha = far ? a0 * LONG_ALPHA : a0;
+        if (!faint) ctx.beginPath();
+        let some = false;
+        for (let j = from * 2; j < to * 2; j += 2) {
+          const a = L[j], b = L[j + 1];
+          if (lit && (lit[a] || lit[b])) {
+            if (!far) lits.push(a, b);
+            continue;
+          }
+          if (faint) continue;
+          const ax = sx[a], ay = sy[a], bx = sx[b], by = sy[b];
+          if ((ax < 0 && bx < 0) || (ax > W && bx > W) || (ay < 0 && by < 0) || (ay > H && by > H)) continue;
+          if ((ax - bx) * (ax - bx) + (ay - by) * (ay - by) > long2 !== far) continue;
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(bx, by);
+          some = true;
+          nl++;
+        }
+        if (some) ctx.stroke();
+      }
     }
-    ctx.stroke();
-    if (st.nearLinks?.size) {
+    if (lits.length) {
       ctx.globalAlpha = 1;
       ctx.strokeStyle = T.edgeOn;
       ctx.beginPath();
-      for (const j of st.nearLinks) {
-        const a = L[j * 2], b = L[j * 2 + 1];
-        if (a === undefined) continue;
-        ctx.moveTo(sx[a], sy[a]);
-        ctx.lineTo(sx[b], sy[b]);
+      for (let j = 0; j < lits.length; j += 2) {
+        ctx.moveTo(sx[lits[j]], sy[lits[j]]);
+        ctx.lineTo(sx[lits[j + 1]], sy[lits[j + 1]]);
       }
       ctx.stroke();
+      nl += lits.length >> 1;
     }
 
     // the halos, under the discs: 2.5 times the radius, as a bubble's, and
@@ -508,20 +565,25 @@ export class Painter {
     }
     for (let b = 0; b < B; b++) count[b + 1] += count[b];
     // the nodes asleep: small pale dots, under the others, one path
+    // (those near a hover as sharp as the hovered node's other neighbours,
+    // a little bigger: a neighbour asleep is found as well as a living one)
     if (sleeping) {
-      ctx.globalAlpha = st.near ? 0.25 : 0.9;
       ctx.fillStyle = T.sleep;
-      ctx.beginPath();
-      for (let i = 0; i < n; i++) {
-        if (!s.sleep[i] || show[i] === 0 || !seen(i, sr[i] + 2)) continue;
-        const r = Math.max(0.9, sr[i]);
-        if (r < 2) ctx.rect(sx[i] - r, sy[i] - r, r * 2, r * 2);
-        else {
-          ctx.moveTo(sx[i] + r, sy[i]);
-          ctx.arc(sx[i], sy[i], r, 0, Math.PI * 2);
+      for (const near of st.near ? [false, true] : [false]) {
+        ctx.globalAlpha = st.near && !near ? 0.25 : 0.9;
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+          if (!s.sleep[i] || show[i] === 0 || !seen(i, sr[i] + 2)) continue;
+          if (st.near && st.near.has(s.items[i].id) !== near) continue;
+          const r = near ? Math.max(2.5, sr[i]) : Math.max(0.9, sr[i]);
+          if (r < 2) ctx.rect(sx[i] - r, sy[i] - r, r * 2, r * 2);
+          else {
+            ctx.moveTo(sx[i] + r, sy[i]);
+            ctx.arc(sx[i], sy[i], r, 0, Math.PI * 2);
+          }
         }
+        ctx.fill();
       }
-      ctx.fill();
       discs += sleeping;
     }
     const sorted = new Int32Array(discs - sleeping);
@@ -695,6 +757,38 @@ export class Painter {
       ctx.strokeText(s.titles[hi], sx[hi], y);
       ctx.fillStyle = T.fg;
       ctx.fillText(s.titles[hi], sx[hi], y);
+      ctx.lineWidth = 1;
+    }
+    // its neighbours too small for their own label: theirs, readable,
+    // NEIGHBOURS at most, the biggest first, none over another
+    if (st.near && hi !== undefined) {
+      // room kept for the hovered node's own label, under it
+      const hy = sy[hi] + Math.max(3, sr[hi]) + 6, hw = Math.max(40, sr[hi] * 2);
+      const hr = Math.max(3, sr[hi]);
+      const boxes: [number, number, number, number][] = [[sx[hi] - Math.max(hw, hr), sy[hi] - hr, sx[hi] + Math.max(hw, hr), hy + 16]];
+      const them: { i: number; y: number }[] = [];
+      const nfs = 11.5;
+      ctx.font = font = `500 ${nfs}px ${T.font}`;
+      const near = [...st.near].map((id) => s.index.get(id)).filter((i): i is number => i !== undefined && i !== hi && show[i] > 0 && labelAlpha(cur[i] * k) < 1 && seen(i, 0));
+      near.sort((a, b) => cur[b] - cur[a] || a - b);
+      for (const i of near.slice(0, NEIGHBOURS * 2)) {
+        const w = ctx.measureText(s.titles[i]).width / 2, ly = sy[i] + Math.max(2.5, sr[i]) + 4 + nfs * this.asc;
+        boxes.push([sx[i] - w, ly - nfs, sx[i] + w, ly + nfs * 0.3]);
+        them.push({ i, y: ly });
+      }
+      const keep = declutter(boxes, 3);
+      let shown = 0;
+      ctx.lineWidth = 3;
+      for (let q = 0; q < them.length && shown < NEIGHBOURS; q++) {
+        if (!keep[q + 1]) continue;
+        const { i, y: ly } = them[q];
+        ctx.globalAlpha = 0.95;
+        ctx.strokeStyle = T.bg;
+        ctx.strokeText(s.titles[i], sx[i], ly);
+        ctx.fillStyle = s.sleep[i] || s.done[i] ? T.fg3 : T.fg;
+        ctx.fillText(s.titles[i], sx[i], ly);
+        shown++;
+      }
       ctx.lineWidth = 1;
     }
     ctx.globalAlpha = 1;

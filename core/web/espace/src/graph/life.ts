@@ -1,4 +1,4 @@
-// A big graph's sizes by life (lod.ts, from LOD.from nodes): a node's
+// A graph's sizes by life (lod.ts, its knobs), at any size: a node's
 // radius, its weight's (model.ts, radiusOf), times how alive it is now,
 // worked out by code from what the node already says, never chosen by a
 // model: what waits for the user the biggest, then what runs, what a skill
@@ -33,6 +33,9 @@ export const LIFE = {
 };
 // A node asleep is this much of its radius (its dot).
 export const SLEEP_R = 0.5;
+// ... and, in a graph of bubbles alone (below LOD.from nodes), its bubble's
+// radius at least: one the pointer and a finger still reach.
+export const SLEEP_BUBBLE = 6;
 
 const age = (x: LifeOf, now: number) => {
   const t = Date.parse(x.updated);
@@ -89,12 +92,46 @@ export function degrees(nodes: readonly { id: string; parent?: string; links?: r
   return d;
 }
 
-// lifeRadius is a node's radius in a big graph: its radius r times its
-// life (when on), a node asleep SLEEP_R of it (when on), rounded to half a
-// unit, so that a little change of age does not move the layout.
-export function lifeRadius(r: number, x: LifeOf, degree: number, now: number, o: { life: boolean; lifeStrength: number; sleep: boolean; sleepDays: number }): { r: number; sleeps: boolean } {
-  const sleeps = o.sleep && asleep(x, now, o.sleepDays);
+// lifeRadius is a node's radius by its life, at any size of graph: its
+// radius r times its life (when on), a node asleep SLEEP_R of it (when
+// on), rounded to half a unit, so that a little change of age does not
+// move the layout. A root (root: the top of a family, a node under it)
+// never sleeps and is never smaller than its radius: it names its family.
+export function lifeRadius(
+  r: number,
+  x: LifeOf,
+  degree: number,
+  now: number,
+  o: { life: boolean; lifeStrength: number; sleep: boolean; sleepDays: number },
+  root = false,
+): { r: number; sleeps: boolean } {
+  const sleeps = !root && o.sleep && asleep(x, now, o.sleepDays);
   let f = o.life ? lifeFactor(x, degree, now, o.lifeStrength) : 1;
+  if (root) f = Math.max(1, f);
   if (sleeps) f = Math.min(f, 1) * SLEEP_R;
   return { r: Math.round(r * f * 2) / 2, sleeps };
 }
+
+// A link takes its nodes' life: between two living nodes it is drawn as
+// it is, between a living node and a sleeping one faint, between two
+// sleeping nodes hardly at all (most of a second brain sleeps: its links
+// would be a grey cloud over the few that live). A root, awake always,
+// takes the life of the node at the link's other end: its spokes to its
+// sleeping notes are not a fan, those to its living ones are drawn. A
+// link of a node hovered, open or held is lit whatever its ends
+// (Graph.tsx, paint.ts).
+export const LINK_ALPHA = [1, 0.2, 0.05] as const;
+
+// A link's end: false living, true asleep, null a root (the other end's).
+export type End = boolean | null;
+
+// linkLife is a link's class by its ends: 0 both living, 1 one asleep,
+// 2 both.
+export function linkLife(a: End, b: End): 0 | 1 | 2 {
+  if (a === null) a = b ?? false;
+  if (b === null) b = a;
+  return ((a ? 1 : 0) + (b ? 1 : 0)) as 0 | 1 | 2;
+}
+
+// linkAlpha is a link's share of its ink by its ends.
+export const linkAlpha = (a: End, b: End): number => LINK_ALPHA[linkLife(a, b)];

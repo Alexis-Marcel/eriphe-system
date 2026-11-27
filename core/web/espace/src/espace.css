@@ -544,10 +544,17 @@ button, input, select, textarea { font: inherit; }
 /* One thin solid grey line per pair of linked nodes, under them; hovering
    a node keeps it, its neighbours and their links sharp, the rest fades
    (Graph.tsx, hoverOn: .hovering on the viewport, .near on what stays). */
-.gr-link { fill: none; stroke: var(--edge); stroke-width: 1; vector-effect: non-scaling-stroke; transition: stroke 0.2s, opacity 0.2s; }
+/* A link takes its nodes' life (graph/life.ts, LINK_ALPHA): faint from a
+   living node to a sleeping one, hardly there between two asleep; those
+   of a node open or held lit; hovering lights the hovered node's. */
+.gr-link { fill: none; stroke: var(--edge); stroke-width: 1; vector-effect: non-scaling-stroke; transition: stroke 0.2s, opacity 0.2s; opacity: var(--la); }
 :root { --edge: color-mix(in oklab, var(--fg) 24%, transparent); --edge-on: color-mix(in oklab, var(--fg) 55%, transparent); }
-.gr-viewport.hovering .gr-link:not(.near) { opacity: 0.12; }
-.gr-viewport.hovering .gr-link.near { stroke: var(--edge-on); }
+.gr-link { --la: 1; }
+.gr-link[data-life="1"] { --la: 0.2; }
+.gr-link[data-life="2"] { --la: 0.05; }
+.gr-link[data-lit] { --la: 1; stroke: var(--edge-on); }
+.gr-viewport.hovering .gr-link:not(.near) { opacity: calc(var(--la) * 0.12); }
+.gr-viewport.hovering .gr-link.near { opacity: 1; stroke: var(--edge-on); }
 /* The fade is an opacity on elements nothing else animates (a bubble's
    outer element, a page's document): composited, no filter to paint. */
 .gr-node { transition: opacity 0.2s; }
@@ -1100,11 +1107,16 @@ li:hover .a2-inline-no, .a2-inline-no:focus-visible { opacity: 1; }
 .a2-clash > .a2-ev .a2-ev-sub .a2-ev-place { display: none; }
 @container (max-width: 560px) { .a2-clash > .a2-ev .a2-ev-sub .a2-ev-place { display: inline; } }
 
-/* A big graph's nodes asleep (graph/life.ts): a pale dot, its bubble as
+/* The nodes asleep (graph/life.ts), at any size of graph: a pale bubble,
+   smaller, no family's colour; in a big graph a pale dot, its bubble as
    pale (only when hovered, open, or seen very close). The zones of the
    families where something waits (graph/paint.ts) breathe, softly: a
    layer of their own, its opacity in CSS, no paint at rest. */
 .gr-node.sleeps .gr-core { background: color-mix(in srgb, var(--fg) 16%, var(--bg)); box-shadow: none; opacity: 0.9 !important; }
+/* Its label in the faint grey that still reads (--fg3, AA, as a done
+   node's), no short word in so small a core. */
+.gr-node.sleeps .gr-label b { color: var(--fg3); }
+.gr-node.sleeps .gr-code { display: none; }
 .gr-breath { animation: zone-breath 6s ease-in-out infinite; }
 @keyframes zone-breath { 0%, 100% { opacity: 0.15; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .gr-breath { animation: none; opacity: 0.6; } }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { asleep, DAY, degrees, LIFE, lifeFactor, lifeRadius, SLEEP_R, type LifeOf } from "./life";
+import { asleep, DAY, degrees, LIFE, LINK_ALPHA, lifeFactor, lifeRadius, linkAlpha, linkLife, SLEEP_R, type LifeOf } from "./life";
 import { decide, LOD, SLEEPS, type Item, type Knobs } from "./lod";
 
 // A big graph's sizes by life: what waits for the user is the biggest,
@@ -94,5 +94,35 @@ describe("the degrees", () => {
     expect(d.get("a")).toBe(1);
     expect(d.get("b")).toBe(2);
     expect(d.get("c")).toBe(1);
+  });
+});
+
+describe("a root", () => {
+  it("never sleeps and is never smaller than its radius: it names its family", () => {
+    const old = node({ updated: ago(300) });
+    const child = lifeRadius(20, old, 0, now, on);
+    const root = lifeRadius(20, old, 0, now, on, true);
+    expect(child.sleeps).toBe(true);
+    expect(root.sleeps).toBe(false);
+    expect(root.r).toBe(20);
+    // alive, it grows as any node
+    expect(lifeRadius(20, node({ status: "waits" }), 0, now, on, true).r).toBeGreaterThan(20);
+  });
+});
+
+describe("a link", () => {
+  it("takes its nodes' life: drawn between living nodes, faint to a sleeping one, hardly there between two asleep", () => {
+    expect(linkAlpha(false, false)).toBe(1);
+    expect(linkAlpha(false, true)).toBe(linkAlpha(true, false));
+    expect(linkAlpha(false, true)).toBeLessThan(0.5);
+    expect(linkAlpha(true, true)).toBeLessThan(linkAlpha(false, true));
+    expect(linkAlpha(true, true)).toBeLessThanOrEqual(0.1);
+    expect(LINK_ALPHA).toHaveLength(3);
+  });
+
+  it("to a root takes its other end's life: no fan of spokes to sleeping notes", () => {
+    expect(linkLife(null, true)).toBe(2);
+    expect(linkLife(false, null)).toBe(0);
+    expect(linkLife(null, null)).toBe(0);
   });
 });

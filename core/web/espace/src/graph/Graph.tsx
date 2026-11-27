@@ -8,7 +8,7 @@ import { Page } from "../page/Page";
 import { onReads, readsUnderWay } from "../page/usePage";
 import { bigBox, bigRoom, boxAt, edgeMark, frameAll, MIN_K, frameAlone, frameAround, framePages, pageMax, type Box, type Cam } from "./camera";
 import { decide, drawnRadius, families, GRAB, hit, LOD, lodVersion, NEAR, onLod, rootsOf, same, type View } from "./lod";
-import { degrees, lifeRadius } from "./life";
+import { degrees, lifeRadius, linkLife, SLEEP_BUBBLE, type End } from "./life";
 import { FAMILIES, Painter, scene, type Scene } from "./paint";
 import { CENTRING, edgePush, edgeStep, extent, FORCES, onForces, pairs, setFamily, Sim, SLICE, type LNode, type Pos, type Pt } from "./layout";
 import { coreShape, pickTiles, TILE, variation } from "./glance";
@@ -138,35 +138,47 @@ export function Graph({ live }: { live: boolean }) {
   const openKey = open.filter((id) => ids.has(id)).join(",");
   const openIds = useMemo(() => (openKey ? openKey.split(",") : []), [openKey]);
   const lit = useMemo(() => new Set(openIds.flatMap((id) => subtree(nodes, id))), [openIds, nodes]);
-  const rOf = (x: GraphNode) => (lod && life.get(x.id)?.r) || radiusOf(x, nodes);
+  // A node's radius by its life; asleep in a graph of bubbles alone, never
+  // below SLEEP_BUBBLE: a bubble the pointer still reaches.
+  const rOf = (x: GraphNode) => {
+    const l = life.get(x.id);
+    if (!l) return radiusOf(x, nodes);
+    return l.sleeps && !lod ? Math.max(SLEEP_BUBBLE, l.r) : l.r;
+  };
   // The nodes drawn as tiles (graph/glance.ts): a tile's body is its
   // rounded rectangle, for the layout and the camera alike.
   const tilesWas = useRef<string[]>([]);
   const tiles = useMemo(() => pickTiles(list, openIds, tilesWas.current), [list, openIds]);
   useEffect(() => void (tilesWas.current = tiles), [tiles]);
-  // A big graph's sizes by life, and the nodes asleep (life.ts, the knobs
-  // of lod.ts): worked out again as the graph or the knobs change, and as
-  // time goes (now, every few minutes: what aged).
+  // The sizes by life, and the nodes asleep (life.ts, the knobs of
+  // lod.ts), at any size of graph: worked out again as the graph or the
+  // knobs change, and as time goes (now, every few minutes: what aged). A
+  // root never sleeps: it names its family.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 5 * 60_000);
     return () => clearInterval(id);
   }, []);
   const lifeKey = `${LOD.life}:${LOD.lifeStrength}:${LOD.sleep}:${LOD.sleepDays}`;
-  const degree = useMemo(() => (lod ? degrees(list.map((x) => ({ id: x.id, parent: x.parent, links: x.links }))) : null), [lod, list]);
+  const degree = useMemo(() => degrees(list.map((x) => ({ id: x.id, parent: x.parent, links: x.links }))), [list]);
   const life = useMemo(() => {
-    const out = new Map<string, { r: number; sleeps: boolean }>();
-    if (!lod || !degree) return out;
+    const out = new Map<string, { r: number; sleeps: boolean; root: boolean }>();
+    const above = new Set<string>();
+    for (const x of list) if (x.parent && ids.has(x.parent)) above.add(x.parent);
     for (const x of list) {
       const tile = !!(x.glance?.shown && !x.glance.seen);
-      out.set(x.id, lifeRadius(radiusOf(x, nodes), { status: x.status, updated: x.updated, maintained: x.maintained, tile }, degree.get(x.id) ?? 0, now, LOD));
+      const root = above.has(x.id) && !(x.parent && ids.has(x.parent));
+      out.set(x.id, { ...lifeRadius(radiusOf(x, nodes), { status: x.status, updated: x.updated, maintained: x.maintained, tile }, degree.get(x.id) ?? 0, now, LOD, root), root });
     }
     return out;
-  }, [lod, degree, list, nodes, now, lifeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [degree, list, nodes, now, lifeKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // A big graph's continents keep each family together (layout.ts, FAMILY).
   useEffect(() => setFamily(lod && LOD.zones ? LOD.group : 0), [lod, lodV]);
   useEffect(() => () => setFamily(0), []);
-  const sleeps = (x: GraphNode) => lod && !!life.get(x.id)?.sleeps && !openIds.includes(x.id);
+  const sleeps = (x: GraphNode) => !!life.get(x.id)?.sleeps && !openIds.includes(x.id);
+  // A link takes its nodes' life (life.ts, linkLife): a root takes its
+  // other end's; one open is awake.
+  const endOf = (id: string): End => (life.get(id)?.root ? null : !!life.get(id)?.sleeps && !openIds.includes(id));
   const tileOf = (x: GraphNode) => (tiles.includes(x.id) ? TILE : undefined);
   const bodyOf = (x: GraphNode) => {
     const b = labelBox(x, titleOf(x, external), depthOf(nodes, x.id), rOf(x));
@@ -252,6 +264,8 @@ export function Graph({ live }: { live: boolean }) {
   );
   const links: Link[] = useMemo(() => pairs(bodies).map(([a, b]) => ({ key: `${a}-${b}`, a, b })), [bodies]);
   const linkBy = useMemo(() => new Map(links.map((l) => [l.key, l])), [links]);
+  // The links of a node open or held are lit, whatever their ends' life.
+  const litBy = (l: Link) => openIds.includes(l.a) || openIds.includes(l.b) || held === l.a || held === l.b;
   // A big graph's canvas: its scene (paint.ts), each node's family's
   // colour, worked out once per graph; its nodes are born already, as
   // discs (a bubble come is not born again).
@@ -263,7 +277,7 @@ export function Graph({ live }: { live: boolean }) {
       list.map((x, i) => {
         const title = plainTitle(x, external), d = depthOf(nodes, x.id);
         born.add(x.id);
-        return { id: x.id, r: bodies[i]?.id === x.id ? bodies[i].r : rOf(x), depth: d, light: lightOf(x), status: x.status, fam: famOf.get(x.id) ?? -1, title, code: d === 0 ? codeOf(title) : "", root: rootOf?.get(x.id), sleeps: sleeps(x) };
+        return { id: x.id, r: bodies[i]?.id === x.id ? bodies[i].r : rOf(x), depth: d, light: lightOf(x), status: x.status, fam: famOf.get(x.id) ?? -1, title, code: d === 0 ? codeOf(title) : "", root: rootOf?.get(x.id), sleeps: sleeps(x), end: endOf(x.id) };
       }),
       links.map((l) => [l.a, l.b]),
     );
@@ -502,7 +516,7 @@ export function Graph({ live }: { live: boolean }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const painter = useRef<Painter | null>(null);
   const swaps = useRef(new Map<string, number>());
-  const nearBy = useRef<{ ids: Set<string>; links: Set<number> } | null>(null);
+  const nearBy = useRef<{ ids: Set<string> } | null>(null);
   const openSet = useMemo(() => new Set(openIds), [openIds]);
   const openSetNow = useRef(openSet);
   openSetNow.current = openSet;
@@ -512,7 +526,7 @@ export function Graph({ live }: { live: boolean }) {
     const xy = xyNow();
     if (xy.length !== S.items.length * 2) return;
     P.resize(sizeNow.current.w, sizeNow.current.h);
-    const fading = P.paint(S, xy, view(), { mounted: els.current.nodes, swapped: swaps.current, open: openSetNow.current, hover: hovered.current, near: nearBy.current?.ids ?? null, nearLinks: nearBy.current?.links ?? null, moved: moved.current }, performance.now());
+    const fading = P.paint(S, xy, view(), { mounted: els.current.nodes, swapped: swaps.current, open: openSetNow.current, hover: hovered.current, near: nearBy.current?.ids ?? null, held: sim.heldId(), moved: moved.current }, performance.now());
     if (fading) paintSoon();
   };
   const paintNow = useRef(paint);
@@ -884,14 +898,11 @@ export function Graph({ live }: { live: boolean }) {
       nearBy.current = null;
       if (id && !grab.current && !sizing.current) {
         const S = sceneNow.current, i = S?.index.get(id);
-        const ids = new Set([id]), ls = new Set<number>();
+        const ids = new Set([id]);
         if (S && i !== undefined)
           for (let j = 0; j < S.links.length; j += 2)
-            if (S.links[j] === i || S.links[j + 1] === i) {
-              ls.add(j >> 1);
-              ids.add(S.items[S.links[j] === i ? S.links[j + 1] : S.links[j]].id);
-            }
-        nearBy.current = { ids, links: ls };
+            if (S.links[j] === i || S.links[j + 1] === i) ids.add(S.items[S.links[j] === i ? S.links[j + 1] : S.links[j]].id);
+        nearBy.current = { ids };
       }
       if (was !== id) pickSoon(true);
       paintSoon();
@@ -943,7 +954,7 @@ export function Graph({ live }: { live: boolean }) {
         {!lod && (
           <svg className="gr-links" aria-hidden="true">
             {links.map((l) => (
-              <line key={l.key} ref={reg("links", l.key)} className="gr-link" />
+              <line key={l.key} ref={reg("links", l.key)} className="gr-link" data-life={linkLife(endOf(l.a), endOf(l.b)) || undefined} data-lit={litBy(l) || undefined} />
             ))}
           </svg>
         )}
