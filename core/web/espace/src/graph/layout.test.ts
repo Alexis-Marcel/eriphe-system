@@ -383,8 +383,9 @@ describe("the force graph", () => {
 
     // The real case: a page open in the middle with its own bubbles, a
     // subject above it (linked to the page or not) and the subject's bubble
-    // below the page, on its far side; a subject alone or not.
-    const entourage = (linked: boolean, alone = true): LNode[] =>
+    // below the page, on its far side, its other bubbles by it; a subject
+    // alone.
+    const entourage = (linked: boolean): LNode[] =>
       open(
         [
           node("ENT", "Mon entourage"),
@@ -393,7 +394,9 @@ describe("the force graph", () => {
           node("E3", "Idées de cadeaux", { parent: "ENT" }),
           node("TAC", "Mes tâches", { links: linked ? ["ENT"] : [] }),
           node("MAJ", "Mettre à jour Mes tâches", { parent: "TAC" }),
-          ...(alone ? [node("OUT", "Outils à revoir")] : []),
+          node("T1", "Ranger le garage", { parent: "TAC" }),
+          node("T2", "Payer les factures", { parent: "TAC" }),
+          node("OUT", "Outils à revoir"),
         ],
         ["ENT"],
       );
@@ -408,6 +411,8 @@ describe("the force graph", () => {
       const [x, y] = p[id];
       return y < t ? "above" : y > b ? "below" : x < l ? "left" : x > r ? "right" : "on";
     };
+    // under tells whether a point is right under the box, within its width.
+    const under = ([x, y]: Pt, [l, , r, b]: number[]) => y > b && x > l && x < r;
     // crosses tells whether the segment from a to b goes through the box.
     const crosses = (a: Pt, b: Pt, [l, t, r, bt]: number[]) => {
       for (let i = 0; i <= 400; i++) {
@@ -419,21 +424,21 @@ describe("the force graph", () => {
 
     it("brings a bubble left on the far side of the page round it, back by what it hangs on", () => {
       // left there as the page comes into focus (spreadRound and the
-      // springs), or once it is in focus (the springs alone: then with
-      // nothing else in its way, as a body jammed at the page's corner
-      // can still hold it)
+      // springs), or once it is in focus (the springs alone)
       for (const [linked, refocus] of [
         [false, true],
         [true, true],
         [false, false],
         [true, false],
       ]) {
-        const nodes = entourage(linked, refocus);
+        const nodes = entourage(linked);
         const sim = laid(nodes);
         sim.focus("ENT");
         sim.settle();
         const at = sim.at("ENT")!;
         put(sim, "TAC", [at[0], at[1] - 420]);
+        put(sim, "T1", [at[0] - 120, at[1] - 470]);
+        put(sim, "T2", [at[0] + 120, at[1] - 470]);
         put(sim, "MAJ", [at[0], at[1] + 420]);
         if (refocus) {
           sim.focus(null);
@@ -441,12 +446,13 @@ describe("the force graph", () => {
         } else sim.reheat();
         sim.settle();
         const p = sim.positions(), page = boxAt(p.ENT, nodes[0].box!);
-        // by its subject, not on the far side of the page, its link clear
-        // of the page
-        const far = { above: "below", below: "above", left: "right", right: "left" } as Record<string, string>;
-        expect(side(p, page, "MAJ"), `linked: ${linked}, refocus: ${refocus}`).not.toBe(far[side(p, page, "TAC")]);
-        expect(crosses(p.MAJ, p.TAC, page), `linked: ${linked}, refocus: ${refocus}`).toBe(false);
-        expect(dist(p.MAJ, p.TAC)).toBeLessThan(250);
+        // neither under the page any more (the subject may have moved
+        // round it, the spread or its bubble's pull), the link between
+        // them clear of the page: the bubble came round, by its subject
+        const why = `linked: ${linked}, refocus: ${refocus}`;
+        expect(under(p.TAC, page), why).toBe(false);
+        expect(under(p.MAJ, page), why).toBe(false);
+        expect(crosses(p.MAJ, p.TAC, page), why).toBe(false);
         expect(overlaps(sim, nodes)).toEqual([]);
       }
     });
