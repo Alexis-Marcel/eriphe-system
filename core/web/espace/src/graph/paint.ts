@@ -178,6 +178,7 @@ export class Painter {
   private union: HTMLCanvasElement | null = null;
   private breathCtx: CanvasRenderingContext2D | null = null;
   private breathing = true;
+  private widths = new Map<string, number>(); // the family names' half widths, by size and name
 
   // breath: a canvas under this one, for the zones of the families where
   // something waits, its opacity breathing in CSS (espace.css): no paint
@@ -216,6 +217,7 @@ export class Painter {
   // retheme reads the colours again (the theme changed).
   retheme() {
     this.theme = readTheme();
+    this.widths.clear();
     this.halo = this.sprite();
     this.metrics();
   }
@@ -649,7 +651,9 @@ export class Painter {
         if (px < -300 || px > W + 300 || py < -fs || py > H + fs) continue;
         const fnt = `600 ${fs}px ${T.font}`;
         if (fnt !== font) ctx.font = font = fnt;
-        const w = ctx.measureText(s.titles[f.root]).width / 2;
+        const key = `${fs}|${s.titles[f.root]}`;
+        let w = this.widths.get(key);
+        if (w === undefined) this.widths.set(key, (w = ctx.measureText(s.titles[f.root]).width / 2));
         names.push({ j, px, py, fs, na });
         boxes.push([px - w, py - fs * 0.6, px + w, py + fs * 0.6]);
       }
