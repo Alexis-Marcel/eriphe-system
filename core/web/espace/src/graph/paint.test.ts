@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeAll, describe, expect, it } from "vitest";
-import { FADE, Painter, scene, type SceneNode, type State } from "./paint";
+import { FADE, LONG, LONG_ALPHA, Painter, scene, type SceneNode, type State } from "./paint";
 
 // The canvas paints a disc for each node on screen but those drawn as
 // bubbles (once their fade is over) and those covered by their page; a
@@ -104,6 +104,18 @@ describe("the canvas", () => {
     alphas.length = 0;
     p.paint(t, xy, view, { ...none, held: "t" }, 32);
     expect(alphas.slice(0, 4)).toEqual([...links, 1]);
+  });
+
+  it("inks a link long on screen fainter: it crosses the graph", () => {
+    const { ctx } = counting();
+    const alphas: number[] = [];
+    const c = ctx as unknown as { globalAlpha: number; stroke: () => void };
+    c.stroke = () => void alphas.push(c.globalAlpha);
+    const t = scene([node("a", 10), node("b", 10), node("c", 10)], [["a", "b"], ["b", "c"]]);
+    const p = new Painter(document.createElement("canvas"), ctx);
+    p.resize(1000, 600);
+    p.paint(t, Float32Array.from([100, 100, 150, 100, 150 + LONG + 50, 100]), view, none, 0);
+    expect(alphas[1] / alphas[0]).toBeCloseTo(LONG_ALPHA, 5);
   });
 });
 
