@@ -288,13 +288,33 @@ export function depthOf(nodes: Record<string, GraphNode>, id: string): number {
   return pathOf(nodes, id).length - 1;
 }
 
+// childrenOf is each node's children, by id, in the graph's order: worked
+// out once for a graph (the store gives a new object when it changes) and
+// kept for it, for every page open and every walk down.
+const childrenCache = new WeakMap<Record<string, GraphNode>, Map<string, string[]>>();
+export function childrenOf(nodes: Record<string, GraphNode>): Map<string, string[]> {
+  let kids = childrenCache.get(nodes);
+  if (!kids) {
+    kids = new Map();
+    for (const n of Object.values(nodes)) {
+      if (!n.parent) continue;
+      const k = kids.get(n.parent);
+      if (k) k.push(n.id);
+      else kids.set(n.parent, [n.id]);
+    }
+    childrenCache.set(nodes, kids);
+  }
+  return kids;
+}
+
 // subtree is a node and every node under it.
 export function subtree(nodes: Record<string, GraphNode>, id: string): string[] {
-  const kids = new Map<string, string[]>();
-  for (const n of Object.values(nodes)) if (n.parent) kids.set(n.parent, [...(kids.get(n.parent) ?? []), n.id]);
+  const kids = childrenOf(nodes);
+  const seen = new Set<string>();
   const out: string[] = [];
   const walk = (x: string) => {
-    if (out.includes(x)) return;
+    if (seen.has(x)) return;
+    seen.add(x);
     out.push(x);
     for (const k of kids.get(x) ?? []) walk(k);
   };

@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import type { Proposals } from "./a2ui/proposals";
+import { LegerPanel, startLeger } from "./dev-leger";
 import { physicsGraph, PhysicsPanel } from "./dev-physics";
 import { setReads, type Boot } from "./data/api";
 import { sample } from "./data/sample";
@@ -13,7 +14,8 @@ import strings from "./strings.json";
 // a made-up graph whose pages a make-believe core reads (data/sample.ts,
 // samplecore.ts, sampleviews.ts), made-up proposals and orb
 // (sampleproposals.ts); ?physique, the graph's forces to tune by hand on
-// fixed graphs (dev-physics.tsx). main.tsx imports it only on the dev server: none
+// fixed graphs (dev-physics.tsx); ?leger, the graph at any size, to feel
+// and measure how smoothly it draws (dev-leger.tsx). main.tsx imports it only on the dev server: none
 // of it is in the built app (a test checks espace.js holds no sample's words).
 
 export type Dev = { proposals: Proposals; start(): () => void; Panel?: ComponentType };
@@ -27,7 +29,9 @@ export function devBoot(): Boot {
 }
 
 export function dev(lang: Lang): Dev {
-  const physics = new URLSearchParams(location.search).has("physique");
+  const q = new URLSearchParams(location.search);
+  const leger = q.has("leger");
+  const physics = q.has("physique") || leger;
   setReads({
     page: async (id, version) => sample.page(id, version) ?? (physics && store.getState().nodes[id] ? sample.pageOf(store.getState().nodes[id]) : null),
     trace: async (id) => sample.trace(id),
@@ -36,8 +40,9 @@ export function dev(lang: Lang): Dev {
   });
   return {
     proposals: sampleProposals(lang),
-    Panel: physics ? PhysicsPanel : undefined,
+    Panel: leger ? LegerPanel : physics ? PhysicsPanel : undefined,
     start() {
+      if (leger) return startLeger();
       if (physics) {
         step(store, applyNodes, { reset: true, nodes: physicsGraph() });
         return () => {};

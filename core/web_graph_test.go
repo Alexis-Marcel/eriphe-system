@@ -54,8 +54,9 @@ func TestEspaceBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// One line each of sample.ts, sampleviews.ts, fixtures.ts, gallery.json.
-	for _, s := range []string{"Virement urgent à valider", "Temps de réponse p95", "Relire le devis de Sam", "Le train de 7 h 12"} {
+	// One line each of sample.ts, sampleviews.ts, fixtures.ts, gallery.json,
+	// dev-leger.tsx (the ?leger page).
+	for _, s := range []string{"Virement urgent à valider", "Temps de réponse p95", "Relire le devis de Sam", "Le train de 7 h 12", "nœuds fictifs"} {
 		if bytes.Contains(entry, []byte(s)) {
 			t.Errorf("espace.js holds a sample's %q", s)
 		}

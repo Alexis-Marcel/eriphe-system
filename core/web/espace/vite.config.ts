@@ -43,5 +43,6 @@ export default defineConfig({
   // the page reader is held to them (page/read.test.ts, page/body.test.tsx).
   server: { port: 5300, strictPort: true, fs: { allow: [".", "../../nodefile/testdata"] } },
   preview: { port: 5301, strictPort: true, headers: { "Content-Security-Policy": csp } },
-  test: { environment: "node", include: ["src/**/*.test.ts", "src/**/*.test.tsx"] },
+  // css: the stylesheet read as text by a test (graph/contrast.test.ts).
+  test: { environment: "node", include: ["src/**/*.test.ts", "src/**/*.test.tsx"], css: { include: [/espace\.css/] } },
 });

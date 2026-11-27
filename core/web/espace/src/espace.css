@@ -548,9 +548,12 @@ button, input, select, textarea { font: inherit; }
 :root { --edge: color-mix(in oklab, var(--fg) 24%, transparent); --edge-on: color-mix(in oklab, var(--fg) 55%, transparent); }
 .gr-viewport.hovering .gr-link:not(.near) { opacity: 0.12; }
 .gr-viewport.hovering .gr-link.near { stroke: var(--edge-on); }
-.gr-node, .gr-page { transition: filter 0.2s; }
-.gr-viewport.hovering .gr-node:not(.near) { filter: opacity(0.2); }
-.gr-viewport.hovering .gr-page:not(.near) { filter: opacity(0.4); }
+/* The fade is an opacity on elements nothing else animates (a bubble's
+   outer element, a page's document): composited, no filter to paint. */
+.gr-node { transition: opacity 0.2s; }
+.gr-page > .pg { transition: border-color 0.3s, box-shadow 0.3s, opacity 0.2s; }
+.gr-viewport.hovering .gr-node:not(.near):not(.open) { opacity: 0.2; }
+.gr-viewport.hovering .gr-page:not(.near) > .pg { opacity: 0.4; }
 
 /* The graph's forces as sliders (graph/Forces.tsx). */
 .forces { margin: 0; padding: 0; border: 0; display: grid; gap: 10px; min-width: 0; }
@@ -564,18 +567,21 @@ button, input, select, textarea { font: inherit; }
 .forces-reset { justify-self: start; }
 .forces-reset:disabled { opacity: 0.45; cursor: default; }
 
-.gr-node { position: absolute; width: 0; height: 0; z-index: 2; }
-.gr-node > * { position: absolute; left: 0; top: 0; translate: -50% -50%; }
+/* A bubble: placed by its transform (Graph.tsx, place), its motion on the
+   element inside (.gr-bub), what it draws centred on its point. */
+.gr-node { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 2; }
+.gr-bub { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.gr-bub > * { position: absolute; left: 0; top: 0; translate: -50% -50%; }
 .gr-core { display: grid; place-items: center; border: 0; padding: 0; border-radius: 50%; cursor: pointer; touch-action: none; color: var(--fg2);
   background: radial-gradient(circle at 35% 30%, var(--card), var(--fill-strong) 75%);
   box-shadow: 0 0 0 1px var(--glass-line), 0 0 24px -4px color-mix(in oklab, var(--accent) 40%, transparent);
-  transition: transform 0.25s, box-shadow 0.3s; }
+  transition: transform 0.25s, box-shadow 0.3s, opacity 0.6s; }
 .gr-node:hover .gr-core { transform: scale(1.06); box-shadow: 0 0 0 1px var(--link-on), 0 0 30px -2px color-mix(in oklab, var(--accent) 55%, transparent); }
 .gr-node.d1 .gr-core, .gr-node.d2 .gr-core { background: var(--card); box-shadow: 0 0 0 1px var(--line-strong), 0 0 14px -6px var(--accent); }
 .gr-node.running .gr-core { box-shadow: 0 0 0 1px color-mix(in oklab, var(--run) 50%, transparent), 0 0 20px -4px var(--run); }
 .gr-node.done .gr-core { box-shadow: 0 0 0 1px color-mix(in oklab, var(--ok) 40%, var(--line-strong)); }
 /* A permanent subject: a small satellite orbits its bubble, slowly. */
-.gr-sat { pointer-events: none; border-radius: 50%; animation: orbit 28s linear infinite; }
+.gr-sat { pointer-events: none; border-radius: 50%; animation: orbit 28s linear infinite; transition: opacity 0.3s; }
 .gr-sat i { position: absolute; top: -3.5px; left: 50%; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%;
   background: var(--accent); box-shadow: 0 0 0 2px var(--bg), 0 0 8px color-mix(in oklab, var(--accent) 70%, transparent); }
 @keyframes orbit { to { rotate: 360deg; } }
@@ -587,7 +593,9 @@ button, input, select, textarea { font: inherit; }
 /* A node that waits: its halo, one sign: its glow, and its core ringed in the same violet (.gr-node.yours .gr-core). */
 .gr-halo { border-radius: 50%; pointer-events: none; background: radial-gradient(circle, color-mix(in oklab, var(--accent) 28%, transparent), transparent 62%); animation: halo 3.2s ease-in-out infinite; }
 @keyframes halo { 0%, 100% { opacity: 0.55; scale: 0.92; } 50% { opacity: 1; scale: 1.05; } }
-.gr-ring { pointer-events: none; overflow: visible; }
+.gr-ring { pointer-events: none; overflow: visible; transition: opacity 0.3s; }
+/* A tile has no orbit nor satellite: they fade as its core morphs. */
+.gr-ring.off, .gr-sat.off { opacity: 0; }
 .gr-orbit { fill: none; stroke: var(--link); stroke-width: 1; stroke-dasharray: 1 6; vector-effect: non-scaling-stroke; }
 .gr-ring-run { fill: none; stroke: var(--run); stroke-width: 2; stroke-dasharray: 6 5; animation: spin 6s linear infinite; transform-origin: 0 0; }
 .gr-node.yours .gr-core { box-shadow: 0 0 0 2px var(--accent), 0 0 26px -2px color-mix(in oklab, var(--accent) 60%, transparent); }
@@ -620,8 +628,11 @@ button, input, select, textarea { font: inherit; }
 .gl-area { fill: color-mix(in oklab, var(--fg3) 10%, transparent); stroke: none; }
 .gl-dot { fill: var(--fg2); }
 .gr-label { top: auto !important; translate: -50% 0 !important; display: grid; justify-items: center; gap: 1px; white-space: nowrap; text-align: center; pointer-events: none;
-  text-shadow: 0 0 10px var(--bg), 0 0 4px var(--bg), 0 0 2px var(--bg); }
+  text-shadow: 0 0 10px var(--bg), 0 0 4px var(--bg), 0 0 2px var(--bg); transition: margin-top 0.45s cubic-bezier(0.2, 0.7, 0.2, 1); }
 .gr-label b { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; }
+/* A done node's core fades (Graph.tsx); its label stays readable: the
+   faint grey, AA on the ground in both themes (contrast.test.ts). */
+.gr-node.done .gr-label b { color: var(--fg3); }
 .gr-node.d1 .gr-label b, .gr-node.d2 .gr-label b { font-size: 12.5px; font-weight: 500; }
 /* A title written after an external read: shown as it is, in the external
    amber, with a small ⚠ whose words say why (graph/Title.tsx), in a page,
@@ -640,7 +651,7 @@ button, input, select, textarea { font: inherit; }
 .gr-edge:hover { background: var(--fill); }
 
 /* ---------- a page, open in the graph (page/) ---------- */
-.gr-page { position: absolute; z-index: 4; translate: -50% -50%; display: flex; flex-direction: column; }
+.gr-page { position: absolute; left: 0; top: 0; z-index: 4; translate: -50% -50%; display: flex; flex-direction: column; }
 .gr-page > .pg { max-height: inherit; } /* the height the screen holds above the bar (Graph.tsx) */
 /* A page given a size (dragged by its corner, or enlarged): that size,
    its body scrolling within; for the session only. */
@@ -945,7 +956,7 @@ a.notice-text:hover { text-decoration: underline; }
 
 @media (prefers-reduced-motion: reduce) {
   .a2-shimmer, .a2-button.is-busy::after, .dot.run, .gr-halo, .gr-ring-run, .gr-edge, .pg-skel i { animation: none; }
-  .btn, .gr-core, .gr-link, .pg { transition: none; }
+  .btn, .gr-core, .gr-link, .pg, .gr-node, .gr-label, .gr-ring, .gr-sat { transition: none; }
 }
 
 /* A batch's rows (a2ui/lists.tsx): each with its box, all ticked, the

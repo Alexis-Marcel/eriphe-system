@@ -8,6 +8,7 @@ import { makeT, WordsContext } from "../i18n";
 import { OrbProvider } from "../orb/useOrb";
 import strings from "../strings.json";
 import { coreShape } from "./glance";
+import { CULL_FROM } from "./cull";
 import { Graph } from "./Graph";
 
 // The graph draws a bubble again only when what it shows changes: each
@@ -63,21 +64,64 @@ describe("the graph's frames", () => {
     );
     for (let i = 0; i < 5; i++) frame();
     const bubble = (id: string) => el.querySelector<HTMLElement>(`.gr-node[data-node="${id}"]`)!;
-    expect(bubble("c").style.left).not.toBe("");
+    expect(bubble("c").style.transform).toMatch(/^translate\(/);
+    expect(bubble("c").style.left).toBe("");
 
     // A page opens: the graph moves for a while; the bubbles are drawn
     // again once (the one open hidden), then not at each frame.
     await act(async () => step(store, openPage, "a", false));
     frame();
     const drawn = vi.mocked(coreShape).mock.calls.length;
-    const was = [bubble("c").style.left, bubble("c").style.top].join();
+    const was = bubble("c").style.transform;
     for (let i = 0; i < 40; i++) frame();
-    expect([bubble("c").style.left, bubble("c").style.top].join()).not.toBe(was);
+    expect(bubble("c").style.transform).not.toBe(was);
     expect(vi.mocked(coreShape).mock.calls.length).toBe(drawn);
     // The links follow too, straight on their elements: one line per pair.
     expect(el.querySelectorAll("line.gr-link")).toHaveLength(4);
     expect(el.querySelector("path.gr-link")).toBeNull();
     for (const l of el.querySelectorAll("line.gr-link")) expect(l.getAttribute("x1")).not.toBeNull();
+
+    act(() => root.unmount());
+    el.remove();
+    store.setState(empty(), true);
+  });
+});
+
+// A big graph draws only the bubbles the camera sees, and their links:
+// the camera gone far away, none; back, they are drawn again where they are.
+describe("a big graph", () => {
+  it("draws only what the camera sees", async () => {
+    store.setState(empty(), true);
+    const many = Array.from({ length: CULL_FROM + 50 }, (_, i) => node(`n${i}`, i % 10 ? `n${i - (i % 10)}` : undefined));
+    step(store, applyNodes, { reset: true, nodes: many });
+    const el = document.createElement("div");
+    document.body.append(el);
+    const root = createRoot(el);
+    await act(async () =>
+      root.render(
+        <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}>
+          <OrbProvider>
+            <Graph live />
+          </OrbProvider>
+        </WordsContext.Provider>,
+      ),
+    );
+    for (let i = 0; i < 5; i++) frame();
+    const drawn = () => el.querySelectorAll(".gr-node").length;
+    expect(drawn()).toBeGreaterThan(0);
+    expect(el.querySelectorAll("line.gr-link").length).toBeGreaterThan(0);
+
+    // The wheel takes the camera far away: nothing is drawn.
+    const wheel = (dx: number) => act(() => void el.querySelector(".gr-viewport")!.dispatchEvent(new WheelEvent("wheel", { deltaX: dx, bubbles: true, cancelable: true })));
+    wheel(1e6);
+    frame();
+    expect(drawn()).toBe(0);
+    expect(el.querySelectorAll("line.gr-link")).toHaveLength(0);
+    // Back: drawn again, each where the simulation has it.
+    wheel(-1e6);
+    frame();
+    expect(drawn()).toBeGreaterThan(0);
+    for (const b of el.querySelectorAll<HTMLElement>(".gr-node")) expect(b.style.transform).toMatch(/^translate\(/);
 
     act(() => root.unmount());
     el.remove();
