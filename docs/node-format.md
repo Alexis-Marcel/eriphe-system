@@ -15,7 +15,7 @@ pages the check below finds nothing in.
 
 ````markdown
 ---
-format: 3
+format: 4
 id: k3v9q2m7
 title: Mes mails
 goal: Tableau de bord des mails à traiter, tenu par le skill mails ; on n'y écrit pas de réponses.
@@ -82,6 +82,18 @@ name is matched without case, never a field of the table nor one starting with `
 as a date, and a tag matches its parents (`cuisine` finds `cuisine/recette`). A mapping, or an
 empty field, is kept but not indexed. The workspace shows them under the node's title.
 
+An author may also write them as Obsidian does, in a front matter of the page's own at its top (a
+`---` line, a YAML mapping, a `---` line, after blank lines at most), in `node_open`, `node_write`,
+`node_edit` or `node_append` (and the user's own edit of the page): its fields are set as `node_set` sets them (a field written wins
+over the property's value, a field without a value is skipped) and the block leaves the page, so
+that the file keeps one front matter. All of the block or nothing: a block one of whose fields is
+not a property (a field of the table above, a name starting with `_`, a mapping as a value, a tag
+that is not one) stays in the page as text, nothing lost, and the check says so (`front-block`).
+A block the page already held before the write is not written by it: it stays as it is. A `---`
+rule followed by text that is not a YAML mapping, or by a line starting with `#` (a heading, a
+YAML comment), is the page's own. A value is written as `node_set` writes it, an attachment's id
+(`att_…`) as text.
+
 Any other field is kept with its value. While the front matter does not change, it keeps its bytes,
 comments included. When code writes it again (a new title, say), the known fields come first in the
 order of the table, the empty ones left out, then the other fields in their order; YAML comments are
@@ -96,7 +108,7 @@ A node is the user's note: it outlives every change of Eriphe. No code wipes a n
 archived, by the user), and a change of this format converts the files instead of leaving them
 unread.
 
-- **Where:** each file says its own format, in its front matter's `format`. The format is 3 today;
+- **Where:** each file says its own format, in its front matter's `format`. The format is 4 today;
   a file that does not say it is in format 1. It is in the file rather than once for the
   repository because the file is the unit: a file
   copied in from elsewhere, and each old version in the history, says the format it was written
@@ -127,6 +139,11 @@ unread.
   Blocks, the sources code read live for them and their items' notes are gone with this format:
   once every node converted (no file left broken), the tables that kept the values and the notes
   are dropped from core.db.
+- 3 → 4 folds a front matter an author wrote at the top of a page, kept there as text until format
+  4, into the node's properties, as a write does now ([Front matter](#front-matter)); a property
+  the front matter has already keeps its value (`node_set` set it after the page was written). The
+  front matter is then written again in its canonical form. A page without such a block, or with
+  one that does not fold, keeps its bytes.
 - **At start**, a file of an older format is converted to today's, through each conversion in
   turn: all of them in one commit by `convert`, each node a version of its own, the old one kept in
   the history. A file changed by hand meanwhile is first committed as it is (`outside`). A file
@@ -236,6 +253,7 @@ problems as JSON). Lines are counted from 1 in the body, what follows the front 
 | `on-target` | an `on:` link that names no event (`on:<kind>/<key>#<field>`) |
 | `chart` | a chart without a table, or a cell of a series that is not a number |
 | `fence-open` | a code fence never closed |
+| `front-block` | a front matter at the top of the page that stayed text: one of its fields is not a property ([Front matter](#front-matter)) |
 
 **In the workspace.** The page draws a node's body from its Markdown (`core/web/espace/src/page`):
 a task is a row whose box the user ticks (one line rewritten by eriphe-core, a version of theirs),

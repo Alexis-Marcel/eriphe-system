@@ -13,12 +13,13 @@ import (
 // written over has them; written alike, they are accepted; written
 // otherwise, the write is refused.
 
-// AuthorBody replaces the node's body with an author's. A heading that
-// only repeats the node's title at its top goes: the page shows the
-// title above the body already. The external marks of its callouts are
-// code's (listen.go).
+// AuthorBody replaces the node's body with an author's. A front-matter
+// block at its top becomes the node's properties (frontblock.go). A
+// heading that only repeats the node's title at its top goes: the page
+// shows the title above the body already. The external marks of its
+// callouts are code's (listen.go).
 func (n *Node) AuthorBody(body string) error {
-	body = dropTitleHeading(body, n.Meta.Title)
+	body = dropTitleHeading(n.foldFront(body), n.Meta.Title)
 	if err := keepMarks(ReadPage(n.body), ReadPage(body)); err != nil {
 		return err
 	}

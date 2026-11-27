@@ -1,5 +1,5 @@
 ---
-format: 3
+format: 4
 id: k3v9q2m7
 title: Mes mails
 goal: Tableau de bord des mails à traiter, tenu par le skill mails.

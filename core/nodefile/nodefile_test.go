@@ -128,7 +128,7 @@ func TestUnknownFieldsKeptOnChange(t *testing.T) {
 	n.Meta.Title = "Sam: done"
 	out := string(mustBytes(t, n))
 	front, _, _ := strings.Cut(strings.TrimPrefix(out, "---\n"), "\n---\n")
-	want := `format: 3
+	want := `format: 4
 id: m4ilx7q2
 title: 'Sam: done'
 parent: k3v9q2m7

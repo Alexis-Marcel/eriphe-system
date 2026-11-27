@@ -1,5 +1,5 @@
 ---
-format: 3
+format: 4
 id: p4f8t2l6
 title: Portefeuille
 created: 2026-11-05T10:00:00+01:00

@@ -1156,7 +1156,10 @@ Markdown page. The format is specified in
   `external` mark) are set by code (`Meta`, `CodeBody`). An author's write goes through
   `AuthorBody`: left out, they are kept from the version written over; written otherwise, the
   write is refused (`ErrCodeField`). An old step's front matter `after` reads as a field this
-  package does not know, kept as it was.
+  package does not know, kept as it was. A front matter an author writes at the top of the page
+  (Obsidian style) becomes the node's properties in `AuthorBody` (`frontblock.go`), the written
+  fields winning, and leaves the page; all or nothing: a block with a field that is not a property
+  stays as text and `Check` says `front-block`; a block the page held already is left as it is.
 - **Format conversions** (`format.go`, `topage.go`): `Upgrade` runs a file through each
   conversion from its format to today's; `ConversionsWith` gives 2 → 3 the values code kept in
   `core.db` for a format-2 file's blocks (`Snapshots`), written in its page.
@@ -1265,8 +1268,8 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   still pending make one version, author `readings` (`CommitReadings`), at most one a day. At start,
   a file as code wrote it is not one changed outside Eriphe; an index made again from the files
   knows none, and commits such a file as `outside`.
-- **File format:** each file says its format, the front matter's `format` (absent: 1; 3 today,
-  1 → 2 dropping `lifetime`, 2 → 3 writing the blocks as Markdown with what code had read for them; [Format version](../docs/node-format.md#format-version)). A change of the format
+- **File format:** each file says its format, the front matter's `format` (absent: 1; 4 today,
+  1 → 2 dropping `lifetime`, 2 → 3 writing the blocks as Markdown with what code had read for them, 3 → 4 folding a front matter written at the top of a page into the node's properties (the front matter's own values kept); [Format version](../docs/node-format.md#format-version)). A change of the format
   adds its conversion to `nodefile` (from the format before, a pure function of the file's bytes)
   and a test that reads the old format. At start, a file of an older format is converted, all of
   them in one commit by `convert` (its words committed first as `outside` when changed by hand),
@@ -1342,7 +1345,8 @@ decided), and a run or a step that ends, or the node archived, drops its progres
   tool the task is not lent included. `node_open`
   opens a child (title, goal, body) of its node, or of a node where it works (`parent`); with `steps`, its work cut in steps ([below](#work-in-steps-node_stepsgo)). `page_format` gives how a page is written ([below](#the-page-format-tool-page_formatgo)). `progress` adds one line to its trace. A task that follows a skill has
   `skill_propose` too ([Skills improve with use](#skills)). It never starts a task, and never
-  archives, approves or closes a node (no `node_set`).
+  archives, approves or closes a node (no `node_set`); it sets a node's properties and tags with a
+  front matter at the top of the page it writes, folded into the node's (`nodefile.AuthorBody`).
 - **Where it writes** (#768, `writable` in `task_write.go`, read at each call): its node and every
   node under it; the node it was launched for, its node's parent, when its node was opened for it
   (the brain's launches: a skill's run works in its home node, a step in its step node, and
