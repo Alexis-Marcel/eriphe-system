@@ -1,0 +1,18 @@
+#!/bin/sh
+# eriphe-chromium: the browser eriphe-browser drives (Playwright's
+# --executable-path). Debian's chromium-headless-shell, the one
+# eriphe-capture uses: installed on first use through apt, whose /cache
+# keeps the packages for the machine's next tasks. Playwright talks to it
+# over fds 3 and 4 (--remote-debugging-pipe): apt gets neither, and writes
+# to stderr only.
+set -eu
+for b in /usr/bin/chromium-headless-shell /usr/bin/chromium; do
+  if [ -x "$b" ]; then exec "$b" "$@"; fi
+done
+echo "eriphe-chromium: installing chromium-headless-shell (once per machine: the cache keeps it)" >&2
+install() { apt-get install -y --no-install-recommends chromium-headless-shell fonts-liberation 1>&2 3>&- 4>&-; }
+if ! install && ! { apt-get update 1>&2 3>&- 4>&- && install; }; then
+  echo "eriphe-chromium: could not install chromium-headless-shell" >&2
+  exit 1
+fi
+exec /usr/bin/chromium-headless-shell "$@"

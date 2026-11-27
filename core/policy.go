@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -244,6 +245,9 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 		if decision == decideNoRule && inContainer(tool) {
 			decision = decideAllow
 		}
+		if c.inTaskCall(t, tool) {
+			decision, reason = decideAllow, inTaskReason
+		}
 		switch decision {
 		case decideAllow, decideDeny:
 			if c.store.answered(id, pid) {
@@ -281,6 +285,22 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 		}
 	}
 	return left
+}
+
+const inTaskReason = "outil qui tourne dans le conteneur de la tâche"
+
+// inTaskCall tells a call of a server that runs in the task (TaskTool) the
+// task was lent, not at Never: it acts inside the container, as the shell
+// does, so it is allowed. Its agent was told so in advance (AllowedTools):
+// this answers one that asks all the same. Another task's, or one at Never,
+// is an MCP tool out of what it was lent, refused.
+func (c *core) inTaskCall(t *TaskRow, tool string) bool {
+	server, _, ok := splitToolName(tool)
+	if !ok || t == nil {
+		return false
+	}
+	srv, found := c.conf().Servers[server]
+	return found && srv.taskLent() && slices.Contains(grantServers(c.taskGrant(t)), server)
 }
 
 // inContainer tells whether a worker's tool acts only inside its task's

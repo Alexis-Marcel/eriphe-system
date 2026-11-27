@@ -152,6 +152,9 @@ func newPool(store *Store, servers map[string]Server) *pool {
 		dialLocal: func(context.Context, string, json.RawMessage) (mcp.Transport, error) { return nil, errLocalUnsupported }}
 	p.dial = p.dialServer
 	for name, s := range servers {
+		if s.inTask() {
+			continue // no one connects to it but its task's agent
+		}
 		p.ups[name] = &upstream{p: p, name: name, srv: s, status: statusConnecting, wake: make(chan struct{}, 1)}
 	}
 	return p
@@ -213,7 +216,8 @@ func (u *upstream) stop() {
 }
 
 // sync makes the pool follow the catalog: new servers are connected,
-// removed ones closed, changed ones started over.
+// removed ones closed, changed ones started over. A server that runs in the
+// task (TaskTool) has no upstream.
 func (p *pool) sync(servers map[string]Server) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -227,7 +231,7 @@ func (p *pool) sync(servers map[string]Server) {
 		log.Printf("server %s: closed (%s)", name, map[bool]string{true: "changed", false: "removed"}[ok])
 	}
 	for name, s := range servers {
-		if _, ok := p.ups[name]; ok {
+		if _, ok := p.ups[name]; ok || s.inTask() { // in the task: no one connects to it but its task's agent
 			continue
 		}
 		u := &upstream{p: p, name: name, srv: s, status: statusConnecting, wake: make(chan struct{}, 1)}

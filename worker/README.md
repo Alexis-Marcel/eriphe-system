@@ -66,6 +66,20 @@ under the same tags): the updaters of machines installed before pull it, and a d
   Captured pages). The browser is not in the image (about
   290 MB unpacked, 103 packages): the first capture on a machine installs it with
   `fonts-liberation` through apt, and `/cache/apt` keeps the packages for the next task.
+- `eriphe-browser` (`/usr/local/bin`), the browser tool of a task: an MCP server over stdio
+  ([Playwright MCP](https://github.com/microsoft/playwright-mcp), baked in at a pinned version,
+  `PLAYWRIGHT_MCP`, about 10 MB, no browser of its own). eriphe-core lends it as a catalog tool that
+  runs in the task (`{"task": {"command": "eriphe-browser"}}`, core/README.md, Tools that run in
+  the task): the agent starts it in its container, where it opens, clicks, types, reads the console
+  and takes screenshots of the apps the task runs on `localhost`, and it goes with the task.
+  Headless, a profile in memory (no cookie or sign-in kept), `--no-sandbox` (no capability to
+  sandbox with). Its browser is Debian's `chromium-headless-shell`, the one `eriphe-capture`
+  uses, through `eriphe-chromium` (`--executable-path`), which installs it on first use through apt
+  and `/cache/apt` (each task unpacks it again, about 10 s). Out of the container it goes through
+  the egress relay, whose credentials Playwright takes in `--proxy-server`; `localhost` and the
+  device stay direct (`NO_PROXY`). A screenshot named by the agent is written in its workspace
+  (`/work`), where `eriphe-capture --file shot.png <node-id>` puts it in its node; unnamed outputs
+  go to `/tmp/eriphe-browser`. Its arguments are Playwright MCP's, after its own.
 
 ## Agents
 

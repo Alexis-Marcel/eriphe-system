@@ -18,8 +18,10 @@ import (
 // credential (see pool.go and proxy.go). Like agents, servers are what the
 // brain chooses from: "use" tells it what each one is for.
 
-// Server is one entry of the catalog: either remote (url and auth) or local
-// (run: a container a device runs as a service, see services).
+// Server is one entry of the catalog: remote (url and auth), local (run: a
+// container a device runs as a service, see services), or in the task
+// (task: a command the agent of each task it is lent to starts in its own
+// container, see TaskTool).
 type Server struct {
 	URL  string      `json:"url,omitempty"`
 	Auth *ServerAuth `json:"auth,omitempty"`
@@ -27,7 +29,9 @@ type Server struct {
 	// read by the services module; the catalog only reaches it through
 	// pool.dialLocal.
 	Run json.RawMessage `json:"run,omitempty"`
-	Use string          `json:"use"` // what it is for, for the brain
+	// Task is a server that runs in the task (TaskTool).
+	Task *TaskTool `json:"task,omitempty"`
+	Use  string    `json:"use"` // what it is for, for the brain
 	// Title is the user's own name for it, shown in the workspace; its
 	// name (the key) stays its technical name, in its tools' names.
 	Title string `json:"title,omitempty"`
@@ -92,12 +96,34 @@ type OAuthConfig struct {
 	RedirectURI string `json:"redirect_uri,omitempty"`
 }
 
+// TaskTool is a catalog server that runs in the task: an MCP server over
+// stdio that the agent of a task it is lent to starts in its own container,
+// gone with the task (the browser, worker/base/eriphe-browser). It reaches
+// what the task runs on localhost, and nothing of another task's. eriphe-core
+// never connects to it, so it knows none of its tools: its value is the
+// whole tool's, Free (lent when asked) or Never (Off: lent to none), decided
+// at launch, and its calls are the container's own (policy.go, inContainer).
+type TaskTool struct {
+	Command string            `json:"command"`
+	Args    []string          `json:"args,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	Off     bool              `json:"off,omitempty"` // Never: no task gets it
+}
+
 func (s Server) local() bool { return len(s.Run) > 0 }
+
+// inTask tells a server that runs in the task (TaskTool).
+func (s Server) inTask() bool { return s.Task != nil }
+
+// taskLent tells an in-task server a task may be lent: not at Never.
+func (s Server) taskLent() bool { return s.Task != nil && !s.Task.Off }
 
 func (s Server) authKind() string {
 	switch {
 	case s.local():
 		return "local"
+	case s.inTask():
+		return "task"
 	case s.Auth == nil:
 		return ""
 	case s.Auth.OAuth != nil:
@@ -144,6 +170,19 @@ func (c *Config) checkServers() error {
 				return fmt.Errorf("server %s: account_access gives each account one of %s", name, strings.Join(accessLevels, ", "))
 			}
 		}
+		if s.inTask() {
+			if s.URL != "" || s.Auth != nil || s.local() {
+				return fmt.Errorf("server %s: a server in the task (task) has no url, auth or run", name)
+			}
+			if strings.TrimSpace(s.Task.Command) == "" {
+				return fmt.Errorf("server %s: task needs its command", name)
+			}
+			if s.Access != "" || len(s.AccountAccess) > 0 || s.Grid != nil || len(s.Exceptions) > 0 ||
+				len(s.AccountGrids) > 0 || len(s.PlaceGrids) > 0 || len(s.PlaceArgs) > 0 {
+				return fmt.Errorf("server %s: a server in the task has no grid: it is Free or Never (task.off)", name)
+			}
+			continue
+		}
 		if s.local() {
 			if s.URL != "" || s.Auth != nil {
 				return fmt.Errorf("server %s: a local server (run) has no url or auth", name)
@@ -156,7 +195,7 @@ func (c *Config) checkServers() error {
 		}
 		u, err := url.Parse(s.URL)
 		if s.URL == "" || err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return fmt.Errorf("server %s: url (http or https) or run is required", name)
+			return fmt.Errorf("server %s: url (http or https), run or task is required", name)
 		}
 		a := s.Auth
 		if a == nil {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -30,7 +31,7 @@ func mcpTask() *Task {
 func TestMCPServersFor(t *testing.T) {
 	task := mcpTask()
 	n := newDevice(options{callbackURL: "http://eriphe-device:8790"})
-	servers, err := mcpServersFor(n.callbackFor(task), task)
+	servers, err := mcpServersFor(n.callbackFor(task), task, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +63,7 @@ func TestMCPServersFor(t *testing.T) {
 		t.Errorf("servers %v, Claude Code's %v", names, claude)
 	}
 
-	if _, err := mcpServersFor("", &Task{Spec: TaskSpec{MCPServers: map[string]any{"x": map[string]any{"type": "sse", "url": "u"}}}}); err == nil {
+	if _, err := mcpServersFor("", &Task{Spec: TaskSpec{MCPServers: map[string]any{"x": map[string]any{"type": "sse", "url": "u"}}}}, nil); err == nil {
 		t.Error("an SSE server was taken")
 	}
 }
@@ -350,5 +351,56 @@ func TestClaudeHarnessTools(t *testing.T) {
 	}
 	if args, _ := (claudeCode{}).command(n, mcpTask()); slices.Contains(args, "--tools") {
 		t.Fatalf("worker args = %v", args)
+	}
+}
+
+// A server that runs in the task (eriphe-core's TaskTool, the browser) is a
+// command every runtime hands its agent, with the task's way out under its
+// own variables: an agent that starts it with a few variables of its own
+// (Codex) would leave it no route out of the container.
+func TestTaskToolServer(t *testing.T) {
+	n := newDevice(options{callbackURL: "http://eriphe-device:8790", listenAddr: "172.17.0.2:8790", egressPort: "8791"})
+	task := &Task{ID: "t1", State: stateRunning, secret: "sec", perms: map[string]*permission{},
+		Spec: TaskSpec{Prompt: "test the front",
+			MCPServers: map[string]any{"navigateur": map[string]any{"type": "stdio", "command": "eriphe-browser",
+				"args": []any{"--mobile"}, "env": map[string]any{"A": "1", "NO_PROXY": "own"}}},
+			AllowedTools: []string{"mcp__navigateur"}}}
+	egress := n.egressEnv(task)
+	if egress["HTTPS_PROXY"] == "" {
+		t.Fatal("no egress")
+	}
+	servers, err := mcpServersFor(n.callbackFor(task), task, egress)
+	if err != nil || len(servers) != 1 {
+		t.Fatal(servers, err)
+	}
+	s := servers[0]
+	if s.Command != "eriphe-browser" || !slices.Equal(s.Args, []string{"--mobile"}) || s.Env["A"] != "1" ||
+		s.Env["NO_PROXY"] != "own" || s.Env["HTTPS_PROXY"] != egress["HTTPS_PROXY"] {
+		t.Errorf("server %+v", s)
+	}
+
+	var cfg struct {
+		MCPServers map[string]struct {
+			Command string            `json:"command"`
+			Env     map[string]string `json:"env"`
+		} `json:"mcpServers"`
+	}
+	json.Unmarshal(claudeCode{}.files(n, task)[claudeMCP], &cfg)
+	if c := cfg.MCPServers["navigateur"]; c.Command != "eriphe-browser" || c.Env["HTTPS_PROXY"] != egress["HTTPS_PROXY"] || c.Env["A"] != "1" {
+		t.Errorf("Claude Code's %+v", c)
+	}
+
+	codex := codexThreadConfig(task.Spec, servers)["mcp_servers"].(map[string]any)["navigateur"].(map[string]any)
+	if codex["command"] != "eriphe-browser" || codex["default_tools_approval_mode"] != "approve" ||
+		codex["env"].(map[string]string)["HTTPS_PROXY"] != egress["HTTPS_PROXY"] {
+		t.Errorf("Codex's %v", codex)
+	}
+
+	acp, err := acpServers(servers, false)
+	if err != nil || len(acp) != 1 {
+		t.Fatal(acp, err)
+	}
+	if a := acp[0].(map[string]any); a["command"] != "eriphe-browser" || !strings.Contains(fmt.Sprint(a["env"]), "HTTPS_PROXY") {
+		t.Errorf("ACP's %v", a)
 	}
 }

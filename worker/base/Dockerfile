@@ -22,6 +22,15 @@ COPY --from=uv /uv /uvx /usr/local/bin/
 # through apt and /cache, for the tasks that capture a page.
 COPY --chmod=755 eriphe-capture /usr/local/bin/eriphe-capture
 
+# eriphe-browser: the browser tool of a task (an MCP server over stdio, see
+# the script). Playwright MCP is baked in, pinned (about 10 MB, no browser:
+# PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD); the browser is Debian's, installed on
+# first use by eriphe-chromium as for eriphe-capture.
+ARG PLAYWRIGHT_MCP=0.0.86
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g --no-fund --no-audit @playwright/mcp@${PLAYWRIGHT_MCP} \
+    && npm cache clean --force
+COPY --chmod=755 eriphe-browser eriphe-chromium /usr/local/bin/
+
 # apt for a task: as root without capabilities (no sandbox user to switch
 # to), its downloads and lists in /cache, kept for the next task. The Debian
 # image's docker-clean would delete them after each install.
