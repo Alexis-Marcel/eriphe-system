@@ -348,15 +348,9 @@ On the machine that runs eriphe-core, in its data folder (`/data` in the contain
 - `nodes.db`: the graph's index, only made from the files: delete it and the next start makes it
   again, nothing lost. What Eriphe keeps beside a page (the notes on a list's items, its cards, the
   values its live blocks last read) is in `core.db`, not in the index.
-- `memoire/`: a **readable copy of what Eriphe knows about you** (your profile, the people, the
-  facts, the decisions, the journal), plain markdown files written by Eriphe's code after every
-  change. It is not a page of the graph and not in git, so when you ask Eriphe to forget something,
-  it leaves this folder at once. You can read it, or open it in a notes app; changes made there are
-  written over, since the memory itself stays the truth.
-- Every night, the backup folder (`memory-backups/` next to the memory, or `memory.backup_dir` in
+- Every night, the backup folder (`memory-backups/` next to `core.db`, or `memory.backup_dir` in
   `core.json`) gets `nodes-<day>.bundle` (the graph's history, which `git clone` reads),
-  `nodes-<day>.trace.tar` (the traces), `nodes-<day>.db`, `memory-<day>.db` and
-  `memoire-<day>.tar.gz` (the readable copy), kept 14 days by default.
+  `nodes-<day>.trace.tar` (the traces) and `nodes-<day>.db`, kept 14 days by default.
 
 ## Privacy and safety
 

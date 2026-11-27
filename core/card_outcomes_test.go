@@ -57,16 +57,6 @@ var outcomeMakers = map[string]func(t *testing.T) (*core, string){
 		c.store.db.QueryRow(`SELECT id FROM task_starts WHERE task_id = ?`, task).Scan(&id)
 		return c, proposalRef(cardTaskStart, id)
 	},
-	cardUnlearn: func(t *testing.T) (*core, string) {
-		c, node := outcomeCore(t)
-		mustAdd(t, c.mem, &Memory{Kind: kindPreference, Text: "Les réunions le matin"})
-		e := learnedAll(t, c.mem)[0]
-		if err := c.mem.setUndo(e.ID, undoProposed, "demandé"); err != nil {
-			t.Fatal(err)
-		}
-		c.cardNow(cardUnlearn, e.ID, "", nodeRef(node))
-		return c, proposalRef(cardUnlearn, e.ID)
-	},
 	cardAccess: func(t *testing.T) (*core, string) { // what a task asks for itself
 		c, node := outcomeCore(t)
 		task := workIn(t, c, node, stateRunning)

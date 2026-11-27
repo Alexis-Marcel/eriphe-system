@@ -355,10 +355,9 @@ func workerVoice(name, lang string) string {
 
 // taskUntrusted: a task started on what came from outside, which may leave
 // something in its device's cache for the next tasks to run: the brain and the
-// assistants (they read the mail, the web…), memory extraction (it reads
-// their conversations), and a worker started on a tainted turn. Those get a
-// cache of their own; workers the user or an untainted turn started share
-// the other.
+// assistants (they read the mail, the web…), and a worker started on a
+// tainted turn. Those get a cache of their own; workers the user or an
+// untainted turn started share the other.
 func taskUntrusted(kind string, taint []string) bool {
 	return kind != "worker" || len(taint) > 0
 }

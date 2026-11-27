@@ -106,35 +106,3 @@ func (c *core) askedThisTurn(msg *Message) bool {
 	from, to, _, _ := c.turn.snapshot()
 	return msg.Seq >= from && msg.Seq <= to && from > 0 && rememberRequest.MatchString(msg.Text)
 }
-
-// extractionDecision applies the rules to an extraction's operation: what
-// it read decides its trust. It never writes the profile, a preference nor
-// a lesson: only the user's own words make one, through the brain. What it
-// is sure of (stated, not read outside, not worded as an instruction) is
-// active at once, on trial in the learning journal, which undoes it; the
-// journal episode too, its trust telling what it is made of. The rest is
-// proposed, without a card, and expires undecided (expireProposals).
-func extractionDecision(kind string, refTrust string, scan scanResult, basis string) (writeDecision, error) {
-	d := writeDecision{Status: memProposed, Trust: refTrust, Source: srcExtraction}
-	if scan.Reject != "" {
-		return d, fmt.Errorf("refused: %s", scan.Reject)
-	}
-	if ownerKind(kind) {
-		return d, fmt.Errorf("an extraction cannot write a %s: only the user's own words make one", kind)
-	}
-	switch {
-	case containsStr(scan.Flags, "imperative") && refTrust != trustOwner:
-		d.Why = "it reads like an instruction"
-	case kind == kindEpisode:
-		d.Status = memActive // the journal: its trust tells what it is made of
-	case basis == basisInferred || basis == basisAmbiguous:
-		d.Why = "it is " + basis + ", not said in so many words"
-	case refTrust == trustExternal:
-		d.Why = "taken from an external content"
-	case refTrust == trustOwner:
-		d.Status, d.Trust = memActive, trustFirstParty
-	default: // the brain's words in a clean turn, a clean task's
-		d.Status = memActive
-	}
-	return d, nil
-}

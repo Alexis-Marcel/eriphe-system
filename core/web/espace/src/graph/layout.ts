@@ -66,7 +66,27 @@ export const T = {
   passes: 2, // ... passes a tick
   spread: 0.2, // after a focus change, the pull to a place round the node in focus, × the energy
   jam: 2, // two bodies overlapping less than this are apart (within their margins: never visible)
+  // How the graph stays fast with thousands of nodes, the rules the same.
+  // Up to `exact` bodies, the repulsion and the collision go over every
+  // pair and the graph is laid out at once (hurry): a small graph is where
+  // it always was. Past it, the repulsion of a far group of bodies is that
+  // of one body as heavy as they all, at their middle (Barnes-Hut: a group
+  // seen smaller than `theta` from a body), a body is only tested against
+  // those in its cells of a grid, and a hurry takes a slice a frame
+  // (SLICE). The tree is the faster past some 20 bodies. A theta of 0.5
+  // keeps the rules (layout.test.ts plays them all on the tree): past 0.6,
+  // two linked open pages may settle apart, a bubble stay behind a page.
+  theta: 0.5,
+  exact: 50,
+  cell: 128, // the grid's cell, in the graph's units
+  rests: 1000, // at rest, the collision's passes at most (over frames past `exact`); a dense graph of hundreds needs more than 200
 };
+
+// SLICE is the most a frame of the graph may take of the main thread, in
+// ms, while it hurries (the first layout, a change settled at once): what
+// draws the graph gives it to its simulation (Graph.tsx), the rest is
+// done in the frames after.
+export const SLICE = 8;
 
 // FORCE_RANGES are the bounds a setting may give each force; eriphe-core
 // keeps a force within the same (web_gestures.go, espaceForceRanges).
@@ -141,11 +161,27 @@ export function hash(s: string): number {
 // extent is a node's box: its half width, its top and its bottom (an open
 // page with a margin, a bubble with its label under it).
 export function extent(x: LNode, at: Pt): [number, number, number] {
-  return x.box
-    ? [x.box[0] / 2 + 24, at[1] - x.box[1] / 2 - 24, at[1] + x.box[1] / 2 + 24]
-    : x.tile
-      ? [Math.max(x.tile[0] / 2, x.lw / 2) + 10, at[1] - x.tile[1] / 2 - 8, at[1] + x.tile[1] / 2 + 10 + x.lh]
-      : [Math.max(x.r, x.lw / 2) + 10, at[1] - x.r - 8, at[1] + x.r + 10 + x.lh];
+  ext(x, at[1]);
+  return [EH, ET, EB];
+}
+
+// ext is extent for the simulation's loops, with nothing allocated: it
+// leaves the box of x at height y in EH, ET and EB.
+let EH = 0, ET = 0, EB = 0;
+function ext(x: LNode, y: number): void {
+  if (x.box) {
+    EH = x.box[0] / 2 + 24;
+    ET = y - x.box[1] / 2 - 24;
+    EB = y + x.box[1] / 2 + 24;
+  } else if (x.tile) {
+    EH = Math.max(x.tile[0] / 2, x.lw / 2) + 10;
+    ET = y - x.tile[1] / 2 - 8;
+    EB = y + x.tile[1] / 2 + 10 + x.lh;
+  } else {
+    EH = Math.max(x.r, x.lw / 2) + 10;
+    ET = y - x.r - 8;
+    EB = y + x.r + 10 + x.lh;
+  }
 }
 
 // overlap tells whether two bodies at those points sit on each other.
@@ -221,6 +257,362 @@ function enters(a: Pt, b: Pt, [l, t, r, bt]: number[]): number {
 // A body of the simulation: a node, where it is and how fast it goes.
 type Body = LNode & { x: number; y: number; vx: number; vy: number };
 
+// A point that pushes and is pushed: a body for the repulsion.
+type Charge = { id: string; x: number; y: number; vx: number; vy: number };
+
+// repelPairs is the repulsion over every pair of bodies, k the strength
+// (the force × the energy): each pushes every other away, by k over the
+// distance squared (never closer than T.chargeMin). Two on the same spot
+// part in a direction their names give.
+export function repelPairs(L: Charge[], k: number): void {
+  for (let i = 0; i < L.length; i++)
+    for (let j = i + 1; j < L.length; j++) {
+      const p = L[i], q = L[j];
+      let dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy);
+      if (d < 1) {
+        dx = hash(p.id + q.id) - 0.5;
+        dy = 0.5 - hash(q.id + p.id);
+        d = Math.hypot(dx, dy) || 1;
+      }
+      const f = k / Math.max(d, T.chargeMin) / d;
+      p.vx -= dx * f;
+      p.vy -= dy * f;
+      q.vx += dx * f;
+      q.vy += dy * f;
+    }
+}
+
+// LEAF marks a cell without children (its first child's place): -1 is a
+// child missing, the quarter empty.
+const LEAF = -2;
+
+// Quad is a quadtree of the bodies, built again each tick, in flat arrays
+// kept from one tick to the next: a cell is a square (x0, y0, its side s),
+// its bodies (order[from..to]), their count and their middle;
+// a cell of one body (or of bodies on one spot) has no children.
+export class Quad {
+  private cap = 0;
+  private cells = 0;
+  private x0 = new Float64Array(0);
+  private y0 = new Float64Array(0);
+  private s = new Float64Array(0);
+  private sx = new Float64Array(0);
+  private sy = new Float64Array(0);
+  private m = new Float64Array(0);
+  private kids = new Int32Array(0);
+  private from = new Int32Array(0);
+  private to = new Int32Array(0);
+  private order = new Int32Array(0);
+  private stack = new Int32Array(0);
+  private px = new Float64Array(0); // the bodies' places, read once a tick
+  private py = new Float64Array(0);
+
+  private cell(): number {
+    if (this.cells === this.cap) {
+      const cap = Math.max(64, this.cap * 2);
+      const grow = <A extends Float64Array | Int32Array>(a: A, n: number): A => {
+        const b = new (a.constructor as new (n: number) => A)(n);
+        b.set(a);
+        return b;
+      };
+      this.x0 = grow(this.x0, cap);
+      this.y0 = grow(this.y0, cap);
+      this.s = grow(this.s, cap);
+      this.sx = grow(this.sx, cap);
+      this.sy = grow(this.sy, cap);
+      this.m = grow(this.m, cap);
+      this.kids = grow(this.kids, cap * 4);
+      this.from = grow(this.from, cap);
+      this.to = grow(this.to, cap);
+      this.cap = cap;
+    }
+    return this.cells++;
+  }
+
+  // repel is the repulsion, k the strength, a far cell pushing as one body
+  // as heavy as its bodies at their middle: far when its side is less than
+  // theta times its distance (0: every pair, as repelPairs).
+  repel(L: Charge[], k: number, theta: number): void {
+    const n = L.length;
+    if (n < 2) return;
+    if (this.order.length < n) {
+      this.order = new Int32Array(n);
+      this.px = new Float64Array(n);
+      this.py = new Float64Array(n);
+    }
+    const px = this.px, py = this.py;
+    let lx = Infinity, ly = Infinity, hx = -Infinity, hy = -Infinity;
+    for (let i = 0; i < n; i++) {
+      this.order[i] = i;
+      const x = (px[i] = L[i].x), y = (py[i] = L[i].y);
+      if (x < lx) lx = x;
+      if (y < ly) ly = y;
+      if (x > hx) hx = x;
+      if (y > hy) hy = y;
+    }
+    this.cells = 0;
+    const root = this.build(0, n, lx, ly, Math.max(hx - lx, hy - ly) + 1, 0);
+    if (this.stack.length < this.cells * 4 + 4) this.stack = new Int32Array(this.cells * 4 + 4);
+    const { x0, y0, s, sx, sy, m, kids, from, to, order, stack } = this;
+    const cmin = T.chargeMin, theta2 = theta * theta;
+    for (let i = 0; i < n; i++) {
+      const x = px[i], y = py[i];
+      let fx = 0, fy = 0, top = 0;
+      stack[top++] = root;
+      while (top) {
+        const c = stack[--top];
+        const k0 = c * 4;
+        if (kids[k0] === LEAF) {
+          // a leaf: its bodies one by one, as a pair each
+          for (let o = from[c]; o < to[c]; o++) {
+            const j = order[o];
+            if (j === i) continue;
+            // the pair as repelPairs takes it, from the first in the list:
+            // the push on this one, away from the other
+            let dx = px[j] - x, dy = py[j] - y, d = Math.sqrt(dx * dx + dy * dy);
+            if (d < 1) {
+              const a = L[Math.min(i, j)].id, b = L[Math.max(i, j)].id, sign = j > i ? 1 : -1;
+              dx = (hash(a + b) - 0.5) * sign;
+              dy = (0.5 - hash(b + a)) * sign;
+              d = Math.hypot(dx, dy) || 1;
+            }
+            const f = k / (d > cmin ? d : cmin) / d;
+            fx -= dx * f;
+            fy -= dy * f;
+          }
+          continue;
+        }
+        const dx = sx[c] - x, dy = sy[c] - y, d2 = dx * dx + dy * dy, side = s[c];
+        const inside = x >= x0[c] && x <= x0[c] + side && y >= y0[c] && y <= y0[c] + side;
+        if (!inside && side * side < theta2 * d2) {
+          const d = Math.sqrt(d2), f = (k * m[c]) / (d > cmin ? d : cmin) / d;
+          fx -= dx * f;
+          fy -= dy * f;
+          continue;
+        }
+        for (let q = 0; q < 4; q++) if (kids[k0 + q] >= 0) stack[top++] = kids[k0 + q];
+      }
+      L[i].vx += fx;
+      L[i].vy += fy;
+    }
+  }
+
+  // build makes the cell of the bodies order[a..b), a square at (x, y) of
+  // side s, and its children; it gives the cell.
+  private build(a: number, b: number, x: number, y: number, s: number, depth: number): number {
+    const c = this.cell();
+    this.x0[c] = x;
+    this.y0[c] = y;
+    this.s[c] = s;
+    this.from[c] = a;
+    this.to[c] = b;
+    this.m[c] = b - a;
+    const k0 = c * 4;
+    this.kids[k0] = this.kids[k0 + 1] = this.kids[k0 + 2] = this.kids[k0 + 3] = -1;
+    // its middle: where its bodies push from, as one
+    let sx = 0, sy = 0;
+    for (let o = a; o < b; o++) {
+      sx += this.px[this.order[o]];
+      sy += this.py[this.order[o]];
+    }
+    this.sx[c] = sx / (b - a);
+    this.sy[c] = sy / (b - a);
+    if (b - a < 2 || depth > 40) {
+      this.kids[k0] = LEAF;
+      return c;
+    }
+    const h = s / 2, mx = x + h, my = y + h;
+    // the bodies in four: by side, then each side by height
+    const m1 = this.split(a, b, mx, true);
+    const m0 = this.split(a, m1, my, false), m2 = this.split(m1, b, my, false);
+    // (the arrays may grow while a child is built: read them after)
+    const k1 = m0 > a ? this.build(a, m0, x, y, h, depth + 1) : -1;
+    const k2 = m1 > m0 ? this.build(m0, m1, x, my, h, depth + 1) : -1;
+    const k3 = m2 > m1 ? this.build(m1, m2, mx, y, h, depth + 1) : -1;
+    const k4 = b > m2 ? this.build(m2, b, mx, my, h, depth + 1) : -1;
+    this.kids[k0] = k1;
+    this.kids[k0 + 1] = k2;
+    this.kids[k0 + 2] = k3;
+    this.kids[k0 + 3] = k4;
+    return c;
+  }
+
+  // split puts the bodies of order[a..b) below at (by x, or by y) first;
+  // it gives where the others start.
+  private split(a: number, b: number, at: number, byX: boolean): number {
+    const order = this.order, v0 = byX ? this.px : this.py;
+    let i = a, j = b - 1;
+    while (i <= j) {
+      const v = v0[order[i]];
+      if (v < at) i++;
+      else {
+        const t = order[i];
+        order[i] = order[j];
+        order[j--] = t;
+      }
+    }
+    return i;
+  }
+}
+
+// Grid is a uniform grid over the bodies' boxes (and a margin round
+// them), in flat arrays kept from one pass to the next: what may touch a
+// body is in its cells.
+class Grid {
+  private start = new Int32Array(0);
+  private cursor = new Int32Array(0);
+  private items = new Int32Array(0);
+  private box = new Float64Array(0); // per body: its first and last column and row
+  private seen = new Int32Array(0);
+  private found = new Int32Array(0);
+  private cols = 0;
+
+  // fill puts the bodies of L in the grid, each box grown by margin.
+  fill(L: (LNode & { x: number; y: number })[], margin: number): void {
+    const n = L.length;
+    if (this.box.length < n * 4) {
+      this.box = new Float64Array(n * 4);
+      this.seen = new Int32Array(n);
+      this.found = new Int32Array(n);
+    }
+    this.seen.fill(0);
+    let lx = Infinity, ly = Infinity, hx = -Infinity, hy = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const x = L[i].x;
+      ext(L[i], L[i].y);
+      const l = x - EH - margin, r = x + EH + margin, t = ET - margin, b = EB + margin;
+      this.box[i * 4] = l;
+      this.box[i * 4 + 1] = r;
+      this.box[i * 4 + 2] = t;
+      this.box[i * 4 + 3] = b;
+      if (l < lx) lx = l;
+      if (t < ly) ly = t;
+      if (r > hx) hx = r;
+      if (b > hy) hy = b;
+    }
+    // a cell of T.cell, bigger when the graph is spread very far
+    let size = T.cell;
+    while (((hx - lx) / size + 1) * ((hy - ly) / size + 1) > 4 * n + 4096) size *= 2;
+    const cols = Math.floor((hx - lx) / size) + 1, rows = Math.floor((hy - ly) / size) + 1;
+    this.cols = cols;
+    for (let i = 0; i < n; i++) {
+      const o = i * 4;
+      this.box[o] = Math.floor((this.box[o] - lx) / size);
+      this.box[o + 1] = Math.floor((this.box[o + 1] - lx) / size);
+      this.box[o + 2] = Math.floor((this.box[o + 2] - ly) / size);
+      this.box[o + 3] = Math.floor((this.box[o + 3] - ly) / size);
+    }
+    if (this.start.length < cols * rows + 1) this.start = new Int32Array(cols * rows + 1);
+    const start = this.start;
+    start.fill(0, 0, cols * rows + 1);
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+      const o = i * 4;
+      for (let r = this.box[o + 2]; r <= this.box[o + 3]; r++)
+        for (let c = this.box[o]; c <= this.box[o + 1]; c++) {
+          start[r * cols + c + 1]++;
+          total++;
+        }
+    }
+    for (let k = 1; k <= cols * rows; k++) start[k] += start[k - 1];
+    if (this.items.length < total) this.items = new Int32Array(total);
+    if (this.cursor.length < cols * rows) this.cursor = new Int32Array(cols * rows);
+    const cursor = this.cursor;
+    cursor.fill(0, 0, cols * rows);
+    for (let i = 0; i < n; i++) {
+      const o = i * 4;
+      for (let r = this.box[o + 2]; r <= this.box[o + 3]; r++)
+        for (let c = this.box[o]; c <= this.box[o + 1]; c++) {
+          const cell = r * cols + c;
+          this.items[start[cell] + cursor[cell]++] = i;
+        }
+    }
+  }
+
+  // after gives the bodies after i in the list that share a cell with it,
+  // in the cells' order (the same every time).
+  after(i: number): Int32Array {
+    const o = i * 4, cols = this.cols, start = this.start, items = this.items, seen = this.seen;
+    let k = 0;
+    for (let r = this.box[o + 2]; r <= this.box[o + 3]; r++)
+      for (let c = this.box[o]; c <= this.box[o + 1]; c++) {
+        const cell = r * cols + c;
+        for (let e = start[cell]; e < start[cell + 1]; e++) {
+          const j = items[e];
+          if (j > i && seen[j] !== i + 1) {
+            seen[j] = i + 1;
+            this.found[k++] = j;
+          }
+        }
+      }
+    return this.found.subarray(0, k);
+  }
+}
+
+// ROOM is the most free space a new body's place counts (seed): more room
+// round it than this is as good.
+const ROOM = 80;
+
+// Room holds the bodies placed while new ones are born (seed), in cells of
+// T.cell, to find the closest to a place without looking at all of them.
+class Room {
+  private cells = new Map<number, number[]>(); // the bodies in a cell, by their number here
+  private x: number[] = []; // per body: its middle, half width, top and bottom
+  private h: number[] = [];
+  private t: number[] = [];
+  private b: number[] = [];
+  private seen: number[] = [];
+  private stamp = 0;
+
+  private key(c: number, r: number): number {
+    return (c + 0x100000) * 0x200000 + (r + 0x100000);
+  }
+
+  add(o: Body): void {
+    ext(o, o.y);
+    const i = this.x.length;
+    this.x.push(o.x);
+    this.h.push(EH);
+    this.t.push(ET);
+    this.b.push(EB);
+    this.seen.push(0);
+    const C = T.cell, l = Math.floor((o.x - EH) / C), r = Math.floor((o.x + EH) / C), t = Math.floor(ET / C), b = Math.floor(EB / C);
+    for (let y = t; y <= b; y++)
+      for (let x = l; x <= r; x++) {
+        const k = this.key(x, y);
+        const cell = this.cells.get(k);
+        if (cell) cell.push(i);
+        else this.cells.set(k, [i]);
+      }
+  }
+
+  // clearance is the room between a body x at p and the closest one
+  // placed, box to box (below 0: they overlap); Infinity when none is
+  // within ROOM: only those can be closer than ROOM. It stops as soon as
+  // it is below enough.
+  clearance(x: Body, p: Pt, enough = -Infinity): number {
+    ext(x, p[1]);
+    const h = EH, t = ET, b = EB, C = T.cell;
+    const c0 = Math.floor((p[0] - h - ROOM) / C), c1 = Math.floor((p[0] + h + ROOM) / C);
+    const r0 = Math.floor((t - ROOM) / C), r1 = Math.floor((b + ROOM) / C);
+    const stamp = ++this.stamp, X = this.x, H = this.h, Tp = this.t, B = this.b, seen = this.seen;
+    let least = Infinity;
+    for (let r = r0; r <= r1; r++)
+      for (let c = c0; c <= c1; c++) {
+        const cell = this.cells.get(this.key(c, r));
+        if (!cell) continue;
+        for (const o of cell) {
+          if (seen[o] === stamp) continue;
+          seen[o] = stamp;
+          const gx = Math.abs(p[0] - X[o]) - h - H[o], gy = Math.max(Tp[o] - b, t - B[o]);
+          least = Math.min(least, gx > 0 && gy > 0 ? Math.hypot(gx, gy) : Math.max(gx, gy));
+          if (least <= enough) return least;
+        }
+      }
+    return least;
+  }
+}
+
 // Sim is the graph's simulation: Graph.tsx keeps one for the session,
 // tells it the nodes (sync), the drags (hold, drop), and ticks it a frame
 // at a time while it is awake.
@@ -236,9 +628,21 @@ export class Sim {
   private centre: Pt = [0, 0]; // where the centre force pulls: the node in focus, else where the last one was
   private spread = new Map<string, Pt>(); // after a focus change: the angle and distance each body heads for, round the node in focus
   private forces: Forces;
+  private slice: number; // the most a frame may take, in ms (Infinity: all at once)
+  private hurried = false; // the graph is laid out at once, not shown moving (hurry)
+  private later: { id: string | null } | null = null; // a focus asked while the graph hurries: made once it rests
+  private again = false; // ... and a hurry asked after it: the focus too is laid out at once
+  private resting = -1; // at rest: the collision's passes done so far (-1: not resting)
+  private deadline = Infinity; // when the frame under way must give the main thread back
+  private adjacent = new Map<Body, Body[]>(); // each body's linked ones, in the links' order
+  private quad = new Quad();
+  private grid = new Grid();
 
-  constructor(forces: Forces = FORCES) {
+  // slice: what draws the graph gives the most a frame may take (SLICE);
+  // without one, the first layout and every hurry are done at once.
+  constructor(forces: Forces = FORCES, { slice = Infinity }: { slice?: number } = {}) {
     this.forces = forces;
+    this.slice = slice;
     sims.add(new WeakRef(this));
   }
 
@@ -260,7 +664,8 @@ export class Sim {
     this.list = nodes.map((n) => {
       let b = this.byId.get(n.id);
       if (!b) {
-        b = { ...n, links: [...n.links], x: 0, y: 0, vx: 0, vy: 0 };
+        // every body of one shape: the loops over them stay fast
+        b = { id: n.id, parent: n.parent, links: [...n.links], r: n.r, lw: n.lw, lh: n.lh, box: n.box, tile: n.tile, x: 0, y: 0, vx: 0, vy: 0 };
         this.byId.set(n.id, b);
         fresh.push(b);
         return b;
@@ -274,19 +679,30 @@ export class Sim {
     for (const b of this.list) if (b.parent && !this.byId.has(b.parent)) b.parent = undefined;
     this.edges = pairs(this.list).map(([a, b]) => [this.byId.get(a)!, this.byId.get(b)!]);
     this.degree = new Map();
+    this.adjacent = new Map();
     for (const [a, b] of this.edges) {
       this.degree.set(a.id, (this.degree.get(a.id) ?? 0) + 1);
       this.degree.set(b.id, (this.degree.get(b.id) ?? 0) + 1);
+      if (!this.adjacent.has(a)) this.adjacent.set(a, []);
+      if (!this.adjacent.has(b)) this.adjacent.set(b, []);
+      this.adjacent.get(a)!.push(b);
+      this.adjacent.get(b)!.push(a);
     }
     // the new ones are born one by one, the closest to the root first
-    const placed = new Set(this.list.filter((b) => !fresh.includes(b)).map((b) => b.id));
-    for (const b of fresh.sort((a, c) => this.depth(a) - this.depth(c))) {
-      this.seed(b, placed);
-      placed.add(b.id);
+    if (fresh.length) {
+      const isFresh = new Set(fresh);
+      const placed = new Set(this.list.filter((b) => !isFresh.has(b)).map((b) => b.id));
+      const room = new Room();
+      for (const b of this.list) if (!isFresh.has(b)) room.add(b);
+      for (const b of fresh.sort((a, c) => this.depth(a) - this.depth(c))) {
+        this.seed(b, placed, room);
+        placed.add(b.id);
+        room.add(b);
+      }
     }
     if (first) {
       this.alpha = 1;
-      this.settle();
+      this.hurry();
     } else if (changed || fresh.length) this.reheat();
   }
 
@@ -294,6 +710,7 @@ export class Sim {
   // then rests again.
   reheat(a = T.warm): void {
     this.alpha = Math.max(this.alpha, a);
+    this.resting = -1;
   }
 
   // hold keeps the body id under the pointer (at, in the graph's units);
@@ -312,6 +729,7 @@ export class Sim {
       b.y += dy * share;
     }
     this.held = { id, at };
+    this.hurried = false;
     [x.x, x.y] = at;
     x.vx = x.vy = 0;
     this.reheat(T.dragWarm);
@@ -354,8 +772,14 @@ export class Sim {
   // pulls every other body to it, and it stays where it is, the graph
   // settling round it. Nothing else moves at once: the graph, warmed,
   // glides to its new centre. Without one, the centre stays where the last
-  // one was: the graph's middle, nothing drifts.
+  // one was: the graph's middle, nothing drifts. Asked while the graph is
+  // being laid out at once (hurry), it is made once that layout rests, as
+  // if the layout had been all at once.
   focus(id: string | null): void {
+    if (this.hurried) {
+      this.later = { id };
+      return;
+    }
     const x = id ? this.byId.get(id) : undefined;
     const next = x ? x.id : null;
     if (next === this.focusId) return;
@@ -428,13 +852,57 @@ export class Sim {
   // asleep tells whether nothing moves any more: no need to tick until
   // something changes (sync, hold, drop, setForces warm it).
   asleep(): boolean {
-    return this.alpha === 0 && !this.held;
+    return this.alpha === 0 && !this.held && this.resting < 0;
   }
 
-  // settle ticks until the graph is at rest (max ticks at most): the
-  // first layout, and every change when the user asks for less motion.
+  // settle ticks until the graph is at rest (max ticks at most), all at
+  // once.
   settle(max = 3000): void {
     for (let i = 0; i < max && !this.asleep(); i++) this.tick();
+  }
+
+  // hurry lays the graph out at once, not shown moving: the first layout,
+  // and every change when the user asks for less motion. Past T.exact
+  // bodies, what fits in a slice is done now, the rest in the next frames
+  // (frame); it tells whether the graph is at rest already.
+  hurry(): boolean {
+    if (this.hurried && this.later) this.again = true;
+    this.hurried = true;
+    this.frame();
+    return this.asleep();
+  }
+
+  // hurrying tells whether the graph is being laid out at once (hurry):
+  // what draws it shows it once at rest, not on the way.
+  hurrying(): boolean {
+    return this.hurried;
+  }
+
+  // frame is a frame's work: a tick, or while the graph hurries, as many
+  // as fit in the slice (3000 at most, as settle; up to T.exact bodies,
+  // all). A rest's collision too goes on in the next frame once the slice
+  // is spent. Once the hurry rests, the focus asked meanwhile is made.
+  frame(): void {
+    this.deadline = this.list.length > T.exact ? performance.now() + this.slice : Infinity;
+    try {
+      if (!this.hurried) this.tick();
+      else
+        for (let i = 0; i < 3000 && !this.asleep(); i++) {
+          this.tick();
+          if (performance.now() > this.deadline) break;
+        }
+    } finally {
+      this.deadline = Infinity;
+    }
+    if (!this.asleep()) return;
+    this.hurried = false;
+    if (this.later) {
+      const { id } = this.later;
+      this.later = null;
+      this.focus(id);
+      this.hurried = this.again;
+      this.again = false;
+    }
   }
 
   // positions are where the bodies are now.
@@ -461,6 +929,10 @@ export class Sim {
   // collision; cold, it rests.
   tick(): void {
     if (this.asleep()) return;
+    if (this.resting >= 0) {
+      this.rest();
+      return;
+    }
     const held = this.held ? this.byId.get(this.held.id) : undefined;
     if (held) [held.x, held.y] = this.held!.at;
     const target = held ? T.dragWarm : 0;
@@ -473,22 +945,10 @@ export class Sim {
     const fx = this.focusId ? this.byId.get(this.focusId) : undefined;
     if (fx) this.centre = [fx.x, fx.y];
     const [cx, cy] = this.centre;
-    // repulsion: every body pushes every other away
-    for (let i = 0; i < L.length; i++)
-      for (let j = i + 1; j < L.length; j++) {
-        const p = L[i], q = L[j];
-        let dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy);
-        if (d < 1) {
-          dx = hash(p.id + q.id) - 0.5;
-          dy = 0.5 - hash(q.id + p.id);
-          d = Math.hypot(dx, dy) || 1;
-        }
-        const f = (F.repulsion * a) / Math.max(d, T.chargeMin) / d;
-        p.vx -= dx * f;
-        p.vy -= dy * f;
-        q.vx += dx * f;
-        q.vy += dy * f;
-      }
+    // repulsion: every body pushes every other away (a far group as one,
+    // past T.exact bodies)
+    if (L.length <= T.exact) repelPairs(L, F.repulsion * a);
+    else this.quad.repel(L, F.repulsion * a, T.theta);
     // links: two linked bodies are held at the link distance, shape to
     // shape; the one with fewer links moves more (d3's bias). Pulled
     // together, each heads for the other the shortest way that does not go
@@ -554,13 +1014,22 @@ export class Sim {
     for (let k = 0; k < T.passes; k++) this.collide(T.soft);
   }
 
-  // rest: the graph is cold. What still overlaps is set apart at once,
-  // and nothing moves until the next change.
+  // rest: the graph is cold. What still overlaps is set apart at once
+  // (over the next frames if the slice is spent), and nothing moves until
+  // the next change.
   private rest(): void {
-    this.alpha = 0;
-    this.spread = new Map();
-    for (let i = 0; i < 200 && this.collide(1) > T.jam; i++);
-    for (const x of this.list) x.vx = x.vy = 0;
+    if (this.resting < 0) {
+      this.alpha = 0;
+      this.spread = new Map();
+      for (const x of this.list) x.vx = x.vy = 0;
+      this.resting = 0;
+    }
+    while (this.resting < T.rests) {
+      if (this.collide(1) <= T.jam) break;
+      this.resting++;
+      if (performance.now() > this.deadline) return;
+    }
+    this.resting = -1;
   }
 
   // collide is the graph's one collision: every body (a bubble with its
@@ -572,30 +1041,42 @@ export class Sim {
   private collide(strength: number): number {
     let most = 0;
     const L = this.list;
-    for (let i = 0; i < L.length; i++)
-      for (let j = i + 1; j < L.length; j++) {
-        const a = L[i], b = L[j];
-        const [ha, ta, ba] = extent(a, [a.x, a.y]), [hb, tb, bb] = extent(b, [b.x, b.y]);
-        const dx = b.x - a.x;
-        const ox = ha + hb - Math.abs(dx), oy = Math.min(ba, bb) - Math.max(ta, tb);
-        if (ox <= 0 || oy <= 0) continue;
-        const fa = this.fixed(a), fb = this.fixed(b);
-        if (fa && fb) continue;
-        most = Math.max(most, Math.min(ox, oy));
-        const ma = 2 * ha * (ba - ta), mb = 2 * hb * (bb - tb);
-        const sb = fa ? 1 : fb ? 0 : ma / (ma + mb), sa = 1 - sb;
-        // sideways a little preferred: the screen is wide
-        if (ox <= oy * 1.3) {
-          const s = (Math.abs(dx) > 0.01 ? Math.sign(dx) : hash(a.id + b.id) < 0.5 ? 1 : -1) * ox * strength;
-          a.x -= s * sa;
-          b.x += s * sb;
-        } else {
-          const s = ((tb + bb) / 2 >= (ta + ba) / 2 ? 1 : -1) * oy * strength;
-          a.y -= s * sa;
-          b.y += s * sb;
-        }
-      }
+    if (L.length <= T.exact) {
+      for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) most = Math.max(most, this.part(L[i], L[j], strength));
+      return most;
+    }
+    // past T.exact bodies, each against those in its cells only, in the
+    // same order; the margin covers what the pass moves them
+    this.grid.fill(L, 2 * T.jam + 2);
+    for (let i = 0; i < L.length; i++) for (const j of this.grid.after(i)) most = Math.max(most, this.part(L[i], L[j], strength));
     return most;
+  }
+
+  // part sets a and b apart if they overlap (collide); it gives by how
+  // much they did (0: they did not, or neither may move).
+  private part(a: Body, b: Body, strength: number): number {
+    ext(a, a.y);
+    const ha = EH, ta = ET, ba = EB;
+    ext(b, b.y);
+    const hb = EH, tb = ET, bb = EB;
+    const dx = b.x - a.x;
+    const ox = ha + hb - Math.abs(dx), oy = Math.min(ba, bb) - Math.max(ta, tb);
+    if (ox <= 0 || oy <= 0) return 0;
+    const fa = this.fixed(a), fb = this.fixed(b);
+    if (fa && fb) return 0;
+    const ma = 2 * ha * (ba - ta), mb = 2 * hb * (bb - tb);
+    const sb = fa ? 1 : fb ? 0 : ma / (ma + mb), sa = 1 - sb;
+    // sideways a little preferred: the screen is wide
+    if (ox <= oy * 1.3) {
+      const s = (Math.abs(dx) > 0.01 ? Math.sign(dx) : hash(a.id + b.id) < 0.5 ? 1 : -1) * ox * strength;
+      a.x -= s * sa;
+      b.x += s * sb;
+    } else {
+      const s = ((tb + bb) / 2 >= (ta + ba) / 2 ? 1 : -1) * oy * strength;
+      a.y -= s * sa;
+      b.y += s * sb;
+    }
+    return Math.min(ox, oy);
   }
 
   // aim is the way x goes to join to (a unit vector) when the straight
@@ -655,18 +1136,22 @@ export class Sim {
 
   // seed places a new body in the most free space near what it is linked
   // to (those already placed), or, linked to nothing, in the most free
-  // space on the disc, near its middle. The forces do the rest.
-  private seed(x: Body, placed: Set<string>): void {
-    const others = this.list.filter((o) => o !== x && placed.has(o.id));
-    if (!others.length) {
+  // space on the disc, near its middle. The forces do the rest. room holds
+  // the bodies placed.
+  private seed(x: Body, placed: Set<string>, room: Room): void {
+    if (!placed.size) {
       x.x = x.y = 0;
       return;
     }
-    const kin = this.edges.flatMap(([p, q]) => (p === x && placed.has(q.id) ? [q] : q === x && placed.has(p.id) ? [p] : []));
+    const kin = (this.adjacent.get(x) ?? []).filter((o) => placed.has(o.id));
     const turn = hash(x.id) * Math.PI * 2, N = 24;
     let best: Pt = [0, 0], score = -Infinity;
     const consider = (p: Pt, near: Pt) => {
-      const s = Math.min(this.clearance(x, p, others), 80) - 0.05 * Math.hypot(p[0] - near[0], p[1] - near[1]);
+      // a place too far to do better than the best yet, however free, is
+      // not looked at; nor the bodies round one once it cannot
+      const far = 0.05 * Math.hypot(p[0] - near[0], p[1] - near[1]);
+      if (ROOM - far <= score) return;
+      const s = Math.min(room.clearance(x, p, score + far), ROOM) - far;
       if (s > score) {
         score = s;
         best = p;
@@ -681,9 +1166,13 @@ export class Sim {
           consider([c[0] + ux * d, c[1] + uy * d], c);
         }
     } else {
+      const others = this.list.filter((o) => o !== x && placed.has(o.id));
       const c: Pt = [others.reduce((s, o) => s + o.x, 0) / others.length, others.reduce((s, o) => s + o.y, 0) / others.length];
       let R = 0;
-      for (const o of others) R = Math.max(R, Math.hypot(o.x - c[0], o.y - c[1]) + extent(o, [o.x, o.y])[0]);
+      for (const o of others) {
+        ext(o, o.y);
+        R = Math.max(R, Math.hypot(o.x - c[0], o.y - c[1]) + EH);
+      }
       for (let d = 60; d <= R + 240; d += 60)
         for (let i = 0; i < N; i++) {
           const t = turn + (i / N) * Math.PI * 2;
@@ -692,19 +1181,6 @@ export class Sim {
     }
     [x.x, x.y] = best;
     x.vx = x.vy = 0;
-  }
-
-  // clearance is the room between a body x at p and the closest other one,
-  // box to box (below 0: they overlap).
-  private clearance(x: Body, p: Pt, others: Body[]): number {
-    const [h, t, b] = extent(x, p);
-    let least = Infinity;
-    for (const o of others) {
-      const [ho, to, bo] = extent(o, [o.x, o.y]);
-      const gx = Math.abs(p[0] - o.x) - h - ho, gy = Math.max(to - b, t - bo);
-      least = Math.min(least, gx > 0 && gy > 0 ? Math.hypot(gx, gy) : Math.max(gx, gy));
-    }
-    return least;
   }
 
   private depth(x: Body): number {

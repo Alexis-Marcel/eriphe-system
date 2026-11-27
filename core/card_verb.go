@@ -23,7 +23,6 @@ var kindVerbs = map[string]string{
 	cardRule:      "card.verb.apply",
 	cardSetting:   "card.verb.change",
 	cardTaskStart: "card.verb.start",
-	cardUnlearn:   "card.verb.undo",
 	cardAccess:    "card.verb.allow",
 	cardSkill:     "card.verb.approve",
 	cardCalls:     "card.verb.do",

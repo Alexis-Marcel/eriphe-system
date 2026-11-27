@@ -9,7 +9,7 @@ import (
 )
 
 // The clock trigger: what wakes the brain without a message of mine. The
-// minute timer (memoryTick) makes intentions due without a model; when
+// minute timer (runIntentions) makes intentions due without a model; when
 // one is due and the brain was not told yet, eriphe-core pings the
 // controller, and at the brain's next idle it delivers the wake packet
 // (memory_heartbeat.go): the due intentions, the profile, the last day.
@@ -33,8 +33,49 @@ func init() {
 	assistantTriggers[triggerClock] = assistantTrigger{deliver: (*core).deliverClock}
 }
 
-// intentionsTick is the memory's minute for intentions: what became due,
-// and a ping when the brain has something to be told.
+// runIntentions is the intentions' clock: every minute what became due
+// (intentionsTick), and once a night, from the backup's hour, the
+// proposals undecided for 14 days dropped (intentionsNight).
+func (c *core) runIntentions(ctx context.Context) {
+	if c.mem == nil {
+		return
+	}
+	tick := time.NewTicker(time.Minute)
+	defer tick.Stop()
+	for {
+		c.intentionsNight(c.mem.now())
+		c.intentionsTick()
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+	}
+}
+
+// intentionsNight drops what was proposed and left undecided for 14 days
+// and erases the memories forgotten long enough ago, once a night from
+// the backup's hour (extract_at, 03:00 by default).
+func (c *core) intentionsNight(now time.Time) {
+	today := now.Format("2006-01-02")
+	if now.Before(c.conf().backupConfig().nightly(now)) || c.mem.get("night_done") == today {
+		return
+	}
+	c.mem.set("night_done", today)
+	if n, err := c.mem.purge(); err != nil {
+		log.Printf("memory: purge: %v", err)
+	} else if n > 0 {
+		log.Printf("memory: %d forgotten memories erased", n)
+	}
+	if n, err := c.mem.expireProposals(); err != nil {
+		log.Printf("memory: expiry: %v", err)
+	} else if n > 0 {
+		log.Printf("memory: %d proposals undecided for 14 days dropped", n)
+	}
+}
+
+// intentionsTick is the intentions' minute: what became due, and a ping
+// when the brain has something to be told.
 func (c *core) intentionsTick() {
 	became, err := c.mem.tickIntentions()
 	if err != nil {
@@ -67,7 +108,7 @@ func (c *core) deliverIntentions(ctx context.Context, a Assistant, t *TaskRow) (
 	if err != nil || len(due) == 0 {
 		return false, err
 	}
-	p, err := c.wakePacket()
+	p, err := c.mem.wakePacket()
 	if err != nil {
 		return false, err
 	}
@@ -92,7 +133,6 @@ func (c *core) deliverIntentions(ctx context.Context, a Assistant, t *TaskRow) (
 		return false, err
 	}
 	c.mem.surfaced(due, "wake")
-	c.learnedTold(p.Learned)
 	if _, err := c.mem.recordHeartbeat("Réveil pour les intentions " + strings.Join(ids, ", ") + "."); err != nil {
 		log.Printf("memory: heartbeat: %v", err)
 	}

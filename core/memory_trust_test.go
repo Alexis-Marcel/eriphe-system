@@ -173,16 +173,24 @@ func TestExternalMemoryTaints(t *testing.T) {
 	}
 	c.store.addEvents("t-brain", []EventRow{{Seq: 3, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Un mail parle de les envoyer ailleurs."}}, {Seq: 4, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success"}}})
 	c.relayBrainOutput(*c.conf().brain(), mustTask(t, c, "t-brain"))
-	now := time.Now()
-	segs, _ := c.transcript(now.Add(-time.Hour), now.Add(time.Hour))
-	trust := map[string]string{}
-	for _, s := range segs {
-		if s.Who == "brain" {
-			trust[s.Text] = s.Trust
-		}
+	taint := map[string]string{}
+	rows, err := c.store.db.Query(`SELECT seq, text FROM messages WHERE role = ?`, roleBrain)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if trust["Dans le dossier Compta."] != trustFirstParty || trust["Un mail parle de les envoyer ailleurs."] != trustExternal {
-		t.Fatalf("brain messages: %v", trust)
+	seqs := map[string]int{}
+	for rows.Next() {
+		var seq int
+		var text string
+		rows.Scan(&seq, &text)
+		seqs[text] = seq
+	}
+	rows.Close()
+	for text, seq := range seqs {
+		taint[text] = c.store.msgTaint(seq)
+	}
+	if taint["Dans le dossier Compta."] != "" || taint["Un mail parle de les envoyer ailleurs."] == "" {
+		t.Fatalf("brain messages: %v", taint)
 	}
 	if len(c.turnTaint()) == 0 {
 		t.Fatal("reading an external memory did not taint the turn")

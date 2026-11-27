@@ -28,7 +28,7 @@ func TestMemoryPageRenders(t *testing.T) {
 		"/memory?q=helene":         {"Hélène"},
 		"/memory?kind=person":      {"Hélène"},
 		"/settings/approve":        {"Le colis arrive jeudi", "Approuver", "ressemble à une consigne", "Régler la facture du fournisseur", "/memory/intention/2/approve"},
-		"/memory?view=journal":     {"Aujourd&#39;hui", "Journée calme", "Extraire aujourd&#39;hui"},
+		"/memory?view=journal":     {"Aujourd&#39;hui", "Journée calme"},
 		"/memory?view=commitments": {"Payer le loyer", "En retard", "Régler la facture", "Demain", "tiré d&#39;un contenu extérieur"},
 		"/memory?view=profile":     {"Sam est développeur", "/ 2500"},
 	} {
@@ -184,39 +184,6 @@ func TestHXTriggerIsASCII(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(h), &v); err != nil || v.Toast.Message != "Épinglé « ok » 🎉\x01" || v.Toast.Kind != "error" {
 		t.Fatalf("%s: %+v %v", h, v, err)
-	}
-}
-
-// "Extract now": nothing to do, a run started, one already running, and no
-// memory at all, each as a toast.
-func TestMemoryExtractNow(t *testing.T) {
-	tw, csrf := newMemoryWeb(t)
-	tw.c.mem.now = func() time.Time { return time.Now().Add(time.Minute) }
-	extract := func(form url.Values) (msg, kind string) {
-		t.Helper()
-		_, _, h := tw.post("/memory/extract", form, csrf)
-		var v struct {
-			Toast struct{ Message, Kind string }
-		}
-		if err := json.Unmarshal([]byte(h.Get("HX-Trigger")), &v); err != nil {
-			t.Fatalf("trigger %q: %v", h.Get("HX-Trigger"), err)
-		}
-		return v.Toast.Message, v.Toast.Kind
-	}
-	if msg, kind := extract(nil); msg != "Rien de nouveau à extraire aujourd'hui." || kind != "ok" {
-		t.Fatalf("nothing: %q %s", msg, kind)
-	}
-	dayActivity(t, tw.c)
-	msg, kind := extract(url.Values{"day": {time.Now().Format("2006-01-02")}})
-	if !strings.HasPrefix(msg, "Extraction lancée (tâche ") || kind != "ok" {
-		t.Fatalf("started: %q %s", msg, kind)
-	}
-	if _, kind := extract(nil); kind != "error" {
-		t.Fatalf("twice: %s", kind)
-	}
-	tw.c.mem = nil
-	if msg, kind := extract(nil); msg != errMemoryOff.Error() || kind != "error" {
-		t.Fatalf("no memory: %q %s", msg, kind)
 	}
 }
 

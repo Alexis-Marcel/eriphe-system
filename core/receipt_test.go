@@ -302,23 +302,6 @@ func TestNoRepairAfterFailure(t *testing.T) {
 	}
 }
 
-// The night's extraction reads a task's receipt rather than its last message.
-func TestTranscriptReadsReceipt(t *testing.T) {
-	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateStopped})
-	c.store.addEvents("t-1", []EventRow{ev(1, "text", map[string]any{"text": doneReceipt}), ev(2, "turn_end", map[string]any{"subtype": "success"})})
-	segs, err := c.transcript(time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
-	if err != nil || len(segs) != 1 {
-		t.Fatalf("segments %+v %v", segs, err)
-	}
-	for _, want := range []string{"Its receipt: status done", "decisions: kept the old field",
-		"lessons it proposes: run the linter first", "claimed, not checked: tests pass | the page loads"} {
-		if !strings.Contains(segs[0].Text, want) {
-			t.Errorf("segment lacks %q: %s", want, segs[0].Text)
-		}
-	}
-}
-
 // The drawer shows verified and not verified side by side, without the
 // raw block, in French and in English.
 func TestReceiptOnCard(t *testing.T) {

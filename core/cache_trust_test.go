@@ -26,7 +26,4 @@ func TestTaskCacheTrust(t *testing.T) {
 			t.Errorf("taint %v: untrusted %v, want %v", tc.taint, spec.Untrusted, tc.want)
 		}
 	}
-	if !taskUntrusted(taskKindMemory, nil) {
-		t.Error("memory extraction shares the trusted cache")
-	}
 }

@@ -12,15 +12,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Only the brain is budgeted. The memory's extraction and a worker (a
-// skill's run among them) never reach eriphe-core's own tools, where the
-// budget is held: the relay refuses them. A task's own tools
-// (eriphe-nodes) are another server, never budgeted: a task writes as
-// much as its work needs.
+// Only the brain is budgeted. A worker (a skill's run among them) never
+// reaches eriphe-core's own tools, where the budget is held: the relay
+// refuses it. A task's own tools (eriphe-nodes) are another server, never
+// budgeted: a task writes as much as its work needs.
 func TestBrainBudgetIsTheBrainsOnly(t *testing.T) {
 	c := nodeCore(t)
 	c.self = newMCPServer(c.core)
-	c.store.insertTask(&TaskRow{ID: "m-1", Kind: taskKindMemory, Device: "pc", Runtime: "claude-code", State: stateRunning})
 	c.store.insertTask(&TaskRow{ID: "w-1", Kind: "worker", Device: "pc", Runtime: "claude-code", State: stateRunning})
 	mux := http.NewServeMux()
 	mux.Handle("/v1/device/tasks/{id}/mcp/{server}", c.taskMCPHandler())
@@ -45,7 +43,7 @@ func TestBrainBudgetIsTheBrainsOnly(t *testing.T) {
 		"body": strings.Repeat("Une ligne. ", brainWriteRunes/10)}); !strings.HasPrefix(msg, "Refused") {
 		t.Fatalf("the brain's whole page: %q", msg)
 	}
-	for _, task := range []string{"m-1", "w-1"} { // the memory's extraction, a worker (a skill's run is one)
+	for _, task := range []string{"w-1"} { // a worker (a skill's run is one)
 		if cs, err := dial(task); err == nil {
 			cs.Close()
 			t.Fatalf("task %s reached eriphe-core's own tools", task)
