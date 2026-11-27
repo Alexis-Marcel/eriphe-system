@@ -53,4 +53,26 @@ describe("the canvas", () => {
     expect(n.arc).toBe(2); // c and its ring
     expect(n.text).not.toContain("t a");
   });
+
+  it("eases a disc to its new size, from where it was, however long it rested", () => {
+    const { n, ctx } = counting();
+    const radii: number[] = [];
+    (ctx as unknown as { arc: (x: number, y: number, r: number) => void }).arc = (_x, _y, r) => void (n.arc++, radii.push(r));
+    const p = new Painter(document.createElement("canvas"), ctx);
+    p.resize(1000, 600);
+    const one = (r: number) => scene([node("a", 10), node("b", r)], []);
+    const two = [100, 100, 300, 100];
+    expect(p.paint(one(10), two, view, none, 0)).toBe(false);
+    // b grows, a long while after: the first paint starts from 10
+    radii.length = 0;
+    expect(p.paint(one(20), two, view, none, 60_000)).toBe(true);
+    expect(radii[1]).toBe(10);
+    // then it eases, and rests at 20
+    let t = 60_000, fading = true;
+    for (let i = 0; fading && i < 200; i++) fading = p.paint(one(20), two, view, none, (t += 16));
+    expect(fading).toBe(false);
+    radii.length = 0;
+    p.paint(one(20), two, view, none, (t += 16));
+    expect(radii[1]).toBe(20);
+  });
 });

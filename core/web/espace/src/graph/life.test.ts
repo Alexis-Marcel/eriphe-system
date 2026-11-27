@@ -71,17 +71,20 @@ describe("a node asleep", () => {
     expect((dot.r * 2) % 1).toBe(0);
   });
 
-  it("is a bubble only from SLEEPS times the threshold", () => {
-    const items: Item[] = Array.from({ length: 12 }, (_, i) => ({ id: `n${i}`, r: 20, waits: false, sleeps: i % 2 === 0 }));
+  it("is a bubble only close, as its dot grows on screen", () => {
+    // children of radius 14 awake: dots of 7 asleep, every other one
+    const items: Item[] = Array.from({ length: 12 }, (_, i) => ({ id: `n${i}`, r: i % 2 === 0 ? 14 * SLEEP_R : 14, waits: false, sleeps: i % 2 === 0 }));
     const xy = Float32Array.from(items.flatMap((_, i) => [i * 60, 0]));
     const o: Knobs = { ...LOD, from: 10, bubbleAt: 16 };
-    // scale 1: a radius of 20, past 16 but short of 16 × SLEEPS
-    const { ids } = decide(items, xy, { x: 0, y: 300, k: 1, w: 1000, h: 600 }, null, [], o, 100);
-    expect([...ids!].every((id) => Number(id.slice(1)) % 2 === 1)).toBe(true);
-    const close = decide(items, xy, { x: 0, y: 300, k: SLEEPS, w: 2000, h: 600 }, null, [], o, 100);
-    expect([...close.ids!].some((id) => Number(id.slice(1)) % 2 === 0)).toBe(true);
-    // hovered (kept), it is one at once
-    expect(decide(items, xy, { x: 0, y: 300, k: 1, w: 1000, h: 600 }, null, ["n0"], o, 100).ids!.has("n0")).toBe(true);
+    const at = (k: number, keep: string[] = []) => [...decide(items, xy, { x: 0, y: 300, k, w: 4000, h: 600 }, null, keep, o, 100).ids!].map((id) => Number(id.slice(1)));
+    // scale 1.2: the awake ones are bubbles, the dots not
+    expect(at(1.2).length).toBeGreaterThan(0);
+    expect(at(1.2).every((i) => i % 2 === 1)).toBe(true);
+    // close (the camera goes to 2.6), the dots too
+    expect(at(2.4).some((i) => i % 2 === 0)).toBe(true);
+    expect(16 * SLEEPS).toBeLessThanOrEqual(14 * SLEEP_R * 2.6);
+    // hovered (kept), one at once
+    expect(at(0.5, ["n0"])).toContain(0);
   });
 });
 

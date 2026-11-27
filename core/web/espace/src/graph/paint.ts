@@ -173,6 +173,7 @@ export class Painter {
   private cur = new Float32Array(0);
   private curOf: Scene | null = null;
   private lastT = 0;
+  private easing = false;
   // the zones as last drawn, in the graph's units (zones.ts)
   private zone: { tex: HTMLCanvasElement; breath: HTMLCanvasElement | null; x0: number; y0: number; t: number; m: number; shapes: Shape[]; scene: Scene; theme: Theme; moved?: number; at: number } | null = null;
   private union: HTMLCanvasElement | null = null;
@@ -265,7 +266,9 @@ export class Painter {
       this.cur = nc;
       this.curOf = s;
     }
-    const dt = this.lastT ? Math.max(0, Math.min(100, now - this.lastT)) : 0;
+    // the clock runs from the last paint only while an ease is under way:
+    // a change made at rest starts from where it was, not a jump
+    const dt = this.easing ? Math.max(0, Math.min(100, now - this.lastT)) : 0;
     this.lastT = now;
     const e = 1 - Math.exp(-dt / EASE);
     let moving = false;
@@ -279,6 +282,7 @@ export class Painter {
       else moving = true;
       cur[i] = c;
     }
+    this.easing = moving;
     return moving;
   }
 

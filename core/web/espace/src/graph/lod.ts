@@ -65,9 +65,12 @@ export const BUDGET = 40;
 export const GRAB = 8;
 
 export type Item = { id: string; r: number; waits: boolean; sleeps?: boolean };
-// A node asleep (life.ts) is a bubble only from SLEEPS times the threshold:
-// very close, or hovered, open, held.
-export const SLEEPS = 2.5;
+// A node asleep (life.ts) is a bubble from SLEEPS times the threshold, its
+// dot's radius on screen (half its radius awake, life.ts SLEEP_R): about
+// when it would be 1.2 times the threshold awake, close (a child's dot
+// from a scale of 1.5 to 2.4; the camera stops at 2.6), or hovered, open,
+// held.
+export const SLEEPS = 0.6;
 export type View = { x: number; y: number; k: number; w: number; h: number };
 
 // drawnRadius is a disc's radius in the graph's units: its radius times
