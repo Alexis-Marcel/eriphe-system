@@ -38,6 +38,9 @@ const root = resolve(arg("root", "."));
 const port = Number(arg("port", "5310"));
 const json = arg("json", "");
 const throttle = Number(arg("throttle", "1"));
+// --gpu: Chromium with its GPU (a canvas rasterised there, as in a
+// browser on a desktop), not in software on the main thread.
+const gpu = process.argv.includes("--gpu");
 // React as in production (the dev server otherwise serves its development
 // build): the dev page stays on (import.meta.env.DEV).
 const prodReact = arg("react", "prod") !== "dev";
@@ -55,7 +58,7 @@ let browser;
 const rows = [];
 try {
   await server.listen();
-  browser = await chromium.launch();
+  browser = await chromium.launch(gpu ? { args: ["--enable-gpu", "--ignore-gpu-blocklist", "--use-angle=metal"] } : {});
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: "fr-FR", colorScheme: "light" });
   page.setDefaultTimeout(180_000);
   const cdp = await page.context().newCDPSession(page);
@@ -66,8 +69,12 @@ try {
   // says its frames and the main thread's work meanwhile.
   const play = async (move) => {
     const a = await metrics();
+    const p0 = await page.evaluate(() => window.leger.stats().paints);
     const f = await page.evaluate((m) => window.leger.sample(3000, m ? window.leger[m] : undefined), move);
     const b = await metrics();
+    const st = await page.evaluate(() => window.leger.stats());
+    f.paint = st.paint;
+    f.paints = st.paints - p0;
     const d = (k) => Math.round((b[k] - a[k]) * 1000);
     return { ...f, task: d("TaskDuration"), script: d("ScriptDuration"), layout: d("LayoutDuration"), style: d("RecalcStyleDuration"), layouts: b.LayoutCount - a.LayoutCount, dom: b.Nodes };
   };
@@ -92,7 +99,7 @@ try {
     const zoom = await play("panZoom");
     const row = { n, stable: rested ? at.stable : null, drawn: at.drawn, k: at.k, bubbles: at.bubbles, bubbles1: at1.bubbles, settle, pan, sweep, pan1, zoom };
     rows.push(row);
-    const ph = (p) => `${p.fps} fps (p95 ${p.p95}, worst ${p.worst} ms), busy ${p.task} ms (script ${p.script}, layout ${p.layout}, style ${p.style}, ${p.layouts} layouts)`;
+    const ph = (p) => `${p.fps} fps (p95 ${p.p95}, worst ${p.worst} ms), busy ${p.task} ms (script ${p.script}, layout ${p.layout}, style ${p.style}, ${p.layouts} layouts), canvas ${p.paints} paints of ~${p.paint} ms`;
     console.error(`${n}: drawn ${at.drawn} ms, rest ${rested ? `${at.stable} ms` : "not within " + cap / 1000 + " s"}, scale ${at.k}, ${at.bubbles} bubbles (${at1.bubbles} at 1), ${pan.dom} DOM nodes`);
     for (const [name, p] of [["settle", settle], ["pan", pan], ["sweep", sweep], ["pan 1", pan1], ["zoom", zoom]]) console.error(`  ${name}: ${ph(p)}`);
   }

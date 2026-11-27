@@ -6,7 +6,7 @@ import { useWords, type Lang } from "../i18n";
 import { Orb } from "../orb/Orb";
 import { Page } from "../page/Page";
 import { onReads, readsUnderWay } from "../page/usePage";
-import { bigBox, bigRoom, boxAt, edgeMark, frameAll, frameAlone, frameAround, framePages, pageMax, type Box, type Cam } from "./camera";
+import { bigBox, bigRoom, boxAt, edgeMark, frameAll, MIN_K, frameAlone, frameAround, framePages, pageMax, type Box, type Cam } from "./camera";
 import { decide, families, hit, LOD, lodVersion, NEAR, onLod, same, type View } from "./lod";
 import { FAMILIES, Painter, scene, type Scene } from "./paint";
 import { CENTRING, edgePush, edgeStep, extent, FORCES, onForces, pairs, Sim, SLICE, type LNode, type Pos, type Pt } from "./layout";
@@ -559,7 +559,7 @@ export function Graph({ live }: { live: boolean }) {
       const near = bubbles.filter((x) => lit.has(x.id)).map((x) => bubbleBox(x, rp[x.id]));
       return framePages(pages, focus, near, band, size.w < 1200 ? 0.9 : 1, all);
     }
-    return frameAll(all, band);
+    return frameAll(all, band, lod ? MIN_K : 0.25);
   };
   // Asked for less motion, the camera goes there at once, as the graph
   // settles at once (wake): nothing glides.
@@ -633,7 +633,7 @@ export function Graph({ live }: { live: boolean }) {
       setManual(true);
       if (e.ctrlKey || e.metaKey) {
         const k0 = camK.get();
-        const k1 = Math.max(0.25, Math.min(2.6, k0 * Math.exp(-e.deltaY * 0.006)));
+        const k1 = Math.max(lodNow.current ? MIN_K : 0.25, Math.min(2.6, k0 * Math.exp(-e.deltaY * 0.006)));
         camX.jump(e.clientX - ((e.clientX - camX.get()) * k1) / k0);
         camY.jump(e.clientY - ((e.clientY - camY.get()) * k1) / k0);
         camK.jump(k1);

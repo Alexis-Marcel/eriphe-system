@@ -335,11 +335,12 @@ export class Painter {
         ctx.fill();
       }
     }
-    // the rings: violet for what waits (2 px, as its bubble's core), the
-    // run colour for what runs
+    // the rings: violet for what waits (2 px, as its bubble's core), at
+    // every scale; the run colour for what runs, once big enough not to
+    // be taken for the violet
     for (const [flag, style, lw] of [
       [(i: number) => s.items[i].waits, T.accent, 2],
-      [(i: number) => s.run[i] === 1, T.run, 1.5],
+      [(i: number) => s.run[i] === 1 && sr[i] >= 5, T.run, 1.5],
     ] as const) {
       ctx.strokeStyle = style;
       ctx.lineWidth = lw;

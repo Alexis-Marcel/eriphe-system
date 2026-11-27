@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { GraphNode } from "./data/api";
 import { applyNodes, step, store } from "./data/store";
+import { LOD, setLod, type Knobs } from "./graph/lod";
 import { paintStats } from "./graph/paint";
 import "./dev.css";
 
@@ -159,7 +160,7 @@ export function secondBrain(n = 1100, links = 4000, seed = 42): GraphNode[] {
   return out;
 }
 
-type Stats = { fps: number; worst: number; p95: number; bubbles: number; stable: number | null; drawn: number | null; nodes: number; k: number };
+type Stats = { fps: number; worst: number; p95: number; bubbles: number; stable: number | null; drawn: number | null; nodes: number; k: number; paint: number; paints: number; discs: number; labels: number; links: number };
 
 // The frames as the page sees them: their times, for the overlay and the
 // script.
@@ -187,6 +188,11 @@ function stats(): Stats {
     drawn: drawnIn,
     nodes: Object.keys(store.getState().nodes).length,
     k: Math.round(scale() * 100) / 100,
+    paint: Math.round(paintStats.ms * 100) / 100,
+    paints: paintStats.paints,
+    discs: paintStats.discs,
+    labels: paintStats.labels,
+    links: paintStats.links,
   };
 }
 
@@ -351,6 +357,46 @@ export function startLeger() {
   };
 }
 
+// The level of detail's knobs (graph/lod.ts), live: what a node needs on
+// screen to be a bubble, to show its label; the discs' size, their colour.
+const KNOBS: { key: keyof Knobs; label: string; min: number; max: number; step: number }[] = [
+  { key: "bubbleAt", label: "bulle dès (rayon px)", min: 4, max: 60, step: 1 },
+  { key: "labelAt", label: "titre dès (rayon px)", min: 1, max: 40, step: 0.5 },
+  { key: "size", label: "taille des disques", min: 0.3, max: 3, step: 0.05 },
+  { key: "cap", label: "bulles au plus", min: 10, max: 400, step: 10 },
+  { key: "from", label: "disques dès (nœuds)", min: 0, max: 1000, step: 25 },
+];
+const DEFAULTS = { ...LOD };
+
+function Knobs() {
+  const [, setV] = useState(0);
+  const set = (k: Partial<Knobs>) => {
+    setLod(k);
+    setV((v) => v + 1);
+  };
+  return (
+    <fieldset className="dev-leger-knobs">
+      <legend>Niveau de détail</legend>
+      {KNOBS.map((k) => (
+        <label key={k.key}>
+          <span>
+            {k.label} <output>{String(LOD[k.key])}</output>
+          </span>
+          <input type="range" min={k.min} max={k.max} step={k.step} value={Number(LOD[k.key])} onChange={(e) => set({ [k.key]: Number(e.target.value) })} />
+        </label>
+      ))}
+      <label className="dev-leger-check">
+        <input type="checkbox" checked={LOD.color} onChange={(e) => set({ color: e.target.checked })} /> couleur par famille
+      </label>
+      <div className="dev-phys-row">
+        <button type="button" onClick={() => set({ ...DEFAULTS })}>
+          Réglages par défaut
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
 // LegerPanel is the overlay: the figures, a few times a second (written
 // straight on their elements, not drawn again), and the controls.
 export function LegerPanel() {
@@ -373,6 +419,8 @@ export function LegerPanel() {
           `p95      ${s.p95.toFixed(1)} ms`,
           `au repos ${s.stable === null ? "…" : `${s.stable} ms`}`,
           `échelle  ${s.k}`,
+          `canevas  ${s.paint.toFixed(2)} ms`,
+          `         ${s.discs} disques, ${s.labels} titres`,
         ].join("\n");
     }, 250);
     return () => clearInterval(id);
@@ -417,6 +465,7 @@ export function LegerPanel() {
               Changer une taille
             </button>
           </div>
+          <Knobs />
         </>
       )}
     </aside>
