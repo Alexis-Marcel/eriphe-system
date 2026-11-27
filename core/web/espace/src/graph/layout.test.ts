@@ -349,7 +349,7 @@ describe("the force graph", () => {
         for (const k of kin) {
           const g = gap(sim, me, opened.find((n) => n.id === k)!);
           expect(g).toBeLessThan(FORCES.distance + 40);
-          expect(g).toBeLessThanOrEqual(others[others.length >> 1]);
+          expect(g).toBeLessThanOrEqual(others[others.length >> 1] + 1e-6);
         }
         expect(overlaps(sim, opened)).toEqual([]);
         // the others stand all round it, not on one side
@@ -379,6 +379,90 @@ describe("the force graph", () => {
         expect(centred(cam, page)).toBe(true);
         expect(overlaps(sim, opened)).toEqual([]);
       }
+    });
+
+    // The real case: a page open in the middle with its own bubbles, a
+    // subject above it (linked to the page or not) and the subject's bubble
+    // below the page, on its far side; a subject alone or not.
+    const entourage = (linked: boolean, alone = true): LNode[] =>
+      open(
+        [
+          node("ENT", "Mon entourage"),
+          node("E1", "Anniversaires", { parent: "ENT" }),
+          node("E2", "Appeler Sam", { parent: "ENT" }),
+          node("E3", "Idées de cadeaux", { parent: "ENT" }),
+          node("TAC", "Mes tâches", { links: linked ? ["ENT"] : [] }),
+          node("MAJ", "Mettre à jour Mes tâches", { parent: "TAC" }),
+          ...(alone ? [node("OUT", "Outils à revoir")] : []),
+        ],
+        ["ENT"],
+      );
+    // put places a body by hand, as a drag would leave it, its cluster
+    // staying where it is.
+    const put = (sim: Sim, id: string, p: Pt) => {
+      const b = (sim as unknown as { byId: Map<string, { x: number; y: number }> }).byId.get(id)!;
+      [b.x, b.y] = p;
+    };
+    // side is the side of the page box a body stands on.
+    const side = (p: Pos, [l, t, r, b]: number[], id: string) => {
+      const [x, y] = p[id];
+      return y < t ? "above" : y > b ? "below" : x < l ? "left" : x > r ? "right" : "on";
+    };
+    // crosses tells whether the segment from a to b goes through the box.
+    const crosses = (a: Pt, b: Pt, [l, t, r, bt]: number[]) => {
+      for (let i = 0; i <= 400; i++) {
+        const x = a[0] + ((b[0] - a[0]) * i) / 400, y = a[1] + ((b[1] - a[1]) * i) / 400;
+        if (x > l && x < r && y > t && y < bt) return true;
+      }
+      return false;
+    };
+
+    it("brings a bubble left on the far side of the page round it, back by what it hangs on", () => {
+      // left there as the page comes into focus (spreadRound and the
+      // springs), or once it is in focus (the springs alone: then with
+      // nothing else in its way, as a body jammed at the page's corner
+      // can still hold it)
+      for (const [linked, refocus] of [
+        [false, true],
+        [true, true],
+        [false, false],
+        [true, false],
+      ]) {
+        const nodes = entourage(linked, refocus);
+        const sim = laid(nodes);
+        sim.focus("ENT");
+        sim.settle();
+        const at = sim.at("ENT")!;
+        put(sim, "TAC", [at[0], at[1] - 420]);
+        put(sim, "MAJ", [at[0], at[1] + 420]);
+        if (refocus) {
+          sim.focus(null);
+          sim.focus("ENT");
+        } else sim.reheat();
+        sim.settle();
+        const p = sim.positions(), page = boxAt(p.ENT, nodes[0].box!);
+        // by its subject, not on the far side of the page, its link clear
+        // of the page
+        const far = { above: "below", below: "above", left: "right", right: "left" } as Record<string, string>;
+        expect(side(p, page, "MAJ"), `linked: ${linked}, refocus: ${refocus}`).not.toBe(far[side(p, page, "TAC")]);
+        expect(crosses(p.MAJ, p.TAC, page), `linked: ${linked}, refocus: ${refocus}`).toBe(false);
+        expect(dist(p.MAJ, p.TAC)).toBeLessThan(250);
+        expect(overlaps(sim, nodes)).toEqual([]);
+      }
+    });
+
+    it("still spreads the page's own bubbles all round it", () => {
+      const nodes = entourage(false);
+      const sim = laid(nodes);
+      sim.focus("ENT");
+      sim.settle();
+      const p = sim.positions(), page = boxAt(p.ENT, nodes[0].box!);
+      const own = new Set(["E1", "E2", "E3"].map((id) => side(p, page, id)));
+      expect(own.has("on")).toBe(false);
+      expect(own.size, [...own].join()).toBeGreaterThanOrEqual(2);
+      expect(sides(sim, nodes, "ENT").size).toBeGreaterThanOrEqual(3);
+      expect(crosses(p.MAJ, p.TAC, page)).toBe(false);
+      expect(overlaps(sim, nodes)).toEqual([]);
     });
 
     it("glides to a new focus: nothing jumps, the new one stays, and none at all keeps the graph about where it is", () => {
