@@ -133,7 +133,7 @@ function readTheme(): Theme {
     run: rgb(c("--run", "#3b6ea8")),
     ok: rgb(c("--ok", "#30a46c")),
     neutral: rgb(mix(card, 0.5, fill)),
-    sleep: rgb(mix(fg, 0.3, bg)),
+    sleep: rgb(mix(fg, 0.16, bg)),
     fills: fams.map((f) => rgb(mix(f, share, card))),
     dots: fams.map((f) => rgb(f)),
     // a zone: its family's hue, greyed toward the page (low in saturation)
@@ -505,7 +505,7 @@ export class Painter {
     for (let b = 0; b < B; b++) count[b + 1] += count[b];
     // the nodes asleep: small pale dots, under the others, one path
     if (sleeping) {
-      ctx.globalAlpha = st.near ? 0.2 : 0.7;
+      ctx.globalAlpha = st.near ? 0.25 : 0.9;
       ctx.fillStyle = T.sleep;
       ctx.beginPath();
       for (let i = 0; i < n; i++) {

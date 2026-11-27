@@ -1104,7 +1104,7 @@ li:hover .a2-inline-no, .a2-inline-no:focus-visible { opacity: 1; }
    pale (only when hovered, open, or seen very close). The zones of the
    families where something waits (graph/paint.ts) breathe, softly: a
    layer of their own, its opacity in CSS, no paint at rest. */
-.gr-node.sleeps .gr-core { background: color-mix(in srgb, var(--fg) 30%, var(--bg)); box-shadow: none; opacity: 0.7 !important; }
+.gr-node.sleeps .gr-core { background: color-mix(in srgb, var(--fg) 16%, var(--bg)); box-shadow: none; opacity: 0.9 !important; }
 .gr-breath { animation: zone-breath 6s ease-in-out infinite; }
 @keyframes zone-breath { 0%, 100% { opacity: 0.15; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .gr-breath { animation: none; opacity: 0.6; } }
