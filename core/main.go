@@ -76,12 +76,11 @@ func main() {
 	c := newCore(cfg, store)
 	c.token = token
 	c.startMachineTLS() // machine_tls.go
-	// Eriphe's memory, in its own file: without it, the rest still works.
+	// The intentions, in memory.db: without it, the rest still works.
 	if mem, err := openMemory(cfg.memoryConfig().DB); err != nil {
 		log.Printf("memory: %v", err)
 	} else {
 		c.useMemory(mem) // its abouts are kept by the names of core.db (names.go)
-		c.mem.owner = func() string { return c.conf().User }
 	}
 	// The graph's nodes, in their own repository (nodes.go).
 	if nodes, err := openNodes(cfg, store.db); err != nil {

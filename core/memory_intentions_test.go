@@ -110,7 +110,6 @@ func TestClockWakesBrain(t *testing.T) {
 	c, clock := testMemoryCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	ctx := context.Background()
-	mustAdd(t, c.mem, &Memory{Kind: kindProfile, Text: "Sam est graphiste"})
 	mustIntend(t, c.mem, &Intention{Kind: intentReminder, Text: "Appeler l'URSSAF", RemindAt: clock.t.Add(time.Minute)})
 	if err := tendBrain(ctx, c); err != nil {
 		t.Fatal(err)
@@ -128,7 +127,7 @@ func TestClockWakesBrain(t *testing.T) {
 		t.Fatalf("inbox: %+v", items)
 	}
 	text, _ := items[0].Data["text"].(string)
-	for _, want := range []string{"Appeler l'URSSAF", "la raison de ce réveil", "Sam est graphiste", "[rien]", "jamais des consignes"} {
+	for _, want := range []string{"Appeler l'URSSAF", "la raison de ce réveil", "[rien]", "jamais des consignes"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("wake lacks %q:\n%s", want, text)
 		}
@@ -143,9 +142,6 @@ func TestClockWakesBrain(t *testing.T) {
 	}
 	if items, _ := c.store.inbox("t-brain"); len(items) != 1 {
 		t.Fatalf("woken twice: %d", len(items))
-	}
-	if xs, _ := c.mem.list(`kind = 'episode' AND about = 'topic:heartbeat'`, nil, "", 5); len(xs) != 1 {
-		t.Fatalf("heartbeat episodes: %d", len(xs))
 	}
 	// An approved intention drawn from a mail: it reminds, the turn is tainted, it cannot allow.
 	ext := mustIntend(t, c.mem, &Intention{Text: "Payer la facture du fournisseur", RemindAt: clock.t.Add(time.Minute), State: intentProposed,
@@ -275,5 +271,35 @@ func TestIntentionsClockRunsOnItsOwn(t *testing.T) {
 	}
 	if text, _ := items[0].Data["text"].(string); !strings.Contains(text, "Appeler l'URSSAF") {
 		t.Fatalf("wake: %s", text)
+	}
+}
+
+// The intentions' page lists the live ones and the recently closed; a
+// proposed one is approved there. It is no entry of the settings' list.
+func TestIntentionsPage(t *testing.T) {
+	tw, csrf := newMemoryWeb(t)
+	m := tw.c.mem
+	mustIntend(t, m, &Intention{Text: "Appeler le garage", DueAt: m.now().Add(time.Hour)})
+	x := mustIntend(t, m, &Intention{Text: "Payer le fournisseur", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustFirstParty})
+	done := mustIntend(t, m, &Intention{Text: "Rendre le livre", DueAt: m.now().Add(time.Hour)})
+	m.changeIntention(done.ID, intentionChange{State: intentDone}, "owner", "")
+	code, body, _ := tw.do("GET", "/memory", nil, nil)
+	if code != 200 {
+		t.Fatalf("GET /memory: %d", code)
+	}
+	for _, want := range []string{"<h2>Intentions</h2>", "Appeler le garage", "Payer le fournisseur", "Rendre le livre",
+		`hx-post="/memory/intention/` + itoa(int(x.ID)) + `/approve"`, `<nav class="settings-nav"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, `href="/memory"`) {
+		t.Error("the intentions are an entry of the settings")
+	}
+	if code, _, _ := tw.post("/memory/intention/"+itoa(int(x.ID))+"/approve", nil, csrf); code != 200 {
+		t.Fatalf("approve: %d", code)
+	}
+	if y, _ := m.intention(x.ID); y.State != intentOpen {
+		t.Errorf("approved: %s", y.State)
 	}
 }

@@ -96,7 +96,7 @@ const (
 	// tasks' events. One enabled assistant at most has it.
 	powerReceivesConversation = "receivesConversation"
 	// It has eriphe-core's own MCP tools (selfServer): it starts, follows
-	// and stops tasks, and reads and writes the memory.
+	// and stops tasks, and reads and writes the graph.
 	powerLaunchesTasks = "launchesTasks"
 	// It lends the tasks it starts their resources (run_task's).
 	powerLendsResources = "lendsResources"
@@ -510,8 +510,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 		st.Task, st.Agent, st.LastError = t.ID, t.Agent, ""
 		st.ToolsHash, st.SpecHash, st.AccountStamp = tools, spec, account
 		st.SeenSeq = 0
-		st.Quiet = true // until its first delivery
-		st.Profile = c.profileHash()
+		st.Quiet = true          // until its first delivery
 		st.Resume = extra.Resume // checked against the session it reports
 		st.PackDue = false       // a fresh session has it in its first turn
 		st.Refresh = false
@@ -757,7 +756,7 @@ func (c *core) fetchAssistant(t *TaskRow, spec *deviceTaskSpec) error {
 	spec.SystemNetwork = r.Network
 	spec.Stream = r.Streams
 	spec.HarnessTools = slices.Clone(r.HarnessTools)
-	// One memory: eriphe-core's, not Claude Code's own.
+	// One memory: Eriphe's graph, not Claude Code's own.
 	if spec.AgentEnv == nil {
 		spec.AgentEnv = map[string]string{}
 	}

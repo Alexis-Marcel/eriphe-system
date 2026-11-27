@@ -43,7 +43,7 @@ func TestIntentionEdges(t *testing.T) {
 	m.tickIntentions()
 	p, _ := m.wakePacket()
 	m.surfaced(p.Due, "test")
-	if p, _ = m.wakePacket(); len(p.Pending) != 1 || p.Pending[0].ID != ext.ID || strings.Contains(p.render("Sam"), "SECRET") {
-		t.Fatalf("pending external quoted:\n%s", p.render("Sam"))
+	if p, _ = m.wakePacket(); len(p.Pending) != 1 || p.Pending[0].ID != ext.ID || strings.Contains(p.render(), "SECRET") {
+		t.Fatalf("pending external quoted:\n%s", p.render())
 	}
 }

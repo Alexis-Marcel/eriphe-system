@@ -171,16 +171,6 @@ func TestCardAnsweredElsewhereMovesAtOnce(t *testing.T) {
 		move func(ref string)         // answers it elsewhere
 		want string
 	}{
-		{"a memory forgotten on its page", func(node string) string {
-			x := mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Le garage ferme lundi", Status: memProposed, SourceKind: srcTask})
-			c.cardNow(cardMemory, x.ID, "", nodeRef(node))
-			return proposalRef(cardMemory, x.ID)
-		}, func(ref string) {
-			_, id, _ := parseProposalRef(ref)
-			if err := c.mem.forget(id, "owner", "not true"); err != nil {
-				t.Fatal(err)
-			}
-		}, cardRejected},
 		{"an intention cancelled on its page", func(node string) string {
 			x := mustIntend(t, c.mem, &Intention{Text: "Relancer Sam", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustOwner})
 			c.cardNow(cardIntention, x.ID, "", nodeRef(node))

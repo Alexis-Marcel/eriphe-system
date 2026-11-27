@@ -17,8 +17,8 @@ import (
 
 // The graph's nodes (package nodestore): a git repository of markdown
 // files, nodes/ next to core.db, and its index nodes.db beside it. A
-// secret is refused by the memory's filter (scanSecrets); the nightly
-// backup goes with the memory's, into its backup folder, at its hour.
+// secret is refused (scanSecrets); the nightly backup goes into its
+// backup folder, at its hour (BackupConfig).
 
 // nodeByCode is the author of code's own writes of a node.
 const nodeByCode = "eriphe"

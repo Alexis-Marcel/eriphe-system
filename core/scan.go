@@ -105,7 +105,7 @@ func scanText(parts ...string) scanResult {
 
 // scanSecrets tells why a text holds a secret: a credential, a long
 // random string, a link with a password or a token; "" when it holds
-// none. The memory and the graph's nodes (nodes.go) refuse such a text.
+// none. The intentions and the graph's nodes (nodes.go) refuse such a text.
 func scanSecrets(text string) string { return scanSecretsNamed(text, text) }
 
 // scanSecretsNamed is scanSecrets with the long random strings looked for

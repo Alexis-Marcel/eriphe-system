@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-// The intentions in the Memory page (the "Intentions" tab, and those
-// proposed in "À approuver"): what is owed, by whom, by when, with done,
-// snooze and cancel; approve or reject what was drawn from outside.
+// The intentions' page (/memory, until they move to core.db): what is
+// owed, by whom, by when, with done, snooze and cancel; approve or reject
+// what was drawn from outside, here or in « À valider ».
 
 type intentCard struct {
 	*Intention
@@ -22,46 +22,44 @@ func (w *web) intentCard(x *Intention) intentCard {
 }
 
 func (w *web) intentionRoutes(mux *webMux) {
+	mux.Handle("GET /memory", w.auth(w.handleIntentions))
 	mux.Handle("POST /memory/intention/{id}/{action}", w.auth(w.handleIntention))
 }
 
-// intentionCounts are the tab's and the stats' numbers: what is live, and
-// what is due or late.
-func (w *web) intentionCounts(p *memoryPage) {
-	m := w.c.mem
-	now := m.now().Unix()
-	var n int
-	m.db.QueryRow(`SELECT COUNT(*) FROM intentions WHERE state IN ('open', 'due', 'snoozed')`).Scan(&n)
-	p.Open = n
-	m.db.QueryRow(`SELECT COUNT(*) FROM intentions WHERE state IN ('open', 'due', 'snoozed') AND due_at IS NOT NULL AND due_at < ?`, now).Scan(&n)
-	p.Overdue = n
-	m.db.QueryRow(`SELECT COUNT(*) FROM intentions WHERE state = 'proposed'`).Scan(&n)
-	p.Proposed += n
+type intentionsPage struct {
+	Off         bool
+	Intents     []intentCard // the live ones
+	IntentsDone []intentCard // recently closed
 }
 
-// intentionsView fills the Intentions tab: the live ones, the due first,
-// then the recently closed.
-func (w *web) intentionsView(p *memoryPage) error {
-	xs, err := w.c.mem.intentions(intentDue, intentOpen, intentSnoozed, intentProposed)
-	if err != nil {
-		return err
+// handleIntentions shows the live intentions, the due first, then the
+// recently closed.
+func (w *web) handleIntentions(rw http.ResponseWriter, r *http.Request, s *session) {
+	p := intentionsPage{Off: w.c.mem == nil}
+	if !p.Off {
+		xs, err := w.c.mem.intentions(intentDue, intentOpen, intentSnoozed, intentProposed)
+		if err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		for _, x := range xs {
+			p.Intents = append(p.Intents, w.intentCard(x))
+		}
+		closed, err := w.c.mem.intentions(intentDone, intentCancelled)
+		if err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		for i := len(closed) - 1; i >= 0 && len(p.IntentsDone) < 20; i-- {
+			p.IntentsDone = append(p.IntentsDone, w.intentCard(closed[i]))
+		}
 	}
-	for _, x := range xs {
-		p.Intents = append(p.Intents, w.intentCard(x))
-	}
-	closed, err := w.c.mem.intentions(intentDone, intentCancelled)
-	if err != nil {
-		return err
-	}
-	for i := len(closed) - 1; i >= 0 && len(p.IntentsDone) < 20; i-- {
-		p.IntentsDone = append(p.IntentsDone, w.intentCard(closed[i]))
-	}
-	return nil
+	w.render(rw, r, s, "memory", "", page{Title: "intent.title", Nav: "settings", Tab: "memory", Data: p})
 }
 
 func (w *web) handleIntention(rw http.ResponseWriter, r *http.Request, s *session) {
 	if w.c.mem == nil {
-		http.Error(rw, errMemoryOff.Error(), http.StatusServiceUnavailable)
+		http.Error(rw, errIntentionsOff.Error(), http.StatusServiceUnavailable)
 		return
 	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -80,7 +78,7 @@ func (w *web) handleIntention(rw http.ResponseWriter, r *http.Request, s *sessio
 	switch action {
 	case "approve":
 		if x.State != intentProposed {
-			w.toast(rw, tr(w.lang(r), "mem.notproposed"), false)
+			w.toast(rw, tr(w.lang(r), "intent.notproposed"), false)
 			return
 		}
 		ch.State = intentOpen
@@ -166,6 +164,22 @@ var intentionStrings = map[string]map[string]string{
 		"intent.did.snooze":       "Reporté.",
 		"intent.did.reopen":       "Intention rouverte.",
 		"intent.proposedlead":     "Des intentions attendent ton accord : elles viennent d'un contenu extérieur (un mail, une page) ou ont été déduites.",
+		"intent.title":            "Intentions",
+		"intent.lead":             "Ce qui est dû, par qui, pour quand : tes promesses, celles de {{name}}, ce que tu attends des autres, tes rappels. {{name}} te le rappelle au bon moment.",
+		"intent.off":              "Les intentions de {{name}} n'ont pas pu s'ouvrir : voir le journal d'eriphe-core.",
+		"intent.none":             "Rien en cours.",
+		"intent.donerecent":       "Terminés récemment",
+		"intent.overdue":          "En retard",
+		"intent.notproposed":      "Cette intention n'attend plus d'approbation.",
+		"intent.inboxlead":        "Ce que {{name}} a lu dans un mail, une page ou une tâche ne devient pas une intention sans ton accord.",
+		"trust.owner":             "De toi",
+		"trust.first_party":       "D'Eriphe",
+		"trust.external":          "De l'extérieur",
+		"src.owner":               "toi",
+		"src.brain":               "{{name}}",
+		"src.extraction":          "extraction",
+		"src.task":                "tâche",
+		"src.import":              "import",
 	},
 	"en": {
 		"intent.kind.promise":     "Promise",
@@ -202,5 +216,21 @@ var intentionStrings = map[string]map[string]string{
 		"intent.did.snooze":       "Snoozed.",
 		"intent.did.reopen":       "Intention reopened.",
 		"intent.proposedlead":     "Intentions wait for your approval: they come from external content (a mail, a page) or were inferred.",
+		"intent.title":            "Intentions",
+		"intent.lead":             "What is owed, by whom, by when: your promises, {{name}}'s, what you wait for from others, your reminders. {{name}} reminds you at the right time.",
+		"intent.off":              "{{name}}'s intentions could not be opened: see eriphe-core's log.",
+		"intent.none":             "Nothing under way.",
+		"intent.donerecent":       "Recently closed",
+		"intent.overdue":          "Overdue",
+		"intent.notproposed":      "This intention no longer waits for approval.",
+		"intent.inboxlead":        "What {{name}} read in a mail, a page or a task does not become an intention without your approval.",
+		"trust.owner":             "From you",
+		"trust.first_party":       "From Eriphe",
+		"trust.external":          "External",
+		"src.owner":               "you",
+		"src.brain":               "{{name}}",
+		"src.extraction":          "extraction",
+		"src.task":                "task",
+		"src.import":              "import",
 	},
 }

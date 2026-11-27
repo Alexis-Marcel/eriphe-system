@@ -504,7 +504,6 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra d
 	spec.AgentEnv, spec.MCPServers, spec.Servers, spec.AlwaysLoad = nil, nil, nil, nil // added when the device fetches the task
 	spec.Folders = nil                                                                 // the same
 	if kind == "worker" {
-		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + c.taskNowText()) // situations.go
 		// The skill it follows: a tool of its eriphe-nodes proposes a
 		// version of it (skill_propose.go).
 		if r.skill != "" {

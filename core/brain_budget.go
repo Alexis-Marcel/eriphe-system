@@ -50,8 +50,8 @@ const (
 	brainNodeWrites = 3
 	// brainSkillWrites: one skill proposed per turn, never a series.
 	brainSkillWrites = 1
-	// brainGestures is how many counted calls (the writes above, a
-	// memory, a notification, a rule, a node's properties, a catalog call
+	// brainGestures is how many counted calls (the writes above, an
+	// intention, a notification, a rule, a node's properties, a catalog call
 	// that is not a read) a turn makes per message: a gesture is one or
 	// two calls, a few for a turn that answers a card.
 	brainGestures = 6
@@ -73,7 +73,7 @@ const (
 var brainToolClass = map[string]string{
 	// Reads.
 	"list_agents": budgetRead, "list_devices": budgetRead, "list_tools": budgetRead, "list_folders": budgetRead,
-	"list_repos": budgetRead, "task_status": budgetRead, "list_tasks": budgetRead, "recall": budgetRead,
+	"list_repos": budgetRead, "task_status": budgetRead, "list_tasks": budgetRead,
 	"intentions": budgetRead, "read_attachment": budgetRead, "list_skills": budgetRead,
 	"read_skill": budgetRead, "skill_runs": budgetRead, "monitors": budgetRead, "node_find": budgetRead,
 	"node_read": budgetRead, "page_format": budgetRead, "notifications": budgetRead,
@@ -83,8 +83,8 @@ var brainToolClass = map[string]string{
 	"node_show": budgetRoute, "turn_home": budgetRoute, "node_settle": budgetRoute, "withdraw_proposal": budgetRoute,
 	// Writes.
 	"node_write": budgetWrite, "node_edit": budgetWrite, "write_skill": budgetSkill,
-	"node_set": budgetCounts, "remember": budgetCounts, "update_memory": budgetCounts, "forget": budgetCounts,
-	"intend": budgetCounts, "update_intention": budgetCounts, "notify": budgetCounts,
+	"node_set": budgetCounts,
+	"intend":   budgetCounts, "update_intention": budgetCounts, "notify": budgetCounts,
 	"rule": budgetCounts, "setting": budgetCounts, "write_monitor": budgetCounts, "try_monitor": budgetCounts,
 }
 

@@ -392,8 +392,7 @@ func (c *core) startSkillRun(ctx context.Context, sk triggeredSkill, key string,
 			c.store.db.Exec(`UPDATE skill_runs SET external = 1 WHERE id = ?`, runID)
 		}
 	}
-	// It writes its node's items as the user wants to see them.
-	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, home, events, now, c.seePreferences()), Agent: sk.Manifest.Uses.Model, about: alias,
+	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, home, events, now), Agent: sk.Manifest.Uses.Model, about: alias,
 		askStart: false, approvedInAdvance: true, cleanStart: !external, inNode: sk.Trigger.Node, origin: skillOrigin(sk.Name, events), skill: sk.Name}
 	for _, t := range sk.Manifest.Uses.Tools {
 		r.Resources = append(r.Resources, ResourceRef{Kind: "tool", Ref: t})
@@ -472,10 +471,8 @@ func (c *core) homeNode(id string) (title string, external bool, err error) {
 }
 
 // skillRunPrompt is a run's prompt: the skill, the home node it works
-// in (its title; "" for a node of its own), then its events. prefs are
-// the user's preferences about what they see, for the items it writes
-// (seePreferences).
-func skillRunPrompt(sk triggeredSkill, home string, events []journalEvent, now time.Time, prefs []string) string {
+// in (its title; "" for a node of its own), then its events.
+func skillRunPrompt(sk triggeredSkill, home string, events []journalEvent, now time.Time) string {
 	var b strings.Builder
 	b.WriteString(skillMethod(sk.Name, sk.Manifest) + "\n\n") // task_launch.go
 	if home != "" {
@@ -484,13 +481,6 @@ func skillRunPrompt(sk triggeredSkill, home string, events []journalEvent, now t
 	}
 	if s := skillCanText(sk.Trigger); s != "" {
 		b.WriteString(strings.TrimSpace(s) + "\n\n")
-	}
-	if len(prefs) > 0 {
-		b.WriteString("[ce que l'utilisateur veut voir, plus ou moins (ses préférences, de sa mémoire) : écris les éléments en conséquence ; ce qu'il ne veut plus voir n'est pas dans la page]\n")
-		for _, p := range prefs {
-			fmt.Fprintf(&b, "- %s\n", p)
-		}
-		b.WriteString("\n")
 	}
 	if len(events) == 0 {
 		fmt.Fprintf(&b, "[déclenchement : horaire « %s », %s]\n", sk.Trigger.At, now.Format("2006-01-02 15:04"))

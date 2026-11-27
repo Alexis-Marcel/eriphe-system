@@ -57,7 +57,7 @@ func TestJournalInSettings(t *testing.T) {
 // told in the conversation, and what waits is asked there.
 func TestNavWithoutActivity(t *testing.T) {
 	tw, _ := newMemoryWeb(t)
-	mustAdd(t, tw.c.mem, &Memory{Kind: kindFact, Text: "Le colis arrive jeudi", Status: memProposed, SourceKind: srcExtraction})
+	mustIntend(t, tw.c.mem, &Intention{Text: "Récupérer le colis jeudi", State: intentProposed, SourceKind: srcExtraction, Trust: trustExternal})
 	for _, path := range []string{"/", "/settings/agents", "/settings/journal"} {
 		_, body, _ := tw.do("GET", path, nil, nil)
 		for _, gone := range []string{`id="activity-btn"`, `href="/activity`, `<b class="badge">1</b>`} {
@@ -90,7 +90,6 @@ func TestApprovals(t *testing.T) {
 		t.Fatal("an empty inbox is not said so")
 	}
 
-	mustAdd(t, m, &Memory{Kind: kindFact, Text: "Le colis arrive jeudi", Status: memProposed, SourceKind: srcExtraction, Trust: trustExternal})
 	mustIntend(t, m, &Intention{Text: "Régler la facture du fournisseur", DueAt: m.now().Add(48 * time.Hour), State: intentProposed,
 		SourceKind: srcExtraction, Trust: trustExternal})
 	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "topic:mail", Ceiling: 2, State: ruleProposed, By: "brain", Why: "Trop de mails."})
@@ -103,10 +102,9 @@ func TestApprovals(t *testing.T) {
 	for _, want := range []string{
 		`<a href="/settings/approve" aria-current="page">`,
 		`id="permissions"`, "npm publish", `hx-post="/tasks/t-perm/answer"`,
-		`id="memory"`, "Le colis arrive jeudi", `hx-post="/memory/1/approve"`,
-		"Régler la facture du fournisseur", `hx-post="/memory/intention/1/approve"`,
+		`id="memory"`, "Régler la facture du fournisseur", `hx-post="/memory/intention/1/approve"`,
 		`id="rules"`, "Trop de mails.", `hx-post="/notify/rules/1/approve"`,
-		`hx-trigger="memory-changed from:body"`, `<span class="nav-count">3</span>`,
+		`hx-trigger="memory-changed from:body"`, `<span class="nav-count">2</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("À valider lacks %q", want)

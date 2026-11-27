@@ -13,15 +13,14 @@ import (
 //
 //   - wrote: in the window after the push, the model it was pushed to
 //     wrote or changed a record about the card's node or entity. For the
-//     brain (a turn's card, a pack's), a memory, an intention or a version
-//     of the node written by "brain"; for a worker task, a memory its
-//     remember wrote (source task:<id>), or a version of the node written
-//     by a task or a skill's run.
+//     brain (a turn's card, a pack's), an intention or a version of the
+//     node written by "brain"; for a worker task, a version of the node
+//     written by a task or a skill's run.
 //   - answered: the card of what a brain turn is about (the turn's, or the
 //     one of a pack delivered with the turn's messages; a pack's other
 //     cards are no turn's) when the turn's answer, the first message after
 //     it, is the brain's, and the brain did not ask again for it in the
-//     turn (recall about it or naming it, node_read of it): the card was
+//     turn (node_read of it): the card was
 //     enough, or it did not matter to the answer; it does not tell which,
 //     so it is counted apart from wrote.
 //   - no: neither.
@@ -38,7 +37,7 @@ const cardPushesSchema = `CREATE TABLE IF NOT EXISTS card_pushes (
 	chars   INTEGER NOT NULL,
 	turn    INTEGER NOT NULL DEFAULT 0,  -- the brain's turn it went in (its last message's seq); 0 for none
 	who     TEXT NOT NULL DEFAULT '',    -- the task's id
-	looked  INTEGER NOT NULL DEFAULT 0,  -- recall or node_read asked for it in that turn
+	looked  INTEGER NOT NULL DEFAULT 0,  -- node_read asked for it in that turn
 	used    TEXT NOT NULL DEFAULT ''     -- '' until judged; wrote, answered, no
 );
 CREATE INDEX IF NOT EXISTS card_pushes_used ON card_pushes (used, at);`
@@ -107,16 +106,6 @@ func (c *core) cardLookedUp(keys ...string) {
 	}
 }
 
-// recallLookedUp notes what a recall asks for: its about, and the
-// entities its words name.
-func (c *core) recallLookedUp(in recallIn) {
-	keys := c.named(in.Query)
-	if in.About != "" {
-		keys = append(keys, in.About)
-	}
-	c.cardLookedUp(keys...)
-}
-
 // cardPush is a row of card_pushes.
 type cardPush struct {
 	ID     int64
@@ -181,21 +170,13 @@ func (c *core) judgeCard(x cardPush) string {
 	case placeTurn, placePack:
 		n = nodeBy(false)
 		if c.mem != nil {
-			var m, i int
-			c.mem.db.QueryRow(`SELECT COUNT(*) FROM memory_log l JOIN memories m ON m.id = l.memory_id
-				WHERE m.about = ? AND l.time BETWEEN ? AND ? AND l.who = ?`, x.About, from, to, byBrain).Scan(&m)
+			var i int
 			c.mem.db.QueryRow(`SELECT COUNT(*) FROM intention_log l JOIN intentions i ON i.id = l.intention_id
 				WHERE i.about = ? AND l.time BETWEEN ? AND ? AND l.who = ?`, x.About, from, to, byBrain).Scan(&i)
-			n += m + i
+			n += i
 		}
 	case placeTask:
 		n = nodeBy(true)
-		if c.mem != nil {
-			var m int
-			c.mem.db.QueryRow(`SELECT COUNT(*) FROM memory_log l JOIN memories m ON m.id = l.memory_id
-				WHERE m.about = ? AND l.time BETWEEN ? AND ? AND l.who = 'task' AND m.source_ref = ?`, x.About, from, to, "task:"+x.Who).Scan(&m)
-			n += m
-		}
 	}
 	if n > 0 {
 		return cardWrote

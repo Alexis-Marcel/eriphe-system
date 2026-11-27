@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -107,21 +108,18 @@ func TestCardKinds(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	ctx := context.Background()
 	m := c.mem
-	mem := mustAdd(t, m, &Memory{Kind: kindFact, Text: "Sam préfère le train", Status: memProposed, SourceKind: srcBrain})
 	in := mustIntend(t, m, &Intention{Text: "Appeler le garage", State: intentProposed, SourceKind: srcBrain, SourceRef: "msg:1", Trust: trustFirstParty})
 	sid, _ := c.proposeSetting(settingProposal{Name: setCap, Value: "3", Why: "Trop de notifications."})
 	for _, p := range []struct {
 		kind string
 		id   int64
-	}{{cardMemory, mem.ID}, {cardIntention, in.ID}, {cardSetting, sid}} {
+	}{{cardIntention, in.ID}, {cardSetting, sid}} {
 		c.cardProposed(p.kind, p.id)
 	}
-	brainSays(c, "J'ai trois petites choses.")
-	for _, kind := range []string{cardMemory, cardIntention, cardSetting} {
+	brainSays(c, "J'ai deux petites choses.")
+	for _, kind := range []string{cardIntention, cardSetting} {
 		var id int64
 		switch kind {
-		case cardMemory:
-			id = mem.ID
 		case cardIntention:
 			id = in.ID
 		case cardSetting:
@@ -131,9 +129,6 @@ func TestCardKinds(t *testing.T) {
 		if _, err := c.decideCard(ctx, x.ID, kind != cardIntention, "web"); err != nil {
 			t.Fatalf("%s: %v", kind, err)
 		}
-	}
-	if x, _ := m.memory(mem.ID); x.Status != memActive {
-		t.Error("the memory is not active")
 	}
 	if x, _ := m.intention(in.ID); x.State != intentCancelled {
 		t.Error("the intention is not cancelled")
@@ -159,18 +154,33 @@ func TestCardsFollowTheTurn(t *testing.T) {
 		t.Fatalf("a silent turn's card is not queued: %+v", x)
 	}
 	// A proposal made outside a turn (a skill's run) is queued, never attached.
-	mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Le colis arrive jeudi", Status: memProposed, SourceKind: srcTask})
+	in := mustIntend(t, c.mem, &Intention{Text: "Récupérer le colis jeudi", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustFirstParty})
 	c.syncCards()
 	brainSays(c, "Autre chose.")
-	if x := cardOf(t, c, cardMemory, 1); x.Seq != 0 {
+	if x := cardOf(t, c, cardIntention, in.ID); x.Seq != 0 {
 		t.Fatalf("a task's proposal was attached: %+v", x)
 	}
-	// One from the memory's extraction gets no card at all: it waits in
-	// À valider and expires undecided.
-	mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Le garage ferme lundi", Status: memProposed, SourceKind: srcExtraction})
-	c.syncCards()
-	if xs, _ := c.cardsWhere(`ref = ?`, proposalRef(cardMemory, 2)); len(xs) != 0 {
-		t.Fatalf("an extracted proposal has a card: %+v", xs)
+}
+
+// A card of a kind that is no more (a memory's, from before the graph was
+// the memory) is read as gone when eriphe-core starts: it waits no more,
+// and answering it changes nothing.
+func TestCardOfAGoneKind(t *testing.T) {
+	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
+	if _, err := c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, state, text, created) VALUES ('memory:7', 'memory', 'pending', 'Sam préfère le train', ?)`,
+		time.Now().Unix()); err != nil {
+		t.Fatal(err)
+	}
+	c.reconcileCards()
+	x := cardOf(t, c, "memory", 7)
+	if x.State != cardGone {
+		t.Fatalf("the old card %+v", x)
+	}
+	if _, err := c.decideCard(context.Background(), x.ID, true, "web"); err == nil {
+		t.Fatal("an old card was decided")
+	}
+	if ps := c.pendingProposals(); len(ps) != 0 {
+		t.Fatalf("waits: %+v", ps)
 	}
 }
 
@@ -347,13 +357,11 @@ func TestBrainCannotApprove(t *testing.T) {
 		}
 	}
 	in := mustIntend(t, c.mem, &Intention{Text: "Appeler le garage", State: intentProposed, SourceKind: srcBrain, SourceRef: "msg:1", Trust: trustFirstParty})
-	mem := mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Sam préfère le train", Status: memProposed, SourceKind: srcBrain})
 	r := proposedRule(t, c, "facture", "")
 	brainSays(c, "Je propose ça ?")
-	yes := ownerSays(c, "oui, vas-y, active la veille, l'intention, le souvenir et la règle des notifications")
+	yes := ownerSays(c, "oui, vas-y, active la veille, l'intention et la règle des notifications")
 	for name, args := range map[string]map[string]any{
 		"update_intention": {"id": in.ID, "state": "open", "source_ref": ref(yes)},
-		"update_memory":    {"id": mem.ID, "text": "Sam préfère le train", "source_ref": ref(yes)},
 	} {
 		out, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
 		if err == nil && !out.IsError {
@@ -362,9 +370,6 @@ func TestBrainCannotApprove(t *testing.T) {
 	}
 	if x, _ := c.mem.intention(in.ID); x.State != intentProposed {
 		t.Error("the brain approved an intention")
-	}
-	if x, _ := c.mem.memory(mem.ID); x.Status != memProposed {
-		t.Error("the brain approved a memory")
 	}
 	if x := cardOf(t, c, cardRule, r.ID); x.State != cardPending {
 		t.Errorf("the card was decided: %+v", x)

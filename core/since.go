@@ -24,7 +24,7 @@ import (
 // notification or a brain message written in a tainted turn, an intention
 // drawn from a mail, a task started on a tainted turn). An external item's
 // text is quoted only when asked for, and that taints the turn, as reading
-// an external memory does.
+// an external node does.
 
 // task_log is what happened to each worker task, as the brain was told:
 // a state, and for a turn that ended its receipt's verdict, in numbers.
