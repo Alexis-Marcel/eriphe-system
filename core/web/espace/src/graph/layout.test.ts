@@ -616,6 +616,44 @@ describe("thousands of nodes", () => {
     expect(sliced.positions()).toEqual(once.positions());
   });
 
+  // run gives the frames to the graph until it rests, as Graph.tsx does.
+  const run = (sim: Sim) => {
+    for (let i = 0; i < 20000 && !sim.asleep(); i++) sim.frame();
+  };
+
+  it("makes a focus asked while it is laid out once that layout rests, as if all at once", () => {
+    const nodes = graph(200);
+    const page = nodes.find((n) => n.box)!.id;
+    // with motion: the first layout, then the glide to the focus
+    const once = laid(nodes);
+    once.focus(page);
+    once.settle();
+    const sliced = new Sim({ ...DEFAULT_FORCES }, { slice: 0 });
+    sliced.sync(nodes);
+    sliced.focus(page);
+    expect(sliced.focused()).toBe(null);
+    run(sliced);
+    expect(sliced.focused()).toBe(page);
+    expect(sliced.positions()).toEqual(once.positions());
+    // without: the focus laid out at once too (hurry after it)
+    const still = new Sim({ ...DEFAULT_FORCES }, { slice: 0 });
+    still.sync(nodes);
+    still.focus(page);
+    expect(still.hurry()).toBe(false);
+    for (let i = 0; i < 20000 && !still.asleep(); i++) {
+      still.frame();
+      if (!still.asleep()) expect(still.hurrying()).toBe(true);
+    }
+    expect(still.positions()).toEqual(once.positions());
+  });
+
+  it("lays a small graph out at once, whatever the slice", () => {
+    const sim = new Sim({ ...DEFAULT_FORCES }, { slice: 0 });
+    sim.sync(big());
+    expect(sim.asleep()).toBe(true);
+    expect(sim.positions()).toEqual(laid(big()).positions());
+  });
+
   it("lays the owner's graph out where it always did", () => {
     const want: Pos = { SJ: [-11.35, -265.62], MJ: [21.6, -129.62], SM: [-238.47, -31.82], MM: [-207.76, 104.52], SI: [105.5, 139.94], MP: [58.23, 275.94], OUT: [272.26, -63.34] };
     const p = laid(owner()).positions();

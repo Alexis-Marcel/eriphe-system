@@ -66,18 +66,20 @@ export const T = {
   passes: 2, // ... passes a tick
   spread: 0.2, // after a focus change, the pull to a place round the node in focus, × the energy
   jam: 2, // two bodies overlapping less than this are apart (within their margins: never visible)
-  // How the graph stays fast with thousands of nodes (the look is the
-  // same): up to `exact` bodies, the repulsion and the collision go over
-  // every pair; past it, the repulsion of a far group of bodies is that of
-  // one body as heavy as they all, at their middle (Barnes-Hut: a group
-  // seen smaller than `theta` from a body), and a body is only tested
-  // against those in its cells of a grid. A theta of 0.5 keeps the rules
-  // (layout.test.ts plays them all on the tree): past 0.6, two linked open
-  // pages may settle apart, a bubble stay behind a page.
+  // How the graph stays fast with thousands of nodes, the rules the same.
+  // Up to `exact` bodies, the repulsion and the collision go over every
+  // pair and the graph is laid out at once (hurry): a small graph is where
+  // it always was. Past it, the repulsion of a far group of bodies is that
+  // of one body as heavy as they all, at their middle (Barnes-Hut: a group
+  // seen smaller than `theta` from a body), a body is only tested against
+  // those in its cells of a grid, and a hurry takes a slice a frame
+  // (SLICE). The tree is the faster past some 20 bodies. A theta of 0.5
+  // keeps the rules (layout.test.ts plays them all on the tree): past 0.6,
+  // two linked open pages may settle apart, a bubble stay behind a page.
   theta: 0.5,
-  exact: 100,
+  exact: 50,
   cell: 128, // the grid's cell, in the graph's units
-  rests: 1000, // at rest, the collision's passes at most (over frames: SLICE); a dense graph of hundreds needs more than 200
+  rests: 1000, // at rest, the collision's passes at most (over frames past `exact`); a dense graph of hundreds needs more than 200
 };
 
 // SLICE is the most a frame of the graph may take of the main thread, in
@@ -628,6 +630,8 @@ export class Sim {
   private forces: Forces;
   private slice: number; // the most a frame may take, in ms (Infinity: all at once)
   private hurried = false; // the graph is laid out at once, not shown moving (hurry)
+  private later: { id: string | null } | null = null; // a focus asked while the graph hurries: made once it rests
+  private again = false; // ... and a hurry asked after it: the focus too is laid out at once
   private resting = -1; // at rest: the collision's passes done so far (-1: not resting)
   private deadline = Infinity; // when the frame under way must give the main thread back
   private adjacent = new Map<Body, Body[]>(); // each body's linked ones, in the links' order
@@ -768,8 +772,14 @@ export class Sim {
   // pulls every other body to it, and it stays where it is, the graph
   // settling round it. Nothing else moves at once: the graph, warmed,
   // glides to its new centre. Without one, the centre stays where the last
-  // one was: the graph's middle, nothing drifts.
+  // one was: the graph's middle, nothing drifts. Asked while the graph is
+  // being laid out at once (hurry), it is made once that layout rests, as
+  // if the layout had been all at once.
   focus(id: string | null): void {
+    if (this.hurried) {
+      this.later = { id };
+      return;
+    }
     const x = id ? this.byId.get(id) : undefined;
     const next = x ? x.id : null;
     if (next === this.focusId) return;
@@ -852,10 +862,11 @@ export class Sim {
   }
 
   // hurry lays the graph out at once, not shown moving: the first layout,
-  // and every change when the user asks for less motion. What fits in a
-  // slice is done now, the rest in the next frames (frame); it tells
-  // whether the graph is at rest already.
+  // and every change when the user asks for less motion. Past T.exact
+  // bodies, what fits in a slice is done now, the rest in the next frames
+  // (frame); it tells whether the graph is at rest already.
   hurry(): boolean {
+    if (this.hurried && this.later) this.again = true;
     this.hurried = true;
     this.frame();
     return this.asleep();
@@ -868,10 +879,11 @@ export class Sim {
   }
 
   // frame is a frame's work: a tick, or while the graph hurries, as many
-  // as fit in the slice (3000 at most, as settle). A rest's collision too
-  // goes on in the next frame once the slice is spent.
+  // as fit in the slice (3000 at most, as settle; up to T.exact bodies,
+  // all). A rest's collision too goes on in the next frame once the slice
+  // is spent. Once the hurry rests, the focus asked meanwhile is made.
   frame(): void {
-    this.deadline = performance.now() + this.slice;
+    this.deadline = this.list.length > T.exact ? performance.now() + this.slice : Infinity;
     try {
       if (!this.hurried) this.tick();
       else
@@ -882,7 +894,15 @@ export class Sim {
     } finally {
       this.deadline = Infinity;
     }
-    if (this.asleep()) this.hurried = false;
+    if (!this.asleep()) return;
+    this.hurried = false;
+    if (this.later) {
+      const { id } = this.later;
+      this.later = null;
+      this.focus(id);
+      this.hurried = this.again;
+      this.again = false;
+    }
   }
 
   // positions are where the bodies are now.

@@ -3712,7 +3712,12 @@ token in `X-CSRF-Token`:
   forces set, a drag) warms the graph (0.5), the forces adapt everything as it cools (2.28 % a
   tick, some 300 ticks), and once cold the graph rests: anything still overlapping is set apart at
   once, and nothing ticks until the next change, nothing trembles. The first layout is settled
-  before it is shown. A new node is born in the most free space near what it links to (on the
+  before it is shown. The rules are the same at any size, the work is not: up to 50 bodies
+  (`T.exact`) the repulsion and the collision go over every pair and a layout asked at once
+  (the first, or any change with less motion: `hurry`) is done at once; past it, a far group of
+  bodies pushes as one (Barnes-Hut, `T.theta` 0.5), a body is tested only against those in its
+  cells of a grid, and such a layout takes 8 ms of a frame at most (`SLICE`), shown once at rest.
+  `npm run bench:layout` measures it from 100 to 3000 nodes. A new node is born in the most free space near what it links to (on the
   disc, near its middle, when it links to nothing), then settles. Nothing is kept: a reload lays
   the graph out afresh. The user drags a bubble, or a page by its head: its cluster
   comes along (one link away 0.85 of the move, two links 0.35) and the graph stays warm (0.3);
@@ -4078,6 +4083,7 @@ npm ci
 npm test            # the layout's, the store's, the pages' and the views' tests (vitest)
 npm run build       # type checks, then writes ../static/espace/espace.js, espace.css and the editor's chunk
 npm run dev         # http://localhost:5300, on a made-up graph, no eriphe-core needed
+npm run bench:layout  # the graph layout's times and quality on generated graphs (Node 24)
 ```
 
 The built app is what the user's workspace needs, nothing more: the dev server's made-up
