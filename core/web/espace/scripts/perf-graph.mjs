@@ -38,9 +38,10 @@ try {
   await page.waitForFunction(() => window.leger, null, { timeout: 60_000 });
   for (const n of sizes) {
     await page.goto(`http://127.0.0.1:${port}/?leger&n=${n}`);
-    await page.waitForFunction(() => window.leger, null, { timeout: 60_000 });
+    await page.waitForFunction(() => window.leger, null, { timeout: 180_000, polling: 250 });
     const settle = await page.evaluate(() => window.leger.sample(3000));
-    const cap = n >= 1000 ? 90_000 : 30_000;
+    page.setDefaultTimeout(180_000);
+    const cap = n >= 1000 ? 120_000 : 30_000;
     const rested = await page.waitForFunction(() => window.leger.stats().stable !== null, null, { timeout: cap, polling: 200 }).then(() => true, () => false);
     const stable = await page.evaluate(() => window.leger.stats().stable);
     const pan = await page.evaluate(() => window.leger.sample(3000, window.leger.panZoom));

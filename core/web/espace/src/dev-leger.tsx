@@ -188,8 +188,8 @@ declare global {
 
 export function startLeger() {
   const asked = Number(new URLSearchParams(location.search).get("n"));
-  load(SIZES.includes(asked) || asked > 0 ? asked : 100);
   window.leger = { load, add, remove, resize, stats, sample, panZoom };
+  load(asked > 0 ? asked : 100);
   let raf = 0;
   const loop = (t: number) => {
     frames.push(t);
