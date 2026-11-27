@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { boxAt, FLOOR, frameAround } from "./camera";
-import { DEFAULT_FORCES, EDGE_DELAY, EDGE_RAMP, EDGE_SPEED, EDGE_ZONE, edgePush, edgeStep, extent, FORCES, pairs, setForces, Sim, T, type LNode, type Pos, type Pt } from "./layout";
+import { graph, rng } from "./generated";
+import { DEFAULT_FORCES, EDGE_DELAY, EDGE_RAMP, EDGE_SPEED, EDGE_ZONE, edgePush, edgeStep, extent, FORCES, pairs, Quad, repelPairs, setForces, Sim, T, type LNode, type Pos, type Pt } from "./layout";
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
@@ -122,7 +123,17 @@ function drag(sim: Sim, id: string, to: Pt, frames = 60): { mid: Pos } {
 
 const moved = (a: Pos, b: Pos, ids: string[]) => Math.max(0, ...ids.map((id) => dist(a[id], b[id])));
 
-describe("the force graph", () => {
+// The same rules whatever the graph's size: each test is played as a small
+// graph is laid out (every pair), and as one past T.exact bodies is (the
+// tree and the grid).
+describe.each([
+  ["", T.exact],
+  [", by the tree and the grid", 0],
+])("the force graph%s", (_, exact) => {
+  const was = T.exact;
+  beforeAll(() => void (T.exact = exact));
+  afterAll(() => void (T.exact = was));
+
   it("draws one link per pair of nodes, whichever way and however often it goes", () => {
     expect(pairs(owner())).toEqual([
       ["MJ", "SJ"],
@@ -529,5 +540,88 @@ describe("the force graph", () => {
     }
     const per = (performance.now() - t0) / 120;
     expect(per).toBeLessThan(8);
+  });
+});
+
+describe("thousands of nodes", () => {
+  // charges are n bodies at random places, the same for a seed.
+  const charges = (n: number, seed: number) => {
+    const r = rng(seed);
+    return Array.from({ length: n }, (_, i) => ({ id: `b${i}`, x: (r() - 0.5) * 3000, y: (r() - 0.5) * 2000, vx: 0, vy: 0 }));
+  };
+  // gap is how far the tree's pushes are from every pair's, over their size.
+  const gap = (theta: number, seed: number) => {
+    const exact = charges(500, seed), tree = charges(500, seed);
+    repelPairs(exact, 1000);
+    new Quad().repel(tree, 1000, theta);
+    let err = 0, size = 0;
+    for (let i = 0; i < exact.length; i++) {
+      err += (exact[i].vx - tree[i].vx) ** 2 + (exact[i].vy - tree[i].vy) ** 2;
+      size += exact[i].vx ** 2 + exact[i].vy ** 2;
+    }
+    return Math.sqrt(err / size);
+  };
+
+  it("pushes as every pair does: the same with theta 0, near enough with T.theta", () => {
+    for (const seed of [1, 2, 3]) {
+      expect(gap(0, seed)).toBeLessThan(1e-12);
+      expect(gap(T.theta, seed)).toBeLessThan(0.03);
+    }
+  });
+
+  it("parts two bodies on one spot, as every pair does", () => {
+    const exact = [
+      { id: "a", x: 5, y: 5, vx: 0, vy: 0 },
+      { id: "b", x: 5, y: 5, vx: 0, vy: 0 },
+      { id: "c", x: 400, y: 0, vx: 0, vy: 0 },
+    ];
+    const tree = exact.map((b) => ({ ...b }));
+    repelPairs(exact, 1000);
+    new Quad().repel(tree, 1000, 0);
+    for (let i = 0; i < exact.length; i++) {
+      expect(tree[i].vx).toBeCloseTo(exact[i].vx, 9);
+      expect(tree[i].vy).toBeCloseTo(exact[i].vy, 9);
+    }
+    expect(exact[0].vx).not.toBe(exact[1].vx);
+  });
+
+  it("lays 500 nodes out, pages and glances among them, nothing on anything, and rests", () => {
+    for (const seed of [1, 2]) {
+      const nodes = graph(500, seed);
+      expect(nodes.some((n) => n.box) && nodes.some((n) => n.tile)).toBe(true);
+      const sim = laid(nodes);
+      expect(sim.asleep()).toBe(true);
+      expect(overlaps(sim, nodes)).toEqual([]);
+      expect(still(sim, nodes, 20)).toBe(0);
+      const { linked, unlinked } = linkedVsNot(sim, nodes);
+      expect(linked).toBeLessThan(unlinked * 0.25);
+    }
+  });
+
+  it("is the same graph laid out twice, at once or a slice a frame", () => {
+    const nodes = graph(500);
+    const once = laid(nodes);
+    expect(laid(nodes).positions()).toEqual(once.positions());
+    const sliced = new Sim({ ...DEFAULT_FORCES }, { slice: 0 });
+    sliced.sync(nodes);
+    expect(sliced.asleep()).toBe(false);
+    expect(sliced.hurrying()).toBe(true);
+    let frames = 0;
+    while (!sliced.asleep() && frames < 5000) {
+      sliced.frame();
+      frames++;
+    }
+    expect(frames).toBeGreaterThan(100);
+    expect(sliced.hurrying()).toBe(false);
+    expect(sliced.positions()).toEqual(once.positions());
+  });
+
+  it("lays the owner's graph out where it always did", () => {
+    const want: Pos = { SJ: [-11.35, -265.62], MJ: [21.6, -129.62], SM: [-238.47, -31.82], MM: [-207.76, 104.52], SI: [105.5, 139.94], MP: [58.23, 275.94], OUT: [272.26, -63.34] };
+    const p = laid(owner()).positions();
+    for (const [id, [x, y]] of Object.entries(want)) {
+      expect(p[id][0], id).toBeCloseTo(x, 1);
+      expect(p[id][1], id).toBeCloseTo(y, 1);
+    }
   });
 });
