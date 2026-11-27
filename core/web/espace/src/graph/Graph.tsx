@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as PtrEvent, type ReactNode } from "react";
-import { AnimatePresence, motion, useMotionValueEvent, useReducedMotion, useSpring, type MotionValue } from "motion/react";
+import { AnimatePresence, frame, motion, useMotionValueEvent, useReducedMotion, useSpring, type MotionValue } from "motion/react";
 import type { GraphNode } from "../data/api";
 import { closePage, depthOf, openPage, step, store, subtree, talkTo, useGraph } from "../data/store";
 import { useWords, type Lang } from "../i18n";
@@ -7,7 +7,8 @@ import { Orb } from "../orb/Orb";
 import { Page } from "../page/Page";
 import { onReads, readsUnderWay } from "../page/usePage";
 import { bigBox, bigRoom, boxAt, edgeMark, frameAll, frameAlone, frameAround, framePages, pageMax, type Box, type Cam } from "./camera";
-import { covered, CULL_FROM, culled, same, type View } from "./cull";
+import { decide, families, hit, LOD, lodVersion, NEAR, onLod, same, type View } from "./lod";
+import { FAMILIES, Painter, scene, type Scene } from "./paint";
 import { CENTRING, edgePush, edgeStep, extent, FORCES, onForces, pairs, Sim, SLICE, type LNode, type Pos, type Pt } from "./layout";
 import { coreShape, pickTiles, TILE, variation } from "./glance";
 import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits } from "./model";
@@ -30,10 +31,12 @@ import { UnaskedMark } from "./Title";
 // drag begun); each frame of the simulation only moves what is drawn:
 // the bubbles, the pages and the links are placed straight on their
 // elements (place), by a transform (no layout), the orb and the edge
-// marks told (onFrame). A big graph draws only the bubbles the camera
-// sees and those near (cull.ts): what is drawn is a small store of its
-// own (Shown), so that the camera moving draws the bubbles that come into
-// view, not the whole graph.
+// marks told (onFrame). A big graph (lod.ts) paints every node as a disc
+// and every link as a line on a canvas (paint.ts), and draws as bubbles
+// only the nodes big on the screen, open, held, hovered or waiting near
+// the camera: what is drawn is a small store of its own (Shown), so that
+// the camera moving draws the bubbles that come, not the whole graph. A
+// disc is hit as a bubble is: hovered, pressed, dragged, clicked.
 
 const ease = [0.2, 0.7, 0.2, 1] as const;
 const PAGE_W = 700, PAGE_W_MANY = 620, PAGE_H = 520, PAGE_MAX = 640;
@@ -42,7 +45,6 @@ const PAGE_W = 700, PAGE_W_MANY = 620, PAGE_H = 520, PAGE_MAX = 640;
 // graph's switch to the phone's list and back. A frame takes a slice of
 // the main thread at most: a big graph is laid out over a few.
 const sim = new Sim(FORCES, { slice: SLICE });
-const where = (id: string) => sim.at(id);
 const positions = () => sim.positions();
 
 // What moves with the simulation's frames, told after each (the orb, the
@@ -63,7 +65,7 @@ const MIN_W = 420, MIN_H = 240;
 
 type Sizing = { id: string; sx: number; sy: number; w0: number; h0: number; c0: Pt; moved: boolean };
 
-type Grab = { id: string; sx: number; sy: number; px: number; py: number; ox: number; oy: number; moved: boolean; raw?: Pt; edgeSince?: number };
+type Grab = { id: string; sx: number; sy: number; px: number; py: number; ox: number; oy: number; moved: boolean; raw?: Pt; edgeSince?: number; disc?: boolean };
 
 // A link drawn: one per pair of nodes linked (a bubble and its parent,
 // two nodes a text links, one way or both), a straight line.
@@ -79,6 +81,9 @@ const putLink = (el: Element, a: Pt, b: Pt) => {
   el.setAttribute("x2", String(b[0]));
   el.setAttribute("y2", String(b[1]));
 };
+
+// lightOf is how bright a node's core is, by its weight.
+const lightOf = (x: GraphNode) => 0.3 + 0.7 * Math.min(1, x.weight / 0.85);
 
 // Drawn draws items, those of a big graph the camera sees only (Shown):
 // it alone is drawn again when they change, not the graph.
@@ -125,6 +130,9 @@ export function Graph({ live }: { live: boolean }) {
   // The nodes in a stable order (the order they were made): the layout is
   // the same for the same graph.
   const list = useMemo(() => Object.values(nodes).sort((a, b) => a.created.localeCompare(b.created) || a.id.localeCompare(b.id)), [nodes]);
+  // The knobs of the level of detail (lod.ts), tuned live on ?leger.
+  const lodV = useSyncExternalStore(onLod, lodVersion);
+  const lod = list.length >= LOD.from;
   const ids = useMemo(() => new Set(list.map((x) => x.id)), [list]);
   const parentOf = (x: GraphNode) => (x.parent && ids.has(x.parent) ? x.parent : undefined);
   const openKey = open.filter((id) => ids.has(id)).join(",");
@@ -221,6 +229,25 @@ export function Graph({ live }: { live: boolean }) {
   );
   const links: Link[] = useMemo(() => pairs(bodies).map(([a, b]) => ({ key: `${a}-${b}`, a, b })), [bodies]);
   const linkBy = useMemo(() => new Map(links.map((l) => [l.key, l])), [links]);
+  // A big graph's canvas: its scene (paint.ts), each node's family's
+  // colour, worked out once per graph; its nodes are born already, as
+  // discs (a bubble come is not born again).
+  const famOf = useMemo(() => families(list.map((x) => ({ id: x.id, parent: parentOf(x) })), FAMILIES), [list]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sceneOf: Scene | null = useMemo(() => {
+    if (!lod) return null;
+    return scene(
+      list.map((x, i) => {
+        const title = plainTitle(x, external), d = depthOf(nodes, x.id);
+        born.add(x.id);
+        return { id: x.id, r: bodies[i]?.id === x.id ? bodies[i].r : rOf(x), depth: d, light: lightOf(x), status: x.status, fam: famOf.get(x.id) ?? -1, title, code: d === 0 ? codeOf(title) : "" };
+      }),
+      links.map((l) => [l.a, l.b]),
+    );
+  }, [lod, bodies, list, famOf]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sceneNow = useRef(sceneOf);
+  sceneNow.current = sceneOf;
+  const lodNow = useRef(lod);
+  lodNow.current = lod;
 
   // What is drawn, by node: placed straight on its element at each frame,
   // by a transform: the writes move it without a layout of the page. Only
@@ -233,23 +260,24 @@ export function Graph({ live }: { live: boolean }) {
   linkByNow.current = linkBy;
   const place = () => {
     const E = els.current;
-    const pos = sim.positions();
     for (const [id, el] of E.nodes) {
-      const p = pos[id];
+      const p = sim.at(id);
       if (p) putNode(el, p);
     }
     // A page is centred on its point; its transform is its spring's.
     for (const [id, el] of E.pages) {
-      const p = pos[id];
+      const p = sim.at(id);
       if (p) el.style.translate = `calc(${p[0]}px - 50%) calc(${p[1]}px - 50%)`;
     }
     for (const [key, el] of E.links) {
       const l = linkByNow.current.get(key);
-      const a = l && pos[l.a], b = l && pos[l.b];
+      const a = l && sim.at(l.a), b = l && sim.at(l.b);
       if (a && b) putLink(el, a, b);
     }
+    // The canvas, in the same frame as the bubbles.
+    if (lodNow.current) paint();
     // The bodies moving (the loop), they are looked at every few frames.
-    if (raf.current === null || ++placed.current % 6 === 0) cull(pos, true);
+    if (raf.current === null || ++placed.current % 6 === 0) pick(true);
     for (const f of framed) f();
   };
   const regs = useRef(new Map<string, (el: Element | null) => void>());
@@ -261,6 +289,13 @@ export function Graph({ live }: { live: boolean }) {
       // screen shows it, not at the next frame.
       f = (el) => {
         const m = els.current[kind] as Map<string, Element>;
+        // A bubble come in a big graph fades in as its disc fades out
+        // (paint.ts); gone, its disc is painted at once.
+        if (kind === "nodes" && lodNow.current) {
+          if (el) swaps.current.set(key, performance.now());
+          else swaps.current.delete(key);
+          paintSoon();
+        }
         if (!el) return void m.delete(key);
         m.set(key, el);
         if (kind === "nodes") {
@@ -388,45 +423,109 @@ export function Graph({ live }: { live: boolean }) {
   const camY = useSpring(size.h / 2, { stiffness: 70, damping: 20 });
   const camK = useSpring(0.9, { stiffness: 70, damping: 20 });
 
-  // What a big graph draws: the bubbles the camera sees and those near
-  // (cull.ts), kept with the one held, focused or hovered; looked at again
-  // as the graph moves (place) and as the camera does, once a frame.
+  // What a big graph draws as bubbles (lod.ts): those big on the screen,
+  // and the one held, focused or hovered; looked at again as the graph
+  // moves (place) and as the camera does, once a frame.
   const [shown] = useState(shownStore);
   const hovered = useRef<string | null>(null);
-  const bodiesNow = useRef(bodies);
-  bodiesNow.current = bodies;
   const sizeNow = useRef(size);
   sizeNow.current = size;
-  // A camera still within what was drawn for it changes nothing (covered);
-  // the bodies moving, they are looked at every few frames; some new ones
-  // left for the next frame (the budget), it comes.
-  const culledFor = useRef<View | null>(null);
-  const cull = (pos?: Pos, force = false) => {
-    const view = { x: camX.get(), y: camY.get(), k: camK.get(), ...sizeNow.current };
-    if (!force && culledFor.current && covered(culledFor.current, view)) return;
-    culledFor.current = view;
+  const view = (): View => ({ x: camX.get(), y: camY.get(), k: camK.get(), ...sizeNow.current });
+  // Where the bodies are, x then y in the scene's order: one buffer, read
+  // again for each paint and each pick.
+  const xyBuf = useRef<Float32Array>(new Float32Array(0));
+  const xyNow = () => (xyBuf.current = sim.xy(xyBuf.current));
+  // A camera that barely moved since the last look changes nothing; the
+  // bodies moving, they are looked at every few frames; some bubbles left
+  // for the next frame (the budget), it comes.
+  const pickedFor = useRef<View | null>(null);
+  const pick = (force = false) => {
+    const S = sceneNow.current;
+    if (!lodNow.current || !S) return shown.set(null);
+    const v = view(), was = pickedFor.current;
+    if (!force && was && Math.abs(v.k / was.k - 1) < 0.03 && Math.abs(v.x - was.x) < NEAR / 3 && Math.abs(v.y - was.y) < NEAR / 3) return;
+    const xy = xyNow();
+    if (xy.length !== S.items.length * 2) return;
+    pickedFor.current = v;
     const focused = document.activeElement?.closest?.(".gr-node")?.getAttribute("data-node");
-    const { ids, more } = culled(bodiesNow.current, pos ? (id) => pos[id] : where, view, shown.get(), [sim.heldId(), focused, hovered.current]);
+    const { ids, more } = decide(S.items, xy, v, shown.get(), [sim.heldId(), focused, hovered.current]);
     shown.set(ids);
-    if (more) cullSoon(true);
+    if (more) pickSoon(true);
   };
-  const cullRaf = useRef<number | null>(null);
-  const cullForce = useRef(false);
-  const cullSoon = (force = false) => {
-    cullForce.current ||= force;
-    if (cullRaf.current === null)
-      cullRaf.current = requestAnimationFrame(() => {
-        cullRaf.current = null;
-        const f = cullForce.current;
-        cullForce.current = false;
-        cull(undefined, f);
+  const pickRaf = useRef<number | null>(null);
+  const pickForce = useRef(false);
+  const pickSoon = (force = false) => {
+    pickForce.current ||= force;
+    if (pickRaf.current === null)
+      pickRaf.current = requestAnimationFrame(() => {
+        pickRaf.current = null;
+        const f = pickForce.current;
+        pickForce.current = false;
+        pick(f);
       });
   };
-  const onCam = () => cullSoon();
+
+  // The canvas (paint.ts): painted in the frame the camera or the graph
+  // moves, with the world's transform (motion's render step), at most once.
+  const canvas = useRef<HTMLCanvasElement | null>(null);
+  const painter = useRef<Painter | null>(null);
+  const swaps = useRef(new Map<string, number>());
+  const nearBy = useRef<{ ids: Set<string>; links: Set<number> } | null>(null);
+  const openSet = useMemo(() => new Set(openIds), [openIds]);
+  const openSetNow = useRef(openSet);
+  openSetNow.current = openSet;
+  const paint = () => {
+    const P = painter.current, S = sceneNow.current;
+    if (!P || !S || !lodNow.current) return;
+    const xy = xyNow();
+    if (xy.length !== S.items.length * 2) return;
+    P.resize(sizeNow.current.w, sizeNow.current.h);
+    const fading = P.paint(S, xy, view(), { mounted: els.current.nodes, swapped: swaps.current, open: openSetNow.current, near: nearBy.current?.ids ?? null, nearLinks: nearBy.current?.links ?? null }, performance.now());
+    if (fading) paintSoon();
+  };
+  const paintNow = useRef(paint);
+  paintNow.current = paint;
+  const [paintSoon] = useState(() => {
+    const go = () => paintNow.current();
+    return () => void frame.render(go);
+  });
+  const onCanvas = (el: HTMLCanvasElement | null) => {
+    canvas.current = el;
+    painter.current = el ? Painter.on(el) : null;
+    if (el) paintSoon();
+  };
+  // The theme changed (the user's, or the system's), or the fonts came:
+  // painted again in its colours, its font.
+  useEffect(() => {
+    if (!lod) return;
+    const again = () => {
+      painter.current?.retheme();
+      paintSoon();
+    };
+    const mo = new MutationObserver(again);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    const mq = matchMedia("(prefers-color-scheme: dark)");
+    mq.addEventListener?.("change", again);
+    void document.fonts?.ready.then(again);
+    return () => {
+      mo.disconnect();
+      mq.removeEventListener?.("change", again);
+    };
+  }, [lod]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The knobs turned, the screen resized, the graph changed: looked at again.
+  useEffect(() => {
+    pick(true);
+    paintSoon();
+  }, [lodV, size.w, size.h, sceneOf, openSet]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onCam = () => {
+    pickSoon();
+    if (lodNow.current) paintSoon();
+  };
   useMotionValueEvent(camX, "change", onCam);
   useMotionValueEvent(camY, "change", onCam);
   useMotionValueEvent(camK, "change", onCam);
-  useEffect(() => () => void (cullRaf.current !== null && cancelAnimationFrame(cullRaf.current)), []);
+  useEffect(() => () => void (pickRaf.current !== null && cancelAnimationFrame(pickRaf.current)), []);
   const [manual, setManual] = useState(false);
   useEffect(() => setManual(false), [openKey, talk]);
   // The page in focus: the last one opened (Eriphe's show too), or the
@@ -554,8 +653,26 @@ export function Graph({ live }: { live: boolean }) {
   const [resizing, setResizing] = useState<string | null>(null);
   const edgeRaf = useRef<number | null>(null);
   const dragged = useRef(false); // swallows the click that ends a drag
+  // discAt is the disc under a pointer on the canvas of a big graph (not
+  // on a bubble or a page), if any: a finger reaches a little wider.
+  const discAt = (e: PtrEvent): string | null => {
+    const S = sceneNow.current, el = vp.current;
+    if (!lodNow.current || !S || !el || (e.target as HTMLElement).closest(".gr-node, .pg, button")) return null;
+    const xy = xyNow();
+    if (xy.length !== S.items.length * 2) return null;
+    const r = el.getBoundingClientRect();
+    return hit(S.items, xy, view(), e.clientX - r.left, e.clientY - r.top, e.pointerType === "touch" ? 12 : 3, (id) => openSetNow.current.has(id));
+  };
   const onDown = (e: PtrEvent) => {
     if ((e.target as HTMLElement).closest("button, .pg")) return;
+    // A disc pressed: held as its bubble would be; let go where it was, it
+    // opens.
+    const d = discAt(e);
+    if (d) {
+      grabNode(d, e);
+      if (grab.current) grab.current.disc = true;
+      return;
+    }
     pan.current = { x: e.clientX, y: e.clientY, cx: camX.get(), cy: camY.get() };
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
@@ -681,18 +798,28 @@ export function Graph({ live }: { live: boolean }) {
       return;
     }
     const d = pan.current;
-    if (!d) return;
+    if (!d) {
+      // Over the canvas, a disc hovered as its bubble is.
+      if (lodNow.current && !sizing.current) {
+        const h = discAt(e);
+        vp.current?.classList.toggle("over-disc", !!h);
+        if (h !== hovered.current && (h || !(e.target as HTMLElement).closest(".gr-node, .pg"))) hoverOn(h);
+      }
+      return;
+    }
     if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) > 3) setManual(true);
     camX.jump(d.cx + e.clientX - d.x);
     camY.jump(d.cy + e.clientY - d.y);
   };
-  const onUp = () => {
+  const onUp = (e?: PtrEvent) => {
     if (sizing.current) return endResize();
     const g = grab.current;
     grab.current = null;
     pan.current = null;
     if (edgeRaf.current) cancelAnimationFrame(edgeRaf.current);
     edgeRaf.current = null;
+    // A disc pressed and let go without a move: a click on it.
+    if (g?.disc && !g.moved && e?.type === "pointerup") return openNode(g.id, e.metaKey || e.ctrlKey || e.shiftKey);
     if (!g?.moved || !g.raw) return;
     // Dropped: it stays there (nothing remembers it), what is under it
     // steps aside, what followed it settles.
@@ -710,7 +837,26 @@ export function Graph({ live }: { live: boolean }) {
     const v = vp.current;
     if (!v) return;
     for (const el of v.querySelectorAll(".near")) el.classList.remove("near");
+    const was = hovered.current;
     hovered.current = id;
+    // A big graph: the hovered node becomes a bubble; the canvas fades the
+    // rest as the page does.
+    if (lodNow.current) {
+      nearBy.current = null;
+      if (id && !grab.current && !sizing.current) {
+        const S = sceneNow.current, i = S?.index.get(id);
+        const ids = new Set([id]), ls = new Set<number>();
+        if (S && i !== undefined)
+          for (let j = 0; j < S.links.length; j += 2)
+            if (S.links[j] === i || S.links[j + 1] === i) {
+              ls.add(j >> 1);
+              ids.add(S.items[S.links[j] === i ? S.links[j + 1] : S.links[j]].id);
+            }
+        nearBy.current = { ids, links: ls };
+      }
+      if (was !== id) pickSoon(true);
+      paintSoon();
+    }
     if (!id || grab.current || sizing.current) {
       v.classList.remove("hovering");
       return;
@@ -743,18 +889,24 @@ export function Graph({ live }: { live: boolean }) {
 
   return (
     <div
-      className={`gr-viewport${held ? " holding" : ""}${resizing ? " resizing" : ""}`}
+      className={`gr-viewport${lod ? " lod" : ""}${held ? " holding" : ""}${resizing ? " resizing" : ""}`}
       ref={vp}
       onDoubleClick={(e) => !(e.target as HTMLElement).closest(".pg") && setManual(false)}
       onPointerDown={onDown}
       onPointerMove={onMove}
       onPointerUp={onUp}
       onPointerCancel={onUp}
+      onPointerLeave={() => lod && !grab.current && hovered.current && !openIds.includes(hovered.current) && hoverOn(null)}
     >
+      {lod && <canvas className="gr-canvas" ref={onCanvas} aria-hidden="true" />}
       <motion.div className="gr-world" style={{ x: camX, y: camY, scale: camK }}>
-        <svg className="gr-links" aria-hidden="true">
-          <Drawn shown={shown} all={list.length < CULL_FROM} items={links} on={(l, s) => s.has(l.a) || s.has(l.b)} draw={(l) => <line key={l.key} ref={reg("links", l.key)} className="gr-link" />} />
-        </svg>
+        {!lod && (
+          <svg className="gr-links" aria-hidden="true">
+            {links.map((l) => (
+              <line key={l.key} ref={reg("links", l.key)} className="gr-link" />
+            ))}
+          </svg>
+        )}
 
         {/* The bubbles: the graph as the keyboard and a screen reader
             reach it (the pages are documents of their own, beside it); in
@@ -762,7 +914,7 @@ export function Graph({ live }: { live: boolean }) {
         <div role="application" aria-label={t("espace.graph")}>
           <Drawn
             shown={shown}
-            all={list.length < CULL_FROM}
+            all={!lod}
             items={list}
             on={(x, s) => s.has(x.id)}
             draw={(x) => (
@@ -779,7 +931,8 @@ export function Graph({ live }: { live: boolean }) {
               glanceWord={x.glance ? glanceSaid(x.glance, lang, t) : ""}
               open={openIds.includes(x.id)}
               held={held === x.id}
-              light={0.3 + 0.7 * Math.min(1, x.weight / 0.85)}
+              light={lightOf(x)}
+              fam={lod && LOD.color && (famOf.get(x.id) ?? -1) >= 0 ? `var(--fam${famOf.get(x.id)})` : undefined}
               waitsWord={t("espace.waits")}
               maintainedWord={x.maintained?.length ? t("espace.maintained", x.maintained.join(", ")) : ""}
               onGrab={onGrab}
@@ -923,7 +1076,7 @@ const born = new Set<string>();
 const Bubble = memo(function Bubble(p: {
   place: (el: HTMLElement | null) => void;
   x: GraphNode; title: string; said: string; d: number; r: number; tile?: [number, number]; lang: Lang; glanceWord: string;
-  open: boolean; held: boolean; light: number; waitsWord: string; maintainedWord: string;
+  open: boolean; held: boolean; light: number; fam?: string; waitsWord: string; maintainedWord: string;
   onGrab: (id: string, e: PtrEvent) => void; onOpen: (id: string, beside: boolean) => void; onHover: (id: string | null) => void;
 }) {
   const { x, d, r, tile } = p;
@@ -939,12 +1092,12 @@ const Bubble = memo(function Bubble(p: {
   // the same with pages open or not: only a hover fades (Graph, hoverOn)
   const light = tile ? 1 : x.status === "done" ? Math.max(0.35, p.light * 0.8) : Math.max(0.5, p.light);
   const ring = R + (d === 0 ? 9 : 7);
-  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.status, yours && "yours", p.held && "held", p.open && "open", p.maintainedWord && "maintained", x.external && "external", x.unasked && "unasked", tile && "tiled"]
+  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.status, yours && "yours", p.held && "held", p.open && "open", p.maintainedWord && "maintained", x.external && "external", x.unasked && "unasked", tile && "tiled", p.fam && "fam"]
     .filter(Boolean)
     .join(" ");
   const hide = tile ? " off" : "";
   return (
-    <div ref={p.place} className={cls} style={{ pointerEvents: p.open ? "none" : undefined, zIndex: p.held ? 6 : undefined }} data-node={x.id} aria-hidden={p.open || undefined}>
+    <div ref={p.place} className={cls} style={{ pointerEvents: p.open ? "none" : undefined, zIndex: p.held ? 6 : undefined, ...(p.fam ? { "--f": p.fam } : null) }} data-node={x.id} aria-hidden={p.open || undefined}>
       <motion.div
         className="gr-bub"
         initial={fresh ? { opacity: 0, scale: 0.3 } : false}

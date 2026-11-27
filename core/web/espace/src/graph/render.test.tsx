@@ -8,7 +8,7 @@ import { makeT, WordsContext } from "../i18n";
 import { OrbProvider } from "../orb/useOrb";
 import strings from "../strings.json";
 import { coreShape } from "./glance";
-import { CULL_FROM } from "./cull";
+import { LOD } from "./lod";
 import { Graph } from "./Graph";
 
 // The graph draws a bubble again only when what it shows changes: each
@@ -39,6 +39,8 @@ beforeAll(() => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} unobserve() {} });
   vi.stubGlobal("requestAnimationFrame", (f: FrameRequestCallback) => frames.push(f));
   vi.stubGlobal("cancelAnimationFrame", () => undefined);
+  // jsdom paints nothing: a canvas has no context (paint.ts copes).
+  HTMLCanvasElement.prototype.getContext = (() => null) as never;
   setReads({ page: async () => null, trace: async () => [], file: async () => null, open: async () => ({ error: "" }) });
 });
 afterAll(() => {
@@ -87,12 +89,14 @@ describe("the graph's frames", () => {
   });
 });
 
-// A big graph draws only the bubbles the camera sees, and their links:
-// the camera gone far away, none; back, they are drawn again where they are.
+// A big graph paints its nodes on a canvas and draws as bubbles only
+// those big on the screen, and no line of its links in the page: framed
+// whole, a few; zoomed in, those the camera sees, the cap at most; the
+// camera gone far away, none; back, drawn again where they are.
 describe("a big graph", () => {
-  it("draws only what the camera sees", async () => {
+  it("draws as bubbles only the nodes big on the screen", async () => {
     store.setState(empty(), true);
-    const many = Array.from({ length: CULL_FROM + 50 }, (_, i) => node(`n${i}`, i % 10 ? `n${i - (i % 10)}` : undefined));
+    const many = Array.from({ length: LOD.from + 50 }, (_, i) => node(`n${i}`, i % 10 ? `n${i - (i % 10)}` : undefined));
     step(store, applyNodes, { reset: true, nodes: many });
     const el = document.createElement("div");
     document.body.append(el);
@@ -106,20 +110,28 @@ describe("a big graph", () => {
         </WordsContext.Provider>,
       ),
     );
-    for (let i = 0; i < 5; i++) frame();
+    for (let i = 0; i < 30; i++) frame();
     const drawn = () => el.querySelectorAll(".gr-node").length;
-    expect(drawn()).toBeGreaterThan(0);
-    expect(el.querySelectorAll("line.gr-link").length).toBeGreaterThan(0);
+    expect(el.querySelector("canvas.gr-canvas")).not.toBeNull();
+    expect(el.querySelectorAll("line.gr-link")).toHaveLength(0);
+    expect(drawn()).toBeLessThanOrEqual(LOD.cap);
 
+    const vp = el.querySelector(".gr-viewport")!;
+    const wheel = (init: WheelEventInit) => act(() => void vp.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, clientX: innerWidth / 2, clientY: innerHeight / 2, ...init })));
+    // Zoomed in: the bubbles the camera sees, as many as the budget lets
+    // in a frame, then the rest.
+    wheel({ deltaY: -1000, ctrlKey: true });
+    for (let i = 0; i < 10; i++) frame();
+    const zoomed = drawn();
+    expect(zoomed).toBeGreaterThan(0);
+    expect(zoomed).toBeLessThanOrEqual(LOD.cap);
     // The wheel takes the camera far away: nothing is drawn.
-    const wheel = (dx: number) => act(() => void el.querySelector(".gr-viewport")!.dispatchEvent(new WheelEvent("wheel", { deltaX: dx, bubbles: true, cancelable: true })));
-    wheel(1e6);
+    wheel({ deltaX: 1e6 });
     frame();
     expect(drawn()).toBe(0);
-    expect(el.querySelectorAll("line.gr-link")).toHaveLength(0);
     // Back: drawn again, each where the simulation has it.
-    wheel(-1e6);
-    frame();
+    wheel({ deltaX: -1e6 });
+    for (let i = 0; i < 10; i++) frame();
     expect(drawn()).toBeGreaterThan(0);
     for (const b of el.querySelectorAll<HTMLElement>(".gr-node")) expect(b.style.transform).toMatch(/^translate\(/);
 

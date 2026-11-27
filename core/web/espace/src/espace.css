@@ -551,6 +551,21 @@ button, input, select, textarea { font: inherit; }
 /* The fade is an opacity on elements nothing else animates (a bubble's
    outer element, a page's document): composited, no filter to paint. */
 .gr-node { transition: opacity 0.2s; }
+/* A big graph (graph/lod.ts): its nodes are discs on a canvas under the
+   world, the bubbles only those big on screen; a bubble come in fades in
+   as its disc fades out (graph/paint.ts, FADE). A family's colour: soft,
+   low in saturation, away from the halo's violet; a disc and its bubble's
+   core share it (--f, the family's; mixed with the card at --fam-mix). */
+.gr-canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+.gr-viewport.over-disc { cursor: pointer; }
+.gr-viewport.lod .gr-node { animation: lod-in 0.18s ease-out; }
+@keyframes lod-in { from { opacity: 0; } }
+.gr-node.fam .gr-core, .gr-node.fam.d1 .gr-core, .gr-node.fam.d2 .gr-core { background: color-mix(in srgb, var(--f) var(--fam-mix), var(--card)); }
+:root { --fam-mix: 38%; --fam0: #5f9c8f; --fam1: #b08d57; --fam2: #b9786a; --fam3: #6f8fb3; --fam4: #8c9c5a; --fam5: #b07a95; --fam6: #9a8a78; --fam7: #6aa07a; }
+:root[data-theme="dark"] { --fam-mix: 34%; --fam0: #74b3a5; --fam1: #c7a46e; --fam2: #cf8e7f; --fam3: #87a6c9; --fam4: #a3b371; --fam5: #c791ab; --fam6: #b1a08e; --fam7: #81b791; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --fam-mix: 34%; --fam0: #74b3a5; --fam1: #c7a46e; --fam2: #cf8e7f; --fam3: #87a6c9; --fam4: #a3b371; --fam5: #c791ab; --fam6: #b1a08e; --fam7: #81b791; }
+}
 .gr-page > .pg { transition: border-color 0.3s, box-shadow 0.3s, opacity 0.2s; }
 .gr-viewport.hovering .gr-node:not(.near):not(.open) { opacity: 0.2; }
 .gr-viewport.hovering .gr-page:not(.near) > .pg { opacity: 0.4; }

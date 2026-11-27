@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { GraphNode } from "./data/api";
 import { applyNodes, step, store } from "./data/store";
+import { paintStats } from "./graph/paint";
 import "./dev.css";
 
 // The dev server's ?leger page: the graph at any size, to feel and measure
@@ -195,7 +196,9 @@ function load(n: number | string) {
   step(store, applyNodes, { reset: true, nodes: preset ? preset.nodes() : legerGraph(Number(n)) });
 }
 
+let paintsAt = 0;
 function restart() {
+  paintsAt = paintStats.paints;
   loadedAt = performance.now();
   stableAt = null;
   stableIn = null;
@@ -333,7 +336,7 @@ export function startLeger() {
   let raf = 0;
   const loop = (t: number) => {
     frames.push(t);
-    if (drawnIn === null && document.querySelector(".gr-node")) drawnIn = Math.round(t - loadedAt);
+    if (drawnIn === null && (document.querySelector(".gr-node") || paintStats.paints > paintsAt)) drawnIn = Math.max(0, Math.round(t - loadedAt));
     while (frames.length && frames[0] < t - 2500) frames.shift();
     if (stableAt === null && t - loadedAt > 50 && viewport()?.hasAttribute("data-still")) {
       stableAt = t;

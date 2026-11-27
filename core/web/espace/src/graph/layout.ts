@@ -912,6 +912,23 @@ export class Sim {
     return out;
   }
 
+  // xy writes where the bodies are now into out, x then y, in their order
+  // (sync's): a buffer used again frame after frame, not an object per body.
+  xy(out?: Float32Array): Float32Array {
+    const L = this.list;
+    if (!out || out.length !== L.length * 2) out = new Float32Array(L.length * 2);
+    for (let i = 0; i < L.length; i++) {
+      out[i * 2] = L[i].x;
+      out[i * 2 + 1] = L[i].y;
+    }
+    return out;
+  }
+
+  // ids are the bodies' ids, in their order (xy's).
+  ids(): string[] {
+    return this.list.map((b) => b.id);
+  }
+
   // at is where one body is now.
   at(id: string): Pt | undefined {
     const b = this.byId.get(id);
