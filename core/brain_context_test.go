@@ -23,11 +23,11 @@ func say(t *testing.T, c *core, role, text string, delivered bool) int {
 }
 
 func TestContextPackContent(t *testing.T) {
-	c, clock := testMemoryCore(t)
-	mustIntend(t, c.mem, &Intention{Text: "Envoyer le devis au garage", DueAt: clock.now().Add(-time.Hour)})
-	done := mustIntend(t, c.mem, &Intention{Text: "Déjà fait", DueAt: clock.now().Add(time.Hour)})
-	c.mem.changeIntention(done.ID, intentionChange{State: intentDone}, "test", "")
-	mustIntend(t, c.mem, &Intention{Text: "Lu dans un mail", State: intentProposed, SourceKind: srcBrain, Trust: trustExternal})
+	c, clock := testIntentsCore(t)
+	mustIntend(t, c.intents, &Intention{Text: "Envoyer le devis au garage", DueAt: clock.now().Add(-time.Hour)})
+	done := mustIntend(t, c.intents, &Intention{Text: "Déjà fait", DueAt: clock.now().Add(time.Hour)})
+	c.intents.changeIntention(done.ID, intentionChange{State: intentDone}, "test", "")
+	mustIntend(t, c.intents, &Intention{Text: "Lu dans un mail", State: intentProposed, SourceKind: srcBrain, Trust: trustExternal})
 	c.store.insertTask(&TaskRow{ID: "t-run", Kind: "worker", Device: "nas", Agent: "small", Runtime: "claude-code",
 		State: stateRunning, Dir: "owner/repo@eriphe/issue-3", Prompt: "Corrige l'issue 3\net ouvre une PR"})
 	c.store.insertTask(&TaskRow{ID: "t-ask", Kind: "worker", Device: "nas", Agent: "small", Runtime: "claude-code",
@@ -79,9 +79,9 @@ func TestContextPackContent(t *testing.T) {
 // line of its doc, and the open intentions; what may carry what someone
 // else wrote is named, not quoted.
 func TestContextPackState(t *testing.T) {
-	c, clock := testMemoryCore(t)
-	mustIntend(t, c.mem, &Intention{Text: "Relancer Sam", About: "person:sam", DueAt: clock.now().Add(time.Hour)})
-	mustIntend(t, c.mem, &Intention{Text: "Rendre le livre", OwedTo: "person:paul", DueAt: clock.now().Add(time.Hour)})
+	c, clock := testIntentsCore(t)
+	mustIntend(t, c.intents, &Intention{Text: "Relancer Sam", About: "person:sam", DueAt: clock.now().Add(time.Hour)})
+	mustIntend(t, c.intents, &Intention{Text: "Rendre le livre", OwedTo: "person:paul", DueAt: clock.now().Add(time.Hour)})
 
 	openGraph(t, c)
 	open := func(title, body string, external bool, state string) string {
@@ -139,7 +139,7 @@ func TestContextPackState(t *testing.T) {
 
 // A heavy state takes at most half the budget: the messages keep the rest.
 func TestContextPackStateBudget(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	openGraph(t, c)
 	for i := range 40 {
 		d, err := c.nodes.Create(nodestore.New{Title: fmt.Sprintf("Nœud %02d", i), Goal: strings.Repeat("un long but ", 40),
@@ -150,13 +150,13 @@ func TestContextPackStateBudget(t *testing.T) {
 		id := d.Node.Meta.ID
 		setStatus(t, c, id, nodeRunning)
 		for k := range 3 {
-			mustIntend(t, c.mem, &Intention{Text: fmt.Sprintf("%s %d.%d", strings.Repeat("une idée à valider ", 15), i, k), About: nodeRef(id), State: intentProposed, SourceKind: srcBrain, Trust: trustFirstParty})
+			mustIntend(t, c.intents, &Intention{Text: fmt.Sprintf("%s %d.%d", strings.Repeat("une idée à valider ", 15), i, k), About: nodeRef(id), State: intentProposed, SourceKind: srcBrain, Trust: trustFirstParty})
 		}
 	}
 	for i := range 30 {
 		c.store.insertTask(&TaskRow{ID: fmt.Sprintf("t-%02d", i), Kind: "worker", Device: "nas", Agent: "small", Runtime: "claude-code",
 			State: stateRunning, Prompt: strings.Repeat("une longue consigne ", 20)})
-		mustIntend(t, c.mem, &Intention{Text: strings.Repeat("une intention ", 20), DueAt: time.Now().Add(time.Hour)})
+		mustIntend(t, c.intents, &Intention{Text: strings.Repeat("une intention ", 20), DueAt: time.Now().Add(time.Hour)})
 	}
 	c.store.insertTask(&TaskRow{ID: "t-ask", Kind: "worker", Device: "nas", Agent: "small", Runtime: "claude-code",
 		State: stateWaitingPermission, Prompt: "Publie la release"})
@@ -194,7 +194,7 @@ func TestContextPackStateBudget(t *testing.T) {
 
 // Over the budget, the newest messages are kept, in their order.
 func TestContextPackBudget(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	var first, last int
 	for i := range 1000 {
 		seq := say(t, c, []string{roleUser, roleBrain}[i%2], fmt.Sprintf("message %04d ", i)+strings.Repeat("blabla ", 20), true)
@@ -248,7 +248,7 @@ func startedBrain(t *testing.T, c *core, resume bool) *TaskRow {
 // Only a fresh session gets the pack, in its first turn, not in its
 // system prompt; a resumed one has the conversation already.
 func TestContextPackOnlyFresh(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	say(t, c, roleUser, "Rappelle-moi le devis", true)
 	setBrainStatus(c, func(st *AssistantStatus) { st.Session, st.SessionRuntime = "s-1", "claude-code" })
 	if task := startedBrain(t, c, true); task.Prompt != brainStartPrompt {
@@ -274,7 +274,7 @@ func TestContextPackOnlyFresh(t *testing.T) {
 // A resume that falls through on the device (a new session reported) gets
 // the pack with its next delivery, once; a resumed one never does.
 func TestContextPackAfterDeviceFallback(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	say(t, c, roleUser, "Ancien message", true)
 	deliver := func(session, text string) string {
@@ -312,7 +312,7 @@ func TestContextPackAfterDeviceFallback(t *testing.T) {
 // A session of another harness is never resumed: the brain starts fresh,
 // with the pack.
 func TestBrainSessionOfAnotherHarness(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrainStatus(c, func(st *AssistantStatus) { st.Session = "ses_other" })
 	setBrainStatus(c, func(st *AssistantStatus) { st.SessionRuntime = "opencode" })
 	if task := startedBrain(t, c, true); task.Prompt == brainStartPrompt || brainStatus(c).Resume != "" {
@@ -327,7 +327,7 @@ func TestBrainSessionOfAnotherHarness(t *testing.T) {
 // A brain task that says it is idle after a failed turn, then exits, keeps
 // its failures: the resume is dropped after two.
 func TestBrainFailuresNotClearedByAFailedTurn(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrainStatus(c, func(st *AssistantStatus) { st.Failures = 1 })
 	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "error_during_execution"}}})
 	if c.lastTurnOK("t-brain") {
@@ -342,7 +342,7 @@ func TestBrainFailuresNotClearedByAFailedTurn(t *testing.T) {
 // A brain on a self-hosted model server gets a smaller pack: its window
 // is often small, and its instructions and tools fill half of it.
 func TestContextPackSelfHosted(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	for i := range 400 {
 		say(t, c, []string{roleUser, roleBrain}[i%2], fmt.Sprintf("message %04d ", i)+strings.Repeat("blabla ", 20), true)
 	}

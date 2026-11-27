@@ -13,7 +13,7 @@ import (
 // itself and a task's start are refused, and a card no longer waiting too.
 func TestBrainWithdrawsHisCard(t *testing.T) {
 	c, node := outcomeCore(t)
-	x := mustIntend(t, c.mem, &Intention{Text: "Appeler le garage lundi", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustFirstParty})
+	x := mustIntend(t, c.intents, &Intention{Text: "Appeler le garage lundi", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustFirstParty})
 	ref := proposalRef(cardIntention, x.ID)
 	c.cardNow(cardIntention, x.ID, "", nodeRef(node))
 	before := c.store.lastMessageSeq()
@@ -28,7 +28,7 @@ func TestBrainWithdrawsHisCard(t *testing.T) {
 	if c.proposalOf(cardIntention, x.ID).Pending {
 		t.Error("the intention still waits")
 	}
-	if got, _ := c.mem.intention(x.ID); got.State == intentOpen {
+	if got, _ := c.intents.intention(x.ID); got.State == intentOpen {
 		t.Error("withdrawing approved it")
 	}
 	if c.store.lastMessageSeq() != before {

@@ -240,8 +240,8 @@
 {{define "new-dot"}}<b class="new-dot" title="{{t "update.available"}}"><span class="sr-only">{{t "update.available"}}</span></b>{{end}}
 
 {{/* The settings' own navigation, in four groups: only what is set; what
-one looks back on is here too: the Journal and « À valider » (activity.html). Every page of the settings
-has it, the intentions' page too. A dot marks an entry that needs a look:
+one looks back on is here too: the intentions, the Journal and « À valider » (activity.html).
+Every page of the settings has it. A dot marks an entry that needs a look:
 an update (Devices), a tool in error (Tools), a key refused (Agents).
 On a wide screen it is the sidebar, under the way back to the workspace (/espace).
 On a phone it is the first level alone (/settings, View "index"): a grouped
@@ -274,6 +274,7 @@ The ways back follow the pages, never the browser's history. */}}
   <div class="nav-group" role="group" aria-labelledby="sg-space">
     <h2 class="nav-group-title" id="sg-space">{{t "settings.g.space"}}</h2>
     <a href="/settings/account" {{if eq .Tab "account"}}aria-current="page"{{end}}>{{template "i-user"}}<span>{{t "settings.accountnav"}}</span>{{template "chev"}}</a>
+    <a href="/settings/intentions" {{if eq .Tab "intentions"}}aria-current="page"{{end}}>{{template "i-check"}}<span>{{t "intent.title"}}</span>{{template "chev"}}</a>
     <a href="/settings/journal" {{if eq .Tab "journal"}}aria-current="page"{{end}}>{{template "i-history"}}<span>{{t "settings.journal"}}</span>{{template "chev"}}</a>
     <a href="/settings/approve" {{if eq .Tab "approve"}}aria-current="page"{{end}}>{{template "i-shield"}}<span>{{t "activity.approve"}}</span>{{if .Waiting}}<span class="nav-count">{{.Waiting}}</span>{{end}}{{template "chev"}}</a>
   </div>

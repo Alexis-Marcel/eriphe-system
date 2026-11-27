@@ -16,8 +16,6 @@ func aboutOfRow(c *core, table, where string, args ...any) string {
 // a notification, an intention. An about given wins.
 func TestTurnNodeIsTheAbout(t *testing.T) {
 	c := graphCore(t)
-	m, _ := testMemory(t)
-	c.useMemory(m)
 	out, isErr := callBrainTool(t, c, "node_open", map[string]any{"title": "Marque Velora", "goal": "Sam sait si le nom est libre."})
 	if isErr {
 		t.Fatalf("open: %v", out)
@@ -37,14 +35,14 @@ func TestTurnNodeIsTheAbout(t *testing.T) {
 	if isErr {
 		t.Fatalf("intend: %v", out)
 	}
-	if x, _ := c.mem.intention(int64(out["id"].(float64))); x == nil || x.About != key {
+	if x, _ := c.intents.intention(int64(out["id"].(float64))); x == nil || x.About != key {
 		t.Errorf("intention under %+v", x)
 	}
 	if out, isErr := callBrainTool(t, c, "intend", map[string]any{"text": "Relancer l'avocat sur Velora.", "due_at": "2026-12-01"}); isErr {
 		t.Fatalf("intend: %v", out)
 	}
 	var intent string
-	c.mem.db.QueryRow(`SELECT about FROM intentions`).Scan(&intent)
+	c.intents.db.QueryRow(`SELECT about FROM intentions`).Scan(&intent)
 	if intent != key {
 		t.Errorf("intention under %q", intent)
 	}
@@ -99,10 +97,8 @@ func TestRuleMatchesAboutOrRef(t *testing.T) {
 // its card's, or its source's.
 func TestCardAndItemAbouts(t *testing.T) {
 	c := graphCore(t)
-	m, _ := testMemory(t)
-	c.useMemory(m)
 	th := workNode(t, c, "")
-	x := mustIntend(t, c.mem, &Intention{About: "person:sam", Text: "Relire les PR avec Sam.", SourceKind: srcBrain, Trust: trustExternal,
+	x := mustIntend(t, c.intents, &Intention{About: "person:sam", Text: "Relire les PR avec Sam.", SourceKind: srcBrain, Trust: trustExternal,
 		State: intentProposed})
 	c.cardProposed(cardIntention, x.ID)
 	if got := aboutOfRow(c, "convo_cards", "ref = ?", proposalRef(cardIntention, x.ID)); got != "person:sam" {
@@ -128,7 +124,7 @@ func TestCardAndItemAbouts(t *testing.T) {
 	// Raised by a task: the task's.
 	c.turn.about("")
 	c.store.insertTask(&TaskRow{ID: "t-9", Runtime: "claude-code", State: "running", Prompt: "x", About: "project:site"})
-	y := mustIntend(t, c.mem, &Intention{Text: "Renouveler le certificat du site.", SourceKind: srcTask, SourceRef: "task:t-9", Trust: trustExternal, State: intentProposed})
+	y := mustIntend(t, c.intents, &Intention{Text: "Renouveler le certificat du site.", SourceKind: srcTask, SourceRef: "task:t-9", Trust: trustExternal, State: intentProposed})
 	c.cardNow(cardIntention, y.ID, "Je te le rappelle ?", "task:t-9")
 	if got := aboutOfRow(c, "convo_cards", "ref = ?", proposalRef(cardIntention, y.ID)); got != "project:site" {
 		t.Errorf("task's card under %q", got)

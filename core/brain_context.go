@@ -223,17 +223,15 @@ func (c *core) contextPack() (string, contextPackStats) {
 	perms, tasks := c.packTasks()
 	p.section("tasks", "Tâches en cours :", tasks, share(150))
 	var intentions []string
-	if c.mem != nil {
-		now := c.mem.now() // the intentions' clock
-		xs, _ := c.mem.intentions(intentDue, intentOpen, intentSnoozed)
-		for _, x := range xs {
-			if shown[fmt.Sprintf("intention:%d", x.ID)] {
-				continue // in its node's card
-			}
-			intentions = append(intentions, packIntentionLine(x, now))
+	now := c.intents.now() // the intentions' clock
+	xs, _ := c.intents.intentions(intentDue, intentOpen, intentSnoozed)
+	for _, x := range xs {
+		if shown[fmt.Sprintf("intention:%d", x.ID)] {
+			continue // in its node's card
 		}
-		p.section("intentions", "Intentions en cours (dues d'abord) :", intentions, share(100))
+		intentions = append(intentions, packIntentionLine(x, now))
 	}
+	p.section("intentions", "Intentions en cours (dues d'abord) :", intentions, share(100))
 	p.section("pending", fmt.Sprintf("En attente de %s (c'est à lui de répondre) :", user), append(perms, c.packCards(shown)...), share(125))
 
 	stats := contextPackStats{State: runeLen(p.b.String()), Cards: cards}

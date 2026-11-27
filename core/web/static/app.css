@@ -649,7 +649,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 
 /* A section's or an object's colour: the same in light and dark, each dark
    enough to carry white. */
-.tint-violet, .nav-group > a[href="/memory"], .nav-group > a[href="/settings/account"] { --tint: #7c3aed; }
+.tint-violet, .nav-group > a[href="/settings/intentions"], .nav-group > a[href="/settings/account"] { --tint: #7c3aed; }
 .tint-blue, .nav-group > a[href="/settings/agents"] { --tint: #2563eb; }
 .tint-sky, .nav-group > a[href="/settings/watches"], .nav-group > a[href="/settings/access"] { --tint: #0284c7; }
 .tint-teal, .nav-group > a[href="/settings/tools"] { --tint: #0d9488; }

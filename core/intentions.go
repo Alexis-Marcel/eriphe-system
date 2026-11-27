@@ -12,7 +12,7 @@ import (
 // Typed intentions: what is owed, by whom, by when, and when to say so.
 // Prospective memory as "schema-constrained state tracking" (Typed
 // Intention Stores, arXiv 2609.01272): the model only Forms intentions from
-// text (the extraction, the brain's tools) and Revises them with typed
+// text (the brain's tools) and Revises them with typed
 // patches (done, cancelled, rescheduled); the lifecycle is code. Every
 // minute, without a model, open intentions whose reminder time has come,
 // and snoozed ones whose snooze is over, become due (tickIntentions); an
@@ -84,7 +84,6 @@ type Intention struct {
 	SourceRef    string    `json:"source_ref,omitempty"`
 	Trust        string    `json:"trust"`
 	Basis        string    `json:"basis,omitempty"`
-	MemoryID     int64     `json:"memory_id,omitempty"` // the commitment memory it came from
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	ClosedAt     time.Time `json:"closed_at,omitzero"`
@@ -96,23 +95,98 @@ func (x *Intention) Overdue(now time.Time) bool {
 	return !x.DueAt.IsZero() && x.DueAt.Before(now) && containsStr([]string{intentOpen, intentDue, intentSnoozed}, x.State)
 }
 
-const intentionsSchema = `CREATE TABLE intentions (
+// intentionsSchema: the intentions and their log, in core.db. The log is
+// append-only.
+const intentionsSchema = `CREATE TABLE IF NOT EXISTS intentions (
 	  id INTEGER PRIMARY KEY AUTOINCREMENT,
 	  kind TEXT NOT NULL, text TEXT NOT NULL, owner TEXT NOT NULL DEFAULT 'owner', owed_to TEXT NOT NULL DEFAULT '',
 	  about TEXT NOT NULL DEFAULT '', trigger TEXT NOT NULL DEFAULT 'time', cue TEXT NOT NULL DEFAULT '',
 	  due_at INTEGER, remind_at INTEGER, state TEXT NOT NULL, snoozed_until INTEGER,
 	  surfaced_at INTEGER, surfaced INTEGER NOT NULL DEFAULT 0, next_check_at INTEGER,
 	  source_kind TEXT NOT NULL, source_ref TEXT NOT NULL DEFAULT '', trust TEXT NOT NULL, basis TEXT NOT NULL DEFAULT '',
-	  memory_id INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, closed_at INTEGER,
+	  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, closed_at INTEGER,
 	  flags TEXT NOT NULL DEFAULT '');
-	CREATE INDEX intentions_state ON intentions (state, next_check_at);
-	CREATE TABLE intention_log (
+	CREATE INDEX IF NOT EXISTS intentions_state ON intentions (state, next_check_at);
+	CREATE TABLE IF NOT EXISTS intention_log (
 	  seq INTEGER PRIMARY KEY AUTOINCREMENT, intention_id INTEGER NOT NULL, time INTEGER NOT NULL,
 	  who TEXT NOT NULL, op TEXT NOT NULL, from_state TEXT NOT NULL DEFAULT '', to_state TEXT NOT NULL DEFAULT '',
 	  detail TEXT NOT NULL DEFAULT '');
-	CREATE INDEX intention_log_intention ON intention_log (intention_id);
-	CREATE TRIGGER intention_log_append_only BEFORE UPDATE ON intention_log BEGIN
+	CREATE INDEX IF NOT EXISTS intention_log_intention ON intention_log (intention_id);
+	CREATE TRIGGER IF NOT EXISTS intention_log_append_only BEFORE UPDATE ON intention_log BEGIN
 	  SELECT RAISE(ABORT, 'intention_log is append-only'); END;`
+
+func init() { extraSchema = append(extraSchema, intentionsSchema) }
+
+// intentStore keeps the intentions, in core.db.
+type intentStore struct {
+	db  *sql.DB
+	now func() time.Time
+	// noteAbout is an about as kept, noted as seen (names.go); nil: as
+	// given.
+	noteAbout func(string) string
+	// changed is told after every change is committed: the cards of its
+	// proposals follow them; nil: no one.
+	changed func()
+}
+
+// newIntents gives eriphe-core its intentions, in its store: their abouts
+// are kept by the store's names, their proposals' cards follow them.
+func (c *core) newIntents() *intentStore {
+	return &intentStore{db: c.store.db, now: time.Now, noteAbout: c.store.noteAbout,
+		changed: func() { c.settleCards(cardIntention) }}
+}
+
+// note is an about as kept.
+func (s *intentStore) note(about string) string {
+	if s.noteAbout == nil {
+		return about
+	}
+	return s.noteAbout(about)
+}
+
+// commit commits a change of the intentions, and tells who follows them.
+func (s *intentStore) commit(tx *sql.Tx) error {
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if s.changed != nil {
+		s.changed()
+	}
+	return nil
+}
+
+// proposalExpiry is how long a proposed intention waits for the user:
+// undecided after it, it is cancelled (expireProposals).
+const proposalExpiry = 14 * 24 * time.Hour
+
+// expireProposals cancels the proposed intentions nobody decided within
+// proposalExpiry; their cards, if any, then read as rejected. It returns
+// how many.
+func (s *intentStore) expireProposals() (int, error) {
+	cut := s.now().Add(-proposalExpiry).Unix()
+	rows, err := s.db.Query(`SELECT id FROM intentions WHERE state = 'proposed' AND created_at < ?`, cut)
+	if err != nil {
+		return 0, err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, id := range ids {
+		if _, err := s.changeIntention(id, intentionChange{State: intentCancelled}, "expiry", "undecided for 14 days"); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
 
 // defaultRemind is when to remind of a deadline nobody gave a time for: a
 // deadline on a day (midnight) is reminded at 9:00 that day; one at a time,
@@ -222,11 +296,11 @@ func normalizeIntention(x *Intention, now time.Time) error {
 func insertIntention(q querier, x *Intention, now time.Time, who, detail string) error {
 	x.CreatedAt, x.UpdatedAt = now, now
 	res, err := q.Exec(`INSERT INTO intentions (kind, text, owner, owed_to, about, trigger, cue, due_at, remind_at, state, snoozed_until,
-		surfaced_at, surfaced, next_check_at, source_kind, source_ref, trust, basis, memory_id, created_at, updated_at, flags)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		surfaced_at, surfaced, next_check_at, source_kind, source_ref, trust, basis, created_at, updated_at, flags)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		x.Kind, x.Text, x.Owner, x.OwedTo, x.About, x.Trigger, x.Cue, unixOrNil(x.DueAt), unixOrNil(x.RemindAt), x.State,
 		unixOrNil(x.SnoozedUntil), unixOrNil(x.SurfacedAt), x.Surfaced, unixOrNil(x.NextCheckAt), x.SourceKind, x.SourceRef, x.Trust,
-		x.Basis, nullID(x.MemoryID), now.Unix(), now.Unix(), x.Flags)
+		x.Basis, now.Unix(), now.Unix(), x.Flags)
 	if err != nil {
 		return err
 	}
@@ -241,27 +315,27 @@ func intentionLog(q querier, id int64, now time.Time, who, op, from, to, detail 
 }
 
 const intentionColumns = `id, kind, text, owner, owed_to, about, trigger, cue, due_at, remind_at, state, snoozed_until, surfaced_at,
-	surfaced, next_check_at, source_kind, source_ref, trust, basis, memory_id, created_at, updated_at, closed_at, flags`
+	surfaced, next_check_at, source_kind, source_ref, trust, basis, created_at, updated_at, closed_at, flags`
 
 func scanIntention(sc interface{ Scan(...any) error }) (*Intention, error) {
 	var x Intention
-	var due, remind, snoozed, surfaced, next, memID, closed sql.NullInt64
+	var due, remind, snoozed, surfaced, next, closed sql.NullInt64
 	var created, updated int64
 	if err := sc.Scan(&x.ID, &x.Kind, &x.Text, &x.Owner, &x.OwedTo, &x.About, &x.Trigger, &x.Cue, &due, &remind, &x.State,
-		&snoozed, &surfaced, &x.Surfaced, &next, &x.SourceKind, &x.SourceRef, &x.Trust, &x.Basis, &memID, &created, &updated,
+		&snoozed, &surfaced, &x.Surfaced, &next, &x.SourceKind, &x.SourceRef, &x.Trust, &x.Basis, &created, &updated,
 		&closed, &x.Flags); err != nil {
 		return nil, err
 	}
 	x.DueAt, x.RemindAt, x.SnoozedUntil, x.SurfacedAt = fromNull(due), fromNull(remind), fromNull(snoozed), fromNull(surfaced)
 	x.NextCheckAt, x.ClosedAt = fromNull(next), fromNull(closed)
-	x.MemoryID, x.CreatedAt, x.UpdatedAt = memID.Int64, time.Unix(created, 0), time.Unix(updated, 0)
+	x.CreatedAt, x.UpdatedAt = time.Unix(created, 0), time.Unix(updated, 0)
 	return &x, nil
 }
 
 var errNoIntention = errors.New("no such intention")
 
-func (m *memStore) intention(id int64) (*Intention, error) {
-	x, err := scanIntention(m.db.QueryRow(`SELECT `+intentionColumns+` FROM intentions WHERE id = ?`, id))
+func (s *intentStore) intention(id int64) (*Intention, error) {
+	x, err := scanIntention(s.db.QueryRow(`SELECT `+intentionColumns+` FROM intentions WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, errNoIntention
 	}
@@ -270,7 +344,7 @@ func (m *memStore) intention(id int64) (*Intention, error) {
 
 // intentions lists those in the given states (the live ones by default),
 // the due first, then by deadline.
-func (m *memStore) intentions(states ...string) ([]*Intention, error) {
+func (s *intentStore) intentions(states ...string) ([]*Intention, error) {
 	if len(states) == 0 {
 		states = intentLive
 	}
@@ -278,7 +352,7 @@ func (m *memStore) intentions(states ...string) ([]*Intention, error) {
 	for _, s := range states {
 		args = append(args, s)
 	}
-	rows, err := m.db.Query(`SELECT `+intentionColumns+` FROM intentions WHERE state IN (`+placeholders(len(states))+`)
+	rows, err := s.db.Query(`SELECT `+intentionColumns+` FROM intentions WHERE state IN (`+placeholders(len(states))+`)
 		ORDER BY state != 'due', due_at IS NULL, due_at, remind_at, id LIMIT 300`, args...)
 	if err != nil {
 		return nil, err
@@ -297,19 +371,19 @@ func (m *memStore) intentions(states ...string) ([]*Intention, error) {
 
 // addIntention records an intention, unless the same one is already live
 // (then that one is returned).
-func (m *memStore) addIntention(x *Intention, who string) (*Intention, error) {
-	now := m.now()
+func (s *intentStore) addIntention(x *Intention, who string) (*Intention, error) {
+	now := s.now()
 	if err := normalizeIntention(x, now); err != nil {
 		return nil, err
 	}
-	x.About, x.Owner, x.OwedTo = m.noteAbout(x.About), m.noteAbout(x.Owner), m.noteAbout(x.OwedTo)
+	x.About, x.Owner, x.OwedTo = s.note(x.About), s.note(x.Owner), s.note(x.OwedTo)
 	var id int64
-	m.db.QueryRow(`SELECT id FROM intentions WHERE LOWER(TRIM(text)) = LOWER(TRIM(?)) AND state IN ('proposed', 'open', 'due', 'snoozed')
+	s.db.QueryRow(`SELECT id FROM intentions WHERE LOWER(TRIM(text)) = LOWER(TRIM(?)) AND state IN ('proposed', 'open', 'due', 'snoozed')
 		LIMIT 1`, x.Text).Scan(&id)
 	if id != 0 {
-		return m.intention(id)
+		return s.intention(id)
 	}
-	tx, err := m.db.Begin()
+	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +391,7 @@ func (m *memStore) addIntention(x *Intention, who string) (*Intention, error) {
 	if err := insertIntention(tx, x, now, who, ""); err != nil {
 		return nil, err
 	}
-	return x, m.commitIntention(tx)
+	return x, s.commit(tx)
 }
 
 // intentionChange is a typed patch: a move to another state, a snooze, a
@@ -331,8 +405,8 @@ type intentionChange struct {
 }
 
 // changeIntention applies a patch, if the lifecycle allows it.
-func (m *memStore) changeIntention(id int64, ch intentionChange, who, why string) (*Intention, error) {
-	tx, err := m.db.Begin()
+func (s *intentStore) changeIntention(id int64, ch intentionChange, who, why string) (*Intention, error) {
+	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +415,7 @@ func (m *memStore) changeIntention(id int64, ch intentionChange, who, why string
 	if err != nil {
 		return nil, errNoIntention
 	}
-	now := m.now()
+	now := s.now()
 	from := x.State
 	var detail []string
 	if ch.Text != nil {
@@ -416,15 +490,15 @@ func (m *memStore) changeIntention(id int64, ch intentionChange, who, why string
 	if err := intentionLog(tx, id, now, who, "change", from, x.State, strings.Join(detail, "; ")); err != nil {
 		return nil, err
 	}
-	return x, m.commitIntention(tx)
+	return x, s.commit(tx)
 }
 
 // tickIntentions is the minute timer's work, without a model: open
 // intentions whose reminder has come and snoozed ones whose snooze is over
 // become due. It returns those that just did.
-func (m *memStore) tickIntentions() ([]*Intention, error) {
-	now := m.now()
-	rows, err := m.db.Query(`SELECT id FROM intentions WHERE state IN ('open', 'snoozed')
+func (s *intentStore) tickIntentions() ([]*Intention, error) {
+	now := s.now()
+	rows, err := s.db.Query(`SELECT id FROM intentions WHERE state IN ('open', 'snoozed')
 		AND next_check_at IS NOT NULL AND next_check_at <= ?`, now.Unix())
 	if err != nil {
 		return nil, err
@@ -438,7 +512,7 @@ func (m *memStore) tickIntentions() ([]*Intention, error) {
 	rows.Close()
 	var out []*Intention
 	for _, id := range ids {
-		x, err := m.becomeDue(id, "clock", "its time came")
+		x, err := s.becomeDue(id, "clock", "its time came")
 		if err != nil {
 			return out, err
 		}
@@ -451,9 +525,9 @@ func (m *memStore) tickIntentions() ([]*Intention, error) {
 
 // becomeDue moves a live intention to due; its deadline, if later, is the
 // next time it is said again.
-func (m *memStore) becomeDue(id int64, who, why string) (*Intention, error) {
-	now := m.now()
-	x, err := m.intention(id)
+func (s *intentStore) becomeDue(id int64, who, why string) (*Intention, error) {
+	now := s.now()
+	x, err := s.intention(id)
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +536,7 @@ func (m *memStore) becomeDue(id int64, who, why string) (*Intention, error) {
 		return nil, nil
 	}
 	x.State, x.SnoozedUntil, x.SurfacedAt, x.NextCheckAt, x.UpdatedAt = intentDue, time.Time{}, time.Time{}, time.Time{}, now
-	tx, err := m.db.Begin()
+	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
 	}
@@ -478,14 +552,14 @@ func (m *memStore) becomeDue(id int64, who, why string) (*Intention, error) {
 	if err := intentionLog(tx, id, now, who, "due", from, intentDue, why); err != nil {
 		return nil, err
 	}
-	return x, m.commitIntention(tx)
+	return x, s.commit(tx)
 }
 
 // toSurface are the due intentions the brain has not been told of yet, or
 // whose deadline has come since it was.
-func (m *memStore) toSurface() ([]*Intention, error) {
-	now := m.now()
-	rows, err := m.db.Query(`SELECT `+intentionColumns+` FROM intentions WHERE state = 'due'
+func (s *intentStore) toSurface() ([]*Intention, error) {
+	now := s.now()
+	rows, err := s.db.Query(`SELECT `+intentionColumns+` FROM intentions WHERE state = 'due'
 		AND (surfaced_at IS NULL OR (next_check_at IS NOT NULL AND next_check_at <= ?)) ORDER BY due_at IS NULL, due_at, id`, now.Unix())
 	if err != nil {
 		return nil, err
@@ -504,28 +578,28 @@ func (m *memStore) toSurface() ([]*Intention, error) {
 
 // surfaced records that the brain was told: once more at the deadline if
 // it is later, else never again (it stays due, listed, until closed).
-func (m *memStore) surfaced(xs []*Intention, how string) {
-	now := m.now()
+func (s *intentStore) surfaced(xs []*Intention, how string) {
+	now := s.now()
 	for _, x := range xs {
 		var next any
 		if x.DueAt.After(now) && !dayDeadline(x.DueAt) {
 			next = x.DueAt.Unix()
 		}
 		// Only while it is due: snoozed or closed meanwhile, it keeps its own next look.
-		m.db.Exec(`UPDATE intentions SET surfaced_at = ?, surfaced = surfaced + 1, next_check_at = ?, updated_at = ? WHERE id = ? AND state = 'due'`,
+		s.db.Exec(`UPDATE intentions SET surfaced_at = ?, surfaced = surfaced + 1, next_check_at = ?, updated_at = ? WHERE id = ? AND state = 'due'`,
 			now.Unix(), next, now.Unix(), x.ID)
-		intentionLog(m.db, x.ID, now, "eriphe-core", "surfaced", x.State, x.State, how)
+		intentionLog(s.db, x.ID, now, "eriphe-core", "surfaced", x.State, x.State, how)
 	}
 }
 
 // cueIntentions makes due the open intentions whose person cue my message
 // names ("la prochaine fois que je parle à Hélène").
-func (m *memStore) cueIntentions(text string) ([]*Intention, error) {
+func (s *intentStore) cueIntentions(text string) ([]*Intention, error) {
 	words := textStems(text) // matched as an entity's names are (names.go)
 	if len(words) == 0 {
 		return nil, nil
 	}
-	live, err := m.intentions(intentOpen, intentSnoozed)
+	live, err := s.intentions(intentOpen, intentSnoozed)
 	if err != nil {
 		return nil, err
 	}
@@ -541,7 +615,7 @@ func (m *memStore) cueIntentions(text string) ([]*Intention, error) {
 		if !hit {
 			continue
 		}
-		got, err := m.becomeDue(x.ID, "cue", "named in a message")
+		got, err := s.becomeDue(x.ID, "cue", "named in a message")
 		if err != nil {
 			return out, err
 		}
@@ -553,8 +627,8 @@ func (m *memStore) cueIntentions(text string) ([]*Intention, error) {
 }
 
 // intentionHistory is an intention's log, for the page.
-func (m *memStore) intentionHistory(id int64) ([]map[string]any, error) {
-	rows, err := m.db.Query(`SELECT time, who, op, from_state, to_state, detail FROM intention_log WHERE intention_id = ? ORDER BY seq`, id)
+func (s *intentStore) intentionHistory(id int64) ([]map[string]any, error) {
+	rows, err := s.db.Query(`SELECT time, who, op, from_state, to_state, detail FROM intention_log WHERE intention_id = ? ORDER BY seq`, id)
 	if err != nil {
 		return nil, err
 	}

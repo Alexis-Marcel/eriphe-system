@@ -327,7 +327,7 @@ func kvMarks(c *core) int {
 // reply to a message is; an event of Eriphe's own (a monitor's) still is
 // not.
 func TestOrbAnswersTheUsersYes(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	w := &web{c: c}
 	deliver := func() {

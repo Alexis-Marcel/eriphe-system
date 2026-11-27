@@ -10,7 +10,7 @@ import (
 // The lifecycle, in code: reminders come due on the minute, snoozes come
 // back, closed ones stay closed, moves the lifecycle forbids are refused.
 func TestIntentionLifecycle(t *testing.T) {
-	m, clock := testMemory(t)
+	m, clock := testIntents(t)
 	call := mustIntend(t, m, &Intention{Kind: intentReminder, Text: "Appeler l'URSSAF", RemindAt: clock.t.Add(time.Hour)})
 	day := mustIntend(t, m, &Intention{Kind: intentPromise, Text: "Envoyer le planning à Yanis", OwedTo: "person:yanis",
 		DueAt: time.Date(2026, 10, 28, 0, 0, 0, 0, time.Local)})
@@ -107,10 +107,10 @@ func TestIntentionLifecycle(t *testing.T) {
 // The clock trigger wakes the brain when an intention comes due, once,
 // with the wake packet; an intention from outside taints that turn.
 func TestClockWakesBrain(t *testing.T) {
-	c, clock := testMemoryCore(t)
+	c, clock := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	ctx := context.Background()
-	mustIntend(t, c.mem, &Intention{Kind: intentReminder, Text: "Appeler l'URSSAF", RemindAt: clock.t.Add(time.Minute)})
+	mustIntend(t, c.intents, &Intention{Kind: intentReminder, Text: "Appeler l'URSSAF", RemindAt: clock.t.Add(time.Minute)})
 	if err := tendBrain(ctx, c); err != nil {
 		t.Fatal(err)
 	}
@@ -144,14 +144,14 @@ func TestClockWakesBrain(t *testing.T) {
 		t.Fatalf("woken twice: %d", len(items))
 	}
 	// An approved intention drawn from a mail: it reminds, the turn is tainted, it cannot allow.
-	ext := mustIntend(t, c.mem, &Intention{Text: "Payer la facture du fournisseur", RemindAt: clock.t.Add(time.Minute), State: intentProposed,
-		SourceKind: srcExtraction, SourceRef: "task:t-mail", Trust: trustExternal})
+	ext := mustIntend(t, c.intents, &Intention{Text: "Payer la facture du fournisseur", RemindAt: clock.t.Add(time.Minute), State: intentProposed,
+		SourceKind: srcTask, SourceRef: "task:t-mail", Trust: trustExternal})
 	clock.add(2 * time.Minute)
 	c.intentionsTick()
-	if xs, _ := c.mem.toSurface(); len(xs) != 0 {
+	if xs, _ := c.intents.toSurface(); len(xs) != 0 {
 		t.Fatal("a proposed intention comes due")
 	}
-	if _, err := c.mem.changeIntention(ext.ID, intentionChange{State: intentOpen}, "owner", "approved"); err != nil {
+	if _, err := c.intents.changeIntention(ext.ID, intentionChange{State: intentOpen}, "owner", "approved"); err != nil {
 		t.Fatal(err)
 	}
 	ownerSays(c, "Merci")
@@ -178,7 +178,7 @@ func TestClockWakesBrain(t *testing.T) {
 // The clock's wake goes on with the brain's turn but is about no node:
 // a card it raises is no node's until it names one.
 func TestClockWakeAboutNoNode(t *testing.T) {
-	c, clock := testMemoryCore(t)
+	c, clock := testIntentsCore(t)
 	openGraph(t, c)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	ctx := context.Background()
@@ -189,7 +189,7 @@ func TestClockWakeAboutNoNode(t *testing.T) {
 	c.turn.about(s)                       // the turn named the node
 	c.turn.answersIn(s)                   // answered a message written in it
 	c.turn.name([]string{"project:site"}) // and my message a subject
-	mustIntend(t, c.mem, &Intention{Kind: intentReminder, Text: "Appeler le garage", RemindAt: clock.t.Add(time.Minute)})
+	mustIntend(t, c.intents, &Intention{Kind: intentReminder, Text: "Appeler le garage", RemindAt: clock.t.Add(time.Minute)})
 	clock.add(2 * time.Minute)
 	c.intentionsTick()
 	c.store.updateTask("t-brain", map[string]any{"state": stateIdle})
@@ -214,9 +214,9 @@ func TestClockWakeAboutNoNode(t *testing.T) {
 // My message that names a person brings up the intention cued on them,
 // in the same delivery.
 func TestCueInDelivery(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
-	x := mustIntend(t, c.mem, &Intention{Text: "Demander à Hélène pour la TVA", Cue: "Hélène"})
+	x := mustIntend(t, c.intents, &Intention{Text: "Demander à Hélène pour la TVA", Cue: "Hélène"})
 	c.store.addMessage(roleUser, "Je vois Hélène demain pour le bilan", false)
 	if err := tendBrain(context.Background(), c); err != nil {
 		t.Fatal(err)
@@ -226,10 +226,10 @@ func TestCueInDelivery(t *testing.T) {
 	if !strings.Contains(text, "Je vois Hélène") || !strings.Contains(text, "Demander à Hélène pour la TVA") {
 		t.Fatalf("delivery: %s", text)
 	}
-	if got, _ := c.mem.intention(x.ID); got.State != intentDue || got.Surfaced != 1 {
+	if got, _ := c.intents.intention(x.ID); got.State != intentDue || got.Surfaced != 1 {
 		t.Fatalf("cued: %+v", got)
 	}
-	if xs, _ := c.mem.toSurface(); len(xs) != 0 {
+	if xs, _ := c.intents.toSurface(); len(xs) != 0 {
 		t.Fatal("told again by the clock")
 	}
 }
@@ -238,28 +238,28 @@ func TestCueInDelivery(t *testing.T) {
 // runIntentions makes a due one wake the brain, and from the night's hour
 // drops a proposal undecided for 14 days, once a night.
 func TestIntentionsClockRunsOnItsOwn(t *testing.T) {
-	c, clock := testMemoryCore(t)
+	c, clock := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	ctx := context.Background()
-	stale := mustIntend(t, c.mem, &Intention{Text: "Payer le garage", State: intentProposed, SourceKind: srcBrain, Trust: trustExternal})
+	stale := mustIntend(t, c.intents, &Intention{Text: "Payer le garage", State: intentProposed, SourceKind: srcBrain, Trust: trustExternal})
 	if err := tendBrain(ctx, c); err != nil {
 		t.Fatal(err)
 	}
 	// Fifteen days later, before the night's hour: the proposal waits on.
 	clock.t = time.Date(2026, 11, 10, 2, 0, 0, 0, time.Local)
 	c.intentionsNight(clock.t)
-	if x, _ := c.mem.intention(stale.ID); x.State != intentProposed {
+	if x, _ := c.intents.intention(stale.ID); x.State != intentProposed {
 		t.Fatalf("dropped before the night's hour: %+v", x)
 	}
 	clock.t = time.Date(2026, 11, 10, 9, 0, 0, 0, time.Local)
-	mustIntend(t, c.mem, &Intention{Kind: intentReminder, Text: "Appeler l'URSSAF", RemindAt: clock.t.Add(-time.Minute)})
+	mustIntend(t, c.intents, &Intention{Kind: intentReminder, Text: "Appeler l'URSSAF", RemindAt: clock.t.Add(-time.Minute)})
 	round, stop := context.WithCancel(ctx)
 	stop()
 	c.runIntentions(round) // one round: the night, then the minute
-	if x, _ := c.mem.intention(stale.ID); x.State != intentCancelled {
+	if x, _ := c.intents.intention(stale.ID); x.State != intentCancelled {
 		t.Fatalf("a proposal undecided for 14 days: %+v", x)
 	}
-	if got := c.mem.get("night_done"); got != "2026-11-10" {
+	if got := c.store.get(intentionsNightDone); got != "2026-11-10" {
 		t.Fatalf("night done: %q", got)
 	}
 	if err := tendBrain(ctx, c); err != nil {
@@ -275,28 +275,28 @@ func TestIntentionsClockRunsOnItsOwn(t *testing.T) {
 }
 
 // The intentions' page lists the live ones and the recently closed; a
-// proposed one is approved there. It is no entry of the settings' list.
+// proposed one is approved there. It is an entry of the settings' list.
 func TestIntentionsPage(t *testing.T) {
-	tw, csrf := newMemoryWeb(t)
-	m := tw.c.mem
+	tw, csrf := newIntentsWeb(t)
+	m := tw.c.intents
 	mustIntend(t, m, &Intention{Text: "Appeler le garage", DueAt: m.now().Add(time.Hour)})
 	x := mustIntend(t, m, &Intention{Text: "Payer le fournisseur", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustFirstParty})
 	done := mustIntend(t, m, &Intention{Text: "Rendre le livre", DueAt: m.now().Add(time.Hour)})
 	m.changeIntention(done.ID, intentionChange{State: intentDone}, "owner", "")
-	code, body, _ := tw.do("GET", "/memory", nil, nil)
+	code, body, _ := tw.do("GET", "/settings/intentions", nil, nil)
 	if code != 200 {
-		t.Fatalf("GET /memory: %d", code)
+		t.Fatalf("GET /settings/intentions: %d", code)
 	}
 	for _, want := range []string{"<h2>Intentions</h2>", "Appeler le garage", "Payer le fournisseur", "Rendre le livre",
-		`hx-post="/memory/intention/` + itoa(int(x.ID)) + `/approve"`, `<nav class="settings-nav"`} {
+		`hx-post="/settings/intentions/` + itoa(int(x.ID)) + `/approve"`, `<nav class="settings-nav"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page lacks %q", want)
 		}
 	}
-	if strings.Contains(body, `href="/memory"`) {
-		t.Error("the intentions are an entry of the settings")
+	if !strings.Contains(body, `<a href="/settings/intentions" aria-current="page">`) {
+		t.Error("the intentions are not the current entry of the settings")
 	}
-	if code, _, _ := tw.post("/memory/intention/"+itoa(int(x.ID))+"/approve", nil, csrf); code != 200 {
+	if code, _, _ := tw.post("/settings/intentions/"+itoa(int(x.ID))+"/approve", nil, csrf); code != 200 {
 		t.Fatalf("approve: %d", code)
 	}
 	if y, _ := m.intention(x.ID); y.State != intentOpen {

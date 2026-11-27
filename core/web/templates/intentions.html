@@ -3,23 +3,21 @@
 {{define "main"}}
 <div class="settings {{template "settings-level" .}}">
   {{template "settings-nav" .}}
-  <div class="settings-body">{{template "settings-up" .}}{{template "memory-page" .Data}}</div>
+  <div class="settings-body">{{template "settings-up" .}}{{template "intentions-page" .Data}}</div>
 </div>
 {{end}}
 
-{{define "memory-page"}}{{with .}}
-<div class="memory">
-  <header class="mem-hero">
-    <div class="mem-title">
-      <span class="mem-mark" aria-hidden="true">{{template "i-check"}}</span>
+{{define "intentions-page"}}{{with .}}
+<div class="intentions">
+  <header class="intent-hero">
+    <div class="intent-title">
+      <span class="intent-mark" aria-hidden="true">{{template "i-check"}}</span>
       <div><h2>{{t "intent.title"}}</h2><p>{{t "intent.lead"}}</p></div>
     </div>
   </header>
-  {{if .Off}}<p class="alert">{{t "intent.off"}}</p>{{else}}
-  <div class="mem-list" id="intent-list">{{range .Intents}}{{template "intent-card" .}}{{end}}</div>
+  <div class="intent-list" id="intent-list">{{range .Intents}}{{template "intent-card" .}}{{end}}</div>
   {{if not .Intents}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-check"}}</span><p>{{t "intent.none"}}</p></div>{{end}}
   {{if .IntentsDone}}<details class="done"><summary>{{t "intent.donerecent"}} <span class="count">{{len .IntentsDone}}</span></summary>
-  <div class="mem-list">{{range .IntentsDone}}{{template "intent-card" .}}{{end}}</div></details>{{end}}
-  {{end}}
+  <div class="intent-list">{{range .IntentsDone}}{{template "intent-card" .}}{{end}}</div></details>{{end}}
 </div>
 {{end}}{{end}}

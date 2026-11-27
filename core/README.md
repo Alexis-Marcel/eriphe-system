@@ -26,12 +26,14 @@ the container's network, Docker's userland proxy relays IPv6 clients, and eriphe
 with the bridge's gateway address.
 
 At first start it makes what it lacks in the data directory, and reuses it after: the API token
-(`core-token`), the vault key (`vault.key`), the database (`core.db`, `memory.db`), the graph's
+(`core-token`), the vault key (`vault.key`), the database (`core.db`), the graph's
 nodes (`nodes/`, `nodes-trace/`, `nodes.db`) and the
 workspace's self-signed certificate (`web-cert.pem`, `web-key.pem`). An existing `core.db` that
 lacks a column added by hand (`convertedColumns` in `store.go`: `messages.taint`,
 `access_asks.settled`) is refused at start, the error naming the pull request whose SQL adds it:
-eriphe-core never reads a missing taint as none. The API listens on
+eriphe-core never reads a missing taint as none. A `memory.db` left by an older eriphe-core (the
+intentions' former file) is read once at the first start, its intentions copied into `core.db`
+(see [Intentions](#intentions)); it is kept on disk and never opened again. The API listens on
 `0.0.0.0:8800`, the workspace on `https://0.0.0.0:8443` (`ERIPHE_API_LISTEN` and `ERIPHE_WEB_LISTEN`,
 e.g. `0.0.0.0:9443`, move them, as `install.sh --api-port`, `--web-port` does on a Mac), and the
 brain is on, with no agent yet.
@@ -1278,7 +1280,9 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   14; `BackupConfig`): `nodes-<day>.bundle` (a git bundle of `main`
   and `HEAD`: `git clone` reads it and checks it out), `nodes-<day>.trace.tar` (the traces, each as
   long as it was when the tar opened it) and `nodes-<day>.db` (a copy of the index, named last: it
-  says the night's backup is whole).
+  says the night's backup is whole). `core.db` is copied there too, as `core-<day>.db`, the
+  same days kept (`storeNight`, `store_backup.go`: a `VACUUM INTO` snapshot written aside, then
+  renamed); it holds the intentions, the cards, the tasks and the conversation.
   The backup only reads the repository (go-git's repack deleted the loose objects before its new
   pack was checked, and a failed repack lost the history: it is never called). The
   bundle is packed from the objects as they are, written aside, read back whole (every object
@@ -3294,7 +3298,7 @@ The worker tasks at work are listed in Settings › Journal (`/settings/journal`
 above the reliability of the last 30 days; a task's page (`GET /tasks/{id}`) is a page of the
 settings, under the journal, with its trace, its receipt, its access grants, Stop, the reply
 to an idle agent and the answer to the permission it waits for; it reloads every 5 s while the
-task works, and after each of its actions (`memory-changed`).
+task works, and after each of its actions (`data-changed`).
 
 **Cards** (`convo_cards.go`, `web_convo_cards.go`). What waits
 for the user's approval is asked where they talk to the assistant: every proposal (an
@@ -4812,7 +4816,7 @@ are never shown back nor logged.
 What a record is about, its **about**, is a node (`node:<id>`) or a key: an entity
 (a person, `person:lina`; the user, `owner`; the home; a tool, `tool:x`) or a matter remembered (`project:site`,
 `pr:owner/repo#12`, `alert:backup`). Notifications, attention items, cards, tasks and
-card pushes (core.db) and intentions (memory.db) carry an `about` column next to their
+card pushes and intentions (core.db) carry an `about` column next to their
 ref (which record: `intention:12`, `skill:<name>`).
 
 - **Keys** (`about_key.go`): a key is `kind:slug`, made by one function (`aliasKey`) for every
@@ -4886,9 +4890,18 @@ their decisions is a sentence in the node of its subject (`node_edit`, `node_app
 every task of that subject reads it; what holds everywhere (who the user is, how to talk to them)
 is in the node « Faire connaissance ». Nothing else keeps facts: no profile, no separate store,
 no extraction. What is owed is the one thing kept apart, with a lifecycle kept by code: the
-**intentions**, in `memory.db` next to the database (SQLite). memory.db says its schema in `meta`
-(`schema_version`, 8): a new file is made with the intentions' tables alone; a file made before
-keeps its other tables, unread; a file at another schema is refused, never changed.
+**intentions**, in `core.db` (tables `intentions` and `intention_log`, `intentions.go`). An
+intention the brain forms is about the node of its turn unless it names another about.
+
+**From memory.db.** An older eriphe-core kept them in `memory.db`, next to `core.db` (or where the
+`memory` object's `db` key says). At start, when `core.db` holds no intention yet and has not read
+it before, eriphe-core opens that file read-only and copies its intentions and their log into
+`core.db` as they are (ids, states, dates, abouts; `intentions_import.go`), logging
+`intentions: N intentions and M log entries imported from …/memory.db into core.db; memory.db is
+kept, no longer read`. core.db's kv then says the import was made (`intentions_imported`), and the
+file is never opened again; it is never changed nor deleted (a read-only open may leave its
+`-shm` and `-wal` beside it), so it can be removed by hand, with them. A file
+that cannot be read stops the start, naming it: move it aside to start without its intentions.
 
 An intention has a kind (`promise`: the user owes someone; `commitment`: the assistant owes the
 user; `waiting_for`: someone owes the user; `reminder`), who owes and to whom, an about (see
@@ -4906,7 +4919,7 @@ A triggered skill's run reads what happened since its previous run with `since` 
 
 **The clock.** Every minute (`runIntentions`), without a model, open intentions whose reminder has
 come and snoozed ones whose snooze is over become due; a person cue becomes due when the user's
-message names them, and the delivery of that message carries the intention (`[mémoire]`). A due
+message names them, and the delivery of that message carries the intention (`[rappel]`). A due
 intention wakes the brain through the `clock` trigger (the brain has it with `conversation`): at
 its next idle, after the user's messages, it gets the wake packet (what is due now, what was told
 and is still due), and says it in a sentence or two or `[rien]`. Each intention wakes it once, and
@@ -4935,27 +4948,28 @@ the wake packet, which nobody asked for, name such an intention (its id, kind an
 quoting its text. What the brain writes during a tainted turn is marked tainted
 (`messages.taint`).
 
-**The page.** `/memory` lists the intentions with done, snooze (an hour, tomorrow 9:00), cancel and
-reopen, and the recently closed; it is no entry of the settings' list. Proposed ones are approved
+**The page.** Settings → Intentions (`/settings/intentions`) lists the intentions with done, snooze
+(an hour, tomorrow 9:00), cancel and reopen, and the recently closed. Proposed ones are approved
 or rejected there, in À valider, or on their card in the conversation. Claude Code's own
 auto-memory is turned off for the brain (`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`): the graph is its
 memory.
 
 **The night.** Once a night, from the backup's hour (`extract_at`), eriphe-core drops what was
-proposed and left undecided for 14 days (`intentionsNight`, `brain_wake.go`); the same loop checks
-the intentions every minute (`runIntentions`).
+proposed and left undecided for 14 days (`intentionsNight`, `brain_wake.go`) and copies `core.db`
+next to the graph's backup (`core-<day>.db`, `storeNight`); the same loop checks the intentions
+every minute (`runIntentions`).
 
 ```json
 "memory": {
-  "db": "/data/memory.db",
   "extract_at": "03:00",
   "backup_dir": "/backups/memory",
   "backup_keep": 14
 }
 ```
 
-All keys are optional: `db` (the intentions' file) defaults to `memory.db` next to `db`.
-`extract_at`, `backup_dir` and `backup_keep` are the [graph's nightly
-backup](#node-store-nodestore-nodesgo)'s hour, folder and days kept (`BackupConfig`, `nodes.go`).
+All keys are optional. `extract_at`, `backup_dir` and `backup_keep` are the [nightly
+backup](#node-store-nodestore-nodesgo)'s hour, folder and days kept, for the graph and `core.db`
+(`BackupConfig`, `nodes.go`); the object keeps the name `memory` from when the memory had its own
+file. `db` names an older eriphe-core's `memory.db`, read once (`memory.db` next to `db` by default).
 Trusted tools (whose results do not taint a turn) are marked in Settings → Tools (see the [one
 taint rule](#tool-catalog)).

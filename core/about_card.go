@@ -125,22 +125,20 @@ func (c *core) aboutCardParts(key string, line bool) []cardSection {
 			parts = append(parts, cardSection{lines: []string{truncate(c.nodeLine(statusNode{sum, c.nodeStatus(sum)}), aboutCardNodeMax)}, refs: []string{key}})
 		}
 	}
-	if c.mem != nil {
-		now := c.mem.now()
-		// Its intentions: about it, owed by it or to it.
-		intentions := cardSection{title: "Intentions en cours :"}
-		if xs, err := c.mem.intentions(intentDue, intentOpen, intentSnoozed); err == nil {
-			for _, x := range xs {
-				parties := []string{aboutOf(x.About), aboutOf(x.Owner), aboutOf(x.OwedTo)}
-				if !slices.Contains(parties, key) {
-					continue
-				}
-				intentions.lines = append(intentions.lines, truncate(packIntentionLine(x, now), aboutCardLineMax))
-				intentions.refs = append(intentions.refs, fmt.Sprintf("intention:%d", x.ID))
+	now := c.intents.now()
+	// Its intentions: about it, owed by it or to it.
+	intentions := cardSection{title: "Intentions en cours :"}
+	if xs, err := c.intents.intentions(intentDue, intentOpen, intentSnoozed); err == nil {
+		for _, x := range xs {
+			parties := []string{aboutOf(x.About), aboutOf(x.Owner), aboutOf(x.OwedTo)}
+			if !slices.Contains(parties, key) {
+				continue
 			}
+			intentions.lines = append(intentions.lines, truncate(packIntentionLine(x, now), aboutCardLineMax))
+			intentions.refs = append(intentions.refs, fmt.Sprintf("intention:%d", x.ID))
 		}
-		parts = append(parts, intentions)
 	}
+	parts = append(parts, intentions)
 	return append(parts, c.aboutPendingCards(key))
 }
 

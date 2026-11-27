@@ -56,7 +56,7 @@ func TestAboutNotedWhenWritten(t *testing.T) {
 		}
 	}
 	var about string
-	c.mem.db.QueryRow(`SELECT about FROM intentions WHERE text LIKE 'Mettre%'`).Scan(&about)
+	c.intents.db.QueryRow(`SELECT about FROM intentions WHERE text LIKE 'Mettre%'`).Scan(&about)
 	if about != "project:site-web" {
 		t.Errorf("an intention about the key is about %q", about)
 	}
@@ -69,7 +69,7 @@ func TestAboutNotedWhenWritten(t *testing.T) {
 // A message names entities by the words of their keys; never by a word
 // too short or an id; a name inside a longer one named too gives way.
 func TestNamed(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	for _, k := range []string{"project:site", "project:site-web", "person:sam", "topic:facture", "project:x"} {
 		c.store.noteAbout(k)
 	}
@@ -94,7 +94,7 @@ func TestNamed(t *testing.T) {
 // What my message names goes with it to the brain, keys only; the turn
 // is about it until the next delivery.
 func TestNamedInDelivery(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	c.store.noteAbout("project:site-web")
 	c.store.addMessage(roleUser, "Où en est le site web ?", false)
@@ -126,68 +126,11 @@ func TestNamedInDelivery(t *testing.T) {
 // A person's cue matches the same words as an entity's name: plural and
 // accents aside.
 func TestCueMatchesLikeNames(t *testing.T) {
-	c, _ := testMemoryCore(t)
-	mustIntend(t, c.mem, &Intention{Text: "Rendre les clés", Cue: "Hélène Dupont"})
-	xs, err := c.mem.cueIntentions("J'ai vu helene dupont hier")
+	c, _ := testIntentsCore(t)
+	mustIntend(t, c.intents, &Intention{Text: "Rendre les clés", Cue: "Hélène Dupont"})
+	xs, err := c.intents.cueIntentions("J'ai vu helene dupont hier")
 	if err != nil || len(xs) != 1 {
 		t.Fatalf("cue: %+v %v", xs, err)
-	}
-}
-
-// memory.db holds the intentions only: a new file has no memories; one
-// made before keeps its other tables unread, its intentions read; a file
-// at another schema is refused, never changed.
-func TestMemoryFileHoldsIntentions(t *testing.T) {
-	fresh, err := openMemory(filepath.Join(t.TempDir(), "memory.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var n int
-	fresh.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name = 'memories'`).Scan(&n)
-	if v := fresh.schemaVersion(); v != memorySchemaVersion || n != 0 {
-		t.Fatalf("a new file: schema %d, memories table %d", v, n)
-	}
-	fresh.db.Close()
-
-	open := func(version string) (*memStore, string) {
-		path := filepath.Join(t.TempDir(), "memory.db")
-		db, err := sql.Open("sqlite", path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, q := range []string{`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`, intentionsSchema,
-			`CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)`, `CREATE TABLE memories (id INTEGER PRIMARY KEY, text TEXT)`,
-			`INSERT INTO memories (text) VALUES ('Le site est hébergé sur le NAS')`,
-			`INSERT INTO meta VALUES ('schema_version', '` + version + `')`,
-			`INSERT INTO intentions (kind, text, about, state, source_kind, trust, created_at, updated_at)
-				VALUES ('reminder', 'Relire', 'project:site', 'open', 'owner', 'owner', 1, 1)`} {
-			if _, err := db.Exec(q); err != nil {
-				t.Fatalf("%s: %v", q, err)
-			}
-		}
-		db.Close()
-		m, err := openMemory(path)
-		if m != nil {
-			t.Cleanup(func() { m.db.Close() })
-		}
-		if err != nil {
-			return nil, err.Error()
-		}
-		return m, ""
-	}
-	m, why := open("8")
-	if m == nil {
-		t.Fatal(why)
-	}
-	if xs, err := m.intentions(); err != nil || len(xs) != 1 || xs[0].About != "project:site" {
-		t.Fatalf("intentions %+v %v", xs, err)
-	}
-	m.db.QueryRow(`SELECT COUNT(*) FROM memories`).Scan(&n)
-	if n != 1 {
-		t.Errorf("the old memories were touched: %d", n)
-	}
-	if _, why := open("7"); !strings.Contains(why, "schema 7") {
-		t.Errorf("a file at schema 7: %q", why)
 	}
 }
 

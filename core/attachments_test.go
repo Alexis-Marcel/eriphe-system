@@ -288,7 +288,7 @@ func callReadAttachment(t *testing.T, c *core, args map[string]any) *mcp.CallToo
 }
 
 func TestReadAttachmentImage(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	img := pngBytes(t)
 	a := attach(t, c, "screenshot.png", img)
 	if len(c.turnTaint()) != 0 {
@@ -311,7 +311,7 @@ func TestReadAttachmentImage(t *testing.T) {
 		t.Fatalf("the user's attachment tainted the turn: %v", tainted)
 	}
 	d, err := c.decideBrainWrite("", scanResult{})
-	if err != nil || d.Status != memActive {
+	if err != nil || d.Status != writeActive {
 		t.Fatalf("a clean turn's intention: %+v %v", d, err)
 	}
 }
@@ -319,7 +319,7 @@ func TestReadAttachmentImage(t *testing.T) {
 // An attachment of a message from a channel the user did not trust taints
 // the turn, as that message does.
 func TestReadAttachmentUntrustedChannel(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	a := attach(t, c, "screenshot.png", pngBytes(t))
 	stored, err := c.store.attachment(a.ID)
 	if err != nil {
@@ -335,7 +335,7 @@ func TestReadAttachmentUntrustedChannel(t *testing.T) {
 }
 
 func TestReadAttachmentText(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	text := strings.Repeat("é", maxAttachmentChars) + "THE END"
 	a := attach(t, c, "notes.txt", []byte(text))
 	res := callReadAttachment(t, c, map[string]any{"id": a.ID})
@@ -357,7 +357,7 @@ func TestReadAttachmentText(t *testing.T) {
 }
 
 func TestReadAttachmentPDFAndUnknown(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, nil) // no brain: its text
 	a := attach(t, c, "invoice.pdf", minimalPDF("Invoice 42 from Example Org"))
 	res := callReadAttachment(t, c, map[string]any{"id": a.ID})

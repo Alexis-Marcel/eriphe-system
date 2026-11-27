@@ -53,11 +53,11 @@ func init() {
 				if !yes {
 					ch, action = intentionChange{State: intentCancelled}, "reject"
 				}
-				_, err := c.mem.changeIntention(id, ch, "owner", action)
+				_, err := c.intents.changeIntention(id, ch, "owner", action)
 				return err
 			},
 			withdraw: func(c *core, _ context.Context, id int64) error { // taken back, not refused by the user
-				_, err := c.mem.changeIntention(id, intentionChange{State: intentCancelled}, "eriphe", "withdrawn")
+				_, err := c.intents.changeIntention(id, intentionChange{State: intentCancelled}, "eriphe", "withdrawn")
 				return err
 			}},
 		cardRule: {read: (*core).ruleProposal, waiting: (*core).proposedRules, outcome: told("la règle est en vigueur", "elle est écartée"),
@@ -121,14 +121,11 @@ const byText = "text"
 // rule, a setting.
 
 func (c *core) intentionProposal(p proposal) proposal {
-	if c.mem == nil {
-		return p
-	}
-	x, err := c.mem.intention(p.ID)
+	x, err := c.intents.intention(p.ID)
 	if err != nil {
 		return p
 	}
-	p.Pending, p.Extracted = x.State == intentProposed, x.SourceKind == srcExtraction
+	p.Pending = x.State == intentProposed
 	p.Tainted = externalWhy(x.Trust, x.Flags, x.SourceRef)
 	p.Outcome = cardApproved
 	if x.State == intentCancelled {
@@ -144,10 +141,7 @@ func (c *core) intentionProposal(p proposal) proposal {
 }
 
 func (c *core) proposedIntentions() []int64 {
-	if c.mem == nil {
-		return nil
-	}
-	xs, err := c.mem.intentions(intentProposed)
+	xs, err := c.intents.intentions(intentProposed)
 	if err != nil {
 		return nil
 	}

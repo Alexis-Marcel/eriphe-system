@@ -221,7 +221,7 @@ func TestSettingAppliedOrProposed(t *testing.T) {
 
 // « À valider » lists a proposed setting, and its buttons apply or drop it.
 func TestApprovalsSettings(t *testing.T) {
-	tw, csrf := newMemoryWeb(t)
+	tw, csrf := newIntentsWeb(t)
 	c := tw.c
 	id, err := c.proposeSetting(settingProposal{Name: setCap, Value: "6", Why: "Trop de messages gardés."})
 	if err != nil {
@@ -234,7 +234,7 @@ func TestApprovalsSettings(t *testing.T) {
 		}
 	}
 	h := map[string]string{"X-CSRF-Token": csrf}
-	if _, _, hd := tw.do("POST", "/settings/proposals/"+idText(id)+"/approve", url.Values{}, h); !strings.Contains(hd.Get("HX-Trigger"), "memory-changed") {
+	if _, _, hd := tw.do("POST", "/settings/proposals/"+idText(id)+"/approve", url.Values{}, h); !strings.Contains(hd.Get("HX-Trigger"), "data-changed") {
 		t.Error("approving a setting does not reload À valider")
 	}
 	if c.notifyCap() != 6 {

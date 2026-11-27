@@ -57,7 +57,7 @@ func TestBrainSessionBounds(t *testing.T) {
 		}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			c, _ := testMemoryCore(t)
+			c, _ := testIntentsCore(t)
 			say(t, c, roleUser, "Rappelle-moi le devis", true)
 			setBrainStatus(c, func(st *AssistantStatus) { st.Session, st.SessionRuntime = "s-1", "claude-code" })
 			tc.turns(t, c)
@@ -78,7 +78,7 @@ func TestBrainSessionBounds(t *testing.T) {
 
 // A role without bounds resumes whatever its session's size or age.
 func TestSessionWornUnbounded(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	sessionTurn(t, c, "b-1", "s-1", 3*time.Hour, map[string]any{"context_tokens": 900000})
 	if why := c.sessionWorn(assistantRole{}, "s-1"); why != "" {
 		t.Fatalf("unbounded role: %q", why)

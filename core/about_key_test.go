@@ -119,7 +119,7 @@ func TestOneAboutEverywhere(t *testing.T) {
 		t.Errorf("notification under %v", out["about"])
 	}
 	var subj, owed string
-	c.mem.db.QueryRow(`SELECT about, owed_to FROM intentions`).Scan(&subj, &owed)
+	c.intents.db.QueryRow(`SELECT about, owed_to FROM intentions`).Scan(&subj, &owed)
 	if subj != key || owed != "person:sam" {
 		t.Errorf("intention under %q, owed to %q", subj, owed)
 	}

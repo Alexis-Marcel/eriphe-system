@@ -286,10 +286,7 @@ func notificationHappenings(c *core, from time.Time, limit int) ([]happening, er
 var intentionEvents = map[string]string{intentDue: "due", intentDone: "done", intentSnoozed: "snoozed", intentCancelled: "cancelled"}
 
 func intentionHappenings(c *core, from time.Time, limit int) ([]happening, error) {
-	if c.mem == nil {
-		return nil, nil
-	}
-	rows, err := c.mem.db.Query(`SELECT l.time, l.intention_id, l.to_state, i.text, i.trust
+	rows, err := c.intents.db.Query(`SELECT l.time, l.intention_id, l.to_state, i.text, i.trust
 		FROM intention_log l JOIN intentions i ON i.id = l.intention_id
 		WHERE l.time >= ? AND l.from_state != l.to_state AND l.to_state IN ('due', 'done', 'snoozed', 'cancelled')
 		ORDER BY l.seq LIMIT ?`, from.Unix(), limit)

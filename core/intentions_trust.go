@@ -21,9 +21,15 @@ import (
 // rememberRequest: wording of mine that asks Eriphe to keep something.
 var rememberRequest = regexp.MustCompile(`(?i)\b(retiens|retenir|souviens|souvenir|rappelle[- ]toi|mémorise|memorise|mémoriser|note (que|bien|ça|ca)|garde en (tête|tete|mémoire|memoire)|n'oublie pas|oublie pas|remember|keep in mind|note that|don't forget|do not forget|mets? (le |la |ça |ca )?(dans|en) (ta )?mémoire|enregistre|ajoute à ta mémoire|à l'avenir|a l'avenir|la prochaine fois|désormais|dorénavant|corrige|mets à jour|oublie|forget)\b`)
 
+// How a brain write is recorded (writeDecision.Status).
+const (
+	writeActive   = "active"
+	writeProposed = "proposed" // waits for my approval
+)
+
 // writeDecision is how a brain write is recorded, or why it is refused.
 type writeDecision struct {
-	Status string // memActive, or memProposed
+	Status string // writeActive, or writeProposed
 	Trust  string
 	Source string // source_kind
 	Ref    string
@@ -33,7 +39,7 @@ type writeDecision struct {
 // decideBrainWrite applies the rules to a brain's intention: ref cites
 // my message (msg:N) when it comes from my words.
 func (c *core) decideBrainWrite(ref string, scan scanResult) (writeDecision, error) {
-	d := writeDecision{Status: memActive, Trust: trustFirstParty, Source: srcBrain, Ref: strings.TrimSpace(ref)}
+	d := writeDecision{Status: writeActive, Trust: trustFirstParty, Source: srcBrain, Ref: strings.TrimSpace(ref)}
 	if scan.Reject != "" {
 		return d, fmt.Errorf("refused: %s", scan.Reject)
 	}
@@ -44,12 +50,12 @@ func (c *core) decideBrainWrite(ref string, scan scanResult) (writeDecision, err
 	}
 	asked := owner && c.askedThisTurn(msg)
 	if tainted := c.turnTaint(); len(tainted) > 0 && !asked {
-		d.Status, d.Trust = memProposed, trustExternal
+		d.Status, d.Trust = writeProposed, trustExternal
 		d.Why = "this turn read external content (" + strings.Join(tainted, ", ") + ")"
 		return d, nil
 	}
 	if containsStr(scan.Flags, "imperative") && !owner {
-		d.Status = memProposed
+		d.Status = writeProposed
 		d.Why = "it reads like an instruction, and does not come from the user's own message"
 	}
 	return d, nil

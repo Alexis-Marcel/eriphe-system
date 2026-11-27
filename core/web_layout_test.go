@@ -32,6 +32,7 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		{"/settings/access/app", "access", "/settings/access"},
 		{"/settings/notifications", "notifications", ""},
 		{"/settings/account", "account", ""},
+		{"/settings/intentions", "intentions", ""},
 		{"/settings/journal", "journal", ""},
 		{"/settings/approve", "approve", ""},
 	} {
@@ -75,7 +76,7 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 // /settings is the list of the settings alone, the first level on a phone:
 // its ✕ goes back to the workspace and no entry is current. A wide screen
 // opens the first entry in its place (early.js), without a step in the
-// history. /settings/memory leads to the memory, with its query.
+// history.
 func TestSettingsList(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
@@ -195,7 +196,7 @@ func TestSettingsNavAttention(t *testing.T) {
 func TestShellNeverScrolls(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	for _, path := range []string{"/settings/agents", "/settings/journal", "/memory"} {
+	for _, path := range []string{"/settings/agents", "/settings/journal", "/settings/intentions"} {
 		if _, body, _ := tw.do("GET", path, nil, nil); !strings.Contains(body, `<html lang="fr" class="shell">`) {
 			t.Errorf("GET %s: the html element is not marked as the shell", path)
 		}

@@ -104,10 +104,8 @@ func (c *core) cardAbout(kind string, id int64, inherit func() string) {
 func (c *core) proposalAbout(kind string, id int64) string {
 	switch kind {
 	case cardIntention:
-		if c.mem != nil {
-			if x, err := c.mem.intention(id); err == nil {
-				return x.About
-			}
+		if x, err := c.intents.intention(id); err == nil {
+			return x.About
 		}
 	case cardCalls:
 		// A run's calls are about the node they act in (its item's, its

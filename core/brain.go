@@ -339,7 +339,7 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		return false, err
 	}
 	if len(cued) > 0 {
-		c.mem.surfaced(cued, "cue")
+		c.intents.surfaced(cued, "cue")
 	}
 	c.updateAssistant(a.Name, func(st *AssistantStatus) {
 		if pack != "" {

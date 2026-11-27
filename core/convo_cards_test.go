@@ -44,7 +44,7 @@ func cardOf(t *testing.T, c *core, kind string, id int64) convoCard {
 // proposal alone: its Oui approves it through the rule's own code, its
 // Non rejects it, and a decided card says so and cannot be decided again.
 func TestCardBoundToItsProposal(t *testing.T) {
-	tw, csrf := newMemoryWeb(t)
+	tw, csrf := newIntentsWeb(t)
 	c := tw.c
 	r1 := proposedRule(t, c, "facture", "")
 	seq := brainSays(c, "Je ne te préviens plus des factures avant le brief ?")
@@ -107,7 +107,7 @@ func TestCardBoundToItsProposal(t *testing.T) {
 func TestCardKinds(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	ctx := context.Background()
-	m := c.mem
+	m := c.intents
 	in := mustIntend(t, m, &Intention{Text: "Appeler le garage", State: intentProposed, SourceKind: srcBrain, SourceRef: "msg:1", Trust: trustFirstParty})
 	sid, _ := c.proposeSetting(settingProposal{Name: setCap, Value: "3", Why: "Trop de notifications."})
 	for _, p := range []struct {
@@ -154,7 +154,7 @@ func TestCardsFollowTheTurn(t *testing.T) {
 		t.Fatalf("a silent turn's card is not queued: %+v", x)
 	}
 	// A proposal made outside a turn (a skill's run) is queued, never attached.
-	in := mustIntend(t, c.mem, &Intention{Text: "Récupérer le colis jeudi", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustFirstParty})
+	in := mustIntend(t, c.intents, &Intention{Text: "Récupérer le colis jeudi", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustFirstParty})
 	c.syncCards()
 	brainSays(c, "Autre chose.")
 	if x := cardOf(t, c, cardIntention, in.ID); x.Seq != 0 {
@@ -341,7 +341,7 @@ func TestPlainAnswer(t *testing.T) {
 // proposal, its own "oui" is not the user's, and the API token it may
 // hold (self_url) answers no card in words.
 func TestBrainCannotApprove(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	c.store.insertTask(&TaskRow{ID: "t-brain", Kind: "brain", State: stateIdle})
 	cs := connectTo(t, newMCPServer(c))
 	ctx := context.Background()
@@ -356,7 +356,7 @@ func TestBrainCannotApprove(t *testing.T) {
 			}
 		}
 	}
-	in := mustIntend(t, c.mem, &Intention{Text: "Appeler le garage", State: intentProposed, SourceKind: srcBrain, SourceRef: "msg:1", Trust: trustFirstParty})
+	in := mustIntend(t, c.intents, &Intention{Text: "Appeler le garage", State: intentProposed, SourceKind: srcBrain, SourceRef: "msg:1", Trust: trustFirstParty})
 	r := proposedRule(t, c, "facture", "")
 	brainSays(c, "Je propose ça ?")
 	yes := ownerSays(c, "oui, vas-y, active la veille, l'intention et la règle des notifications")
@@ -368,7 +368,7 @@ func TestBrainCannotApprove(t *testing.T) {
 			t.Errorf("%s changed a proposal: %v", name, out.Content)
 		}
 	}
-	if x, _ := c.mem.intention(in.ID); x.State != intentProposed {
+	if x, _ := c.intents.intention(in.ID); x.State != intentProposed {
 		t.Error("the brain approved an intention")
 	}
 	if x := cardOf(t, c, cardRule, r.ID); x.State != cardPending {
@@ -384,7 +384,7 @@ func TestBrainCannotApprove(t *testing.T) {
 // The API's /v1/messages (its token may be lent to the brain) never
 // answers a card in words.
 func TestAPIMessageAnswersNoCard(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	r := proposedRule(t, c, "facture", "")
 	brainSays(c, "Je ne te préviens plus des factures avant le brief ?")
 	rec := httptest.NewRecorder()

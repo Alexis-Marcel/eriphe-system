@@ -29,12 +29,12 @@ func usesOf(c *core, about string) map[string]cardUse {
 // when the model it went to wrote a record about it, answered when the
 // brain answered in its turn without asking for it again, no otherwise.
 func TestCardUses(t *testing.T) {
-	c, _ := testMemoryCore(t)
-	c.mem.now = time.Now
+	c, _ := testIntentsCore(t)
+	c.intents.now = time.Now
 	site := siteNode(t, c)
 	siteKey := nodeRef(site)
-	mustIntend(t, c.mem, &Intention{Text: "Vérifier le blog sur le NAS", About: "project:blog", DueAt: time.Now().Add(time.Hour)})
-	mustIntend(t, c.mem, &Intention{Text: "Vendre des tasses", About: "project:shop", DueAt: time.Now().Add(time.Hour)})
+	mustIntend(t, c.intents, &Intention{Text: "Vérifier le blog sur le NAS", About: "project:blog", DueAt: time.Now().Add(time.Hour)})
+	mustIntend(t, c.intents, &Intention{Text: "Vendre des tasses", About: "project:shop", DueAt: time.Now().Add(time.Hour)})
 
 	// A turn's card, then the brain writes an intention of the subject: wrote.
 	turn := ownerSays(c, "Rappelle-moi de passer le site sur Astro")
@@ -105,9 +105,9 @@ func TestCardUses(t *testing.T) {
 // A pack delivered with a turn: only the card of what the turn is about
 // is the turn's; one answer counts for it alone.
 func TestPackCardsOfTurn(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	th := nodeRef(siteNode(t, c))
-	mustIntend(t, c.mem, &Intention{Text: "Vérifier le blog sur le NAS", About: "project:blog", DueAt: c.mem.now().Add(time.Hour)})
+	mustIntend(t, c.intents, &Intention{Text: "Vérifier le blog sur le NAS", About: "project:blog", DueAt: c.intents.now().Add(time.Hour)})
 	site, _ := c.compileCard(th, aboutCardChars)
 	blog, _ := c.compileCard("project:blog", aboutCardChars)
 	c.packedCards([]pushedCard{site, blog}, 7, th)

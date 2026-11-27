@@ -80,7 +80,7 @@ func TestOneWayToSayYes(t *testing.T) {
 // A page's yes is its card's: the card is decided, by the page, and a
 // proposal with no card yet gets one first.
 func TestPageYesIsTheCards(t *testing.T) {
-	tw, _ := newMemoryWeb(t)
+	tw, _ := newIntentsWeb(t)
 	c := tw.c
 	r, err := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "banque", Ceiling: 2, State: ruleProposed, By: "brain"})
 	if err != nil {
