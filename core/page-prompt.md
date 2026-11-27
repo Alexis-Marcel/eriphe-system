@@ -3,7 +3,7 @@
 La page d'un nœud est un fichier Markdown, et **tout ce qu'elle montre est écrit dedans** : un lecteur sans Eriphe (Obsidian, un autre agent, la recherche) y trouve tout ; Eriphe la dessine mieux, jamais autrement. Rien n'y est relu au moment de l'affichage : quand une chose change, celui qui tient la page réécrit sa ligne, ou une ligne `on:` la suit (plus bas).
 
 ## Le texte
-Du Markdown ordinaire : titres `##`, paragraphes, **gras**, listes, tableaux, `code`, `---`. Pas de titre `#` qui répète celui du nœud : il s'affiche au-dessus. Un autre nœud : `[[Titre]]` (`[[Titre|ces mots]]`) ; `![[Titre]]` seul sur sa ligne l'inclut dans Obsidian, Eriphe le dessine en lien. Du code ou un diff : un bloc ```` ```diff ````.
+Du Markdown ordinaire : titres `##`, paragraphes, **gras**, listes, tableaux, `code`, `---`. Pas de titre `#` qui répète celui du nœud : il s'affiche au-dessus. Un autre nœud : `[[Titre]]` (`[[Titre|ces mots]]`) ; `![[Titre]]` seul sur sa ligne l'inclut dans Obsidian, Eriphe le dessine en lien. Du code ou un diff : un bloc ```` ```diff ````. Tags et propriétés : `node_set` (props), ou un bloc YAML entre deux `---` en tête de page, rangé dans les propriétés du nœud (jamais title, goal ni parent).
 
 **Dater.** Une page qui suit quelque chose commence par la ligne qui dit quand elle a été écrite : `Écrit le 26/11/2026 à 9 h.` (ou `Mis à jour le …`). Une date sans année prend l'année de cette ligne.
 

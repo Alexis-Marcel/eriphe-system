@@ -38,6 +38,7 @@ const (
 	ProblemOnTarget       = "on-target"       // on: that names no event (on:<kind>/<key>#<field>)
 	ProblemChart          = "chart"           // [!chart] whose table is not one it draws
 	ProblemFenceOpen      = "fence-open"      // a code fence never closed
+	ProblemFrontBlock     = "front-block"     // a front-matter block at the top that stayed text
 )
 
 // Callout types Eriphe draws, and the options each takes besides aside.
@@ -78,6 +79,17 @@ func (p *Page) Check(hasTool func(tool string) bool) []Problem {
 	out := []Problem{}
 	add := func(ln int, code, what string) {
 		out = append(out, Problem{Line: ln, Code: code, What: what})
+	}
+	// A front-matter block at the top that did not fold into the node's
+	// properties (frontblock.go).
+	for i, t := range p.lines {
+		if blank(t) {
+			continue
+		}
+		if _, _, _, ok := frontBlock(strings.Join(p.lines[i:], "\n")); ok {
+			add(i+1, ProblemFrontBlock, "this block at the top stays text: each of its fields must be a property (not title, goal, parent, id nor another field node_set or code writes, no name starting with _; a text, a number, a date, a [[link]] or a list of them); fix it, or set the properties with node_set (props)")
+		}
+		break
 	}
 	// References.
 	defined := map[string]bool{}
