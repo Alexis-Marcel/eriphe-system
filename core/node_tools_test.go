@@ -196,13 +196,10 @@ func TestBrainNodeTextLinks(t *testing.T) {
 	}
 }
 
-// node_set changes a title and a goal; done leaves one decision memory,
-// source node:<id>, however often it is set; a standing node is never
-// done. node_show asks the screen.
+// node_set changes a title and a goal; done is said once, however often
+// it is set; a standing node is never done. node_show asks the screen.
 func TestBrainNodeSetShow(t *testing.T) {
 	c := graphCore(t)
-	m, _ := testMemory(t)
-	c.useMemory(m)
 	var evs []journalEvent
 	c.subscribeEvents(func(e journalEvent) { evs = append(evs, e) })
 	id := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Garage", "body": "Rendez-vous pris jeudi."})["id"].(string)
@@ -213,11 +210,6 @@ func TestBrainNodeSetShow(t *testing.T) {
 	}
 	for range 2 {
 		mustBrainNodes(t, c, "node_set", map[string]any{"id": id, "done": true})
-	}
-	xs, _ := c.mem.list(`kind = ? AND source_ref = ?`, []any{kindDecision, nodeRef(id)}, `id`, 10)
-	if len(xs) != 1 || xs[0].About != nodeRef(id) || xs[0].SourceKind != srcNode || !strings.Contains(xs[0].Text, "Garage du jeudi") ||
-		!strings.Contains(xs[0].Text, "Rendez-vous pris jeudi.") {
-		t.Fatalf("decisions: %+v", xs)
 	}
 	done := 0
 	for _, e := range evs {
@@ -230,12 +222,6 @@ func TestBrainNodeSetShow(t *testing.T) {
 	}
 	if sum, _ := c.nodes.Get(id); sum.Done.IsZero() || c.nodeStatus(sum) != nodeDone {
 		t.Errorf("not done: %+v", sum)
-	}
-	// Not done again, then done again: the decision is replaced, one stays.
-	mustBrainNodes(t, c, "node_set", map[string]any{"id": id, "done": false})
-	mustBrainNodes(t, c, "node_set", map[string]any{"id": id, "done": true})
-	if n := c.mem.count(`kind = 'decision' AND status = 'active' AND superseded_by IS NULL AND source_ref = '` + nodeRef(id) + `'`); n != 1 {
-		t.Errorf("%d current decisions", n)
 	}
 	dd, err := c.nodes.Create(nodestore.New{Title: "Ma journée", Author: "user"})
 	if err != nil {
@@ -316,7 +302,7 @@ func TestSubjectKeepsTheBrainsTitle(t *testing.T) {
 	if sum, _ := c.nodes.Get(clean["id"].(string)); sum.Title != "Ma journée" || sum.External || sum.TitleExternal() {
 		t.Fatalf("opened in a clean turn: %+v", sum)
 	}
-	c.turn.taint(taintExternalMemory) // a recall that gave a fact read in a mail
+	c.turn.taint("mcp__eriphe-mail__read") // a mail read in the turn
 	opened := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Mes rendez-vous", "body": "Trois rendez-vous."})
 	sum, _ := c.nodes.Get(opened["id"].(string))
 	if sum.Title != "Mes rendez-vous" || !sum.External || !sum.TitleExternal() {

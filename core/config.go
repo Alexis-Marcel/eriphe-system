@@ -47,7 +47,7 @@ type Config struct {
 	VaultKeyFile string     `json:"vault_key_file,omitempty"`
 	Web          *WebConfig `json:"web,omitempty"` // the workspace (web.go); off without it
 
-	Memory *MemoryConfig `json:"memory,omitempty"` // Eriphe's memory (memory.go)
+	Memory *BackupConfig `json:"memory,omitempty"` // the nightly backup (nodes.go); its key keeps an older name
 }
 
 // BrainConfig describes the permanent orchestrator: a long-lived task on a

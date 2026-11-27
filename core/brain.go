@@ -65,9 +65,6 @@ func (c *core) notifyBrain(id, state string) {
 	if c.stepTaskChanged(id, state, outcome) {
 		return // a step's: the brain hears of it only as an exception (node_steps.go)
 	}
-	if c.memoryTaskChanged(id, state) {
-		return // the memory's own tasks are eriphe-core's (memory_extract.go)
-	}
 	if c.conf().brain() == nil {
 		return
 	}
@@ -206,13 +203,6 @@ func init() {
 		// pack costs a fraction of writing the whole history again.
 		// A small session is resumed after a pause all the same.
 		SessionTokens: brainSessionTokens, ResumeIdle: brainResumeIdle, ResumeIdleFloor: brainResumeIdleFloor,
-		instructions: func(c *core, _ Assistant, prompt string) string {
-			// The profile, from the memory: data about the user, quoted.
-			if profile := c.profileBlock(false); profile != "" {
-				prompt += "\n\n" + profile + "\n"
-			}
-			return prompt
-		},
 		firstPrompt: func(c *core, a Assistant, resume bool) string { return c.brainFirstPrompt(a, resume) },
 		started:     (*core).brainStarted,
 		permission:  func(c *core, ctx context.Context, _ Assistant, t *TaskRow) error { return c.brainPermission(ctx, t) },
@@ -252,7 +242,7 @@ func (c *core) brainStarted(a Assistant, _ *TaskRow, resumed bool) {
 }
 
 // messageRef is how the brain reads where a message comes from: #N, the
-// message's reference, which the memory tools cite, then its marks.
+// message's reference, which the intention tools cite, then its marks.
 func (c *core) messageRef(m Message) string {
 	ref := fmt.Sprintf("#%d", m.Seq)
 	switch {
@@ -303,10 +293,6 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 	if open := c.attentionBlock(); open != "" {
 		parts = append(parts, open)
 	}
-	profile, hash := c.profileForDelivery()
-	if profile != "" {
-		parts = append([]string{profile}, parts...)
-	}
 	pack, packed := c.packForDelivery(a)
 	if pack != "" {
 		parts = append([]string{pack}, parts...)
@@ -353,12 +339,9 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		return false, err
 	}
 	if len(cued) > 0 {
-		c.mem.surfaced(cued, "cue")
+		c.intents.surfaced(cued, "cue")
 	}
 	c.updateAssistant(a.Name, func(st *AssistantStatus) {
-		if hash != "" {
-			st.Profile = hash
-		}
 		if pack != "" {
 			st.PackDue = false
 			st.Cards = held

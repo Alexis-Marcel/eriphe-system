@@ -1,0 +1,23 @@
+{{/* The intentions' page (web_intentions.go): what is owed, by whom, by
+     when. Its cards are in cards.html. */}}
+{{define "main"}}
+<div class="settings {{template "settings-level" .}}">
+  {{template "settings-nav" .}}
+  <div class="settings-body">{{template "settings-up" .}}{{template "intentions-page" .Data}}</div>
+</div>
+{{end}}
+
+{{define "intentions-page"}}{{with .}}
+<div class="intentions">
+  <header class="intent-hero">
+    <div class="intent-title">
+      <span class="intent-mark" aria-hidden="true">{{template "i-check"}}</span>
+      <div><h2>{{t "intent.title"}}</h2><p>{{t "intent.lead"}}</p></div>
+    </div>
+  </header>
+  <div class="intent-list" id="intent-list">{{range .Intents}}{{template "intent-card" .}}{{end}}</div>
+  {{if not .Intents}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-check"}}</span><p>{{t "intent.none"}}</p></div>{{end}}
+  {{if .IntentsDone}}<details class="done"><summary>{{t "intent.donerecent"}} <span class="count">{{len .IntentsDone}}</span></summary>
+  <div class="intent-list">{{range .IntentsDone}}{{template "intent-card" .}}{{end}}</div></details>{{end}}
+</div>
+{{end}}{{end}}

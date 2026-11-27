@@ -16,15 +16,9 @@ import (
 // outcomeMakers raise a waiting card of each kind, each in a core of its
 // own; they give its ref.
 var outcomeMakers = map[string]func(t *testing.T) (*core, string){
-	cardMemory: func(t *testing.T) (*core, string) {
-		c, node := outcomeCore(t)
-		x := mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Le garage ferme lundi", Status: memProposed, SourceKind: srcTask})
-		c.cardNow(cardMemory, x.ID, "", nodeRef(node))
-		return c, proposalRef(cardMemory, x.ID)
-	},
 	cardIntention: func(t *testing.T) (*core, string) {
 		c, node := outcomeCore(t)
-		x := mustIntend(t, c.mem, &Intention{Text: "Relancer Sam", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustOwner})
+		x := mustIntend(t, c.intents, &Intention{Text: "Relancer Sam", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustOwner})
 		c.cardNow(cardIntention, x.ID, "", nodeRef(node))
 		return c, proposalRef(cardIntention, x.ID)
 	},
@@ -56,16 +50,6 @@ var outcomeMakers = map[string]func(t *testing.T) (*core, string){
 		var id int64
 		c.store.db.QueryRow(`SELECT id FROM task_starts WHERE task_id = ?`, task).Scan(&id)
 		return c, proposalRef(cardTaskStart, id)
-	},
-	cardUnlearn: func(t *testing.T) (*core, string) {
-		c, node := outcomeCore(t)
-		mustAdd(t, c.mem, &Memory{Kind: kindPreference, Text: "Les réunions le matin"})
-		e := learnedAll(t, c.mem)[0]
-		if err := c.mem.setUndo(e.ID, undoProposed, "demandé"); err != nil {
-			t.Fatal(err)
-		}
-		c.cardNow(cardUnlearn, e.ID, "", nodeRef(node))
-		return c, proposalRef(cardUnlearn, e.ID)
 	},
 	cardAccess: func(t *testing.T) (*core, string) { // what a task asks for itself
 		c, node := outcomeCore(t)
@@ -124,7 +108,7 @@ var outcomeMakers = map[string]func(t *testing.T) (*core, string){
 // outcomeCore is a core with a graph, and a node its cards wait in.
 func outcomeCore(t *testing.T) (*core, string) {
 	t.Helper()
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	openGraph(t, c)
 	c.useNodes(c.nodes)
 	return c, mustNode(t, c, nodestore.New{Title: "Le sujet"})

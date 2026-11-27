@@ -117,7 +117,7 @@ var serverName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
 
 // reserved are the names of the MCP servers a task already has, and of
 // those Eriphe provides (providedServers).
-var reserved = append([]string{"eriphe-core", "eriphe-device", taskMemServer, nodesServer}, slices.Sorted(maps.Keys(providedServers))...)
+var reserved = append([]string{"eriphe-core", "eriphe-device", nodesServer}, slices.Sorted(maps.Keys(providedServers))...)
 
 func (c *Config) checkServers() error {
 	for name, s := range c.Servers {

@@ -69,24 +69,20 @@ func TestTopicRuleCanonical(t *testing.T) {
 	}
 }
 
-// The known topics gather the rules', the notifications' and the
-// memory's subjects, in one form, without ids.
+// The known topics gather the rules' and the notifications' subjects, in
+// one form, without ids.
 func TestKnownTopics(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	ownerSays(c, "ok")
 	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:getout", Floor: 5, Ceiling: 5, State: ruleActive, By: "user"})
 	c.brainNotify(notifyIn{Text: "x", Weight: 2, Why: "y", Ref: "Factures"})
 	c.brainNotify(notifyIn{Text: "x", Weight: 2, Why: "y", Ref: "task:t-1"})
-	seq := ownerSays(c, "Lina est ma sœur")
-	if _, err := c.brainRemember(rememberIn{Text: "Lina est la sœur de Sam.", Kind: kindPerson, About: "person:Lina", SourceRef: ref(seq)}); err != nil {
-		t.Fatal(err)
-	}
 	var refs []string
 	for _, tp := range c.knownTopics() {
 		refs = append(refs, tp.Ref)
 	}
 	got := strings.Join(refs, " ")
-	for _, want := range []string{"project:getout", "topic:facture", "person:lina"} {
+	for _, want := range []string{"project:getout", "topic:facture"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("known topics %q lack %q", got, want)
 		}

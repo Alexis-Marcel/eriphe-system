@@ -513,14 +513,6 @@ func templateFuncs(lang string) template.FuncMap {
 		// name is what the user calls their assistant: the pages' title and brand.
 		"name": assistantName,
 		"tf":   func(key string, args ...any) string { return fmt.Sprintf(tr(lang, key), args...) },
-		// reason is a learned entry's reason: code's own words in lang,
-		// anyone else's as written.
-		"reason": func(s string) string {
-			if k, ok := learnedReasonKeys[s]; ok {
-				return tr(lang, k)
-			}
-			return s
-		},
 		// botIcon is a bot channel's mark in Settings → Access (bot_channel.go).
 		"botIcon": func(id string) string { return botSpecs[id].Icon },
 		"ago": func(t time.Time) string {
@@ -836,7 +828,7 @@ func trimURL(u string) (string, string) {
 // workspacePages are the pages a message may link to inside the workspace,
 // e.g. [Connecter un appareil](/settings/devices#connect): they open in the
 // same tab. Anything else that is not http(s) stays plain text.
-var workspacePages = []string{"/settings", "/memory", "/tasks/", "/welcome", "/espace"}
+var workspacePages = []string{"/settings", "/tasks/", "/welcome", "/espace"}
 
 func link(u, text string) string {
 	if strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "//") && !strings.Contains(u, "\\") {

@@ -39,7 +39,7 @@ func TestFormatOf(t *testing.T) {
 	}
 }
 
-// Today's files say format 3 and keep their bytes; the format is written
+// Today's files say format 4 and keep their bytes; the format is written
 // only past 1, so a file of format 1 written again says none.
 func TestFormatRoundTrip(t *testing.T) {
 	for _, name := range []string{"testdata/full.md", "testdata/fenced.md"} {
@@ -51,7 +51,7 @@ func TestFormatRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if out, _ := n.Bytes(); n.Meta.Format != 3 || !bytes.Equal(out, raw) {
+		if out, _ := n.Bytes(); n.Meta.Format != 4 || !bytes.Equal(out, raw) {
 			t.Errorf("%s: format %d, bytes kept %v", name, n.Meta.Format, bytes.Equal(out, raw))
 		}
 	}

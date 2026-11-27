@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -150,5 +152,46 @@ func TestBrainWritesAMarkdownPage(t *testing.T) {
 		if !strings.Contains(string(raw), id) {
 			t.Errorf("node_find %q: %s", q, raw)
 		}
+	}
+}
+
+// A task writes a page with its own front matter at its top, as Obsidian
+// writes a note: node_open and node_write take its fields as the node's
+// properties, indexed, and the page keeps none of it; a field that is
+// not a property leaves the block in the page, and the write says so.
+func TestTaskWritesAFrontMatterBlock(t *testing.T) {
+	c := nodeCore(t)
+	parent := mustNode(t, c.core, nodestore.New{Title: "Recettes", Author: byBrain})
+	task, _ := startInNode(t, c, runRequest{Title: "Recette", Prompt: "Écris.", Node: parent})
+	page := "Écrit le 27/11/2026.\n\nUne tarte.\n"
+	kid := mustNodes(t, c.core, task.ID, "node_open", map[string]any{"title": "Tarte", "goal": "Une recette.",
+		"body": "---\ntags: [cuisine/recette]\nnote: 9\ntype: plaisir\n---\n\n" + page})
+	id := kid["id"].(string)
+	d, _ := c.nodes.Read(id, 0)
+	if d.Node.Text() != page || bytes.Count(d.Raw, []byte("---\n")) != 2 {
+		t.Fatalf("opened:\n%s", d.Raw)
+	}
+	props, err := c.nodes.Props([]string{id}, []string{"tags", "note", "type"})
+	if err != nil || fmt.Sprint(props[id]) != "map[note:9 tags:[cuisine/recette] type:plaisir]" {
+		t.Fatalf("props %v %v", props, err)
+	}
+	out := mustNodes(t, c.core, task.ID, "node_write", map[string]any{"id": id, "expect": d.Version.Hash,
+		"body": "---\nnote: 8\ncout: 7\n---\n" + page})
+	d, _ = c.nodes.Read(id, 0)
+	if _, ok := out["problems"]; ok || d.Node.Text() != page {
+		t.Fatalf("problems %v, written:\n%s", out["problems"], d.Raw)
+	}
+	if props, _ = c.nodes.Props([]string{id}, []string{"tags", "note", "cout"}); fmt.Sprint(props[id]) != "map[cout:7 note:8 tags:[cuisine/recette]]" {
+		t.Fatalf("props %v", props)
+	}
+	// title is node_set's: the block stays text, nothing taken from it.
+	body := "---\ntitle: Autre\nnote: 1\n---\n" + page
+	out = mustNodes(t, c.core, task.ID, "node_write", map[string]any{"id": id, "expect": d.Version.Hash, "body": body})
+	d, _ = c.nodes.Read(id, 0)
+	if codes := problemCodes(t, out); strings.Join(codes, " ") != nodefile.ProblemFrontBlock || d.Node.Text() != body || d.Node.Meta.Title != "Tarte" {
+		t.Fatalf("problems %v, written:\n%s", out["problems"], d.Raw)
+	}
+	if props, _ = c.nodes.Props([]string{id}, []string{"note"}); fmt.Sprint(props[id]) != "map[note:8]" {
+		t.Fatalf("props %v", props)
 	}
 }

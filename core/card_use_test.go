@@ -29,35 +29,32 @@ func usesOf(c *core, about string) map[string]cardUse {
 // when the model it went to wrote a record about it, answered when the
 // brain answered in its turn without asking for it again, no otherwise.
 func TestCardUses(t *testing.T) {
-	c, _ := testMemoryCore(t)
-	c.mem.now = time.Now
+	c, _ := testIntentsCore(t)
+	c.intents.now = time.Now
 	site := siteNode(t, c)
 	siteKey := nodeRef(site)
-	mustAdd(t, c.mem, &Memory{Kind: kindFact, About: "project:blog", Text: "Le blog tourne sur le NAS"})
-	mustAdd(t, c.mem, &Memory{Kind: kindFact, About: "project:shop", Text: "La boutique vend des tasses"})
+	mustIntend(t, c.intents, &Intention{Text: "Vérifier le blog sur le NAS", About: "project:blog", DueAt: time.Now().Add(time.Hour)})
+	mustIntend(t, c.intents, &Intention{Text: "Vendre des tasses", About: "project:shop", DueAt: time.Now().Add(time.Hour)})
 
-	// A turn's card, then the brain writes a decision of the subject: wrote.
-	turn := ownerSays(c, "On garde Astro pour le site")
+	// A turn's card, then the brain writes an intention of the subject: wrote.
+	turn := ownerSays(c, "Rappelle-moi de passer le site sur Astro")
 	pushCard(t, c, siteKey, placeTurn, c.turnSeq(), "")
-	if _, err := c.brainRemember(rememberIn{Kind: "decision", About: siteKey, Text: "Astro plutôt que WordPress", SourceRef: ref(turn)}); err != nil {
+	if _, err := c.brainIntend(intendIn{Text: "Passer le site sur Astro", About: siteKey, SourceRef: ref(turn)}); err != nil {
 		t.Fatal(err)
 	}
 	// A turn's card the brain answers with, asking nothing: answered.
 	ownerSays(c, "Le blog marche ?")
 	pushCard(t, c, "project:blog", placeTurn, c.turnSeq(), "")
 	c.store.addMessage(roleBrain, "Oui, il tourne.", true)
-	// A turn's card the brain looks up again before answering: no.
+	// A turn's card the brain does not answer with: no.
 	ownerSays(c, "Et la boutique ?")
 	pushCard(t, c, "project:shop", placeTurn, c.turnSeq(), "")
-	if _, err := c.brainRecall(recallIn{Query: "boutique tasses", About: "project:shop"}); err != nil {
-		t.Fatal(err)
-	}
-	c.store.addMessage(roleBrain, "Elle vend des tasses.", true)
-	// A task's card, and its remember of the subject: wrote; another
-	// task's that writes nothing: no.
-	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Device: "nas", Runtime: "claude-code", State: stateRunning, About: "project:blog"})
-	pushCard(t, c, "project:blog", placeTask, 0, "t-1")
-	if _, err := c.taskRemember("t-1", taskRememberIn{Kind: "fact", About: "project:blog", Text: "Le blog a un flux RSS"}); err != nil {
+	// A task's card, and its write of the node: wrote; another task's
+	// that writes nothing: no.
+	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Device: "nas", Runtime: "claude-code", State: stateRunning, About: siteKey})
+	pushCard(t, c, siteKey, placeTask, 0, "t-1")
+	d, _ := c.nodes.Read(site, 0)
+	if _, err := nodeWrite(c, site, "Le site est sur Astro.", d.Version.Hash, "task:t-1"); err != nil {
 		t.Fatal(err)
 	}
 	pushCard(t, c, "project:shop", placeTask, 0, "t-2")
@@ -88,12 +85,11 @@ func TestCardUses(t *testing.T) {
 		t.Errorf("stats: %+v", st.Cards)
 	}
 	// node_read is asking again too.
-	d, err := c.nodes.Create(nodestore.New{Title: "Photos", Author: byUser}) // its opening is no use of the card
+	pd, err := c.nodes.Create(nodestore.New{Title: "Photos", Author: byUser}) // its opening is no use of the card
 	if err != nil {
 		t.Fatal(err)
 	}
-	photos := d.Node.Meta.ID
-	mustAdd(t, c.mem, &Memory{Kind: kindFact, About: nodeRef(photos), Text: "Les photos sont sur le NAS"})
+	photos := pd.Node.Meta.ID
 	ownerSays(c, "Les photos ?")
 	pushCard(t, c, nodeRef(photos), placeTurn, c.turnSeq(), "")
 	if _, isErr := callBrainTool(t, c, "node_read", map[string]any{"id": photos}); isErr {
@@ -109,9 +105,9 @@ func TestCardUses(t *testing.T) {
 // A pack delivered with a turn: only the card of what the turn is about
 // is the turn's; one answer counts for it alone.
 func TestPackCardsOfTurn(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	th := nodeRef(siteNode(t, c))
-	mustAdd(t, c.mem, &Memory{Kind: kindFact, About: "project:blog", Text: "Le blog tourne sur le NAS"})
+	mustIntend(t, c.intents, &Intention{Text: "Vérifier le blog sur le NAS", About: "project:blog", DueAt: c.intents.now().Add(time.Hour)})
 	site, _ := c.compileCard(th, aboutCardChars)
 	blog, _ := c.compileCard("project:blog", aboutCardChars)
 	c.packedCards([]pushedCard{site, blog}, 7, th)

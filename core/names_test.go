@@ -32,7 +32,7 @@ func names(t *testing.T, c *core) map[string]string {
 func TestAboutNotedWhenWritten(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	seq := ownerSays(c, "Le site web passe en ligne vendredi, préviens-moi")
-	if _, err := c.brainRemember(rememberIn{Text: "Le site web passe en ligne vendredi.", Kind: kindFact, About: "Projet : Site Web", SourceRef: ref(seq)}); err != nil {
+	if _, err := c.brainIntend(intendIn{Text: "Mettre le site web en ligne vendredi.", About: "Projet : Site Web", SourceRef: ref(seq)}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.brainIntend(intendIn{Text: "Relire la page d'accueil.", About: "topic:accueil", OwedTo: "Personne:Sam", SourceRef: ref(seq)}); err != nil {
@@ -56,9 +56,9 @@ func TestAboutNotedWhenWritten(t *testing.T) {
 		}
 	}
 	var about string
-	c.mem.db.QueryRow(`SELECT about FROM memories WHERE kind = 'fact'`).Scan(&about)
+	c.intents.db.QueryRow(`SELECT about FROM intentions WHERE text LIKE 'Mettre%'`).Scan(&about)
 	if about != "project:site-web" {
-		t.Errorf("a memory about the key is about %q", about)
+		t.Errorf("an intention about the key is about %q", about)
 	}
 	// A mail or an event is a page's reference, never an about.
 	if _, err := aboutKey("mail:abc"); err == nil || !strings.Contains(err.Error(), "[m1]: mail:<id>") {
@@ -67,11 +67,10 @@ func TestAboutNotedWhenWritten(t *testing.T) {
 }
 
 // A message names entities by the words of their keys; never by a word
-// too short, an id, or Eriphe's own topics; a name inside a longer one
-// named too gives way.
+// too short or an id; a name inside a longer one named too gives way.
 func TestNamed(t *testing.T) {
-	c, _ := testMemoryCore(t)
-	for _, k := range []string{"project:site", "project:site-web", "person:sam", "topic:facture", "project:x", "topic:workspace"} {
+	c, _ := testIntentsCore(t)
+	for _, k := range []string{"project:site", "project:site-web", "person:sam", "topic:facture", "project:x"} {
 		c.store.noteAbout(k)
 	}
 	for _, tc := range []struct {
@@ -81,7 +80,7 @@ func TestNamed(t *testing.T) {
 		{"Où en est le site web ?", []string{"project:site-web"}},
 		{"Le site est lent", []string{"project:site"}},
 		{"Dis à Sam que les factures sont payées", []string{"person:sam", "topic:facture"}},
-		{"La case x, l'espace workspace", nil},
+		{"La case x", nil},
 		{"Rien à voir", nil},
 	} {
 		got := c.named(tc.text)
@@ -95,7 +94,7 @@ func TestNamed(t *testing.T) {
 // What my message names goes with it to the brain, keys only; the turn
 // is about it until the next delivery.
 func TestNamedInDelivery(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	c.store.noteAbout("project:site-web")
 	c.store.addMessage(roleUser, "Où en est le site web ?", false)
@@ -127,53 +126,11 @@ func TestNamedInDelivery(t *testing.T) {
 // A person's cue matches the same words as an entity's name: plural and
 // accents aside.
 func TestCueMatchesLikeNames(t *testing.T) {
-	c, _ := testMemoryCore(t)
-	mustIntend(t, c.mem, &Intention{Text: "Rendre les clés", Cue: "Hélène Dupont"})
-	xs, err := c.mem.cueIntentions("J'ai vu helene dupont hier")
+	c, _ := testIntentsCore(t)
+	mustIntend(t, c.intents, &Intention{Text: "Rendre les clés", Cue: "Hélène Dupont"})
+	xs, err := c.intents.cueIntentions("J'ai vu helene dupont hier")
 	if err != nil || len(xs) != 1 {
 		t.Fatalf("cue: %+v %v", xs, err)
-	}
-}
-
-// memory.db at schema 7 says subject: opened, it is at 8, about, its
-// values kept and found by full text.
-func TestMemoryMigratesToAbout(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "memory.db")
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	v7 := func(s string) string { return strings.ReplaceAll(s, "about", "subject") }
-	for _, q := range []string{`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`, v7(memorySchema), v7(intentionsSchema), learningSchema,
-		`INSERT INTO meta VALUES ('schema_version', '7')`,
-		`INSERT INTO memories (kind, subject, text, valid_from, recorded_at, source_kind, trust, status, updated_at)
-			VALUES ('fact', 'project:site', 'Le site est hébergé sur le NAS', 1, 1, 'user', 'first_party', 'active', 1)`,
-		`INSERT INTO intentions (kind, text, subject, state, source_kind, trust, created_at, updated_at)
-			VALUES ('todo', 'Relire', 'project:site', 'open', 'user', 'first_party', 1, 1)`} {
-		if _, err := db.Exec(q); err != nil {
-			t.Fatalf("%s: %v", q, err)
-		}
-	}
-	db.Close()
-	m, err := openMemory(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer m.db.Close()
-	if v := m.schemaVersion(); v != memorySchemaVersion {
-		t.Fatalf("schema %d", v)
-	}
-	var about, intent string
-	m.db.QueryRow(`SELECT about FROM memories`).Scan(&about)
-	m.db.QueryRow(`SELECT about FROM intentions`).Scan(&intent)
-	if about != "project:site" || intent != "project:site" {
-		t.Errorf("about %q, intention %q", about, intent)
-	}
-	if xs, err := m.recall(recallQuery{Query: "hébergé NAS"}); err != nil || len(xs) != 1 {
-		t.Errorf("full text: %+v %v", xs, err)
-	}
-	if xs, err := m.recall(recallQuery{About: "project:site"}); err != nil || len(xs) != 1 {
-		t.Errorf("about: %+v %v", xs, err)
 	}
 }
 

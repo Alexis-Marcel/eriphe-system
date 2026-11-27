@@ -18,7 +18,7 @@
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <script src="/static/early.js?v={{.Version}}"></script>
 <link rel="stylesheet" href="/static/app.css?v={{.Version}}">
-{{if or (eq .Tab "memory") (eq .Tab "approve")}}<link rel="stylesheet" href="/static/memory.css?v={{.Version}}">{{end}}
+{{if or (eq .Tab "intentions") (eq .Tab "approve")}}<link rel="stylesheet" href="/static/intentions.css?v={{.Version}}">{{end}}
 {{if eq .Nav "settings"}}<link rel="stylesheet" href="/static/remote.css?v={{.Version}}">{{end}}
 {{if eq .Tab "agents"}}<link rel="stylesheet" href="/static/agents.css?v={{.Version}}">{{end}}
 <script src="/static/htmx.min.js?v=2.0.4" defer></script>

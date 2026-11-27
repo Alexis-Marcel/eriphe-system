@@ -13,12 +13,12 @@ import (
 // own (the user's words, the brain's in a clean turn, what eriphe-core
 // recorded), and names an external item by its kind, its event and its ref
 // without quoting it. include_external quotes those too, and then taints
-// the turn like reading an external memory; so does reading an external
+// the turn like reading an external node; so does reading an external
 // notification or intention through notifications or intentions.
 
 type sinceIn struct {
 	T               string   `json:"t" jsonschema:"an RFC3339 time, YYYY-MM-DD or YYYY-MM-DDTHH:MM (the user's zone), away (since the user left) or last_brief"`
-	Kinds           []string `json:"kinds,omitempty" jsonschema:"only these kinds: task, notification, intention, message, learned, event, node; all by default"`
+	Kinds           []string `json:"kinds,omitempty" jsonschema:"only these kinds: task, notification, intention, message, event, node; all by default"`
 	Limit           int      `json:"limit,omitempty" jsonschema:"at most this many items, 50 by default, 200 at most"`
 	IncludeExternal bool     `json:"include_external,omitempty" jsonschema:"also quote the items drawn from external content; this taints the turn"`
 }
@@ -34,7 +34,7 @@ type happeningView struct {
 }
 
 func registerSinceTools(s *mcp.Server, c *core) {
-	tool(s, "since", "What happened since t, oldest first: tasks (with their receipt's verdict), your notifications and the user's feedback, intentions, messages, what you learned, the journal's events (a payload someone else wrote is external) and the nodes changed (where each stands). Each item has a ref to read it in full and a trust: an external one is quoted only with include_external, which taints the turn. Only what it lists happened.",
+	tool(s, "since", "What happened since t, oldest first: tasks (with their receipt's verdict), your notifications and the user's feedback, intentions, messages, the journal's events (a payload someone else wrote is external) and the nodes changed (where each stands). Each item has a ref to read it in full and a trust: an external one is quoted only with include_external, which taints the turn. Only what it lists happened.",
 		func(ctx context.Context, in sinceIn) (map[string]any, error) {
 			return c.brainSince(in)
 		})

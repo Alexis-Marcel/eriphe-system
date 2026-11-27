@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-// The intentions in the Memory page (the "Intentions" tab, and those
-// proposed in "À approuver"): what is owed, by whom, by when, with done,
-// snooze and cancel; approve or reject what was drawn from outside.
+// The intentions' page (/settings/intentions): what is owed, by whom, by
+// when, with done, snooze and cancel; approve or reject what was drawn
+// from outside, here or in « À valider ».
 
 type intentCard struct {
 	*Intention
@@ -17,70 +17,61 @@ type intentCard struct {
 }
 
 func (w *web) intentCard(x *Intention) intentCard {
-	now := w.c.mem.now()
+	now := w.c.intents.now()
 	return intentCard{Intention: x, Now: now, Overdue: x.Overdue(now)}
 }
 
 func (w *web) intentionRoutes(mux *webMux) {
-	mux.Handle("POST /memory/intention/{id}/{action}", w.auth(w.handleIntention))
+	mux.Handle("GET /settings/intentions", w.auth(w.handleIntentions))
+	mux.Handle("POST /settings/intentions/{id}/{action}", w.auth(w.handleIntention))
 }
 
-// intentionCounts are the tab's and the stats' numbers: what is live, and
-// what is due or late.
-func (w *web) intentionCounts(p *memoryPage) {
-	m := w.c.mem
-	now := m.now().Unix()
-	var n int
-	m.db.QueryRow(`SELECT COUNT(*) FROM intentions WHERE state IN ('open', 'due', 'snoozed')`).Scan(&n)
-	p.Open = n
-	m.db.QueryRow(`SELECT COUNT(*) FROM intentions WHERE state IN ('open', 'due', 'snoozed') AND due_at IS NOT NULL AND due_at < ?`, now).Scan(&n)
-	p.Overdue = n
-	m.db.QueryRow(`SELECT COUNT(*) FROM intentions WHERE state = 'proposed'`).Scan(&n)
-	p.Proposed += n
+type intentionsPage struct {
+	Intents     []intentCard // the live ones
+	IntentsDone []intentCard // recently closed
 }
 
-// intentionsView fills the Intentions tab: the live ones, the due first,
-// then the recently closed.
-func (w *web) intentionsView(p *memoryPage) error {
-	xs, err := w.c.mem.intentions(intentDue, intentOpen, intentSnoozed, intentProposed)
+// handleIntentions shows the live intentions, the due first, then the
+// recently closed.
+func (w *web) handleIntentions(rw http.ResponseWriter, r *http.Request, s *session) {
+	var p intentionsPage
+	xs, err := w.c.intents.intentions(intentDue, intentOpen, intentSnoozed, intentProposed)
 	if err != nil {
-		return err
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	for _, x := range xs {
 		p.Intents = append(p.Intents, w.intentCard(x))
 	}
-	closed, err := w.c.mem.intentions(intentDone, intentCancelled)
+	closed, err := w.c.intents.intentions(intentDone, intentCancelled)
 	if err != nil {
-		return err
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	for i := len(closed) - 1; i >= 0 && len(p.IntentsDone) < 20; i-- {
 		p.IntentsDone = append(p.IntentsDone, w.intentCard(closed[i]))
 	}
-	return nil
+	w.render(rw, r, s, "intentions", "", page{Title: "intent.title", Nav: "settings", Tab: "intentions", Data: p})
 }
 
 func (w *web) handleIntention(rw http.ResponseWriter, r *http.Request, s *session) {
-	if w.c.mem == nil {
-		http.Error(rw, errMemoryOff.Error(), http.StatusServiceUnavailable)
-		return
-	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.Error(rw, "bad id", http.StatusBadRequest)
 		return
 	}
-	x, err := w.c.mem.intention(id)
+	x, err := w.c.intents.intention(id)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusNotFound)
 		return
 	}
-	now := w.c.mem.now()
+	now := w.c.intents.now()
 	action := r.PathValue("action")
 	ch := intentionChange{}
 	switch action {
 	case "approve":
 		if x.State != intentProposed {
-			w.toast(rw, tr(w.lang(r), "mem.notproposed"), false)
+			w.toast(rw, tr(w.lang(r), "intent.notproposed"), false)
 			return
 		}
 		ch.State = intentOpen
@@ -109,17 +100,17 @@ func (w *web) handleIntention(rw http.ResponseWriter, r *http.Request, s *sessio
 	var got *Intention
 	if x.State == intentProposed { // its card's answer (convo_cards.go)
 		if err = w.c.answerProposal(r.Context(), cardIntention, id, action == "approve"); err == nil {
-			got, err = w.c.mem.intention(id)
+			got, err = w.c.intents.intention(id)
 		}
 	} else {
-		got, err = w.c.mem.changeIntention(id, ch, "owner", action)
+		got, err = w.c.intents.changeIntention(id, ch, "owner", action)
 	}
 	if err != nil {
 		w.toast(rw, err.Error(), false)
 		return
 	}
 	rw.Header().Set("HX-Trigger", hxTrigger(tr(w.lang(r), "intent.did."+action), true, true))
-	w.render(rw, r, s, "memory", "intent-card-frag", page{Data: w.intentCard(got)})
+	w.render(rw, r, s, "intentions", "intent-card-frag", page{Data: w.intentCard(got)})
 }
 
 func init() {
@@ -166,6 +157,21 @@ var intentionStrings = map[string]map[string]string{
 		"intent.did.snooze":       "Reporté.",
 		"intent.did.reopen":       "Intention rouverte.",
 		"intent.proposedlead":     "Des intentions attendent ton accord : elles viennent d'un contenu extérieur (un mail, une page) ou ont été déduites.",
+		"intent.title":            "Intentions",
+		"intent.lead":             "Ce qui est dû, par qui, pour quand : tes promesses, celles de {{name}}, ce que tu attends des autres, tes rappels. {{name}} te le rappelle au bon moment.",
+		"intent.none":             "Rien en cours.",
+		"intent.donerecent":       "Terminés récemment",
+		"intent.overdue":          "En retard",
+		"intent.notproposed":      "Cette intention n'attend plus d'approbation.",
+		"intent.inboxlead":        "Ce que {{name}} a lu dans un mail, une page ou une tâche ne devient pas une intention sans ton accord.",
+		"trust.owner":             "De toi",
+		"trust.first_party":       "D'Eriphe",
+		"trust.external":          "De l'extérieur",
+		"src.owner":               "toi",
+		"src.brain":               "{{name}}",
+		"src.extraction":          "extraction",
+		"src.task":                "tâche",
+		"src.import":              "import",
 	},
 	"en": {
 		"intent.kind.promise":     "Promise",
@@ -202,5 +208,20 @@ var intentionStrings = map[string]map[string]string{
 		"intent.did.snooze":       "Snoozed.",
 		"intent.did.reopen":       "Intention reopened.",
 		"intent.proposedlead":     "Intentions wait for your approval: they come from external content (a mail, a page) or were inferred.",
+		"intent.title":            "Intentions",
+		"intent.lead":             "What is owed, by whom, by when: your promises, {{name}}'s, what you wait for from others, your reminders. {{name}} reminds you at the right time.",
+		"intent.none":             "Nothing under way.",
+		"intent.donerecent":       "Recently closed",
+		"intent.overdue":          "Overdue",
+		"intent.notproposed":      "This intention no longer waits for approval.",
+		"intent.inboxlead":        "What {{name}} read in a mail, a page or a task does not become an intention without your approval.",
+		"trust.owner":             "From you",
+		"trust.first_party":       "From Eriphe",
+		"trust.external":          "External",
+		"src.owner":               "you",
+		"src.brain":               "{{name}}",
+		"src.extraction":          "extraction",
+		"src.task":                "task",
+		"src.import":              "import",
 	},
 }

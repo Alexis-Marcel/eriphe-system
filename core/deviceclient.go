@@ -107,7 +107,7 @@ type deviceTaskSpec struct {
 	Profile            string         `json:"profile,omitempty"`
 	SystemNetwork      bool           `json:"system_network,omitempty"`  // the brain reaches eriphe-core by name
 	Stream             bool           `json:"stream,omitempty"`          // the brain: its text as it is written (brain_draft.go)
-	NoAgentMemory      bool           `json:"no_agent_memory,omitempty"` // the brain: Eriphe's memory is its only one
+	NoAgentMemory      bool           `json:"no_agent_memory,omitempty"` // the brain: Eriphe's graph is its only memory
 	// RepoSkills: the agent loads the skills its repository carries (the
 	// user's own repository, or one trusted); off otherwise (repo_skills.go).
 	RepoSkills bool `json:"repo_skills,omitempty"`

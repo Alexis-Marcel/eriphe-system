@@ -17,18 +17,18 @@ import (
 // Cards in the conversation, as decided in the study "Une conversation
 // plutôt qu'un tableau de bord" (2026-11-01): what waits for the user's
 // approval is asked where they talk to the assistant, not on a page of its
-// own. A card is bound by the code to exactly one proposal (a memory, an
+// own. A card is bound by the code to exactly one proposal (an
 // intention, a notification rule, a watch, a setting):
 // its Oui and Non call that proposal's own approval, and nothing else does.
 //
 //   - A proposal the brain makes in a turn is attached to the message it
 //     writes in that turn (attachTurnCards), or, if it writes nothing after
 //     it, to its last message of the turn (cardsTurnEnded).
-//   - Any other proposal (the memory's extraction, a turn that said
-//     nothing) is queued, and enters the attention queue at its card's
-//     weight (cardWeight, attendQueuedCards): it is delivered like
-//     anything else that goes to the user, under a message of eriphe-core's,
-//     a few at a time (attention.go).
+//   - Any other proposal (a turn that said nothing) is queued, and enters
+//     the attention queue at its card's weight (cardWeight,
+//     attendQueuedCards): it is delivered like anything else that goes to
+//     the user, under a message of eriphe-core's, a few at a time
+//     (attention.go).
 //   - A card that stops a task (blocksATask) never waits for a good moment:
 //     if its turn wrote nothing, as when the turn failed, the queue
 //     delivers it at once, whatever the hour (its weight); one still queued
@@ -61,7 +61,6 @@ func init() { extraSchema = append(extraSchema, convoCardsSchema) }
 
 // The kinds of cards: one per kind of proposal.
 const (
-	cardMemory    = "memory"
 	cardIntention = "intention"
 	cardRule      = "rule"
 	cardSetting   = "setting"
@@ -73,10 +72,6 @@ const (
 
 	cardTextAnswer = 30 * time.Minute // a plain yes or no answers a card this recent only
 )
-
-// cardUnlearn is an undo of the learning journal the brain proposed on a
-// tainted turn (learning_tools.go).
-const cardUnlearn = "unlearn"
 
 // cardMu makes deciding a card one thing at a time: a click and a "oui"
 // at the same moment decide it once.
@@ -148,22 +143,21 @@ func (c *core) card(id int64) (convoCard, error) {
 
 // proposal is one proposal of any kind, read now.
 type proposal struct {
-	Kind      string
-	ID        int64
-	Pending   bool   // still waits for the user
-	Outcome   string // when not pending: approved, rejected or gone
-	Tainted   string // why it may carry what someone else wrote, if it may
-	Why       string
-	Fields    []cardField // the parameters of a call to approve
-	Extracted bool        // from the memory's extraction, not from a turn of the brain's
-	text      func(lang string) string
-	fields    func(lang string) []cardField      // Fields in the user's language, when they have words of ours
-	summary   func(lang string) []string         // what a yes makes, in plain sentences of code's, before the fields
-	context   func(lang string) string           // where it acts, said quietly beside its text (an account: « compte Gmail »)
-	origin    func(lang string) cardOrigin       // where it comes from and what its Oui does (card_origin.go)
-	choices   func(lang string) []proposalChoice // a calls card's calls the user may leave out (call_fold.go)
-	acts      func(lang string) []string         // what its Oui says for 1, 2… items chosen
-	verb      func(lang string) string           // what its yes button says, if not its kind's (card_verb.go)
+	Kind    string
+	ID      int64
+	Pending bool   // still waits for the user
+	Outcome string // when not pending: approved, rejected or gone
+	Tainted string // why it may carry what someone else wrote, if it may
+	Why     string
+	Fields  []cardField // the parameters of a call to approve
+	text    func(lang string) string
+	fields  func(lang string) []cardField      // Fields in the user's language, when they have words of ours
+	summary func(lang string) []string         // what a yes makes, in plain sentences of code's, before the fields
+	context func(lang string) string           // where it acts, said quietly beside its text (an account: « compte Gmail »)
+	origin  func(lang string) cardOrigin       // where it comes from and what its Oui does (card_origin.go)
+	choices func(lang string) []proposalChoice // a calls card's calls the user may leave out (call_fold.go)
+	acts    func(lang string) []string         // what its Oui says for 1, 2… items chosen
+	verb    func(lang string) string           // what its yes button says, if not its kind's (card_verb.go)
 }
 
 // Origin is where it comes from and what its Oui does, with the words of
@@ -218,7 +212,7 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 	return p
 }
 
-// externalWhy is why a memory or an intention may carry what someone else
+// externalWhy is why an intention may carry what someone else
 // wrote: drawn from external content, or flagged by the scanner.
 func externalWhy(trust, flags, ref string) string {
 	switch {
@@ -377,18 +371,6 @@ func (c *core) syncCards() {
 	}
 }
 
-// cardQueued gives a proposal made outside a turn, by no one who shows it
-// (the memory's extraction), its card, queued: the attention queue
-// delivers it at its card's weight (attendQueuedCards).
-func (c *core) cardQueued(kind string, id int64) {
-	p := c.proposalOf(kind, id)
-	if !p.Pending {
-		return
-	}
-	c.syncCard(p)
-	c.attendQueuedCards()
-}
-
 // reconcileCards puts the cards in step with their proposals once, when
 // eriphe-core starts: a proposal and its card are written one after the
 // other, not in one transaction, so a stop between the two leaves them
@@ -404,8 +386,8 @@ func (c *core) reconcileCards() {
 // again against their proposals: a proposal decided elsewhere, or gone,
 // is said so on its card at once, it leaves the attention queue, and its
 // nodes stop waiting on it (proposalMoved). Whatever moves a proposal
-// other than its card calls it: a task's state, the memory's store, a
-// page. It takes no lock: decideCardWith calls it too, through a
+// other than its card calls it: a task's state, the intentions' store,
+// a page. It takes no lock: decideCardWith calls it too, through a
 // decider.
 func (c *core) settleCards(kinds ...string) {
 	where, args := `state = ?`, []any{cardPending}
@@ -436,15 +418,16 @@ func (c *core) settleRef(ref string) {
 }
 
 // settleCard says on a waiting card what came of its proposal, if it no
-// longer waits.
+// longer waits. A card of a kind that is no more (a memory's) is gone.
 func (c *core) settleCard(x convoCard) {
-	kind, id, ok := parseProposalRef(x.Ref)
-	if !ok || x.State != cardPending {
+	if x.State != cardPending {
 		return
 	}
-	p := c.proposalOf(kind, id)
-	if p.Pending {
-		return
+	p := proposal{Outcome: cardGone}
+	if kind, id, ok := parseProposalRef(x.Ref); ok {
+		if p = c.proposalOf(kind, id); p.Pending {
+			return
+		}
 	}
 	res, err := c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ? WHERE id = ? AND state = ?`, p.Outcome, time.Now().Unix(), x.ID, cardPending)
 	if n, _ := rowsOf(res, err); n > 0 {
@@ -570,7 +553,7 @@ func (c *core) decideCardWith(ctx context.Context, id int64, approve bool, by st
 	return x, nil
 }
 
-// answerProposal is a page's yes or no on a proposal (Réglages, Mémoire):
+// answerProposal is a page's yes or no on a proposal (Réglages, Intentions):
 // the same as its card's, which it is given first if it has none.
 func (c *core) answerProposal(ctx context.Context, kind string, id int64, approve bool) error {
 	p := c.proposalOf(kind, id)
@@ -800,7 +783,7 @@ func (c *core) withdrawRef(ctx context.Context, ref, by string) bool {
 }
 
 // withdrawProposal makes a proposal wait no more, undecided by the user:
-// a view is dropped, a memory forgotten, the calls and access a card asks
+// a view is dropped, an intention cancelled, the calls and access a card asks
 // for withdrawn (withdrawAsk); another kind is answered no through its own
 // approval, which only records it.
 func (c *core) withdrawProposal(ctx context.Context, kind string, id int64) error {

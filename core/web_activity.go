@@ -11,7 +11,7 @@ import (
 // reads with since (since.go), by kind, the tool accesses among them (the
 // decisions' journal); and « À valider », where everything the brain
 // proposed and the user has not answered yet waits: permissions,
-// memories, intentions, notification rules, settings,
+// intentions, notification rules, settings,
 // and the quiet hours the activity suggests. Both are fallbacks: what
 // happens is told in the conversation, and a proposal is asked there, on
 // a card (convo_cards.go). The Activité tab they had leads here.
@@ -51,7 +51,7 @@ type happenedPage struct {
 }
 
 var (
-	happenedKinds  = []string{feedTask, feedNotification, feedIntention, feedMessage, feedLearned, feedAccess}
+	happenedKinds  = []string{feedTask, feedNotification, feedIntention, feedMessage, feedAccess}
 	happenedRanges = []string{"last", "day", "week"}
 )
 
@@ -133,9 +133,7 @@ func happenedLink(ref string) string {
 	case "notification":
 		return "/settings/notifications?n=" + id + "#notif-" + id
 	case "intention":
-		return "/memory?view=commitments"
-	case "learned":
-		return "/settings/learned#learned-" + id
+		return "/settings/intentions#intent-" + id
 	}
 	return ""
 }
@@ -145,19 +143,16 @@ func happenedLink(ref string) string {
 // asks nothing).
 type approvals struct {
 	Perms    []permView
-	Memories []memCard
 	Intents  []intentCard
 	Rules    []notifyRule
 	Settings []settingProposal
 	Quiet    []quietSuggestion
 }
 
-// Count is all that waits; Remember, the memories and intentions.
+// Count is all that waits.
 func (a approvals) Count() int {
-	return len(a.Perms) + a.Remember() + len(a.Rules) + len(a.Settings)
+	return len(a.Perms) + len(a.Intents) + len(a.Rules) + len(a.Settings)
 }
-
-func (a approvals) Remember() int { return len(a.Memories) + len(a.Intents) }
 
 func (w *web) approvals() approvals {
 	var a approvals
@@ -167,16 +162,9 @@ func (w *web) approvals() approvals {
 			a.Perms = append(a.Perms, p)
 		}
 	}
-	if m := w.c.mem; m != nil {
-		if xs, err := m.list(`status = 'proposed'`, nil, `recorded_at DESC, id DESC`, 200); err == nil {
-			for _, x := range xs {
-				a.Memories = append(a.Memories, w.memCard(x, true))
-			}
-		}
-		if xs, err := m.intentions(intentProposed); err == nil {
-			for _, x := range xs {
-				a.Intents = append(a.Intents, w.intentCard(x))
-			}
+	if xs, err := w.c.intents.intentions(intentProposed); err == nil {
+		for _, x := range xs {
+			a.Intents = append(a.Intents, w.intentCard(x))
 		}
 	}
 	a.Rules, _ = w.c.notifyRules(ruleProposed)
@@ -189,13 +177,8 @@ func (w *web) approvals() approvals {
 // proposals, read with a count each. The permissions are not in it: the
 // conversation and Tâches already show them, live.
 func (w *web) approvalCount() int {
-	n := 0
-	if m := w.c.mem; m != nil {
-		n += m.count(`status = 'proposed'`)
-		var k int
-		m.db.QueryRow(`SELECT COUNT(*) FROM intentions WHERE state = 'proposed'`).Scan(&k)
-		n += k
-	}
+	var n int
+	w.c.intents.db.QueryRow(`SELECT COUNT(*) FROM intentions WHERE state = 'proposed'`).Scan(&n)
 	if rules, err := w.c.notifyRules(ruleProposed); err == nil {
 		n += len(rules)
 	}

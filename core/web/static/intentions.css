@@ -1,0 +1,58 @@
+/* The intentions' page and their cards in « À valider »: the same cards,
+   chips and panels as the rest of the workspace. */
+
+.intentions { --k: var(--accent); min-width: 0; display: grid; gap: 20px; align-content: start; }
+.k-commitment { --k: #d97706; }
+@media (prefers-color-scheme: dark) {
+  .k-commitment { --k: #fbbf24; }
+}
+
+/* Head */
+
+.intent-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.intent-title { display: flex; gap: 16px; align-items: center; min-width: 0; }
+.intent-mark { display: grid; place-items: center; width: 52px; height: 52px; flex: none; border-radius: 12px; background: var(--surface-2); color: var(--muted); }
+.intent-mark .i { width: 26px; height: 26px; stroke-width: 1.8; }
+.intent-title h2 { font-size: 1.3rem; letter-spacing: -.01em; }
+.intent-title p { color: var(--muted); max-width: 60ch; margin-top: 2px; }
+
+/* Cards */
+
+.intent-list { display: grid; gap: 10px; }
+.intent { position: relative; display: grid; gap: 7px; padding: 14px 18px 8px 20px; border-radius: var(--radius); background: var(--surface);
+  border: 1px solid var(--border); box-shadow: var(--shadow-sm); overflow: hidden; animation: rise .25s ease-out; }
+.intent:hover { border-color: var(--border-strong); }
+.intent.st-proposed { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+
+.intent-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 24px; }
+.kind { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; border-radius: 999px; font-size: .74rem; font-weight: 600;
+  color: var(--k); background: color-mix(in srgb, var(--k) 12%, transparent); }
+.kind i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.intent-subj { font-family: var(--mono); font-size: .78rem; color: var(--muted); padding: 2px 8px; border-radius: 7px; background: var(--surface-2); }
+.intent-subj:hover { color: var(--text); text-decoration: none; }
+.trust { margin-left: auto; font-size: .74rem; font-weight: 600; color: var(--faint); display: inline-flex; align-items: center; gap: 5px; }
+.trust::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.t-owner { color: var(--accent-text); }
+.t-first_party { color: var(--muted); }
+.t-external { color: var(--warn); }
+.intent-text { font-size: .98rem; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-line; }
+.intent-meta { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: .78rem; color: var(--faint); }
+.intent-meta .mono { font-size: .74rem; }
+.intent-id { margin-left: auto; font-variant-numeric: tabular-nums; }
+.due-late { color: var(--danger); font-weight: 600; }
+.intent-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; margin: 0 -6px 0; padding-top: 6px; border-top: 1px solid var(--border); }
+.intent-actions .btn { margin-left: 6px; }
+.intent-actions .btn .i { width: 15px; height: 15px; }
+.intent-actions .push { margin-left: auto; }
+.st-proposed .intent-actions { border-top: 0; padding-top: 2px; }
+
+.intentions .done .intent-list { margin-top: 10px; }
+
+@media (max-width: 860px) {
+  .intentions { gap: 16px; }
+  .intent-mark { width: 44px; height: 44px; border-radius: 10px; }
+  .intent-mark .i { width: 22px; height: 22px; }
+  .intent-title { gap: 12px; align-items: flex-start; }
+  .intent-title p { font-size: .88rem; line-height: 1.45; }
+  .intent { padding: 13px 14px 10px 17px; }
+}

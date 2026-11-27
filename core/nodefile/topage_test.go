@@ -102,7 +102,7 @@ func TestToPageFixtures(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if n.Meta.Format != 3 || id != n.Meta.ID {
+			if n.Meta.Format != 4 || id != n.Meta.ID {
 				t.Fatalf("format %d, node %q", n.Meta.Format, id)
 			}
 			if bytes.Contains(out, []byte("eriphe:block")) {

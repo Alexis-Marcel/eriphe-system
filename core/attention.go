@@ -160,14 +160,14 @@ func noteItemRef(id int64) string { return "notification:" + strconv.FormatInt(i
 // cardWeight is a card's weight by its kind: what a task or a node waits
 // on, at once; what the user asked to be done (a skill, a monitor, a run's
 // calls), at the next breakpoint; a reminder to keep, and the small things
-// (a memory, a rule, a setting), at the return.
+// (a rule, a setting), at the return.
 func cardWeight(kind string) int {
 	switch {
 	case blocksATask(kind):
 		return weightBlocksATask
 	case kind == cardIntention:
 		return weightBrief
-	case kind == cardMemory || kind == cardUnlearn || kind == cardRule || kind == cardSetting:
+	case kind == cardRule || kind == cardSetting:
 		return 1
 	}
 	return weightProposal
@@ -418,8 +418,8 @@ func (c *core) attentionBlock() string {
 		c.conf().User, strings.Join(lines, "\n"))
 }
 
-// A proposal waiting without a card in front of the user (the memory's
-// extraction, a turn that said nothing of it) enters the attention queue
+// A proposal waiting without a card in front of the user (a turn that
+// said nothing of it) enters the attention queue
 // at its card's weight (cardWeight), unless it is there already: the
 // queue delivers it like anything else.
 

@@ -208,7 +208,7 @@ func (w *web) skillError(rw http.ResponseWriter, lang string, err error) {
 
 func (w *web) handleApproveSkill(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
-	if err := w.c.approveSkill(name, r.PostFormValue("sha"), "owner"); err != nil {
+	if err := w.c.approveSkill(name, r.PostFormValue("sha")); err != nil {
 		w.toast(rw, tr(w.lang(r), "skills.err.changed"), false)
 		return
 	}
@@ -246,7 +246,7 @@ func (w *web) handleEnableSkill(rw http.ResponseWriter, r *http.Request, s *sess
 
 func (w *web) handleDeleteSkill(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
-	if err := w.c.deleteSkill(name, "owner"); err != nil {
+	if err := w.c.deleteSkill(name); err != nil {
 		w.toast(rw, tr(w.lang(r), "err.internal"), false)
 		return
 	}
@@ -311,31 +311,25 @@ func (w *web) handleRunCall(rw http.ResponseWriter, r *http.Request, s *session)
 	w.render(rw, r, s, "settings", "skill-runs-frag", page{Data: d})
 }
 
-// approveSkill approves a skill's pending version and records it.
-func (c *core) approveSkill(name, sha, who string) error {
+// approveSkill approves a skill's pending version, with the monitor it brings.
+func (c *core) approveSkill(name, sha string) error {
 	undo, err := c.skillMonitorMade(name, sha) // the monitor it brings, approved with it (skill_write.go)
 	if err != nil {
 		return err
 	}
-	prev, err := c.store.approveSkillVersion(name, sha)
-	if err != nil {
+	if err := c.store.approveSkill(name, sha); err != nil {
 		undo()
 		return err
 	}
 	c.settleCards(cardSkill) // the card of the version it was, if the brain wrote it
-	c.learnSkill(name, sha, prev, who, "approved")
 	return nil
 }
 
-// deleteSkill deletes a skill and records it, if it had an approved version.
-func (c *core) deleteSkill(name, who string) error {
-	prev, err := c.store.deleteSkillVersion(name)
-	if err != nil {
+// deleteSkill deletes a skill and settles the card of a version that waited.
+func (c *core) deleteSkill(name string) error {
+	if err := c.store.deleteSkill(name); err != nil {
 		return err
 	}
 	c.settleCards(cardSkill)
-	if prev != "" {
-		c.learnSkill(name, "", prev, who, "deleted")
-	}
 	return nil
 }

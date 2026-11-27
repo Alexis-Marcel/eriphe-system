@@ -12,15 +12,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Only the brain is budgeted. The memory's extraction and a worker (a
-// skill's run among them) never reach eriphe-core's own tools, where the
-// budget is held: the relay refuses them. A task's own tools
-// (eriphe-nodes) are another server, never budgeted: a task writes as
-// much as its work needs.
+// Only the brain is budgeted. A worker (a skill's run among them) never
+// reaches eriphe-core's own tools, where the budget is held: the relay
+// refuses it. A task's own tools (eriphe-nodes) are another server, never
+// budgeted: a task writes as much as its work needs.
 func TestBrainBudgetIsTheBrainsOnly(t *testing.T) {
 	c := nodeCore(t)
 	c.self = newMCPServer(c.core)
-	c.store.insertTask(&TaskRow{ID: "m-1", Kind: taskKindMemory, Device: "pc", Runtime: "claude-code", State: stateRunning})
 	c.store.insertTask(&TaskRow{ID: "w-1", Kind: "worker", Device: "pc", Runtime: "claude-code", State: stateRunning})
 	mux := http.NewServeMux()
 	mux.Handle("/v1/device/tasks/{id}/mcp/{server}", c.taskMCPHandler())
@@ -45,7 +43,7 @@ func TestBrainBudgetIsTheBrainsOnly(t *testing.T) {
 		"body": strings.Repeat("Une ligne. ", brainWriteRunes/10)}); !strings.HasPrefix(msg, "Refused") {
 		t.Fatalf("the brain's whole page: %q", msg)
 	}
-	for _, task := range []string{"m-1", "w-1"} { // the memory's extraction, a worker (a skill's run is one)
+	for _, task := range []string{"w-1"} { // a worker (a skill's run is one)
 		if cs, err := dial(task); err == nil {
 			cs.Close()
 			t.Fatalf("task %s reached eriphe-core's own tools", task)
@@ -107,7 +105,7 @@ func TestTurnBudget(t *testing.T) {
 
 	b := newTurnBudget(1)
 	for range 50 {
-		for _, read := range []string{"node_read", "node_find", "recall", "list_skills", "since", "task_status", "page_format"} {
+		for _, read := range []string{"node_read", "node_find", "intentions", "list_skills", "since", "task_status", "page_format"} {
 			if why := refusal(b.charge(read, map[string]any{"id": "n1"})); why != "" {
 				t.Fatalf("%s refused: %s", read, why)
 			}
@@ -137,13 +135,13 @@ func TestTurnBudget(t *testing.T) {
 		t.Fatalf("a skill refused: %s", why)
 	}
 	refusedFor(t, refusal(b.charge("write_skill", map[string]any{"name": "jour"})))
-	for _, name := range []string{"try_monitor", "write_monitor", "remember", "node_set", "notify"} {
+	for _, name := range []string{"try_monitor", "write_monitor", "intend", "node_set", "notify"} {
 		if why := refusal(b.charge(name, nil)); why != "" {
 			t.Fatalf("%s refused: %s", name, why)
 		}
 	}
 	// Six changes made: the seventh, of any kind, catalog included, is work.
-	refusedFor(t, refusal(b.charge("remember", nil)))
+	refusedFor(t, refusal(b.charge("intend", nil)))
 	refusedFor(t, refusal(b.chargeCatalog()))
 	// The way out is always open.
 	for _, name := range []string{"run_task", "node_show", "turn_home", "answer_task", "stop_task", "withdraw_proposal", "node_settle"} {
@@ -196,7 +194,7 @@ func TestTurnBudget(t *testing.T) {
 // A delivery's budget is scaled by the messages it brings: three tasks'
 // ends delivered together may update their three nodes.
 func TestBrainDeliveryScalesBudget(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	ctx := context.Background()
 	if err := tendBrain(ctx, c); err != nil {

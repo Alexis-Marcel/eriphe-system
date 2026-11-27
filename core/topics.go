@@ -15,9 +15,8 @@ import (
 //     aboutKey (about_key.go); a ref that names one record (task:t-1,
 //     skill:x) is kept as written.
 //   - knownTopics are the abouts in use: the rules', the notifications' of
-//     the last 90 days, the live nodes and the memory's entities
-//     (person:, client:…), so a notification about a matter uses its
-//     node, as its memories do.
+//     the last 90 days and the live nodes, so a notification about a
+//     matter uses its node.
 //   - reuseTopic maps a new label onto a known one of the same word family
 //     (topic:facturation → topic:facture), and the tools list the known
 //     topics to the brain when it invents one.
@@ -41,7 +40,6 @@ type topicView struct {
 	Ref  string `json:"ref"`
 	Uses int    `json:"notifications_90_days,omitempty"`
 	Rule bool   `json:"has_rule,omitempty"`
-	From string `json:"from,omitempty"` // memory: what memories are about
 }
 
 // knownTopics are the refs in use, the ruled and the most used first.
@@ -81,20 +79,6 @@ func (c *core) knownTopics() []topicView {
 	}
 	for _, x := range c.activeNodes(packNodes) {
 		add(nodeRef(x.ID))
-	}
-	if c.mem != nil {
-		if rows, err := c.mem.db.Query(`SELECT DISTINCT about FROM memories WHERE status = 'active' AND
-			(about LIKE 'node:%' OR about LIKE 'project:%' OR about LIKE 'person:%' OR about LIKE 'client:%')`); err == nil {
-			for rows.Next() {
-				var s string
-				if rows.Scan(&s) == nil {
-					if t := add(s); t != nil && t.From == "" && !t.Rule && t.Uses == 0 {
-						t.From = "memory"
-					}
-				}
-			}
-			rows.Close()
-		}
 	}
 	out := make([]topicView, 0, len(byRef))
 	for _, t := range byRef {

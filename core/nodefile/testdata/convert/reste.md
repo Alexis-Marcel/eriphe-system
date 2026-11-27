@@ -1,5 +1,5 @@
 ---
-format: 3
+format: 4
 id: r3s8t1e6
 title: Ce qui ne se convertit pas
 created: 2026-11-15T09:00:00+01:00

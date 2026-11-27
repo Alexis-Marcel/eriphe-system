@@ -166,9 +166,6 @@ func TestLinksIntoTheGraph(t *testing.T) {
 	if n := c.channelCardNote(convoCard{ID: 1}); n.URL != "/espace" {
 		t.Errorf("card note without message: %s", n.URL)
 	}
-	if got := c.learnedHref("msg:" + itoa(int(onNode))); got != "/espace?open=node-k3m9" {
-		t.Errorf("evidence: %s", got)
-	}
 	if n := (notifCard{notification: &notification{Msg: 3, About: "node:k3m9"}}); n.MsgAt() != "/espace?open=node-k3m9" {
 		t.Errorf("a notification's message: %s", n.MsgAt())
 	}

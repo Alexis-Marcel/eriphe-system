@@ -589,25 +589,3 @@ func (r *checkedReceipt) verdict() string {
 	}
 	return strings.Join(parts, " ; ")
 }
-
-// memoryText is the receipt as the night's extraction reads it
-// (memory_extract.go): the task's own words, external, with what
-// eriphe-core verified marked as such.
-func (r *checkedReceipt) memoryText() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "status %s", r.Status)
-	if r.Summary != "" {
-		fmt.Fprintf(&b, "; summary: %s", r.Summary)
-	}
-	for _, f := range []struct {
-		label string
-		items []string
-	}{{"changed", r.Changed}, {"verified by eriphe-core's checks", r.Verified}, {"claimed, not checked", r.Unchecked},
-		{"not verified", r.NotVerified}, {"decisions", r.Decisions}, {"waits for approval", r.NeedsApproval},
-		{"risks", r.Risks}, {"lessons it proposes", r.Lessons}, {"mismatches eriphe-core found", mismatchTexts(r.Mismatches, "en")}} {
-		if len(f.items) > 0 {
-			fmt.Fprintf(&b, "; %s: %s", f.label, strings.Join(f.items, " | "))
-		}
-	}
-	return b.String()
-}

@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "perf:graph": "node scripts/perf-graph.mjs"
+    "perf:graph": "node scripts/perf-graph.mjs",
+    "bench:layout": "node bench/layout.ts"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",

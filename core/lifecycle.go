@@ -125,12 +125,6 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 				spec.AlwaysLoad = append(spec.AlwaysLoad, nodesServer)
 				spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), taskNodesTools()...)
 			}
-			// Its memory, read through its device (situations.go).
-			if !isRoleKind(a.Kind) && c.mem != nil {
-				spec.Servers = append(spec.Servers, taskMemServer)
-				spec.AlwaysLoad = append(spec.AlwaysLoad, taskMemServer)
-				spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), taskMemTools()...)
-			}
 			// An assistant's task: what its role's card gives it (assistant_controller.go).
 			if isRoleKind(a.Kind) {
 				if err := c.fetchAssistant(&TaskRow{ID: a.ID, Kind: a.Kind}, &spec); err != nil {

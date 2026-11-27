@@ -1,10 +1,8 @@
 package main
 
 import (
-	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"strings"
 	"testing"
 )
@@ -103,114 +101,12 @@ func TestFirstRunNotOnExistingInstall(t *testing.T) {
 	}
 }
 
-// The Memory page shows what the assistant knows about the user, the
-// pinned first and marked, and does the interview again on demand.
-func TestMemoryAboutAndInterview(t *testing.T) {
-	keepName(t)
-	tw, csrf := newMemoryWeb(t)
-	c := tw.c
-	if err := c.editAssistant(brainAssistant, assistantEdit{Agent: "small", DisplayName: "Jarvis", SetName: true}); err != nil {
-		t.Fatal(err)
-	}
-	m := c.mem
-	pinned := mustAdd(t, m, &Memory{Kind: kindProfile, About: "owner", Text: "Sam est menuisier à son compte"})
-	plain := mustAdd(t, m, &Memory{Kind: kindFact, About: "owner", Text: "Sam habite 1 rue de l'Exemple"})
-	mustAdd(t, m, &Memory{Kind: kindPerson, About: "person:lea", Text: "Léa, une cliente de Sam"})
-	mustAdd(t, m, &Memory{Kind: kindEpisode, About: "owner", Text: "Sam a fini un chantier"})
-
-	about := func(body string) string {
-		i := strings.Index(body, `id="mem-about"`)
-		j := strings.Index(body, `id="mem-stats"`)
-		if i < 0 || j < i {
-			t.Fatalf("no section: %s", body)
-		}
-		return body[i:j]
-	}
-	_, body, _ := tw.do("GET", "/memory", nil, nil)
-	sec := about(body)
-	// The page is titled so, in the settings; the section is the essentials.
-	if !strings.Contains(body, "<h2>Ce que Jarvis sait de toi</h2>") {
-		t.Error("the page lacks its title")
-	}
-	for _, want := range []string{"L&#39;essentiel", "Faire l&#39;interview", `hx-post="/memory/interview"`,
-		"Sam est menuisier à son compte", "Sam habite 1 rue de l&#39;Exemple", `hx-post="/memory/` + itoa(int(plain.ID)) + `/pin"`,
-		`hx-post="/memory/` + itoa(int(pinned.ID)) + `/forget"`, `hx-get="/memory/` + itoa(int(plain.ID)) + `/edit" hx-target="#mem-` + itoa(int(plain.ID)) + `"`} {
-		if !strings.Contains(sec, want) {
-			t.Errorf("the section lacks %q", want)
-		}
-	}
-	if strings.Count(sec, `class="pinned"`) != 1 || strings.Index(sec, "menuisier") > strings.Index(sec, "rue de l") {
-		t.Error("the pinned one is not first, or not alone marked")
-	}
-	if strings.Contains(sec, "Léa") || strings.Contains(sec, "chantier") {
-		t.Error("the section shows what is not about the user")
-	}
-	// Each memory once on the page: the list below leaves out the section's,
-	// which a search or a filter still finds.
-	for _, x := range []*Memory{pinned, plain} {
-		if n := strings.Count(body, `id="mem-`+itoa(int(x.ID))+`"`); n != 1 {
-			t.Errorf("memory %d shown %d times", x.ID, n)
-		}
-	}
-	ids := map[string]int{}
-	for _, id := range regexp.MustCompile(`id="mem-\d+"`).FindAllString(body, -1) {
-		if ids[id]++; ids[id] > 1 {
-			t.Errorf("%s twice on the page", id)
-		}
-	}
-	if len(ids) != 4 { // every memory, each once
-		t.Errorf("ids on the page: %v", ids)
-	}
-	for _, path := range []string{"/memory?q=menuisier", "/memory?about=owner", "/memory?kind=profile"} {
-		_, b, _ := tw.do("GET", path, nil, nil)
-		list := b[strings.Index(b, `id="mem-list"`):]
-		if !strings.Contains(list, `id="mem-`+itoa(int(pinned.ID))+`"`) {
-			t.Errorf("%s: the list does not find the section's memory", path)
-		}
-	}
-	if _, body, _ := tw.do("GET", "/memory?view=profile", nil, nil); strings.Contains(body, `id="mem-about"`) {
-		t.Error("the section on another view")
-	}
-	tw.hc.Jar.SetCookies(mustURL(tw.srv.URL), []*http.Cookie{{Name: "lang", Value: "en"}})
-	_, body, _ = tw.do("GET", "/memory", nil, nil)
-	if sec := about(body); !strings.Contains(body, "<h2>What Jarvis knows about you</h2>") || !strings.Contains(sec, "The essentials") || !strings.Contains(sec, "Do the interview") {
-		t.Errorf("English: %s", sec)
-	}
-
-	// The button sends the first-run turn and opens the conversation.
-	before := len(firstRunTurns(t, c))
-	_, _, h := tw.post("/memory/interview", nil, csrf)
-	if h.Get("HX-Redirect") != "/" || len(firstRunTurns(t, c)) != before+1 {
-		t.Fatalf("interview: %q, %d turns", h.Get("HX-Redirect"), len(firstRunTurns(t, c)))
-	}
-}
-
-// Nothing known yet: the section says so, and offers the interview.
-func TestMemoryAboutEmpty(t *testing.T) {
-	keepName(t)
-	tw, _ := newMemoryWeb(t)
-	_, body, _ := tw.do("GET", "/memory", nil, nil)
-	if !strings.Contains(body, "Ce qu&#39;Eriphe sait de toi") || !strings.Contains(body, "Rien encore. Une courte interview") ||
-		!strings.Contains(body, `hx-post="/memory/interview"`) {
-		t.Fatalf("empty section: %s", body)
-	}
-}
-
-// Without a brain, no interview to ask for.
-func TestMemoryInterviewNoBrain(t *testing.T) {
-	tw, _, csrf := catalogWeb(t, func(cfg *Config) { noAgents(cfg); cfg.Brain = &BrainConfig{} })
-	tw.do("POST", "/welcome/skip", url.Values{"csrf": {csrf}}, nil)
-	if code, _, _ := tw.post("/memory/interview", nil, csrf); code != http.StatusConflict {
-		t.Fatalf("interview without an agent: %d", code)
-	}
-}
-
 // The standing instructions hold the interview.
 func TestBrainPromptFirstRun(t *testing.T) {
 	raw, _ := os.ReadFile("brain-prompt.md")
 	p := string(raw)
 	for _, want := range []string{"## Premier lancement", "· premier lancement]", "refais-moi l'interview", "/settings/devices#connect",
-		"Une question à la fois", "court résumé", "tu n'insistes pas", "À propos de moi", "update_memory pinned", "`about` `owner`"} {
+		"Une question à la fois", "court résumé", "tu n'insistes pas", "À propos de moi", "« Faire connaissance »", "dans le nœud de leur sujet"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("the prompt lacks %q", want)
 		}

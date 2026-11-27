@@ -452,7 +452,7 @@ export type Note = { id: number; body: Record<string, string>; url: string };
 export type ProposalView = {
   ref: string;
   card: number;
-  // kind is what the proposal is (memory, intention, access…): what its
+  // kind is what the proposal is (intention, access, rule…): what its
   // card asks depends on it.
   kind?: string;
   state: string; // pending, approved, rejected, gone

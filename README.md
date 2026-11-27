@@ -4,13 +4,13 @@ Eriphe is a self-hosted personal assistant: one assistant, always on at home, th
 a web workspace, a terminal or by voice, which remembers, which helps you with what is on the devices
 you connect to it, and which hands longer work to agents running on them.
 
-- **Sovereign.** eriphe-core, its memory, its credentials and the tasks' files live on machines you
+- **Sovereign.** eriphe-core, its graph, its credentials and the tasks' files live on machines you
   own. Nothing goes to a third party except the AI provider you choose and the services you connect.
 - **Any agent as the brain.** Eriphe is a system, not a model. Its brain and its workers are
   existing coding agents (Claude Code, Codex, OpenCode or any ACP agent), signed in with your own
   account or API key, and swappable without changing the rest.
-- **Everything that lasts is outside the brain**, in open formats: MCP for tools, SQLite for state
-  and memory, markdown for the brain's instructions.
+- **Everything that lasts is outside the brain**, in open formats: MCP for tools, SQLite for state,
+  markdown for the graph's nodes and the brain's instructions.
 
 ## Get started
 
@@ -56,9 +56,8 @@ built-in instructions are in French.
   shape it by talking to Eriphe in one console; a list on a phone
   ([docs/workspace.md](docs/workspace.md), [the node format](docs/node-format.md)).
 - **The terminal** (`eriphe`): the same conversation as the workspace's console, from a shell.
-- **Memory**: people, facts, preferences and a nightly journal, kept by eriphe-core in SQLite and
-  recalled by the brain, with a readable copy in markdown (`/data/memoire/`); what it learns from
-  outside content is only proposed until you approve it.
+- **The graph is the memory**: what Eriphe knows of you, your people, your preferences and your
+  decisions is written in the nodes of their subjects, where every task on that subject reads it.
 - **Devices you connect**: connecting a computer gives Eriphe access to it, so it can help with what
   is there: it sees only the folders you open to it, reads them freely, and needs your go-ahead to
   act on what matters. Each device's card says what Eriphe sees and can do there, an access log
@@ -151,9 +150,9 @@ Eriphe is designed like a small Kubernetes:
 - **Policy in code.** Every tool call and permission request goes through eriphe-core's policy
   (rules, user approval), not through the brain's judgement.
 - **Taint.** A turn in which the brain read outside content (mail, web page, tool result) is
-  tainted: it cannot approve permissions or write trusted memory on its own; those go back to you.
+  tainted: it cannot approve permissions or make a trusted reminder on its own; those go back to you.
 
-Details: core/README.md (Security model, Permission policy, Memory), device/README.md (Egress), and
+Details: core/README.md (Security model, Permission policy, Intentions), device/README.md (Egress), and
 [deploy/README.md](deploy/README.md). To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## AI accounts and providers' terms
@@ -166,7 +165,7 @@ and is responsible for using it within their provider's terms.
 
 | Path | What |
 |---|---|
-| `core/` | eriphe-core: control plane, brain, workspace, API, memory |
+| `core/` | eriphe-core: control plane, brain, graph, workspace, API |
 | `device/` | eriphe-device: runs tasks as containers on a machine |
 | `worker/` | the images of tasks: `eriphe-base`, which task containers start from, and one image per agent the device injects into it |
 | `install/` | `install.sh` (Linux, macOS), `install.ps1` (Windows), and `eriphe-launcher`, the one-container install (`ghcr.io/alexis-marcel/eriphe`) |

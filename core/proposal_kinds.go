@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 )
 
 // The kinds of proposals, one table: what differs from one kind to another
@@ -40,7 +39,7 @@ type proposalKind struct {
 }
 
 // proposalKinds names the kinds in the order what waits is listed.
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardSetting, cardTaskStart, cardUnlearn, cardAccess, cardSkill, cardCalls, cardMonitor}
+var proposalKinds = []string{cardIntention, cardRule, cardSetting, cardTaskStart, cardAccess, cardSkill, cardCalls, cardMonitor}
 
 // kindsOf is the table, by kind; filled in init, since its rows call the
 // functions that read it.
@@ -48,28 +47,17 @@ var kindsOf map[string]proposalKind
 
 func init() {
 	kindsOf = map[string]proposalKind{
-		cardMemory: {read: (*core).memoryProposal, waiting: (*core).proposedMemories, outcome: told("le souvenir est retenu", "il est oublié"),
-			decides: func(c *core, _ context.Context, id int64, yes bool) error {
-				if yes {
-					_, err := c.mem.approve(id, "owner")
-					return err
-				}
-				return c.mem.forget(id, "owner", "rejected")
-			},
-			withdraw: func(c *core, _ context.Context, id int64) error {
-				return c.mem.forget(id, "eriphe", "withdrawn: it no longer waits")
-			}},
 		cardIntention: {read: (*core).intentionProposal, waiting: (*core).proposedIntentions, outcome: told("l'intention est ouverte", "elle est annulée"),
 			decides: func(c *core, _ context.Context, id int64, yes bool) error {
 				ch, action := intentionChange{State: intentOpen}, "approve"
 				if !yes {
 					ch, action = intentionChange{State: intentCancelled}, "reject"
 				}
-				_, err := c.mem.changeIntention(id, ch, "owner", action)
+				_, err := c.intents.changeIntention(id, ch, "owner", action)
 				return err
 			},
 			withdraw: func(c *core, _ context.Context, id int64) error { // taken back, not refused by the user
-				_, err := c.mem.changeIntention(id, intentionChange{State: intentCancelled}, "eriphe", "withdrawn")
+				_, err := c.intents.changeIntention(id, intentionChange{State: intentCancelled}, "eriphe", "withdrawn")
 				return err
 			}},
 		cardRule: {read: (*core).ruleProposal, waiting: (*core).proposedRules, outcome: told("la règle est en vigueur", "elle est écartée"),
@@ -84,18 +72,6 @@ func init() {
 			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideSetting(id, yes) }},
 		cardTaskStart: {read: (*core).taskStartProposal, waiting: (*core).proposedStarts, outcome: (*core).taskStartTold, // task_start.go
 			decides: func(c *core, _ context.Context, id int64, yes bool) error { return c.decideTaskStart(id, yes) }},
-		cardUnlearn: {read: (*core).unlearnProposal, waiting: (*core).proposedUndos, outcome: told("l'apprentissage est défait", "il est gardé"),
-			decides: func(c *core, _ context.Context, id int64, yes bool) error {
-				e, err := c.mem.learning(id)
-				if err != nil {
-					return errCardDecided
-				}
-				if yes {
-					_, err := c.unlearn(id, "owner", e.UndoWhy, nil)
-					return err
-				}
-				return c.mem.setUndo(id, undoRejected, e.UndoWhy)
-			}},
 		cardAccess: {read: (*core).accessProposal, waiting: (*core).proposedAccess, decides: (*core).decideAccess, outcome: (*core).accessTold, // access_card.go
 			withdraw: func(c *core, ctx context.Context, id int64) error {
 				a, err := c.accessAskOf(id)
@@ -141,56 +117,15 @@ func init() {
 // (resolveByText).
 const byText = "text"
 
-// The kinds whose records are read here: a memory, an intention, a
-// notification rule, a setting, an undo of the learning journal.
-
-func (c *core) memoryProposal(p proposal) proposal {
-	if c.mem == nil {
-		return p
-	}
-	x, err := c.mem.memory(p.ID)
-	if err != nil {
-		return p
-	}
-	p.Pending, p.Extracted = x.Status == memProposed, x.SourceKind == srcExtraction
-	p.Tainted = externalWhy(x.Trust, x.Flags, x.SourceRef)
-	switch x.Status {
-	case memDeleted:
-		p.Outcome = cardRejected
-	case memActive, memArchived:
-		p.Outcome = cardApproved
-	}
-	p.text = func(string) string { return x.Text }
-	return p
-}
-
-// proposedMemories are the memories that wait for a card: the
-// extraction's get none, they wait in À valider and expire undecided
-// (memory_extract.go).
-func (c *core) proposedMemories() []int64 {
-	if c.mem == nil {
-		return nil
-	}
-	xs, err := c.mem.list(`status = 'proposed' AND source_kind != ?`, []any{srcExtraction}, `recorded_at, id`, 200)
-	if err != nil {
-		return nil
-	}
-	var out []int64
-	for _, x := range xs {
-		out = append(out, x.ID)
-	}
-	return out
-}
+// The kinds whose records are read here: an intention, a notification
+// rule, a setting.
 
 func (c *core) intentionProposal(p proposal) proposal {
-	if c.mem == nil {
-		return p
-	}
-	x, err := c.mem.intention(p.ID)
+	x, err := c.intents.intention(p.ID)
 	if err != nil {
 		return p
 	}
-	p.Pending, p.Extracted = x.State == intentProposed, x.SourceKind == srcExtraction
+	p.Pending = x.State == intentProposed
 	p.Tainted = externalWhy(x.Trust, x.Flags, x.SourceRef)
 	p.Outcome = cardApproved
 	if x.State == intentCancelled {
@@ -206,10 +141,7 @@ func (c *core) intentionProposal(p proposal) proposal {
 }
 
 func (c *core) proposedIntentions() []int64 {
-	if c.mem == nil {
-		return nil
-	}
-	xs, err := c.mem.intentions(intentProposed)
+	xs, err := c.intents.intentions(intentProposed)
 	if err != nil {
 		return nil
 	}
@@ -259,45 +191,6 @@ func (c *core) proposedSettings() []int64 {
 
 func (c *core) proposedSkills() []int64 {
 	return c.store.ids(`SELECT rowid FROM skills WHERE pending != '' AND source = ? ORDER BY rowid`, skillFromEriphe)
-}
-
-func (c *core) unlearnProposal(p proposal) proposal {
-	if c.mem == nil {
-		return p
-	}
-	e, err := c.mem.learning(p.ID)
-	if err != nil {
-		return p
-	}
-	p.Pending, p.Why = e.Undo == undoProposed && e.Status != learnReverted, e.UndoWhy
-	p.Outcome = cardApproved
-	if e.Undo == undoRejected {
-		p.Outcome = cardRejected
-	}
-	if e.Trust == trustExternal {
-		p.Tainted = "external:" + e.Target()
-	}
-	p.text = func(lang string) string { return fmt.Sprintf(tr(lang, "card.unlearn"), learnedSummary(e, lang)) }
-	return p
-}
-
-func (c *core) proposedUndos() []int64 {
-	if c.mem == nil {
-		return nil
-	}
-	rows, err := c.mem.db.Query(`SELECT id FROM learning_log WHERE undo = ? AND status != ? ORDER BY id`, undoProposed, learnReverted)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	var out []int64
-	for rows.Next() {
-		var id int64
-		if rows.Scan(&id) == nil {
-			out = append(out, id)
-		}
-	}
-	return out
 }
 
 // ids reads a column of ids.

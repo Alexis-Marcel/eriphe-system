@@ -99,16 +99,13 @@ func TestAboutFilter(t *testing.T) {
 }
 
 // The same matter, written another way by each tool, is one about in
-// each store: its memory, intention, rule and notification are found
-// again by it.
+// each store: its intention, rule and notification are found again by
+// it.
 func TestOneAboutEverywhere(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	const said, key = "Projet : Site Web", "project:site-web"
 	seq := ownerSays(c, "Le site web passe en ligne vendredi, préviens-moi de tout ce qui le concerne")
-	if _, err := c.brainRemember(rememberIn{Text: "Le site web passe en ligne vendredi.", Kind: kindFact, About: said, SourceRef: ref(seq)}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c.brainIntend(intendIn{Text: "Relire la page d'accueil.", About: "projet:site web", OwedTo: "Personne:Sam", SourceRef: ref(seq)}); err != nil {
+	if _, err := c.brainIntend(intendIn{Text: "Relire la page d'accueil.", About: said, OwedTo: "Personne:Sam", SourceRef: ref(seq)}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.brainRule(ruleIn{Match: "projets:Site Web", Floor: 5, Why: "Demandé.", SourceRef: ref(seq)}); err != nil {
@@ -121,12 +118,8 @@ func TestOneAboutEverywhere(t *testing.T) {
 	if out["about"] != key {
 		t.Errorf("notification under %v", out["about"])
 	}
-	xs, err := c.mem.recall(recallQuery{About: "Projet:site web"})
-	if err != nil || len(xs) != 1 || xs[0].About != key {
-		t.Errorf("recall by the key: %+v %v", xs, err)
-	}
 	var subj, owed string
-	c.mem.db.QueryRow(`SELECT about, owed_to FROM intentions`).Scan(&subj, &owed)
+	c.intents.db.QueryRow(`SELECT about, owed_to FROM intentions`).Scan(&subj, &owed)
 	if subj != key || owed != "person:sam" {
 		t.Errorf("intention under %q, owed to %q", subj, owed)
 	}

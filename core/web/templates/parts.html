@@ -5,7 +5,6 @@
 {{define "i-logout"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/></svg>{{end}}
 {{define "i-send"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>{{end}}
 {{define "i-check"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>{{end}}
-{{define "i-memory"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 4.5a3 3 0 0 0-3 3 3 3 0 0 0-2 5.2A3 3 0 0 0 7 17.5a2.5 2.5 0 0 0 5 .5V6.5a2 2 0 0 0-2.5-2zM14.5 4.5a3 3 0 0 1 3 3 3 3 0 0 1 2 5.2 3 3 0 0 1-2.5 4.8 2.5 2.5 0 0 1-5 .5"/><path d="M12 9.5h2M12 13.5h2.5"/></svg>{{end}}
 {{define "i-x"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>{{end}}
 {{define "i-folder"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h3.6l2 2.2H18a2.5 2.5 0 0 1 2.5 2.5v7.8A2.5 2.5 0 0 1 18 20H6a2.5 2.5 0 0 1-2.5-2.5z"/></svg>{{end}}
 {{define "i-server"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="7" rx="2"/><rect x="3.5" y="13" width="17" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>{{end}}
@@ -241,8 +240,8 @@
 {{define "new-dot"}}<b class="new-dot" title="{{t "update.available"}}"><span class="sr-only">{{t "update.available"}}</span></b>{{end}}
 
 {{/* The settings' own navigation, in four groups: only what is set; what
-one looks back on is here too: the Journal and « À valider » (activity.html). Every page of the settings
-has it, the memory's too. A dot marks an entry that needs a look:
+one looks back on is here too: the intentions, the Journal and « À valider » (activity.html).
+Every page of the settings has it. A dot marks an entry that needs a look:
 an update (Devices), a tool in error (Tools), a key refused (Agents).
 On a wide screen it is the sidebar, under the way back to the workspace (/espace).
 On a phone it is the first level alone (/settings, View "index"): a grouped
@@ -257,11 +256,9 @@ The ways back follow the pages, never the browser's history. */}}
   </div>
   <div class="nav-group" role="group" aria-labelledby="sg-assistant">
     <h2 class="nav-group-title" id="sg-assistant">{{t "settings.g.assistant"}}</h2>
-    <a href="/memory" {{if eq .Tab "memory"}}aria-current="page"{{end}}>{{template "i-memory"}}<span>{{t "nav.memory"}}</span>{{template "chev"}}</a>
     <a href="/settings/agents" {{if eq .Tab "agents"}}aria-current="page"{{end}}>{{template "i-bot"}}<span>{{t "settings.agents"}}</span>{{if .Attn.Agents}}{{template "attn-dot"}}{{end}}{{template "chev"}}</a>
     <a href="/settings/skills" {{if eq .Tab "skills"}}aria-current="page"{{end}}>{{template "i-skill"}}<span>{{t "settings.skills"}}</span>{{template "chev"}}</a>
     <a href="/settings/monitors" {{if eq .Tab "monitors"}}aria-current="page"{{end}}>{{template "i-monitor"}}<span>{{t "settings.monitors"}}</span>{{template "chev"}}</a>
-    <a href="/settings/learned" {{if eq .Tab "learned"}}aria-current="page"{{end}}>{{template "i-history"}}<span>{{t "learned.title"}}</span>{{template "chev"}}</a>
   </div>
   <div class="nav-group" role="group" aria-labelledby="sg-connections">
     <h2 class="nav-group-title" id="sg-connections">{{t "settings.g.connections"}}</h2>
@@ -277,6 +274,7 @@ The ways back follow the pages, never the browser's history. */}}
   <div class="nav-group" role="group" aria-labelledby="sg-space">
     <h2 class="nav-group-title" id="sg-space">{{t "settings.g.space"}}</h2>
     <a href="/settings/account" {{if eq .Tab "account"}}aria-current="page"{{end}}>{{template "i-user"}}<span>{{t "settings.accountnav"}}</span>{{template "chev"}}</a>
+    <a href="/settings/intentions" {{if eq .Tab "intentions"}}aria-current="page"{{end}}>{{template "i-check"}}<span>{{t "intent.title"}}</span>{{template "chev"}}</a>
     <a href="/settings/journal" {{if eq .Tab "journal"}}aria-current="page"{{end}}>{{template "i-history"}}<span>{{t "settings.journal"}}</span>{{template "chev"}}</a>
     <a href="/settings/approve" {{if eq .Tab "approve"}}aria-current="page"{{end}}>{{template "i-shield"}}<span>{{t "activity.approve"}}</span>{{if .Waiting}}<span class="nav-count">{{.Waiting}}</span>{{end}}{{template "chev"}}</a>
   </div>

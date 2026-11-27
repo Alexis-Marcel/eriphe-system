@@ -102,14 +102,3 @@ func TestTaskPromptsInUserLang(t *testing.T) {
 		t.Fatalf("skill run spec %+v", s)
 	}
 }
-
-// A learned entry's reason, when code wrote it, is in the page's language.
-func TestLearnedReasonInLang(t *testing.T) {
-	reason := templateFuncs("fr")["reason"].(func(string) string)
-	if got := reason("approved"); got != "approuvé" {
-		t.Fatalf("fr %q", got)
-	}
-	if got := reason("Sam asked for it"); got != "Sam asked for it" {
-		t.Fatalf("free text %q", got)
-	}
-}

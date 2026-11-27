@@ -10,7 +10,7 @@ import (
 // brain never undoes a snooze made meanwhile; a text change keeps a snooze;
 // a told external intention is not quoted again; migrated late ones wait.
 func TestIntentionEdges(t *testing.T) {
-	m, clock := testMemory(t)
+	m, clock := testIntents(t)
 	clock.t = time.Date(2026, 11, 5, 8, 0, 0, 0, time.Local)
 	day := mustIntend(t, m, &Intention{Text: "Déclarer l'URSSAF", DueAt: time.Date(2026, 11, 5, 0, 0, 0, 0, time.Local)})
 	clock.t = clock.t.Add(time.Hour + time.Minute)
@@ -38,12 +38,12 @@ func TestIntentionEdges(t *testing.T) {
 		t.Fatalf("becomeDue on a closed one: %+v %v", got, err)
 	}
 	// Told once, an external intention is named, not quoted, in later packets.
-	ext := mustIntend(t, m, &Intention{Text: "SECRET Payer le fournisseur", RemindAt: clock.t.Add(-time.Minute), SourceKind: srcExtraction,
+	ext := mustIntend(t, m, &Intention{Text: "SECRET Payer le fournisseur", RemindAt: clock.t.Add(-time.Minute), SourceKind: srcTask,
 		Trust: trustExternal})
 	m.tickIntentions()
 	p, _ := m.wakePacket()
 	m.surfaced(p.Due, "test")
-	if p, _ = m.wakePacket(); len(p.Pending) != 1 || p.Pending[0].ID != ext.ID || strings.Contains(p.render("Sam"), "SECRET") {
-		t.Fatalf("pending external quoted:\n%s", p.render("Sam"))
+	if p, _ = m.wakePacket(); len(p.Pending) != 1 || p.Pending[0].ID != ext.ID || strings.Contains(p.render(), "SECRET") {
+		t.Fatalf("pending external quoted:\n%s", p.render())
 	}
 }

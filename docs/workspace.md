@@ -250,9 +250,8 @@ skill may use or when it runs, and nothing changes before you say yes.
 ## Shape it by talking
 
 "No more newsletters from news.example.org", "show me less of this" are **preferences**. Eriphe
-remembers them as memories about you, and whatever watches your mail or your agenda reads them
-before noting what it found. You manage them like any memory: ask Eriphe what it remembers, or to
-forget one. There is no rule to maintain: the workspace's only settings are how the graph moves
+writes them in the node of their subject (your mail, your agenda), where whatever watches it reads
+them before noting what it found. You change them like any page: ask Eriphe, or edit the node. There is no rule to maintain: the workspace's only settings are how the graph moves
 (see Move things).
 
 ## Proposals
@@ -311,7 +310,7 @@ forget one. There is no rule to maintain: the workspace's only settings are how 
 The workspace is the only place to talk to Eriphe on the web: there is no separate conversation
 page, and no history under the bar: the subject's page is the conversation, and Eriphe keeps it
 saying where things stand. The tasks at work, and how reliable they were lately, are in Settings → Journal; each task has its own
-page there, with its trace, **Stop**, and the answer it waits for. The settings and the memory have
+page there, with its trace, **Stop**, and the answer it waits for. The settings have
 no top bar: **Workspace**, at the top of their menu, leads back.
 
 While the workspace is open in front of you, Eriphe knows you are there: a notification shows as a
@@ -348,15 +347,9 @@ On the machine that runs eriphe-core, in its data folder (`/data` in the contain
 - `nodes.db`: the graph's index, only made from the files: delete it and the next start makes it
   again, nothing lost. What Eriphe keeps beside a page (the notes on a list's items, its cards, the
   values its live blocks last read) is in `core.db`, not in the index.
-- `memoire/`: a **readable copy of what Eriphe knows about you** (your profile, the people, the
-  facts, the decisions, the journal), plain markdown files written by Eriphe's code after every
-  change. It is not a page of the graph and not in git, so when you ask Eriphe to forget something,
-  it leaves this folder at once. You can read it, or open it in a notes app; changes made there are
-  written over, since the memory itself stays the truth.
-- Every night, the backup folder (`memory-backups/` next to the memory, or `memory.backup_dir` in
+- Every night, the backup folder (`memory-backups/` next to `core.db`, or `memory.backup_dir` in
   `core.json`) gets `nodes-<day>.bundle` (the graph's history, which `git clone` reads),
-  `nodes-<day>.trace.tar` (the traces), `nodes-<day>.db`, `memory-<day>.db` and
-  `memoire-<day>.tar.gz` (the readable copy), kept 14 days by default.
+  `nodes-<day>.trace.tar` (the traces) and `nodes-<day>.db`, kept 14 days by default.
 
 ## Privacy and safety
 

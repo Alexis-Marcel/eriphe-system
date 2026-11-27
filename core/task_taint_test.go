@@ -30,7 +30,7 @@ func resultTaint(t *testing.T, c *core, id string) string {
 // trusted, the web, or its start on a tainted turn; not a tool marked
 // trusted, nor what it did without reading anything from outside.
 func TestTaskResultTaint(t *testing.T) {
-	c, _ := testMemoryCore(t) // "vault" is trusted
+	c, _ := testIntentsCore(t) // "vault" is trusted
 
 	workerTask(t, c, "t-clean")
 	c.calledCatalog("t-clean", "vault", "read_note")
@@ -75,7 +75,7 @@ func TestTaskResultTaint(t *testing.T) {
 
 // The other tasks' calls never taint the brain's turn: they taint the task.
 func TestTaskCallTaintsTheTaskNotTheTurn(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	workerTask(t, c, "t-1")
 	ownerSays(c, "Lance-la")
 	c.calledCatalog("t-1", "mail", "search")
