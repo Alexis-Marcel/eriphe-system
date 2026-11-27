@@ -671,9 +671,9 @@ export function Graph({ live }: { live: boolean }) {
   };
   const onDown = (e: PtrEvent) => {
     if ((e.target as HTMLElement).closest("button, .pg")) return;
-    // A disc pressed: held as its bubble would be; let go where it was, it
-    // opens.
-    // A small one (GRAB): the view pans, a press without a move opens it.
+    // A disc pressed: held as its bubble would be, let go where it was it
+    // opens; a small one (GRAB): the view pans, a press without a move
+    // opens it.
     const d = discAt(e);
     const S = sceneNow.current, i = d ? S?.index.get(d) : undefined;
     if (d && S && i !== undefined && drawnRadius(S.items[i].r, camK.get()) * camK.get() >= GRAB) {
