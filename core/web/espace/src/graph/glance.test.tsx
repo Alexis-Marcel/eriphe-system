@@ -61,11 +61,9 @@ describe("which nodes are tiles", () => {
 });
 
 describe("the morph", () => {
-  it("takes the core from its circle to the tile's rounded rectangle, and back; at once with less motion", () => {
-    expect(coreShape(TILE, 35, false).to).toEqual({ width: 148, height: 60, borderRadius: 14 });
-    expect(coreShape(undefined, 35, false).to).toEqual({ width: 70, height: 70, borderRadius: 35 });
-    expect(coreShape(TILE, 35, false).move).toMatchObject({ type: "spring" });
-    expect(coreShape(TILE, 35, true).move).toEqual({ duration: 0 });
+  it("takes the core from its circle to the tile's rounded rectangle, and back", () => {
+    expect(coreShape(TILE, 35)).toEqual({ width: 148, height: 60, borderRadius: 14 });
+    expect(coreShape(undefined, 35)).toEqual({ width: 70, height: 70, borderRadius: 35 });
   });
 });
 

@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as PtrEvent, type ReactNode } from "react";
-import { AnimatePresence, frame, motion, useMotionValueEvent, useReducedMotion, useSpring, type MotionValue } from "motion/react";
+import { AnimatePresence, frame, motion, useMotionValueEvent, useSpring, type MotionValue } from "motion/react";
 import type { GraphNode } from "../data/api";
 import { closePage, depthOf, openPage, step, store, subtree, talkTo, useGraph } from "../data/store";
 import { useWords, type Lang } from "../i18n";
@@ -38,7 +38,6 @@ import { UnaskedMark } from "./Title";
 // the camera moving draws the bubbles that come, not the whole graph. A
 // disc is hit as a bubble is: hovered, pressed, dragged, clicked.
 
-const ease = [0.2, 0.7, 0.2, 1] as const;
 const PAGE_W = 700, PAGE_W_MANY = 620, PAGE_H = 520, PAGE_MAX = 640;
 
 // sim is the graph's simulation, one for the page's life: it outlives the
@@ -1080,6 +1079,9 @@ function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, Motion
 // motion (its birth, held, its page open) is on the element inside, which
 // the graph never writes. An open node's bubble is its page: hidden, out
 // of the keyboard's reach.
+// Light: only the elements that draw something, and its motion in CSS
+// (espace.css: its birth, held, open, the core's morph, its face's
+// cross-fade), none run by script.
 // Its core fades with its weight, and more once done; its label does not:
 // a done node's label is in the faint grey that still reads (--fg3, AA).
 // A bubble of a big graph come back into view (lod.ts) is drawn where it
@@ -1095,9 +1097,6 @@ const Bubble = memo(function Bubble(p: {
   const yours = waits(x);
   const run = x.status === "running";
   const R = r + (d === 0 ? 12 : 6);
-  const still = useReducedMotion();
-  const shape = coreShape(tile, r, !!still);
-  const morph = shape.move;
   const [fresh] = useState(() => !born.has(x.id));
   useEffect(() => void born.add(x.id), [x.id]);
   // A tile is shown whole: a figure that deserves a look.
@@ -1108,14 +1107,10 @@ const Bubble = memo(function Bubble(p: {
     .filter(Boolean)
     .join(" ");
   const hide = tile ? " off" : "";
+  const face = tile && x.glance ? <TileFace g={x.glance} lang={p.lang} /> : d === 0 ? <span className="gr-code">{codeOf(p.title)}</span> : x.status === "done" ? <span className="gr-glyph">✓</span> : null;
   return (
     <div ref={p.place} className={cls} style={{ pointerEvents: p.open ? "none" : undefined, zIndex: p.held ? 6 : undefined, ...(p.fam ? { "--f": p.fam } : null) }} data-node={x.id} aria-hidden={p.open || undefined}>
-      <motion.div
-        className="gr-bub"
-        initial={fresh ? { opacity: 0, scale: 0.3 } : false}
-        animate={{ opacity: p.open ? 0 : p.held ? 0.5 : 1, scale: p.held ? 1.08 : 1 }}
-        transition={{ duration: p.held ? 0.15 : 0.6, ease }}
-      >
+      <div className={`gr-bub${fresh ? " fresh" : ""}`}>
         {yours && <span className="gr-halo" style={{ width: r * 5, height: r * 5 }} />}
         {/* A node a skill maintains: a small satellite orbits it, slowly (still
             when the user asks for less motion). */}
@@ -1124,18 +1119,17 @@ const Bubble = memo(function Bubble(p: {
             <i />
           </span>
         )}
-        <svg className={`gr-ring${hide}`} width={ring * 2 + 16} height={ring * 2 + 16} viewBox={`${-ring - 8} ${-ring - 8} ${ring * 2 + 16} ${ring * 2 + 16}`} aria-hidden="true">
-          {d === 0 && <circle r={R + 7} className="gr-orbit" />}
-          {run && <circle r={R} className="gr-ring-run" />}
-        </svg>
+        {(d === 0 || run) && (
+          <svg className={`gr-ring${hide}`} width={ring * 2 + 16} height={ring * 2 + 16} viewBox={`${-ring - 8} ${-ring - 8} ${ring * 2 + 16} ${ring * 2 + 16}`} aria-hidden="true">
+            {d === 0 && <circle r={R + 7} className="gr-orbit" />}
+            {run && <circle r={R} className="gr-ring-run" />}
+          </svg>
+        )}
         {tile && <span className="gl-ping" style={{ width: tile[0], height: tile[1] }} aria-hidden="true" />}
-        <motion.button
+        <button
           type="button"
           className={`gr-core${tile ? " tile" : ""}`}
-          style={{ opacity: light }}
-          initial={false}
-          animate={shape.to}
-          transition={morph}
+          style={{ opacity: light, ...coreShape(tile, r) }}
           tabIndex={p.open ? -1 : undefined}
           onPointerDown={(e) => p.onGrab(x.id, e)}
           onPointerEnter={() => p.onHover(x.id)}
@@ -1144,18 +1138,8 @@ const Bubble = memo(function Bubble(p: {
           title={p.maintainedWord || undefined}
           aria-label={[x.line && run ? `${p.said} : ${x.line}` : p.said, tile && p.glanceWord, yours && p.waitsWord].filter(Boolean).join(", ")}
         >
-          <AnimatePresence initial={false}>
-            {tile && x.glance ? (
-              <motion.span key="tile" className="gl-in" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: still ? 0 : 0.12, duration: 0.25 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>
-                <TileFace g={x.glance} lang={p.lang} />
-              </motion.span>
-            ) : (
-              <motion.span key="code" className="gl-in" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: still ? 0 : 0.15, duration: 0.25 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>
-                {d === 0 ? <span className="gr-code">{codeOf(p.title)}</span> : x.status === "done" ? <span className="gr-glyph">✓</span> : null}
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </motion.button>
+          <Face k={tile && x.glance ? "tile" : "code"}>{face}</Face>
+        </button>
         {/* Its label slides under a tile and back (CSS, as the core morphs). */}
         <span className="gr-label" style={{ marginTop: tile ? tile[1] / 2 + 10 : R + (d === 0 ? 14 : 8) }}>
           <b>
@@ -1164,10 +1148,41 @@ const Bubble = memo(function Bubble(p: {
           </b>
           {x.line && run && <em className="runs">{x.line}</em>}
         </span>
-      </motion.div>
+      </div>
     </div>
   );
 });
+
+// Face is a core's face, its code or ✓, or its glance's tile; none, no
+// element. As the core becomes a tile or a circle again, the faces
+// cross-fade (espace.css, .gl-in): the one going out in 0.1 s, kept for
+// it, the one coming in after it. The face a bubble is born with is
+// there at once.
+function Face({ k, children }: { k: "tile" | "code"; children: ReactNode }) {
+  const [at, setAt] = useState<{ k: string; out: { k: string; face: ReactNode } | null; moved: boolean }>({ k, out: null, moved: false });
+  const last = useRef(children);
+  if (at.k !== k) setAt({ k, out: last.current ? { k: at.k, face: last.current } : null, moved: true });
+  useEffect(() => void (last.current = children));
+  useEffect(() => {
+    if (!at.out) return;
+    const t = setTimeout(() => setAt((a) => ({ ...a, out: null })), 100);
+    return () => clearTimeout(t);
+  }, [at.out]);
+  return (
+    <>
+      {at.out && (
+        <span key={at.out.k} className="gl-in out">
+          {at.out.face}
+        </span>
+      )}
+      {children && (
+        <span key={k} className={`gl-in${at.moved ? ` in ${k}` : ""}`}>
+          {children}
+        </span>
+      )}
+    </>
+  );
+}
 
 // glanceSaid is a glance's words for a screen reader: its label and its
 // variation, and that its label may be someone else's words.
