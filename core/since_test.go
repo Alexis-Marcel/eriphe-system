@@ -31,13 +31,13 @@ func feedCore(t *testing.T) *core {
 	c.notify(&notification{Text: "Le build de nuit a échoué.", Why: "Le build a échoué.", Source: notifyFromBrain}, notifyItem{Weight: 2})
 	c.notifyClock = func() time.Time { return at(t, "2026-11-04", "10:00") }
 
-	c.mem.now = func() time.Time { return at(t, "2026-11-04", "08:45") }
-	x, err := c.mem.addIntention(&Intention{Kind: intentReminder, Text: "Appeler le garage", SourceKind: srcOwner, Trust: trustOwner,
+	c.intents.now = func() time.Time { return at(t, "2026-11-04", "08:45") }
+	x, err := c.intents.addIntention(&Intention{Kind: intentReminder, Text: "Appeler le garage", SourceKind: srcOwner, Trust: trustOwner,
 		DueAt: at(t, "2026-11-05", "09:00")}, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.mem.becomeDue(x.ID, "eriphe-core", "test"); err != nil {
+	if _, err := c.intents.becomeDue(x.ID, "eriphe-core", "test"); err != nil {
 		t.Fatal(err)
 	}
 

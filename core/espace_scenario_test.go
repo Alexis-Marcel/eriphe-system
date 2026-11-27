@@ -150,7 +150,6 @@ func newScenarioWith(t *testing.T, ctx context.Context, live *liveBrain) *scenar
 		Providers: map[string]Provider{"p": {Kind: "claude-subscription", Secret: secret}},
 		Agents:    map[string]Agent{"small": {Runtime: "claude-code", Provider: "p", Use: "everything"}},
 		Brain:     &BrainConfig{Agent: "small", Tools: []string{"maison", "agenda", "mail", "prod"}},
-		Memory:    &MemoryConfig{},
 		Servers: map[string]Server{
 			"maison": {URL: "https://maison.example.org/mcp", Auth: &ServerAuth{None: true}, Use: "the house", Access: accessFree},
 			"agenda": {URL: "https://agenda.example.org/mcp", Auth: &ServerAuth{None: true}, Use: "the calendar", Access: accessReads},
@@ -162,8 +161,6 @@ func newScenarioWith(t *testing.T, ctx context.Context, live *liveBrain) *scenar
 		t.Fatal(err)
 	}
 	c := newCore(cfg, store)
-	m, _ := testMemory(t)
-	c.useMemory(m)
 	openGraph(t, c)
 	c.useNodes(c.nodes)
 	for _, s := range []string{"maison", "agenda", "prod"} {

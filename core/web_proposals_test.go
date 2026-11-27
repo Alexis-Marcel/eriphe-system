@@ -12,7 +12,7 @@ import (
 // its kind (what the card asks: memory and intention only keep something),
 // and the card whose Oui or Non answers it; once answered, its state.
 func TestEspaceProposal(t *testing.T) {
-	tw, csrf := newMemoryWeb(t)
+	tw, csrf := newIntentsWeb(t)
 	c := tw.c
 	r := proposedRule(t, c, "facture", "")
 	brainSays(c, "Je ne te préviens plus des factures avant le brief ?")

@@ -143,22 +143,21 @@ func (c *core) card(id int64) (convoCard, error) {
 
 // proposal is one proposal of any kind, read now.
 type proposal struct {
-	Kind      string
-	ID        int64
-	Pending   bool   // still waits for the user
-	Outcome   string // when not pending: approved, rejected or gone
-	Tainted   string // why it may carry what someone else wrote, if it may
-	Why       string
-	Fields    []cardField // the parameters of a call to approve
-	Extracted bool        // from the former nightly extraction, not from a turn of the brain's
-	text      func(lang string) string
-	fields    func(lang string) []cardField      // Fields in the user's language, when they have words of ours
-	summary   func(lang string) []string         // what a yes makes, in plain sentences of code's, before the fields
-	context   func(lang string) string           // where it acts, said quietly beside its text (an account: « compte Gmail »)
-	origin    func(lang string) cardOrigin       // where it comes from and what its Oui does (card_origin.go)
-	choices   func(lang string) []proposalChoice // a calls card's calls the user may leave out (call_fold.go)
-	acts      func(lang string) []string         // what its Oui says for 1, 2… items chosen
-	verb      func(lang string) string           // what its yes button says, if not its kind's (card_verb.go)
+	Kind    string
+	ID      int64
+	Pending bool   // still waits for the user
+	Outcome string // when not pending: approved, rejected or gone
+	Tainted string // why it may carry what someone else wrote, if it may
+	Why     string
+	Fields  []cardField // the parameters of a call to approve
+	text    func(lang string) string
+	fields  func(lang string) []cardField      // Fields in the user's language, when they have words of ours
+	summary func(lang string) []string         // what a yes makes, in plain sentences of code's, before the fields
+	context func(lang string) string           // where it acts, said quietly beside its text (an account: « compte Gmail »)
+	origin  func(lang string) cardOrigin       // where it comes from and what its Oui does (card_origin.go)
+	choices func(lang string) []proposalChoice // a calls card's calls the user may leave out (call_fold.go)
+	acts    func(lang string) []string         // what its Oui says for 1, 2… items chosen
+	verb    func(lang string) string           // what its yes button says, if not its kind's (card_verb.go)
 }
 
 // Origin is where it comes from and what its Oui does, with the words of

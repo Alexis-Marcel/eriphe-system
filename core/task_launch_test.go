@@ -211,7 +211,7 @@ func TestLaunchSurroundingsBeside(t *testing.T) {
 // A task's start card leaves out the line of a node its surroundings give
 // (its own or an ancestor), and keeps the rest.
 func TestStartCardWithoutAroundLine(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	id := siteNode(t, c)
 	child := mustNode(t, c, nodestore.New{Title: "Certificat", Parent: id})
 	key := nodeRef(id)

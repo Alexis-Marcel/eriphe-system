@@ -65,7 +65,7 @@ func answers(t *testing.T, c *core) map[string]bool {
 }
 
 func TestBrainWebFetch(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	ownerSays(c, "Lis https://docs.example.org/guide et dis-moi")
 
 	// A clean turn: the read is free, and two asked together both are.
@@ -124,7 +124,7 @@ func TestBrainWebFetch(t *testing.T) {
 }
 
 func TestBrainWebFetchLocal(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	ownerSays(c, "Regarde http://localhost:8080 et http://192.168.0.2/admin")
 	local := []string{"http://localhost:8080", "http://192.168.0.2/admin", "http://127.0.0.1/", "http://[::1]:80/",
 		"http://10.0.0.1", "http://169.254.169.254/latest", "http://100.100.100.100/", "http://nas/", "http://printer.local/",
@@ -149,7 +149,7 @@ func TestBrainWebFetchLocal(t *testing.T) {
 }
 
 func TestBrainWebSearch(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	ownerSays(c, "Cherche")
 	brainAsks(t, c, [2]any{"WebSearch", map[string]any{"query": "météo"}}, [2]any{"Bash", map[string]any{"command": "ls"}})
 	got := answers(t, c)
@@ -166,7 +166,7 @@ func TestBrainWebSearch(t *testing.T) {
 // Nothing of the web is allowed in advance: its value decides each call;
 // a harness without a search of its own is told.
 func TestBrainWebSpec(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	spec := func() deviceTaskSpec {
 		var raw string
 		c.store.db.QueryRow(`SELECT spec FROM tasks WHERE id = ?`, brainStatus(c).Task).Scan(&raw)
@@ -192,7 +192,7 @@ func TestBrainWebSpec(t *testing.T) {
 }
 
 func TestWebValue(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	ownerSays(c, "Cherche, et lis https://mine.example/")
 	search := [2]any{"WebSearch", map[string]any{"query": "météo"}}
 

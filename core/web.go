@@ -618,7 +618,7 @@ func hxTrigger(msg string, ok, changed bool) string {
 	}
 	v := map[string]any{"toast": map[string]string{"message": msg, "kind": kind}}
 	if changed {
-		v["memory-changed"] = true
+		v["data-changed"] = true
 	}
 	return hxEvents(v)
 }

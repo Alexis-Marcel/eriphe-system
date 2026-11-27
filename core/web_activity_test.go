@@ -56,8 +56,8 @@ func TestJournalInSettings(t *testing.T) {
 // The main navigation has no Activité tab nor its badge: what happens is
 // told in the conversation, and what waits is asked there.
 func TestNavWithoutActivity(t *testing.T) {
-	tw, _ := newMemoryWeb(t)
-	mustIntend(t, tw.c.mem, &Intention{Text: "Récupérer le colis jeudi", State: intentProposed, SourceKind: srcExtraction, Trust: trustExternal})
+	tw, _ := newIntentsWeb(t)
+	mustIntend(t, tw.c.intents, &Intention{Text: "Récupérer le colis jeudi", State: intentProposed, SourceKind: srcTask, Trust: trustExternal})
 	for _, path := range []string{"/", "/settings/agents", "/settings/journal"} {
 		_, body, _ := tw.do("GET", path, nil, nil)
 		for _, gone := range []string{`id="activity-btn"`, `href="/activity`, `<b class="badge">1</b>`} {
@@ -82,8 +82,8 @@ func TestNavWithoutActivity(t *testing.T) {
 // « À valider », the fallback in the settings, lists every kind of
 // proposal, each with its own approval.
 func TestApprovals(t *testing.T) {
-	tw, csrf := newMemoryWeb(t)
-	c, m := tw.c, tw.c.mem
+	tw, csrf := newIntentsWeb(t)
+	c, m := tw.c, tw.c.intents
 
 	_, body, _ := tw.do("GET", "/settings/approve", nil, nil)
 	if !strings.Contains(body, "Rien à valider") {
@@ -91,7 +91,7 @@ func TestApprovals(t *testing.T) {
 	}
 
 	mustIntend(t, m, &Intention{Text: "Régler la facture du fournisseur", DueAt: m.now().Add(48 * time.Hour), State: intentProposed,
-		SourceKind: srcExtraction, Trust: trustExternal})
+		SourceKind: srcTask, Trust: trustExternal})
 	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "topic:mail", Ceiling: 2, State: ruleProposed, By: "brain", Why: "Trop de mails."})
 	c.store.insertTask(&TaskRow{ID: "t-perm", Agent: "small", Runtime: "claude-code", Prompt: "Publish", State: stateWaitingPermission})
 	c.store.addEvents("t-perm", []EventRow{{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p-1", "tool_name": "Bash",
@@ -102,9 +102,9 @@ func TestApprovals(t *testing.T) {
 	for _, want := range []string{
 		`<a href="/settings/approve" aria-current="page">`,
 		`id="permissions"`, "npm publish", `hx-post="/tasks/t-perm/answer"`,
-		`id="memory"`, "Régler la facture du fournisseur", `hx-post="/memory/intention/1/approve"`,
+		`id="intentions"`, "Régler la facture du fournisseur", `hx-post="/settings/intentions/1/approve"`,
 		`id="rules"`, "Trop de mails.", `hx-post="/notify/rules/1/approve"`,
-		`hx-trigger="memory-changed from:body"`, `<span class="nav-count">2</span>`,
+		`hx-trigger="data-changed from:body"`, `<span class="nav-count">2</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("À valider lacks %q", want)
@@ -112,10 +112,10 @@ func TestApprovals(t *testing.T) {
 	}
 	// Approving one empties its place, and the page says it changed.
 	h := map[string]string{"X-CSRF-Token": csrf}
-	if _, _, hd := tw.do("POST", "/notify/rules/1/approve", url.Values{}, h); !strings.Contains(hd.Get("HX-Trigger"), "memory-changed") {
+	if _, _, hd := tw.do("POST", "/notify/rules/1/approve", url.Values{}, h); !strings.Contains(hd.Get("HX-Trigger"), "data-changed") {
 		t.Error("approving a rule does not reload À valider")
 	}
-	if _, _, hd := tw.do("POST", "/tasks/t-perm/answer", url.Values{"permission": {"p-1"}, "allow": {"no"}}, h); !strings.Contains(hd.Get("HX-Trigger"), "memory-changed") {
+	if _, _, hd := tw.do("POST", "/tasks/t-perm/answer", url.Values{"permission": {"p-1"}, "allow": {"no"}}, h); !strings.Contains(hd.Get("HX-Trigger"), "data-changed") {
 		t.Error("answering a permission does not reload À valider")
 	}
 	_, body, _ = tw.do("GET", "/settings/approve", nil, nil)

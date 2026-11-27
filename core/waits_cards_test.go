@@ -162,7 +162,7 @@ func TestHeldStartWaitsOnTheTasksNode(t *testing.T) {
 // reconcile. Each case changes the proposal only, then reads the card's
 // row and the graph's events straight away.
 func TestCardAnsweredElsewhereMovesAtOnce(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	openGraph(t, c)
 	c.useNodes(c.nodes)
 	for _, tc := range []struct {
@@ -172,12 +172,12 @@ func TestCardAnsweredElsewhereMovesAtOnce(t *testing.T) {
 		want string
 	}{
 		{"an intention cancelled on its page", func(node string) string {
-			x := mustIntend(t, c.mem, &Intention{Text: "Relancer Sam", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustOwner})
+			x := mustIntend(t, c.intents, &Intention{Text: "Relancer Sam", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustOwner})
 			c.cardNow(cardIntention, x.ID, "", nodeRef(node))
 			return proposalRef(cardIntention, x.ID)
 		}, func(ref string) {
 			_, id, _ := parseProposalRef(ref)
-			if _, err := c.mem.changeIntention(id, intentionChange{State: intentCancelled}, "owner", "page"); err != nil {
+			if _, err := c.intents.changeIntention(id, intentionChange{State: intentCancelled}, "owner", "page"); err != nil {
 				t.Fatal(err)
 			}
 		}, cardRejected},

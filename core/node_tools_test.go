@@ -200,8 +200,6 @@ func TestBrainNodeTextLinks(t *testing.T) {
 // it is set; a standing node is never done. node_show asks the screen.
 func TestBrainNodeSetShow(t *testing.T) {
 	c := graphCore(t)
-	m, _ := testMemory(t)
-	c.useMemory(m)
 	var evs []journalEvent
 	c.subscribeEvents(func(e journalEvent) { evs = append(evs, e) })
 	id := mustBrainNodes(t, c, "node_open", map[string]any{"goal": "Un but.", "title": "Garage", "body": "Rendez-vous pris jeudi."})["id"].(string)

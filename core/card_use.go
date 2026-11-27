@@ -169,12 +169,10 @@ func (c *core) judgeCard(x cardPush) string {
 	switch x.Place {
 	case placeTurn, placePack:
 		n = nodeBy(false)
-		if c.mem != nil {
-			var i int
-			c.mem.db.QueryRow(`SELECT COUNT(*) FROM intention_log l JOIN intentions i ON i.id = l.intention_id
-				WHERE i.about = ? AND l.time BETWEEN ? AND ? AND l.who = ?`, x.About, from, to, byBrain).Scan(&i)
-			n += i
-		}
+		var i int
+		c.intents.db.QueryRow(`SELECT COUNT(*) FROM intention_log l JOIN intentions i ON i.id = l.intention_id
+			WHERE i.about = ? AND l.time BETWEEN ? AND ? AND l.who = ?`, x.About, from, to, byBrain).Scan(&i)
+		n += i
 	case placeTask:
 		n = nodeBy(true)
 	}

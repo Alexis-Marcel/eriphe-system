@@ -70,7 +70,7 @@ func TestNodesRefuseSecretsOnly(t *testing.T) {
 // backup folder.
 func TestNodesNight(t *testing.T) {
 	backups := filepath.Join(t.TempDir(), "backups")
-	cfg := &Config{DB: filepath.Join(t.TempDir(), "core.db"), Memory: &MemoryConfig{BackupConfig: BackupConfig{ExtractAt: "03:00", BackupDir: backups}}}
+	cfg := &Config{DB: filepath.Join(t.TempDir(), "core.db"), Memory: &BackupConfig{ExtractAt: "03:00", BackupDir: backups}}
 	day := time.Date(2026, 11, 17, 2, 59, 0, 0, time.Local)
 	dir, index := cfg.nodesPaths()
 	s, _, err := nodestore.Open(dir, index, nodestore.Options{Now: func() time.Time { return day }})
@@ -151,7 +151,7 @@ func TestNodesNightKeepsItsHourAndFolder(t *testing.T) {
 // night.
 func TestNodesNightRetriesAFailedBackup(t *testing.T) {
 	backups := filepath.Join(t.TempDir(), "backups")
-	cfg := &Config{DB: filepath.Join(t.TempDir(), "core.db"), Memory: &MemoryConfig{BackupConfig: BackupConfig{ExtractAt: "03:00", BackupDir: backups}}}
+	cfg := &Config{DB: filepath.Join(t.TempDir(), "core.db"), Memory: &BackupConfig{ExtractAt: "03:00", BackupDir: backups}}
 	day := time.Date(2026, 11, 17, 3, 1, 0, 0, time.Local)
 	dir, index := cfg.nodesPaths()
 	s, _, err := nodestore.Open(dir, index, nodestore.Options{Now: func() time.Time { return day }})

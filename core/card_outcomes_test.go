@@ -18,7 +18,7 @@ import (
 var outcomeMakers = map[string]func(t *testing.T) (*core, string){
 	cardIntention: func(t *testing.T) (*core, string) {
 		c, node := outcomeCore(t)
-		x := mustIntend(t, c.mem, &Intention{Text: "Relancer Sam", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustOwner})
+		x := mustIntend(t, c.intents, &Intention{Text: "Relancer Sam", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustOwner})
 		c.cardNow(cardIntention, x.ID, "", nodeRef(node))
 		return c, proposalRef(cardIntention, x.ID)
 	},
@@ -108,7 +108,7 @@ var outcomeMakers = map[string]func(t *testing.T) (*core, string){
 // outcomeCore is a core with a graph, and a node its cards wait in.
 func outcomeCore(t *testing.T) (*core, string) {
 	t.Helper()
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	openGraph(t, c)
 	c.useNodes(c.nodes)
 	return c, mustNode(t, c, nodestore.New{Title: "Le sujet"})

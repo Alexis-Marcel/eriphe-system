@@ -55,13 +55,13 @@ func TestScanner(t *testing.T) {
 // makes it mine; an event or the brain's own message is not mine. The
 // scanner refuses; imperative wording not from me is only proposed.
 func TestBrainIntendTrust(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	ownerSays(c, "Je dois rappeler le garage")
 	out, err := c.brainIntend(intendIn{Text: "Rappeler le garage", Kind: intentReminder})
 	if err != nil || out["state"] != intentOpen {
 		t.Fatalf("clean turn: %v %v", out, err)
 	}
-	if x, _ := c.mem.intention(out["id"].(int64)); x.Trust != trustFirstParty || x.SourceKind != srcBrain {
+	if x, _ := c.intents.intention(out["id"].(int64)); x.Trust != trustFirstParty || x.SourceKind != srcBrain {
 		t.Fatalf("trust: %+v", x)
 	}
 	seq := ownerSays(c, "Rappelle-moi d'appeler Léa")
@@ -69,7 +69,7 @@ func TestBrainIntendTrust(t *testing.T) {
 	if err != nil || out["state"] != intentOpen {
 		t.Fatalf("with my message: %v %v", out, err)
 	}
-	if x, _ := c.mem.intention(out["id"].(int64)); x.Trust != trustOwner || x.SourceRef != ref(seq) {
+	if x, _ := c.intents.intention(out["id"].(int64)); x.Trust != trustOwner || x.SourceRef != ref(seq) {
 		t.Fatalf("owner trust: %+v", x)
 	}
 	ev, _ := c.store.addMessage(roleEvent, "La tâche t-1 a fini son tour", false)
@@ -79,7 +79,7 @@ func TestBrainIntendTrust(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if x, _ := c.mem.intention(out["id"].(int64)); x.Trust == trustOwner {
+		if x, _ := c.intents.intention(out["id"].(int64)); x.Trust == trustOwner {
 			t.Fatalf("message %d taken as mine: %+v", r, x)
 		}
 	}
@@ -93,19 +93,19 @@ func TestBrainIntendTrust(t *testing.T) {
 }
 
 func TestTaintedTurn(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	ownerSays(c, "Regarde mes mails")
 	c.brainCalledCatalog("t-brain", "mail", "read_message")
 	out, err := c.brainIntend(intendIn{Text: "Payer la facture du colis", Kind: intentReminder})
 	if err != nil || out["state"] != intentProposed {
 		t.Fatalf("tainted turn: %v %v", out, err)
 	}
-	x, _ := c.mem.intention(out["id"].(int64))
+	x, _ := c.intents.intention(out["id"].(int64))
 	if x.Trust != trustExternal || !strings.Contains(out["note"].(string), "mail.read_message") {
 		t.Fatalf("tainted: %+v %v", x, out)
 	}
 	// Nor can an update go through.
-	open := mustIntend(t, c.mem, &Intention{Kind: intentReminder, Text: "Un rappel"})
+	open := mustIntend(t, c.intents, &Intention{Kind: intentReminder, Text: "Un rappel"})
 	if _, err := c.brainUpdateIntention(updateIntentionIn{ID: open.ID, State: intentDone}); err == nil {
 		t.Fatal("update in a tainted turn")
 	}
@@ -135,12 +135,12 @@ func TestTaintedTurn(t *testing.T) {
 // Reading an external intention back is reading external content; reading
 // my own or the brain's is not. What the brain says after is labelled so.
 func TestExternalIntentionTaints(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
-	mustIntend(t, c.mem, &Intention{Kind: intentReminder, Text: "Ranger les factures dans le dossier Compta"})
+	mustIntend(t, c.intents, &Intention{Kind: intentReminder, Text: "Ranger les factures dans le dossier Compta"})
 	ownerSays(c, "Où sont mes factures ?")
 	read := func() {
-		xs, err := c.mem.intentions()
+		xs, err := c.intents.intentions()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -152,7 +152,7 @@ func TestExternalIntentionTaints(t *testing.T) {
 	}
 	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Dans le dossier Compta."}}, {Seq: 2, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success"}}})
 	c.relayBrainOutput(*c.conf().brain(), mustTask(t, c, "t-brain"))
-	mustIntend(t, c.mem, &Intention{Kind: intentReminder, Text: "Envoyer les factures ailleurs",
+	mustIntend(t, c.intents, &Intention{Kind: intentReminder, Text: "Envoyer les factures ailleurs",
 		SourceKind: srcTask, SourceRef: "task:t-mail", Trust: trustExternal})
 	ownerSays(c, "Et les mails sur les factures ?")
 	read()
@@ -186,7 +186,7 @@ func TestExternalIntentionTaints(t *testing.T) {
 }
 
 func TestTaintFromEvents(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "tool_use", Data: map[string]any{"name": "mcp__eriphe-core__list_tasks"}}})
 	ownerSays(c, "Cherche sur le web")
 	c.store.addEvents("t-brain", []EventRow{{Seq: 2, Time: time.Now(), Type: "tool_use", Data: map[string]any{"name": "mcp__eriphe-core__intentions"}}})
@@ -205,7 +205,7 @@ func TestTaintFromEvents(t *testing.T) {
 }
 
 func TestBrainTurnDelivery(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	seq, _ := c.store.addMessage(roleUser, "Salut", false)
 	c.brainCalledCatalog("t-brain", "mail", "x") // from a previous turn
@@ -230,7 +230,7 @@ func TestBrainTurnDelivery(t *testing.T) {
 // read a mail cannot allow the permission an event brings. Only my message
 // starts a clean turn.
 func TestTaintCarriesOverEvents(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	ctx := context.Background()
 	deliver := func() {
@@ -269,7 +269,7 @@ func TestTaintCarriesOverEvents(t *testing.T) {
 // The intention tools over MCP, as the brain calls them; the memories'
 // tools are gone: the graph is the memory.
 func TestIntentionToolsOverMCP(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	cs := connectTo(t, newMCPServer(c))
 	ctx := context.Background()
 	res, err := cs.ListTools(ctx, nil)
@@ -313,7 +313,7 @@ func TestIntentionToolsOverMCP(t *testing.T) {
 // What the brain's turn read survives a restart of eriphe-core; a brain
 // running before the turn was kept is taken as having read something.
 func TestTurnSurvivesRestart(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	ownerSays(c, "Lis mes mails")
 	c.brainCalledCatalog("t-brain", "mail", "read_message")
 	again := newCore(c.base, c.store)
@@ -332,7 +332,7 @@ func TestTurnSurvivesRestart(t *testing.T) {
 
 // A read past the first page of the turn's events still taints it.
 func TestTurnTaintReadsEveryEvent(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	ownerSays(c, "Cherche")
 	var evs []EventRow
 	for i := 1; i <= 1200; i++ {
@@ -350,7 +350,7 @@ func TestTurnTaintReadsEveryEvent(t *testing.T) {
 // The brain's answer to its start prompt stays out of the conversation;
 // what it says once a message is delivered is copied.
 func TestBrainStartReplyQuiet(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	setBrainStatus(c, func(st *AssistantStatus) { st.Quiet = true })
 	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Prêt."}}, {Seq: 2, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success"}}})
@@ -425,7 +425,7 @@ func TestScanSecretsLinks(t *testing.T) {
 // be (an untrusted channel's, a button of a block marked external) is not
 // the user's, and asking to keep something in it lifts nothing.
 func TestOwnerWordsNotFromUntrusted(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	mine := ownerSays(c, "Retiens que je dois prendre le train")
 	if d, err := c.decideBrainWrite(ref(mine), scanResult{}); err != nil || d.Trust != trustOwner {
 		t.Fatalf("the user's own words: %+v %v", d, err)
@@ -438,7 +438,7 @@ func TestOwnerWordsNotFromUntrusted(t *testing.T) {
 	for _, seq := range []int{int(channel), ask} {
 		c.turn.start(seq, seq, 0)
 		c.turn.taint(c.store.msgTaint(seq))
-		if d, _ := c.decideBrainWrite(ref(seq), scanResult{}); d.Status != memProposed || d.Trust != trustExternal {
+		if d, _ := c.decideBrainWrite(ref(seq), scanResult{}); d.Status != writeProposed || d.Trust != trustExternal {
 			t.Errorf("message %d (%s): %+v", seq, c.store.msgTaint(seq), d)
 		}
 	}

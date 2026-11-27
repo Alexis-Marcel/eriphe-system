@@ -169,7 +169,7 @@ func newMCPServer(c *core) *mcp.Server {
 		func(ctx context.Context, in idIn) (map[string]string, error) {
 			return map[string]string{"result": "stopping"}, c.stopByBrain(ctx, in.TaskID)
 		})
-	registerIntentionTools(s, c)   // intend, intentions, update_intention (memory_intention_tools.go)
+	registerIntentionTools(s, c)   // intend, intentions, update_intention (intentions_tools.go)
 	registerAttachmentTools(s, c)  // read_attachment
 	registerSkillTools(s, c)       // list_skills, read_skill
 	registerSkillWriteTool(s, c)   // write_skill (skill_write.go)

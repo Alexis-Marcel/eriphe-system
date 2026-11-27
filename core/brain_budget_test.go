@@ -194,7 +194,7 @@ func TestTurnBudget(t *testing.T) {
 // A delivery's budget is scaled by the messages it brings: three tasks'
 // ends delivered together may update their three nodes.
 func TestBrainDeliveryScalesBudget(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	ctx := context.Background()
 	if err := tendBrain(ctx, c); err != nil {

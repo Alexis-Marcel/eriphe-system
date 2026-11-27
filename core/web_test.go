@@ -333,7 +333,7 @@ func TestWebPagesRender(t *testing.T) {
 
 	pages := map[string][]string{
 		"/settings/journal": {"PR #7", "acme/site", "fix-form", "Attend ta réponse", `href="/tasks/t-run"`, `href="/tasks/t-perm"`},
-		"/tasks/t-run":      {"go test ./...", "Arrêter la tâche", "PR #7", `<a class="back" href="/settings/journal">`, `hx-trigger="every 5s, memory-changed from:body"`},
+		"/tasks/t-run":      {"go test ./...", "Arrêter la tâche", "PR #7", `<a class="back" href="/settings/journal">`, `hx-trigger="every 5s, data-changed from:body"`},
 		"/tasks/t-idle":     {"Répondre à l&#39;agent", "Shall I send it?"},
 		"/tasks/t-perm":     {"t-perm-t-perm-p-1", "Cette décision te revient", "npm publish", `name="permission" value="p-1"`},
 		"/settings/devices": {"box", "En ligne", "Hors ligne", "16 Go", "gpu", `eriphe-device 0.1.0-dev <small class="mono">7654321</small>`},
@@ -354,7 +354,7 @@ func TestWebPagesRender(t *testing.T) {
 		"/settings/account":                                   {"Français", "English", "eriphe-core " + version, "Clés et mots de passe enregistrés", "providers.p.secret"},
 	}
 	// A task that waits on the user is not polled: its reply would be lost.
-	if _, body, _ := tw.do("GET", "/tasks/t-idle", nil, nil); !strings.Contains(body, `hx-trigger="memory-changed from:body"`) {
+	if _, body, _ := tw.do("GET", "/tasks/t-idle", nil, nil); !strings.Contains(body, `hx-trigger="data-changed from:body"`) {
 		t.Error("the idle task's page does not follow its actions, or is polled")
 	}
 	for path, wants := range pages {
@@ -693,8 +693,8 @@ func TestMarkdownTable(t *testing.T) {
 // A message may link to a page of the workspace, in the same tab; other
 // local paths and protocol-relative links stay text.
 func TestMarkdownWorkspaceLinks(t *testing.T) {
-	got := string(markdown("[Connecter un appareil](/settings/devices#connect), [m](/memory), [x](//evil.example/settings), [y](/logout), [z](/settingsx)"))
-	if !strings.Contains(got, `<a href="/settings/devices#connect">Connecter un appareil</a>`) || !strings.Contains(got, `<a href="/memory">m</a>`) {
+	got := string(markdown("[Connecter un appareil](/settings/devices#connect), [m](/espace), [x](//evil.example/settings), [y](/logout), [z](/settingsx)"))
+	if !strings.Contains(got, `<a href="/settings/devices#connect">Connecter un appareil</a>`) || !strings.Contains(got, `<a href="/espace">m</a>`) {
 		t.Errorf("workspace links missing: %s", got)
 	}
 	for _, bad := range []string{"evil.example", `href="/logout"`, `href="/settingsx"`} {

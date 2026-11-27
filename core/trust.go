@@ -7,9 +7,8 @@ const (
 	trustFirstParty = "first_party"
 	trustExternal   = "external"
 
-	srcOwner      = "owner"
-	srcBrain      = "brain"
-	srcExtraction = "extraction"
-	srcTask       = "task"
-	srcImport     = "import"
+	srcOwner  = "owner"
+	srcBrain  = "brain"
+	srcTask   = "task"
+	srcImport = "import"
 )

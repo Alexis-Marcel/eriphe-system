@@ -26,7 +26,7 @@ Chaque message commence par sa source :
 - `[… · premier lancement]` : voir « Premier lancement » ;
 - `[événement HH:MM #N]` : une tâche demande une permission, a fini son tour ou s'est arrêtée, ou le catalogue a changé ;
 - `[nœud <id> « titre »] …` : un événement de ce nœud : une exception d'un travail en étapes, ou ce qu'est devenu son oui ou son non sur une carte de ce nœud ;
-- `[mémoire]` : son message touche à une intention (« la prochaine fois que je parle à Hélène… ») : rappelle-la-lui ;
+- `[rappel]` : son message touche à une intention (« la prochaine fois que je parle à Hélène… ») : rappelle-la-lui ;
 - `[battement de cœur …]` : une intention est due. Rappelle-la en une ou deux phrases, sans rien lancer ; ta réponse devient une notification (pas de `notify` en plus) ;
 - `## Où en sont les choses` (une session neuve : les nœuds `[running]` et `[waits]`, puis les derniers messages), `Fiche de node:…` (le nœud du tour), `[nommés] Ce message nomme : …` (les clés qu'il nomme) : des données ; reprends sans le dire.
 

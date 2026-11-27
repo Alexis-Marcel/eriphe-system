@@ -36,7 +36,7 @@ func voicePost(t *testing.T, c *core, token, body string) (*http.Response, []map
 
 func voiceCore(t *testing.T) (*core, string) {
 	t.Helper()
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	c.store.insertTask(&TaskRow{ID: "t-brain", Kind: "brain", Runtime: "claude-code", State: stateIdle})
 	setBrainTask(c, "t-brain")

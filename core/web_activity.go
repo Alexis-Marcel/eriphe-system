@@ -133,7 +133,7 @@ func happenedLink(ref string) string {
 	case "notification":
 		return "/settings/notifications?n=" + id + "#notif-" + id
 	case "intention":
-		return "/memory"
+		return "/settings/intentions#intent-" + id
 	}
 	return ""
 }
@@ -149,12 +149,10 @@ type approvals struct {
 	Quiet    []quietSuggestion
 }
 
-// Count is all that waits; Remember, the intentions.
+// Count is all that waits.
 func (a approvals) Count() int {
-	return len(a.Perms) + a.Remember() + len(a.Rules) + len(a.Settings)
+	return len(a.Perms) + len(a.Intents) + len(a.Rules) + len(a.Settings)
 }
-
-func (a approvals) Remember() int { return len(a.Intents) }
 
 func (w *web) approvals() approvals {
 	var a approvals
@@ -164,11 +162,9 @@ func (w *web) approvals() approvals {
 			a.Perms = append(a.Perms, p)
 		}
 	}
-	if m := w.c.mem; m != nil {
-		if xs, err := m.intentions(intentProposed); err == nil {
-			for _, x := range xs {
-				a.Intents = append(a.Intents, w.intentCard(x))
-			}
+	if xs, err := w.c.intents.intentions(intentProposed); err == nil {
+		for _, x := range xs {
+			a.Intents = append(a.Intents, w.intentCard(x))
 		}
 	}
 	a.Rules, _ = w.c.notifyRules(ruleProposed)
@@ -181,12 +177,8 @@ func (w *web) approvals() approvals {
 // proposals, read with a count each. The permissions are not in it: the
 // conversation and Tâches already show them, live.
 func (w *web) approvalCount() int {
-	n := 0
-	if m := w.c.mem; m != nil {
-		var k int
-		m.db.QueryRow(`SELECT COUNT(*) FROM intentions WHERE state = 'proposed'`).Scan(&k)
-		n += k
-	}
+	var n int
+	w.c.intents.db.QueryRow(`SELECT COUNT(*) FROM intentions WHERE state = 'proposed'`).Scan(&n)
 	if rules, err := w.c.notifyRules(ruleProposed); err == nil {
 		n += len(rules)
 	}

@@ -78,7 +78,7 @@ func TestAttentionWeightByKind(t *testing.T) {
 			t.Errorf("%s: weight %d, want %d", kind, got, want)
 		}
 	}
-	tw, _ := newMemoryWeb(t)
+	tw, _ := newIntentsWeb(t)
 	c := tw.c
 	r := proposedRule(t, c, "facture", "")
 	brainSays(c, "Je ne te préviens plus des factures avant le brief ?")

@@ -16,13 +16,13 @@ type wakePacket struct {
 	Pending []*Intention // due, told before, still not closed
 }
 
-func (m *memStore) wakePacket() (*wakePacket, error) {
-	p := &wakePacket{Now: m.now()}
+func (s *intentStore) wakePacket() (*wakePacket, error) {
+	p := &wakePacket{Now: s.now()}
 	var err error
-	if p.Due, err = m.toSurface(); err != nil {
+	if p.Due, err = s.toSurface(); err != nil {
 		return nil, err
 	}
-	all, err := m.intentions(intentDue)
+	all, err := s.intentions(intentDue)
 	if err != nil {
 		return nil, err
 	}

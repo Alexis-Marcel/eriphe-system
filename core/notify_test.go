@@ -177,7 +177,7 @@ func TestRuleChecked(t *testing.T) {
 // notifyCore is a memory core with a pusher, a browser and a fixed clock.
 func notifyCore(t *testing.T, now time.Time) (*core, *browser) {
 	t.Helper()
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	p, err := newPusher(c.store)
 	if err != nil {

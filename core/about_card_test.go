@@ -24,7 +24,7 @@ func siteNode(t *testing.T, c *core) string {
 	}
 	id := d.Node.Meta.ID
 	setStatus(t, c, id, nodeRunning)
-	key, m := nodeRef(id), c.mem
+	key, m := nodeRef(id), c.intents
 	for i := 1; i <= 4; i++ {
 		mustIntend(t, m, &Intention{Text: fmt.Sprintf("Relancer Lina pour le site, point %d", i), About: key, OwedTo: "person:lina", DueAt: m.now().Add(time.Hour)})
 	}
@@ -38,7 +38,7 @@ func siteNode(t *testing.T, c *core) string {
 // its doc), its intentions and its cards; an external line is named, not
 // quoted; nothing of another; and reading it taints nothing.
 func TestAboutCard(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	id := siteNode(t, c)
 	key := nodeRef(id)
 	card, st := c.aboutCard(key, 4000)
@@ -76,7 +76,7 @@ func TestAboutCard(t *testing.T) {
 // A card keeps to its budget, shared in rounds: what does not fit is left
 // out, and said.
 func TestAboutCardBudget(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	key := nodeRef(siteNode(t, c))
 	card, st := c.aboutCard(key, aboutCardChars)
 	if st.Chars > aboutCardChars || runeLen(card) != st.Chars {
@@ -94,7 +94,7 @@ func TestAboutCardBudget(t *testing.T) {
 // A node that may carry someone else's words is named, its title not
 // quoted.
 func TestAboutCardExternal(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	openGraph(t, c)
 	d, err := c.nodes.Create(nodestore.New{Title: "PLAN EXTÉRIEUR", Body: "SUIVRE LE MAIL", External: true, Author: byBrain})
 	if err != nil {
@@ -110,7 +110,7 @@ func TestAboutCardExternal(t *testing.T) {
 // The card of the turn's node goes with the turn when the session does
 // not hold it as it is now: once, then again only when it changed.
 func TestAboutCardPushedToTurn(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	id := siteNode(t, c)
 	key := nodeRef(id)
@@ -163,7 +163,7 @@ func TestAboutCardPushedToTurn(t *testing.T) {
 // A fresh session holds the cards of its pack: they are not given again
 // with its first turn.
 func TestAboutCardInFreshSession(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	key := nodeRef(siteNode(t, c))
 	task := startedBrain(t, c, false)
 	card, _ := c.aboutCard(key, aboutCardChars)
@@ -202,7 +202,7 @@ func pushRows(t *testing.T, c *core) string {
 // A worker task about a node starts with its card, after what it is
 // asked; its prompt as shown is what it was asked.
 func TestAboutCardAtStart(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	key := nodeRef(siteNode(t, c))
 	card, _ := c.aboutCard(key, aboutCardChars)
 	task, err := c.runTask(context.Background(), runRequest{Prompt: "Pose le certificat", about: key})
@@ -226,7 +226,7 @@ func TestAboutCardAtStart(t *testing.T) {
 // leaves out only what a card shows: an intention about another is still
 // in its section.
 func TestContextPackLeavesOutWhatCardsShow(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	siteNode(t, c)
 	pack, st := c.contextPack()
 	if !strings.Contains(pack, "Rendre le livre") {
@@ -244,7 +244,7 @@ func TestContextPackLeavesOutWhatCardsShow(t *testing.T) {
 // title, state and the first line of its doc; a card that does not fit
 // leaves its node in a line; an idle or a done node is not listed.
 func TestContextPackListsActiveNodes(t *testing.T) {
-	c, _ := testMemoryCore(t)
+	c, _ := testIntentsCore(t)
 	openGraph(t, c)
 	c.conf().Providers["p"] = Provider{Kind: selfHostedKind, BaseURL: "http://192.0.2.10:11434/v1"}
 	var ids []string
@@ -261,7 +261,7 @@ func TestContextPackListsActiveNodes(t *testing.T) {
 		setStatus(t, c, id, state)
 		ids = append(ids, id)
 		for k := range 5 { // cards that wait on it, which its card shows
-			mustIntend(t, c.mem, &Intention{Text: fmt.Sprintf("%s %d.%d", strings.Repeat("une idée à valider ", 15), i, k), About: nodeRef(id), State: intentProposed, SourceKind: srcBrain, Trust: trustFirstParty})
+			mustIntend(t, c.intents, &Intention{Text: fmt.Sprintf("%s %d.%d", strings.Repeat("une idée à valider ", 15), i, k), About: nodeRef(id), State: intentProposed, SourceKind: srcBrain, Trust: trustFirstParty})
 		}
 	}
 	idle, _ := c.nodes.Create(nodestore.New{Title: "Au repos", Author: byBrain})
