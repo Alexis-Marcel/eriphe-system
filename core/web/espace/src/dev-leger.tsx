@@ -68,6 +68,96 @@ export function legerGraph(n: number, seed = 7): GraphNode[] {
   return out;
 }
 
+// PRESETS are graphs of a known shape, beside the sizes: "cerveau", a
+// second brain as people keep one, about 1,100 notes and 4,000 links.
+export const PRESETS: Record<string, { label: string; nodes: () => GraphNode[] }> = {
+  cerveau: { label: "second cerveau", nodes: () => secondBrain() },
+};
+
+// secondBrain is n fictitious notes shaped like a second brain: a couple
+// of dozen families (a root and its notes, some notes under notes), sized
+// unevenly; a few hubs (indexes) that very many notes link to; notes that
+// link mostly within their family, preferring the notes already much
+// linked; many leaves with one link or none; some notes alone. About
+// links links in all, a node and its parent counting as one.
+export function secondBrain(n = 1100, links = 4000, seed = 42): GraphNode[] {
+  const r = rng(seed);
+  const pick = <T,>(xs: T[]) => xs[Math.floor(r() * xs.length)];
+  const t0 = Date.parse("2026-11-01T08:00:00Z");
+  const made = (i: number) => new Date(t0 + i * 60_000).toISOString();
+  const out: GraphNode[] = [];
+  const fam: number[] = []; // each node's family (-1: alone)
+  const families: number[][] = [];
+  const F = 24;
+  // the families' sizes: uneven, a few big, many small (a power law)
+  const share = Array.from({ length: F }, (_, i) => 1 / Math.pow(i + 1, 0.9));
+  const total = share.reduce((a, b) => a + b, 0);
+  const status = (): GraphNode["status"] => {
+    const x = r();
+    return x < 0.03 ? "waits" : x < 0.23 ? "done" : x < 0.26 ? "running" : "idle";
+  };
+  const node = (title: string, weight: number, parent?: string): GraphNode => {
+    const i = out.length;
+    const x: GraphNode = { id: `sb${i}`, title, weight, status: status(), created: made(i), updated: made(i), version: 1, parent };
+    if (x.status === "running") x.line = "en cours…";
+    out.push(x);
+    return x;
+  };
+  for (let f = 0; f < F; f++) {
+    node(`${WORDS[f % WORDS.length]}${f >= WORDS.length ? ` ${f}` : ""}`, 0.6 + r() * 0.4);
+    fam.push(f);
+    families.push([out.length - 1]);
+  }
+  const alone = Math.round(n * 0.08);
+  while (out.length < n - alone) {
+    // a family by its share
+    let u = r() * total, f = 0;
+    while (f < F - 1 && (u -= share[f]) > 0) f++;
+    const members = families[f];
+    // under the root mostly, else under one of its notes
+    const parent = members.length > 1 && r() < 0.3 ? out[pick(members.slice(1))] : out[members[0]];
+    node(`${pick(THINGS)} ${out.length}`, 0.15 + r() * 0.5, parent.id);
+    fam.push(f);
+    members.push(out.length - 1);
+  }
+  while (out.length < n) {
+    node(`${pick(THINGS)} seule ${out.length}`, 0.1 + r() * 0.3);
+    fam.push(-1);
+  }
+  // the hubs: a few notes of the big families, indexes many link to
+  const hubs = families.slice(0, 8).map((m) => m[1 + Math.floor(r() * Math.min(5, m.length - 1))]).filter((i) => i !== undefined);
+  for (const h of hubs) out[h].weight = 0.95;
+  const degree = new Array<number>(n).fill(1);
+  const seen = new Set<string>();
+  for (const x of out) if (x.parent) seen.add([x.id, x.parent].sort().join(">"));
+  let made_ = seen.size;
+  const linked = out.map((_, i) => i).filter((i) => fam[i] >= 0);
+  // the notes that link to others: about half; the rest are leaves
+  const writers = linked.filter(() => r() < 0.5);
+  // a target by its degree (the much linked get more), within a family
+  const byDegree = (pool: number[]) => {
+    let sum = 0;
+    for (const i of pool) sum += degree[i];
+    let u = r() * sum;
+    for (const i of pool) if ((u -= degree[i]) <= 0) return i;
+    return pool[pool.length - 1];
+  };
+  for (let tries = 0; made_ < links && tries < links * 20; tries++) {
+    const a = pick(writers);
+    const roll = r();
+    const b = roll < 0.25 ? pick(hubs) : roll < 0.85 ? byDegree(families[fam[a]]) : byDegree(writers);
+    if (a === b) continue;
+    const key = [out[a].id, out[b].id].sort().join(">");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    (out[a].links ??= []).push(out[b].id);
+    degree[a]++;
+    degree[b]++;
+    made_++;
+  }
+  return out;
+}
+
 type Stats = { fps: number; worst: number; p95: number; bubbles: number; stable: number | null; drawn: number | null; nodes: number; k: number };
 
 // The frames as the page sees them: their times, for the overlay and the
@@ -99,9 +189,10 @@ function stats(): Stats {
   };
 }
 
-function load(n: number) {
+function load(n: number | string) {
   restart();
-  step(store, applyNodes, { reset: true, nodes: legerGraph(n) });
+  const preset = typeof n === "string" ? PRESETS[n] : undefined;
+  step(store, applyNodes, { reset: true, nodes: preset ? preset.nodes() : legerGraph(Number(n)) });
 }
 
 function restart() {
@@ -210,16 +301,35 @@ function panZoom(t: number) {
   v.dispatchEvent(ev);
 }
 
+// sweep zooms the camera from where it is to SWEEP and back, about the
+// screen's middle, through the wheel (ctrl): over the threshold where the
+// graph draws bubbles instead of discs, and back.
+const SWEEP = 1.6;
+let swept: { k0: number; now: number } | null = null;
+function sweep(t: number) {
+  const v = viewport();
+  if (!v) return;
+  if (t < 20 || !swept) swept = { k0: scale(), now: scale() };
+  const u = Math.min(1, t / 1500), tri = u < 1 ? u : 1;
+  const back = t > 1500 ? Math.max(0, 1 - (t - 1500) / 1500) : tri;
+  const want = swept.k0 * Math.pow(SWEEP / swept.k0, back);
+  const dy = -Math.log(want / swept.now) / 0.006;
+  swept.now = want;
+  v.dispatchEvent(new WheelEvent("wheel", { deltaY: dy, ctrlKey: true, clientX: innerWidth / 2, clientY: innerHeight / 2, bubbles: true, cancelable: true }));
+}
+
 declare global {
   interface Window {
-    leger?: { load(n: number): void; add(k: number): void; remove(k: number): void; resize(): void; stats(): Stats; sample: typeof sample; pan: typeof pan; panZoom: typeof panZoom; zoomTo: typeof zoomTo };
+    leger?: { load(n: number | string): void; add(k: number): void; remove(k: number): void; resize(): void; stats(): Stats; sample: typeof sample; pan: typeof pan; panZoom: typeof panZoom; sweep: typeof sweep; zoomTo: typeof zoomTo };
   }
 }
 
 export function startLeger() {
-  const asked = Number(new URLSearchParams(location.search).get("n"));
-  window.leger = { load, add, remove, resize, stats, sample, pan, panZoom, zoomTo };
-  load(asked > 0 ? asked : 100);
+  const q = new URLSearchParams(location.search);
+  const asked = Number(q.get("n"));
+  const preset = q.get("preset");
+  window.leger = { load, add, remove, resize, stats, sample, pan, panZoom, sweep, zoomTo };
+  load(preset && PRESETS[preset] ? preset : asked > 0 ? asked : 100);
   let raf = 0;
   const loop = (t: number) => {
     frames.push(t);
@@ -242,7 +352,11 @@ export function startLeger() {
 // straight on their elements, not drawn again), and the controls.
 export function LegerPanel() {
   const out = useRef<HTMLPreElement>(null);
-  const [n, setN] = useState(() => Number(new URLSearchParams(location.search).get("n")) || 100);
+  const [n, setN] = useState<number | string>(() => {
+    const q = new URLSearchParams(location.search);
+    const p = q.get("preset");
+    return p && PRESETS[p] ? p : Number(q.get("n")) || 100;
+  });
   const [shut, setShut] = useState(false);
   useEffect(() => {
     const id = setInterval(() => {
@@ -260,11 +374,11 @@ export function LegerPanel() {
     }, 250);
     return () => clearInterval(id);
   }, []);
-  const go = (k: number) => {
+  const go = (k: number | string) => {
     setN(k);
     load(k);
   };
-  const idx = Math.max(0, SIZES.findIndex((s) => s >= n));
+  const idx = Math.max(0, SIZES.findIndex((s) => typeof n === "number" && s >= n));
   return (
     <aside className={`dev-phys dev-leger${shut ? " shut" : ""}`} aria-label="Fluidité">
       <header>
@@ -281,6 +395,11 @@ export function LegerPanel() {
             {SIZES.map((k) => (
               <button key={k} type="button" onClick={() => go(k)} aria-pressed={k === n}>
                 {k}
+              </button>
+            ))}
+            {Object.entries(PRESETS).map(([k, p]) => (
+              <button key={k} type="button" onClick={() => go(k)} aria-pressed={k === n}>
+                {p.label}
               </button>
             ))}
           </div>
