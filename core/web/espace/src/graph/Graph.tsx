@@ -7,7 +7,7 @@ import { Orb } from "../orb/Orb";
 import { Page } from "../page/Page";
 import { onReads, readsUnderWay } from "../page/usePage";
 import { bigBox, bigRoom, boxAt, edgeMark, frameAll, frameAlone, frameAround, framePages, pageMax, type Box, type Cam } from "./camera";
-import { CENTRING, edgePush, edgeStep, extent, onForces, pairs, Sim, type LNode, type Pos, type Pt } from "./layout";
+import { CENTRING, edgePush, edgeStep, extent, FORCES, onForces, pairs, Sim, SLICE, type LNode, type Pos, type Pt } from "./layout";
 import { coreShape, pickTiles, TILE, variation } from "./glance";
 import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits } from "./model";
 import { TileFace } from "./Tile";
@@ -34,8 +34,9 @@ const ease = [0.2, 0.7, 0.2, 1] as const;
 const PAGE_W = 700, PAGE_W_MANY = 620, PAGE_H = 520, PAGE_MAX = 640;
 
 // sim is the graph's simulation, one for the page's life: it outlives the
-// graph's switch to the phone's list and back.
-const sim = new Sim();
+// graph's switch to the phone's list and back. A frame takes a slice of
+// the main thread at most: a big graph is laid out over a few.
+const sim = new Sim(FORCES, { slice: SLICE });
 const where = (id: string) => sim.at(id);
 
 // What moves with the simulation's frames, told after each (the orb, the
@@ -232,8 +233,7 @@ export function Graph({ live }: { live: boolean }) {
   const frames = useRef(0);
   const reduced = useMemo(() => matchMedia("(prefers-reduced-motion: reduce)").matches, []);
   const wake = () => {
-    if (reduced && !sim.heldId()) {
-      sim.settle();
+    if (reduced && !sim.heldId() && sim.hurry()) {
       place();
       rested();
       markStill();
@@ -241,10 +241,12 @@ export function Graph({ live }: { live: boolean }) {
     }
     if (raf.current !== null) return;
     const loop = () => {
-      if (!sim.asleep()) sim.tick();
+      if (!sim.asleep()) sim.frame();
       const still = sim.asleep();
-      place();
-      if (still || (!sim.heldId() && ++frames.current % 15 === 0)) rested();
+      // laid out at once (hurry): shown once at rest, not on the way
+      const shown = still || !sim.hurrying();
+      if (shown) place();
+      if (still || (shown && !sim.heldId() && ++frames.current % 15 === 0)) rested();
       raf.current = still ? null : requestAnimationFrame(loop);
       markStill();
     };
