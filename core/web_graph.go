@@ -70,6 +70,13 @@ type espaceBoot struct {
 	// Attach is what the bar may attach to one message (attachments.go):
 	// how many files, and how large each, in bytes.
 	Attach espaceAttach `json:"attach"`
+	// Voice is what Settings → Voice set (voice.go): Listen, a service
+	// hears the user, so the bar has a microphone.
+	Voice espaceVoice `json:"voice"`
+}
+
+type espaceVoice struct {
+	Listen bool `json:"listen"`
 }
 
 // espaceAttach is the bar's limits on attachments.
@@ -82,7 +89,8 @@ func (w *web) handleEspaceBoot(rw http.ResponseWriter, r *http.Request, s *sessi
 	lang := w.lang(r)
 	w.c.noteUserLang(lang) // Eriphe's lines follow it
 	b := espaceBoot{Lang: lang, Name: assistantName(), CSRF: s.CSRF, Strings: espaceWords(lang, assistantName()),
-		View: w.c.view(), Setup: w.setupState(), Attach: espaceAttach{Many: maxAttachments, Size: maxAttachmentSize}}
+		View: w.c.view(), Setup: w.setupState(), Attach: espaceAttach{Many: maxAttachments, Size: maxAttachmentSize},
+		Voice: espaceVoice{Listen: w.c.voiceListen().on()}}
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(rw).Encode(b)

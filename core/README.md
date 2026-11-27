@@ -2624,6 +2624,10 @@ own.
   set). With the audio goes a vocabulary: the assistant's name and the titles of the nodes changed
   last, so that the names come out right. A redirect is never followed (the key would go along);
   neither the audio, the text nor the key is logged.
+- **The microphone**: `/espace/boot` says `voice.listen` when a service is set, and the bar then
+  shows a microphone (`orb/dictate.ts`): a tap records, a tap stops, the words join the draft and
+  are never sent by themselves. The pages' `Permissions-Policy` lets the workspace's own origin use
+  the microphone (`microphone=(self)`), and nothing else.
 
 ## Google accounts (Gmail, Calendar, Drive)
 

@@ -206,6 +206,15 @@ What it writes on a page is of two kinds:
 A live block only reads what you let Eriphe read freely: a tool whose reading needs your approval
 each time, or that you blocked, cannot feed it. Eriphe tells you.
 
+## Dictate instead of typing
+
+Once a voice service is set in **Settings → Voice** (Groq, OpenAI, or a Whisper server of your
+own), a microphone shows in the bar. Tap it and speak; tap it again when you are done (Escape
+cancels). What you said is written into the bar, after what you had typed: you read it, fix it if
+needed, and send it yourself. Nothing listens without that tap, and the microphone is let go as soon
+as you stop. With Groq or OpenAI your voice goes to that service; with a server of your own it stays
+at home.
+
 ## Follow something: a page kept up
 
 There are only bubbles. What you want to follow all the time ("keep an eye on my mail", "follow
