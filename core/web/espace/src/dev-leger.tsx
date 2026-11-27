@@ -100,37 +100,38 @@ function stats(): Stats {
 }
 
 function load(n: number) {
-  step(store, applyNodes, { reset: true, nodes: legerGraph(n) });
   restart();
+  step(store, applyNodes, { reset: true, nodes: legerGraph(n) });
 }
 
 function restart() {
   loadedAt = performance.now();
   stableAt = null;
   stableIn = null;
+  drawnIn = null;
 }
 
 function add(k: number) {
+  restart();
   const nodes = Object.values(store.getState().nodes);
   const more = legerGraph(nodes.length + k, 11).slice(nodes.length).map((x) => ({ ...x, id: `${x.id}m`, parent: x.parent && store.getState().nodes[x.parent] ? x.parent : undefined, links: undefined }));
   step(store, applyNodes, { nodes: more });
-  restart();
 }
 
 function remove(k: number) {
+  restart();
   const nodes = Object.values(store.getState().nodes).sort((a, b) => a.created.localeCompare(b.created) || a.id.localeCompare(b.id));
   const keep = nodes.slice(0, Math.max(0, nodes.length - k));
   step(store, applyNodes, { reset: true, nodes: keep });
-  restart();
 }
 
 // resize changes the weight, so the size, of every subject: the layout warms up.
 let grown = false;
 function resize() {
+  restart();
   grown = !grown;
   const nodes = Object.values(store.getState().nodes).filter((x) => !x.parent);
   step(store, applyNodes, { nodes: nodes.map((x) => ({ ...x, weight: grown ? Math.min(1.6, x.weight + 0.5) : Math.max(0.2, x.weight - 0.5) })) });
-  restart();
 }
 
 // sample records the frames and the long tasks for ms milliseconds, while
