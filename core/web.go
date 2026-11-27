@@ -188,7 +188,7 @@ func (p pageTemplates) in(lang string) (*template.Template, error) {
 }
 
 // sharedTemplates are the files of definitions every page has, not pages.
-var sharedTemplates = []string{"parts", "catalog", "tools", "apps", "connections", "places", "agents", "remote", "folders", "push", "skills", "cards", "activity", "access", "bot", "monitors"}
+var sharedTemplates = []string{"parts", "catalog", "tools", "apps", "connections", "places", "agents", "remote", "folders", "push", "skills", "cards", "activity", "access", "bot", "monitors", "voice"}
 
 // notify wakes the event streams at once, rather than at their next tick.
 func (w *web) notify() {
@@ -302,6 +302,7 @@ func (w *web) routes() http.Handler {
 	w.monitorRoutes(mux)    // web_monitors.go
 	w.welcomeRoutes(mux)    // web_welcome.go
 	w.pushRoutes(mux)       // web_push.go
+	w.voiceRoutes(mux)      // web_voice.go
 	w.channelRoutes(mux)    // web_channels.go
 	w.whereRoutes(mux)      // web_where.go
 	w.alertRoutes(mux)      // web_alerts.go

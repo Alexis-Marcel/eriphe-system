@@ -1,0 +1,55 @@
+{{/* Settings → Voice (web_voice.go): who hears the user, so that they can
+     dictate in the workspace. A service or nothing; its key, its model, the
+     language spoken; a test. The form shows the fields of the service
+     chosen (voice.css rules in app.css). */}}
+
+{{define "i-mic"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>{{end}}
+
+{{define "voice"}}
+<header class="page-head"><h2>{{t "settings.voice"}}</h2><p>{{t "voice.lead"}}</p></header>
+{{if .Data.Saved}}<p class="ok-note" role="status">{{if .Data.Listen.Preset}}{{t "voice.saved"}}{{else}}{{t "voice.savedoff"}}{{end}}</p>{{end}}
+<h3 class="section-title">{{template "i-mic"}}{{t "voice.listen"}}</h3>
+<p class="small muted">{{t "voice.listenlead"}}</p>
+{{template "voice-form" .}}
+{{end}}
+
+{{define "voice-form"}}{{with .Data}}{{$p := .Listen.Preset}}
+<form class="panel tool-form voice-form" id="voice-form" hx-post="/settings/voice" hx-swap="outerHTML" hx-disabled-elt="find button[type=submit]" autocomplete="off" novalidate>
+  {{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+  {{if .NoVault}}<p class="alert" role="alert">{{t "voice.err.novault"}}</p>{{end}}
+  <fieldset class="choices">
+    <legend>{{t "voice.service"}}</legend>
+    <div class="choice-row voice-presets">
+      <label class="choice"><input type="radio" name="preset" value="off" {{if not $p}}checked{{end}}><b>{{t "voice.off"}}</b><small>{{t "voice.offlead"}}</small></label>
+      {{range .Presets}}
+      <label class="choice"><input type="radio" name="preset" value="{{.ID}}" {{if eq $p .ID}}checked{{end}}><b>{{if .Name}}{{.Name}}{{else}}{{t (printf "voice.p.%s" .ID)}}{{end}}</b><small>{{t (printf "voice.p.%s.lead" .ID)}}</small></label>
+      {{end}}
+    </div>
+  </fieldset>
+
+  <div class="stack if-voice-on">
+    <label class="field if-voice-server"><span>{{t "voice.baseurl"}}</span>
+      <input type="url" name="base_url" value="{{.Server}}" maxlength="300" spellcheck="false" autocapitalize="off" class="mono" placeholder="http://192.0.2.10:8000/v1" aria-describedby="vbu-h">
+      <small id="vbu-h">{{t "voice.baseurlhint"}}</small></label>
+    {{range .Presets}}{{if .KeyPage}}<p class="small muted if-voice-{{.ID}}">{{t "voice.keywhere"}} <a href="{{.KeyPage}}" target="_blank" rel="noopener noreferrer">{{.KeyPage}}</a></p>{{end}}{{end}}
+    {{template "secret-field" dict "Name" "key" "Label" (t "voice.key") "Hint" (t "voice.keyhint") "IsSet" .Listen.Key}}
+    {{$l := .Listen}}{{range .Presets}}
+    <label class="field narrow-2 if-voice-{{.ID}}"><span>{{t "voice.model"}}</span>
+      <input type="text" name="model_{{.ID}}" value="{{if and (eq $l.Preset .ID) $l.Model}}{{$l.Model}}{{else}}{{.Model}}{{end}}" maxlength="100" spellcheck="false" autocapitalize="off" class="mono" {{if not .Model}}placeholder="Systran/faster-whisper-large-v3"{{end}} aria-describedby="vm-{{.ID}}-h">
+      <small id="vm-{{.ID}}-h">{{t "voice.modelhint"}}</small></label>
+    {{end}}
+    <label class="field narrow-2"><span>{{t "voice.language"}}</span>
+      <select name="language">
+        <option value="fr" {{if eq .Listen.Language "fr"}}selected{{end}}>{{t "voice.lang.fr"}}</option>
+        <option value="en" {{if eq .Listen.Language "en"}}selected{{end}}>{{t "voice.lang.en"}}</option>
+        <option value="auto" {{if not .Listen.Language}}selected{{end}}>{{t "voice.lang.auto"}}</option>
+      </select></label>
+  </div>
+
+  <div class="actions form-actions">
+    <button class="btn btn-primary" type="submit">{{template "i-check"}}{{t "form.save"}}</button>
+    <button class="btn btn-soft test-btn if-voice-on" type="button" hx-post="/settings/voice/test" hx-include="closest form" hx-target="#voice-test" hx-swap="innerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{t "test.button"}}</span><span class="when-busy">{{t "test.busy"}}</span></button>
+  </div>
+  <div id="voice-test" class="test-box" aria-live="polite"></div>
+</form>
+{{end}}{{end}}
