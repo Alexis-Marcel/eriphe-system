@@ -15,10 +15,10 @@ import { useWords } from "../i18n";
 // comes from and what Oui does in general go under Détails.
 
 // KEEPS are the kinds of proposals that only ask whether to keep something
-// (a memory, a reminder): yes runs nothing. Their header asks it and their
+// (a reminder): yes runs nothing. Their header asks it and their
 // buttons say Garder and Oublier; any other kind does something once
 // accepted: Proposition, Oui and ✕.
-const KEEPS: Record<string, string> = { memory: "espace.a2.proposal.memory", intention: "espace.a2.proposal.intention" };
+const KEEPS: Record<string, string> = { intention: "espace.a2.proposal.intention" };
 
 // Fields are a proposal's fields, by name: a Markdown value (a skill's
 // instructions) drawn as Markdown, in a box that scrolls when long.

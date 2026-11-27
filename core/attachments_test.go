@@ -310,9 +310,9 @@ func TestReadAttachmentImage(t *testing.T) {
 	if tainted := c.turnTaint(); len(tainted) != 0 {
 		t.Fatalf("the user's attachment tainted the turn: %v", tainted)
 	}
-	d, err := c.decideBrainWrite(kindFact, "", scanResult{})
+	d, err := c.decideBrainWrite("", scanResult{})
 	if err != nil || d.Status != memActive {
-		t.Fatalf("a clean turn's memory: %+v %v", d, err)
+		t.Fatalf("a clean turn's intention: %+v %v", d, err)
 	}
 }
 

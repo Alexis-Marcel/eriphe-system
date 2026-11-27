@@ -377,7 +377,7 @@ Guide them; do not ask them to tell you the code, the password or any key.
    a link back to it (`/welcome`).
    The first time the workspace opens, the assistant writes first and offers a **short
    interview** (who they are, what they expect, how to talk to them). They can answer or skip it;
-   it can be done again later from the Memory page ("Faire l'interview").
+   it can be done again later by asking the assistant ("refais-moi l'interview").
 
 Nothing else is on by default: no tool, no rule, no remote access.
 

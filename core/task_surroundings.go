@@ -15,7 +15,7 @@ import (
 // children, links and backlinks (id, status, title, goal); for a task in a
 // node of its own (the brain's), its parent's other children and links
 // too, the subject it works for (#767). Nothing else:
-// nothing about the user, no memory; the task reads more with node_read
+// nothing about the user; the task reads more with node_read
 // and node_find when its work needs it (task_nodes.go).
 //
 // It quotes no one else's words: a title that may be (written after an

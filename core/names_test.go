@@ -32,7 +32,7 @@ func names(t *testing.T, c *core) map[string]string {
 func TestAboutNotedWhenWritten(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	seq := ownerSays(c, "Le site web passe en ligne vendredi, préviens-moi")
-	if _, err := c.brainRemember(rememberIn{Text: "Le site web passe en ligne vendredi.", Kind: kindFact, About: "Projet : Site Web", SourceRef: ref(seq)}); err != nil {
+	if _, err := c.brainIntend(intendIn{Text: "Mettre le site web en ligne vendredi.", About: "Projet : Site Web", SourceRef: ref(seq)}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.brainIntend(intendIn{Text: "Relire la page d'accueil.", About: "topic:accueil", OwedTo: "Personne:Sam", SourceRef: ref(seq)}); err != nil {
@@ -56,9 +56,9 @@ func TestAboutNotedWhenWritten(t *testing.T) {
 		}
 	}
 	var about string
-	c.mem.db.QueryRow(`SELECT about FROM memories WHERE kind = 'fact'`).Scan(&about)
+	c.mem.db.QueryRow(`SELECT about FROM intentions WHERE text LIKE 'Mettre%'`).Scan(&about)
 	if about != "project:site-web" {
-		t.Errorf("a memory about the key is about %q", about)
+		t.Errorf("an intention about the key is about %q", about)
 	}
 	// A mail or an event is a page's reference, never an about.
 	if _, err := aboutKey("mail:abc"); err == nil || !strings.Contains(err.Error(), "[m1]: mail:<id>") {
@@ -67,11 +67,10 @@ func TestAboutNotedWhenWritten(t *testing.T) {
 }
 
 // A message names entities by the words of their keys; never by a word
-// too short, an id, or Eriphe's own topics; a name inside a longer one
-// named too gives way.
+// too short or an id; a name inside a longer one named too gives way.
 func TestNamed(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	for _, k := range []string{"project:site", "project:site-web", "person:sam", "topic:facture", "project:x", "topic:workspace"} {
+	for _, k := range []string{"project:site", "project:site-web", "person:sam", "topic:facture", "project:x"} {
 		c.store.noteAbout(k)
 	}
 	for _, tc := range []struct {
@@ -81,7 +80,7 @@ func TestNamed(t *testing.T) {
 		{"Où en est le site web ?", []string{"project:site-web"}},
 		{"Le site est lent", []string{"project:site"}},
 		{"Dis à Sam que les factures sont payées", []string{"person:sam", "topic:facture"}},
-		{"La case x, l'espace workspace", nil},
+		{"La case x", nil},
 		{"Rien à voir", nil},
 	} {
 		got := c.named(tc.text)
@@ -135,45 +134,60 @@ func TestCueMatchesLikeNames(t *testing.T) {
 	}
 }
 
-// memory.db at schema 7 says subject: opened, it is at 8, about, its
-// values kept and found by full text.
-func TestMemoryMigratesToAbout(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "memory.db")
-	db, err := sql.Open("sqlite", path)
+// memory.db holds the intentions only: a new file has no memories; one
+// made before keeps its other tables unread, its intentions read; a file
+// at another schema is refused, never changed.
+func TestMemoryFileHoldsIntentions(t *testing.T) {
+	fresh, err := openMemory(filepath.Join(t.TempDir(), "memory.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	v7 := func(s string) string { return strings.ReplaceAll(s, "about", "subject") }
-	for _, q := range []string{`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`, v7(memorySchema), v7(intentionsSchema),
-		`INSERT INTO meta VALUES ('schema_version', '7')`,
-		`INSERT INTO memories (kind, subject, text, valid_from, recorded_at, source_kind, trust, status, updated_at)
-			VALUES ('fact', 'project:site', 'Le site est hébergé sur le NAS', 1, 1, 'user', 'first_party', 'active', 1)`,
-		`INSERT INTO intentions (kind, text, subject, state, source_kind, trust, created_at, updated_at)
-			VALUES ('todo', 'Relire', 'project:site', 'open', 'user', 'first_party', 1, 1)`} {
-		if _, err := db.Exec(q); err != nil {
-			t.Fatalf("%s: %v", q, err)
+	var n int
+	fresh.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name = 'memories'`).Scan(&n)
+	if v := fresh.schemaVersion(); v != memorySchemaVersion || n != 0 {
+		t.Fatalf("a new file: schema %d, memories table %d", v, n)
+	}
+	fresh.db.Close()
+
+	open := func(version string) (*memStore, string) {
+		path := filepath.Join(t.TempDir(), "memory.db")
+		db, err := sql.Open("sqlite", path)
+		if err != nil {
+			t.Fatal(err)
 		}
+		for _, q := range []string{`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`, intentionsSchema,
+			`CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)`, `CREATE TABLE memories (id INTEGER PRIMARY KEY, text TEXT)`,
+			`INSERT INTO memories (text) VALUES ('Le site est hébergé sur le NAS')`,
+			`INSERT INTO meta VALUES ('schema_version', '` + version + `')`,
+			`INSERT INTO intentions (kind, text, about, state, source_kind, trust, created_at, updated_at)
+				VALUES ('reminder', 'Relire', 'project:site', 'open', 'owner', 'owner', 1, 1)`} {
+			if _, err := db.Exec(q); err != nil {
+				t.Fatalf("%s: %v", q, err)
+			}
+		}
+		db.Close()
+		m, err := openMemory(path)
+		if m != nil {
+			t.Cleanup(func() { m.db.Close() })
+		}
+		if err != nil {
+			return nil, err.Error()
+		}
+		return m, ""
 	}
-	db.Close()
-	m, err := openMemory(path)
-	if err != nil {
-		t.Fatal(err)
+	m, why := open("8")
+	if m == nil {
+		t.Fatal(why)
 	}
-	defer m.db.Close()
-	if v := m.schemaVersion(); v != memorySchemaVersion {
-		t.Fatalf("schema %d", v)
+	if xs, err := m.intentions(); err != nil || len(xs) != 1 || xs[0].About != "project:site" {
+		t.Fatalf("intentions %+v %v", xs, err)
 	}
-	var about, intent string
-	m.db.QueryRow(`SELECT about FROM memories`).Scan(&about)
-	m.db.QueryRow(`SELECT about FROM intentions`).Scan(&intent)
-	if about != "project:site" || intent != "project:site" {
-		t.Errorf("about %q, intention %q", about, intent)
+	m.db.QueryRow(`SELECT COUNT(*) FROM memories`).Scan(&n)
+	if n != 1 {
+		t.Errorf("the old memories were touched: %d", n)
 	}
-	if xs, err := m.recall(recallQuery{Query: "hébergé NAS"}); err != nil || len(xs) != 1 {
-		t.Errorf("full text: %+v %v", xs, err)
-	}
-	if xs, err := m.recall(recallQuery{About: "project:site"}); err != nil || len(xs) != 1 {
-		t.Errorf("about: %+v %v", xs, err)
+	if _, why := open("7"); !strings.Contains(why, "schema 7") {
+		t.Errorf("a file at schema 7: %q", why)
 	}
 }
 

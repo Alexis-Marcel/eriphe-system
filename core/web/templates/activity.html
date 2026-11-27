@@ -101,10 +101,10 @@
   <h3 id="ap-perms">{{t "approve.perms"}} <span class="count">{{len .Perms}}</span></h3>
   {{range .Perms}}{{template "permission" .}}{{end}}
 </section>{{end}}
-{{if or .Memories .Intents}}<section class="approve-group memory" id="memory" aria-labelledby="ap-mem">
+{{if .Intents}}<section class="approve-group memory" id="memory" aria-labelledby="ap-mem">
   <h3 id="ap-mem">{{t "approve.memory"}} <span class="count">{{.Remember}}</span></h3>
-  <p class="muted small">{{t "mem.inboxlead"}}</p>
-  <div class="mem-list">{{range .Intents}}{{template "intent-card" .}}{{end}}{{range .Memories}}{{template "mem-card" .}}{{end}}</div>
+  <p class="muted small">{{t "intent.inboxlead"}}</p>
+  <div class="mem-list">{{range .Intents}}{{template "intent-card" .}}{{end}}</div>
 </section>{{end}}
 {{if .Rules}}<section class="approve-group" id="rules" aria-labelledby="ap-rules">
   <h3 id="ap-rules">{{t "approve.rules"}} <span class="count">{{len .Rules}}</span></h3>

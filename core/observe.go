@@ -12,8 +12,8 @@ import (
 // memory only, a few minutes at most, never in the database. These are
 // observations, not a context: closed values, no app name, no window, and
 // they only make Eriphe quieter (a locked, idle or busy machine is skipped).
-// The user's situation ("in Lyon until Sunday") is dated memory
-// (situations.go); the room they are in is what a voice channel says
+// Where the user is for a while ("in Lyon until Sunday") is written in a
+// node; the room they are in is what a voice channel says
 // (channel_out.go); anything else, Eriphe reads from a tool when it needs
 // it.
 

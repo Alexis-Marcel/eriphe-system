@@ -16,12 +16,6 @@ import (
 // outcomeMakers raise a waiting card of each kind, each in a core of its
 // own; they give its ref.
 var outcomeMakers = map[string]func(t *testing.T) (*core, string){
-	cardMemory: func(t *testing.T) (*core, string) {
-		c, node := outcomeCore(t)
-		x := mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Le garage ferme lundi", Status: memProposed, SourceKind: srcTask})
-		c.cardNow(cardMemory, x.ID, "", nodeRef(node))
-		return c, proposalRef(cardMemory, x.ID)
-	},
 	cardIntention: func(t *testing.T) (*core, string) {
 		c, node := outcomeCore(t)
 		x := mustIntend(t, c.mem, &Intention{Text: "Relancer Sam", State: intentProposed, SourceKind: srcTask, SourceRef: "task:t-1", Trust: trustOwner})

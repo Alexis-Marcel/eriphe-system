@@ -1,3 +1,5 @@
+{{/* The intentions' page (web_intentions.go): what is owed, by whom, by
+     when. Its cards are in cards.html. */}}
 {{define "main"}}
 <div class="settings {{template "settings-level" .}}">
   {{template "settings-nav" .}}
@@ -9,136 +11,15 @@
 <div class="memory">
   <header class="mem-hero">
     <div class="mem-title">
-      <span class="mem-mark" aria-hidden="true">{{template "i-memory"}}</span>
-      <div><h2>{{t "mem.about"}}</h2><p>{{t "mem.lead"}}</p></div>
+      <span class="mem-mark" aria-hidden="true">{{template "i-check"}}</span>
+      <div><h2>{{t "intent.title"}}</h2><p>{{t "intent.lead"}}</p></div>
     </div>
-    {{if not .Off}}<a class="btn btn-ghost sm" href="/memory/export.jsonl" download aria-label="{{t "mem.export"}}">{{template "i-download"}}{{t "mem.export"}}</a>{{end}}
   </header>
-  {{if .Off}}<p class="alert">{{t "mem.off"}}</p>{{else}}
-  {{if eq .View "all"}}{{template "mem-about" .}}{{end}}
-  {{template "mem-stats" .}}
-  <nav class="mem-tabs" aria-label="{{t "nav.memory"}}">
-    <a href="/memory" {{if eq .View "all"}}aria-current="page"{{end}}>{{t "mem.view.all"}}</a>
-    <a href="/memory?view=journal" {{if eq .View "journal"}}aria-current="page"{{end}}>{{t "mem.view.journal"}}</a>
-    <a href="/memory?view=commitments" {{if eq .View "commitments"}}aria-current="page"{{end}}>{{t "mem.view.commitments"}}{{if .Overdue}}<b class="tab-count warn">{{.Overdue}}</b>{{end}}</a>
-    <a href="/memory?view=profile" {{if eq .View "profile"}}aria-current="page"{{end}}>{{t "mem.view.profile"}}</a>
-    {{if .Forgotten}}<a href="/memory?view=forgotten" class="tab-quiet" {{if eq .View "forgotten"}}aria-current="page"{{end}}>{{t "mem.view.forgotten"}}<b class="tab-count quiet">{{.Forgotten}}</b></a>{{end}}
-  </nav>
-  {{if eq .View "journal"}}{{template "mem-journal" .}}
-  {{else if eq .View "commitments"}}{{template "mem-commitments" .}}
-  {{else if eq .View "profile"}}{{template "mem-profile" .}}
-  {{else if eq .View "forgotten"}}{{template "mem-forgotten" .}}
-  {{else}}{{template "mem-all" .}}{{end}}
+  {{if .Off}}<p class="alert">{{t "intent.off"}}</p>{{else}}
+  <div class="mem-list" id="intent-list">{{range .Intents}}{{template "intent-card" .}}{{end}}</div>
+  {{if not .Intents}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-check"}}</span><p>{{t "intent.none"}}</p></div>{{end}}
+  {{if .IntentsDone}}<details class="done"><summary>{{t "intent.donerecent"}} <span class="count">{{len .IntentsDone}}</span></summary>
+  <div class="mem-list">{{range .IntentsDone}}{{template "intent-card" .}}{{end}}</div></details>{{end}}
   {{end}}
 </div>
 {{end}}{{end}}
-
-{{define "i-download"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14"/></svg>{{end}}
-{{define "i-search"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>{{end}}
-{{define "i-clock"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></svg>{{end}}
-
-{{define "mem-stats"}}
-<div class="mem-stats" id="mem-stats" hx-get="{{if eq .View "all"}}/memory{{else}}/memory?view={{.View}}{{end}}" hx-trigger="memory-changed from:body" hx-select="#mem-stats" hx-swap="outerHTML">
-  <a class="stat" href="/memory"><b>{{.Active}}</b><span>{{t "mem.stat.active"}}</span></a>
-  <a class="stat{{if .Proposed}} stat-attn{{end}}" href="/settings/approve"><b>{{.Proposed}}</b><span>{{t "mem.stat.proposed"}}</span></a>
-  <a class="stat{{if .Overdue}} stat-warn{{end}}" href="/memory?view=commitments"><b>{{.Open}}</b><span>{{t "mem.stat.open"}}{{if .Overdue}} · {{tf "mem.stat.overdue" .Overdue}}{{end}}</span></a>
-  <a class="stat stat-meter" href="/memory?view=profile">
-    <b>{{.Pct}}<small>%</small></b><span>{{t "mem.stat.profile"}}<span class="stat-detail"> · {{tf "mem.budget" .ProfileUsed .Budget}}</span></span>
-    <progress class="meter{{if ge .Pct 90}} full{{end}}" max="{{.Budget}}" value="{{.ProfileUsed}}" aria-label="{{t "mem.stat.profile"}}">{{.Pct}} %</progress>
-  </a>
-</div>
-{{end}}
-
-{{define "mem-all"}}
-<form class="mem-search" method="get" action="/memory" role="search">
-  <label class="search-box"><span class="sr-only">{{t "mem.search"}}</span>{{template "i-search"}}
-    <input type="text" name="q" value="{{.Q}}" placeholder="{{t "mem.searchph"}}" autocomplete="off" spellcheck="false" aria-describedby="mem-search-h"></label>
-  <label class="select"><span class="sr-only">{{t "mem.on"}}</span>
-    <select name="about"><option value="">{{t "mem.anyabout"}}</option>
-      {{$cur := .On}}{{range .Ons}}<option value="{{.}}" {{if eq . $cur}}selected{{end}}>{{.}}</option>{{end}}
-    </select></label>
-  {{if .Kind}}<input type="hidden" name="kind" value="{{.Kind}}">{{end}}
-  <label class="check"><input type="checkbox" name="past" value="1" {{if .Past}}checked{{end}}><span>{{t "mem.past"}}</span></label>
-  <button class="btn btn-primary" type="submit">{{t "mem.go"}}</button>
-  <small id="mem-search-h" class="muted">{{t "mem.searchhint"}}</small>
-</form>
-<nav class="kind-chips" aria-label="{{t "mem.kind"}}">
-  <a href="{{.AllLink}}" class="kchip" {{if not .Kind}}aria-current="true"{{end}}>{{t "mem.allkinds"}}</a>
-  {{range .KindLinks}}<a href="{{.Href}}" class="kchip k-{{.Kind}}" {{if .Current}}aria-current="true"{{end}}><i aria-hidden="true"></i>{{t (printf "kind.%s" .Kind)}}</a>{{end}}
-</nav>
-<details class="panel mem-add">
-  <summary>{{template "i-plus"}}{{t "mem.add"}}</summary>
-  <form class="mem-form" hx-post="/memory" hx-target="#mem-list" hx-swap="afterbegin" data-reset>
-    <label class="field span2"><span>{{t "mem.text"}}</span><textarea name="text" rows="2" required maxlength="2000" placeholder="{{t "mem.textph"}}"></textarea></label>
-    <label class="field"><span>{{t "mem.kind"}}</span><select name="kind">{{range .Kinds}}<option value="{{.}}" {{if eq . "fact"}}selected{{end}}>{{t (printf "kind.%s" .)}}</option>{{end}}</select></label>
-    <label class="field"><span>{{t "mem.on"}}</span><input type="text" name="about" maxlength="100" placeholder="{{t "mem.aboutph"}}" class="mono" spellcheck="false" autocomplete="off"></label>
-    <label class="field"><span>{{t "mem.links"}}</span><textarea name="links" rows="1" placeholder="{{t "mem.linksph"}}" class="mono"></textarea></label>
-    <div class="mem-form-end span2">
-      <label class="check"><input type="checkbox" name="pin" value="1"><span>{{t "mem.pinit"}}</span></label>
-      <button class="btn btn-primary" type="submit">{{t "mem.save"}}</button>
-    </div>
-  </form>
-</details>
-<div class="mem-list" id="mem-list">
-{{range .Items}}{{template "mem-card" .}}{{end}}
-</div>
-{{if not .Items}}{{if or .Q .Kind .On .Past (not .About)}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-memory"}}</span><p>{{if or .Q .Kind .On}}{{t "mem.nomatch"}}{{else}}{{t "mem.none"}}{{end}}</p></div>{{end}}{{end}}
-{{end}}
-
-{{/* What the assistant knows about me: the profile and what is about me
-(about owner), the pinned first, with the cards' usual actions. */}}
-{{define "mem-about"}}
-<section class="panel mem-about" id="mem-about" aria-labelledby="mem-about-t">
-  <header class="mem-about-head">
-    <div><h3 id="mem-about-t">{{t "mem.essentials"}}</h3><p class="muted small">{{t "mem.aboutlead"}}</p></div>
-    {{if .Interview}}<form hx-post="/memory/interview" hx-disabled-elt="find button" class="inline">
-      <button class="btn btn-soft sm" type="submit">{{template "i-chat"}}{{t "mem.interview"}}</button>
-    </form>{{end}}
-  </header>
-  {{if .About}}<div class="mem-list">{{range .About}}{{template "mem-card" .}}{{end}}</div>
-  {{else}}<p class="muted">{{if .Interview}}{{t "mem.aboutnone"}}{{else}}{{t "mem.aboutnobrain"}}{{end}}</p>{{end}}
-</section>
-{{end}}
-
-{{define "mem-journal"}}
-<div class="mem-journal-head">
-  <p class="mem-lead">{{template "i-clock"}}{{t "mem.journallead"}}</p>
-</div>
-{{if .Days}}
-<ol class="days">
-{{range .Days}}
-  <li class="day">
-    <h3 class="day-label"><time datetime="{{iso .Day}}">{{.Label}}</time></h3>
-    <ol class="entries">{{range .Items}}<li class="entry">{{template "mem-card" .}}</li>{{end}}</ol>
-  </li>
-{{end}}
-</ol>
-{{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-clock"}}</span><p>{{t "mem.journalnone"}}</p></div>{{end}}
-{{end}}
-
-{{define "mem-commitments"}}
-<p class="mem-lead">{{template "i-check"}}{{t "mem.commitmentslead"}}</p>
-<div class="mem-list" id="intent-list">{{range .Intents}}{{template "intent-card" .}}{{end}}</div>
-{{if not .Intents}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-check"}}</span><p>{{t "mem.commitmentsnone"}}</p></div>{{end}}
-{{if .IntentsDone}}<details class="done"><summary>{{t "mem.donerecent"}} <span class="count">{{len .IntentsDone}}</span></summary>
-<div class="mem-list">{{range .IntentsDone}}{{template "intent-card" .}}{{end}}</div></details>{{end}}
-{{end}}
-
-{{define "mem-profile"}}
-<section class="panel profile-panel">
-  <div class="budget">
-    <div class="budget-num"><b>{{.ProfileUsed}}</b><span>/ {{.Budget}}</span></div>
-    <progress class="meter big{{if ge .Pct 90}} full{{end}}" max="{{.Budget}}" value="{{.ProfileUsed}}" aria-label="{{t "mem.stat.profile"}}">{{.Pct}} %</progress>
-  </div>
-  <p class="muted small">{{tf "mem.budgetlead" .Budget}}</p>
-</section>
-<div class="mem-list" id="mem-list">{{range .Items}}{{template "mem-card" .}}{{end}}</div>
-{{if not .Items}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-pin"}}</span><p>{{t "mem.profilenone"}}</p></div>{{end}}
-{{end}}
-
-{{define "mem-forgotten"}}
-<p class="mem-lead">{{t "mem.forgottenlead"}}</p>
-<div class="mem-list" id="mem-list">{{range .Items}}{{template "mem-card" .}}{{end}}</div>
-{{if not .Items}}<div class="empty"><p>{{t "mem.forgottennone"}}</p></div>{{end}}
-{{end}}
-

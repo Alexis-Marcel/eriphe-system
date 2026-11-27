@@ -25,7 +25,7 @@ func TestReworkAPageEndToEnd(t *testing.T) {
 	c.turn.start(1, 1, 0)
 	c.turnNode(page)
 	for range brainGestures {
-		c.turn.charge("remember", nil)
+		c.turn.charge("intend", nil)
 	}
 	if why, _ := c.turn.charge("node_write", map[string]any{"id": page, "body": strings.Repeat("Une page. ", 100)}); why == "" {
 		t.Fatal("a whole page passed the spent budget")

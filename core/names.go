@@ -12,7 +12,7 @@ import (
 )
 
 // The names index (#573): what a record is about (its about) is a node,
-// node:<id>, or an entity of the memory, a key kind:slug (pr:owner/repo#12,
+// node:<id>, or an entity, a key kind:slug (pr:owner/repo#12,
 // project:site, topic:<monitor>, person:lina), the user (owner), the home;
 // the entities' keys are in one index, names(name, target), in core.db,
 // each naming itself: a row that names another target is none of the
@@ -34,7 +34,7 @@ func init() { extraSchema = append(extraSchema, namesSchema) }
 // namedMax is the most entities a message names.
 const namedMax = 5
 
-// aboutBook is what the memory asks of the names: the target an about is
+// aboutBook is what the intentions ask of the names: the target an about is
 // kept under, noted as seen (note), or only looked up (resolve).
 type aboutBook interface {
 	noteAbout(about string) string
@@ -117,11 +117,11 @@ func (c *core) useMemory(m *memStore) {
 	c.mem = m
 	if m != nil {
 		m.names = c.store
-		m.moved = func() { c.settleCards(cardMemory, cardIntention) } // its proposals' cards follow them
+		m.moved = func() { c.settleCards(cardIntention) } // its proposals' cards follow them
 	}
 }
 
-// noteAbout is the memory's about as kept, noted as seen.
+// noteAbout is an intention's about as kept, noted as seen.
 func (m *memStore) noteAbout(about string) string {
 	if m.names == nil {
 		return about
@@ -129,7 +129,7 @@ func (m *memStore) noteAbout(about string) string {
 	return m.names.noteAbout(about)
 }
 
-// resolveAbout is the memory's about to look up by.
+// resolveAbout is an intention's about to look up by.
 func (m *memStore) resolveAbout(about string) string {
 	if m.names == nil {
 		return about
@@ -138,23 +138,15 @@ func (m *memStore) resolveAbout(about string) string {
 }
 
 // A name told in a message. A key's words are its slug's, for a kind
-// that names (project, person, client, tool, topic); Eriphe's own topics,
-// the user, the home and ids have none.
-
-// systemEntity tells an entity of Eriphe's own: the workspace, its wakes.
-// It is never told in a message.
-func systemEntity(key string) bool {
-	return key == workspaceEntity || key == heartbeatEntity
-}
+// that names (project, person, client, tool, topic); the user, the home
+// and ids have none.
 
 // keyWords is the slug of a key that is told in a message, "" if none.
 func keyWords(key string) string {
 	kind, slug, _ := strings.Cut(key, ":")
 	switch kind {
 	case aliasProject, aliasPerson, aliasClient, aliasTool, aliasTopic:
-		if !systemEntity(key) {
-			return slug
-		}
+		return slug
 	}
 	return ""
 }

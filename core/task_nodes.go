@@ -13,7 +13,7 @@ import (
 )
 
 // eriphe-nodes (#629): a worker task's own node, for the task. Every
-// worker task with a node has it, as it has its memory: it is not lent.
+// worker task with a node has it: it is not lent.
 // Its node is its work, the graph its context (#766): it reads any node
 // (node_read, archived ones when it asks) and finds nodes (node_find), as
 // the brain does; it starts with its node's place in the graph in its
@@ -22,7 +22,8 @@ import (
 // it works for, the nodes someone else linked to or from these
 // (node_write, node_edit, node_append); it opens a child of one of them
 // (node_open), and says how its work goes (progress). Following a skill, it proposes a
-// version of it (skill_propose.go). It never starts a task (the
+// version of it (skill_propose.go); a skill's run reads what happened
+// since a time (since, since.go). It never starts a task (the
 // engine starts steps), never archives, approves nor closes a node.
 //
 // What code keeps, whatever the task reads and writes:
@@ -54,8 +55,9 @@ const (
 )
 
 // nodesTools are its tools, in order.
-// skill_propose is only a task's that follows a skill (skill_propose.go).
-var nodesTools = []string{"node_read", "node_find", "node_write", "node_edit", "node_append", "node_open", "progress", "page_format", "skill_propose"}
+// skill_propose is only a task's that follows a skill (skill_propose.go),
+// since only a skill's run's (since.go).
+var nodesTools = []string{"node_read", "node_find", "node_write", "node_edit", "node_append", "node_open", "progress", "page_format", "skill_propose", "since"}
 
 // taskNodesTools are its tools as the task's agent names them: allowed in
 // advance, they ask nothing.
@@ -257,6 +259,12 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 		tool(s, "skill_propose", "Propose a new version of the skill you follow, only that one: its whole instructions rewritten, and why in one line. Only when its method was wrong, or missed a step or a check it should have had; never for a detail of this node or of this one time. The user approves it on a card; until then the approved version stays, and nothing else of the skill changes.",
 			func(ctx context.Context, in skillProposeIn) (map[string]any, error) {
 				return c.proposeTaskSkill(t.ID, in)
+			})
+	}
+	if r := c.runOfTask(t.ID); r != nil {
+		tool(s, "since", "What happened since a time, oldest first: tasks, Eriphe's notifications (sent, held for later, dropped), intentions, messages, the event journal. t: an RFC3339 time, YYYY-MM-DD or YYYY-MM-DDTHH:MM, away (since the user left) or last_run (since this skill's previous run). What someone else wrote is listed, not quoted. Use it for a brief: what waits for the user is there.",
+			func(ctx context.Context, in sinceIn) (map[string]any, error) {
+				return c.runSince(r, in)
 			})
 	}
 	registerPageFormat(s) // how its node's page is written (page_format.go)

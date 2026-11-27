@@ -84,7 +84,7 @@ type TaskSpec struct {
 	CheckRounds int         `json:"check_rounds,omitempty"`
 
 	// Untrusted: eriphe-core started the task on what came from outside (a
-	// tainted turn, the brain, memory extraction): it gets a cache of its
+	// tainted turn, the brain): it gets a cache of its
 	// own, never the one the other tasks run from (cache.go).
 	Untrusted bool `json:"untrusted,omitempty"`
 }

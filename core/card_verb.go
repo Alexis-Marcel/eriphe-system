@@ -18,7 +18,6 @@ import (
 // kindVerbs are the words of each kind's yes, by kind: every kind of
 // proposalKinds has one (TestEveryCardHasItsVerb).
 var kindVerbs = map[string]string{
-	cardMemory:    "card.verb.keep",
 	cardIntention: "card.verb.keep",
 	cardRule:      "card.verb.apply",
 	cardSetting:   "card.verb.change",

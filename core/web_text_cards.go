@@ -13,7 +13,6 @@ func init() {
 
 var cardStrings = map[string]map[string]string{
 	"fr": {
-		"card.kind.memory":        "À retenir",
 		"card.kind.intention":     "Rappel",
 		"card.kind.rule":          "Règle de notification",
 		"card.kind.watch":         "Règle",
@@ -103,7 +102,6 @@ var cardStrings = map[string]map[string]string{
 		"approve.pagelead":        "{{name}} te demande ton accord dans l'espace ; tout ce qui attend encore est aussi ici. Rien n'entre en vigueur sans toi.",
 	},
 	"en": {
-		"card.kind.memory":        "To remember",
 		"card.kind.intention":     "Reminder",
 		"card.kind.rule":          "Notification rule",
 		"card.kind.watch":         "Rule",

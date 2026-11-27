@@ -38,7 +38,7 @@ import (
 // no card: its Agenda showing the day, its choices adjustable after (ask
 // buttons, in a tainted turn too), no questionnaire. Until a run records
 // it, it is written by hand after a real case: the page written after a
-// recall that read a mail's fact, the turn tainted. The pages the run
+// read of a mail, the turn tainted. The pages the run
 // wrote as blocks were converted by hand to Markdown, a refusal of the
 // blocks' grammar (an ask bound to read data) made one of the page's (a
 // callout marked external by its author). Turn 13 writes the

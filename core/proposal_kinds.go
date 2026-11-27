@@ -39,7 +39,7 @@ type proposalKind struct {
 }
 
 // proposalKinds names the kinds in the order what waits is listed.
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardSetting, cardTaskStart, cardAccess, cardSkill, cardCalls, cardMonitor}
+var proposalKinds = []string{cardIntention, cardRule, cardSetting, cardTaskStart, cardAccess, cardSkill, cardCalls, cardMonitor}
 
 // kindsOf is the table, by kind; filled in init, since its rows call the
 // functions that read it.
@@ -47,17 +47,6 @@ var kindsOf map[string]proposalKind
 
 func init() {
 	kindsOf = map[string]proposalKind{
-		cardMemory: {read: (*core).memoryProposal, waiting: (*core).proposedMemories, outcome: told("le souvenir est retenu", "il est oublié"),
-			decides: func(c *core, _ context.Context, id int64, yes bool) error {
-				if yes {
-					_, err := c.mem.approve(id, "owner")
-					return err
-				}
-				return c.mem.forget(id, "owner", "rejected")
-			},
-			withdraw: func(c *core, _ context.Context, id int64) error {
-				return c.mem.forget(id, "eriphe", "withdrawn: it no longer waits")
-			}},
 		cardIntention: {read: (*core).intentionProposal, waiting: (*core).proposedIntentions, outcome: told("l'intention est ouverte", "elle est annulée"),
 			decides: func(c *core, _ context.Context, id int64, yes bool) error {
 				ch, action := intentionChange{State: intentOpen}, "approve"
@@ -128,45 +117,8 @@ func init() {
 // (resolveByText).
 const byText = "text"
 
-// The kinds whose records are read here: a memory, an intention, a
-// notification rule, a setting, an undo of the learning journal.
-
-func (c *core) memoryProposal(p proposal) proposal {
-	if c.mem == nil {
-		return p
-	}
-	x, err := c.mem.memory(p.ID)
-	if err != nil {
-		return p
-	}
-	p.Pending, p.Extracted = x.Status == memProposed, x.SourceKind == srcExtraction
-	p.Tainted = externalWhy(x.Trust, x.Flags, x.SourceRef)
-	switch x.Status {
-	case memDeleted:
-		p.Outcome = cardRejected
-	case memActive, memArchived:
-		p.Outcome = cardApproved
-	}
-	p.text = func(string) string { return x.Text }
-	return p
-}
-
-// proposedMemories are the memories that wait for a card: those the
-// extraction proposed get none, they wait in À valider and expire undecided.
-func (c *core) proposedMemories() []int64 {
-	if c.mem == nil {
-		return nil
-	}
-	xs, err := c.mem.list(`status = 'proposed' AND source_kind != ?`, []any{srcExtraction}, `recorded_at, id`, 200)
-	if err != nil {
-		return nil
-	}
-	var out []int64
-	for _, x := range xs {
-		out = append(out, x.ID)
-	}
-	return out
-}
+// The kinds whose records are read here: an intention, a notification
+// rule, a setting.
 
 func (c *core) intentionProposal(p proposal) proposal {
 	if c.mem == nil {

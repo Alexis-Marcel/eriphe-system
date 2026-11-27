@@ -169,11 +169,10 @@ describe("a card", () => {
     expect($(".a2-proposal-actions")).not.toBeNull();
   });
 
-  it("says what it asks by its kind: keep a memory or a reminder, or do something", async () => {
+  it("says what it asks by its kind: keep a reminder, or do something", async () => {
     for (const lang of ["fr", "en"] as const) {
       const fr = lang === "fr";
       for (const [kind, kicker, yesWord, noWord] of [
-        ["memory", fr ? "Garder en mémoire ?" : "Keep in memory?", fr ? "Garder" : "Keep", fr ? "Oublier" : "Forget"],
         ["intention", fr ? "Garder ce rappel ?" : "Keep this reminder?", fr ? "Garder" : "Keep", fr ? "Oublier" : "Forget"],
         ["access", fr ? "Proposition" : "Proposal", fr ? "Autoriser" : "Allow", fr ? "Non" : "No"],
       ]) {
@@ -184,7 +183,7 @@ describe("a card", () => {
         act(() => root.unmount());
       }
     }
-    await draw("fr", "memory:1", { read: async (r) => ({ ref: r, card: 1, verb: "Faire", kind: "memory", state: "approved", text: "x" }) });
+    await draw("fr", "intention:1", { read: async (r) => ({ ref: r, card: 1, verb: "Faire", kind: "intention", state: "approved", text: "x" }) });
     expect($(".a2-proposal")).toBeNull(); // kept: it leaves
   });
 
