@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
+import { spring } from "motion";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { Glance, GraphNode } from "../data/api";
 import { CAP, coreShape, pickTiles, sparkPath, TILE, variation } from "./glance";
 import { TileFace } from "./Tile";
+import css from "../espace.css?raw";
 
 const glance = (delta: number, threshold = 2, o: Partial<Glance> = {}): Glance => ({
   label: "PEA",
@@ -61,11 +63,30 @@ describe("which nodes are tiles", () => {
 });
 
 describe("the morph", () => {
-  it("takes the core from its circle to the tile's rounded rectangle, and back; at once with less motion", () => {
-    expect(coreShape(TILE, 35, false).to).toEqual({ width: 148, height: 60, borderRadius: 14 });
-    expect(coreShape(undefined, 35, false).to).toEqual({ width: 70, height: 70, borderRadius: 35 });
-    expect(coreShape(TILE, 35, false).move).toMatchObject({ type: "spring" });
-    expect(coreShape(TILE, 35, true).move).toEqual({ duration: 0 });
+  it("takes the core from its circle to the tile's rounded rectangle, and back", () => {
+    expect(coreShape(TILE, 35)).toEqual({ width: 148, height: 60, borderRadius: 14 });
+    expect(coreShape(undefined, 35)).toEqual({ width: 70, height: 70, borderRadius: 35 });
+  });
+
+  // The morph is CSS's (espace.css, --morph): the spring the bubble had
+  // (stiffness 170, damping 24), as a linear() curve over its duration,
+  // within half a percent; with less motion, none.
+  it("follows the bubble's spring, and is at once with less motion", () => {
+    const m = css.match(/--morph: ([\d.]+)s linear\(([^)]*)\)/);
+    expect(m).not.toBeNull();
+    const ms = Number(m![1]) * 1000, pts = m![2].split(",").map(Number);
+    const g = spring({ keyframes: [0, 1000], stiffness: 170, damping: 24, mass: 1 });
+    // by its end, the spring has come to within half a percent
+    expect(Math.abs(g.next(ms).value / 1000 - 1)).toBeLessThan(0.005);
+    const n = pts.length - 1;
+    for (let t = 0; t <= ms; t += 5) {
+      const f = (t / ms) * n, i = Math.min(n - 1, Math.floor(f));
+      const curve = pts[i] + (pts[i + 1] - pts[i]) * (f - i);
+      expect(Math.abs(curve - g.next(t).value / 1000)).toBeLessThan(0.005);
+    }
+    expect(css).toMatch(/\.gr-core \{[^}]*transition: [^;}]*width var\(--morph\), height var\(--morph\), border-radius var\(--morph\)/);
+    const still = css.slice(css.lastIndexOf("@media (prefers-reduced-motion: reduce) {\n  .a2-shimmer"));
+    expect(still).toMatch(/\.gr-core,[^{]*\{ transition: none; \}/);
   });
 });
 

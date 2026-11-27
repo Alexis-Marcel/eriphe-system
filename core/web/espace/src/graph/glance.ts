@@ -35,12 +35,9 @@ export function pickTiles(nodes: GraphNode[], open: string[], was: string[]): st
 }
 
 // coreShape is what a bubble's core morphs to: its glance's tile, a
-// rounded rectangle, or its circle; with less motion, at once.
-export function coreShape(tile: [number, number] | undefined, r: number, still: boolean) {
-  return {
-    to: tile ? { width: tile[0], height: tile[1], borderRadius: 14 } : { width: r * 2, height: r * 2, borderRadius: r },
-    move: still ? { duration: 0 } : ({ type: "spring", stiffness: 170, damping: 24 } as const),
-  };
+// rounded rectangle, or its circle (the morph is CSS's, espace.css).
+export function coreShape(tile: [number, number] | undefined, r: number) {
+  return tile ? { width: tile[0], height: tile[1], borderRadius: 14 } : { width: r * 2, height: r * 2, borderRadius: r };
 }
 
 // variation writes a glance's variation in the page's language: its

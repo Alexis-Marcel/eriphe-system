@@ -544,13 +544,35 @@ button, input, select, textarea { font: inherit; }
 /* One thin solid grey line per pair of linked nodes, under them; hovering
    a node keeps it, its neighbours and their links sharp, the rest fades
    (Graph.tsx, hoverOn: .hovering on the viewport, .near on what stays). */
-.gr-link { fill: none; stroke: var(--edge); stroke-width: 1; vector-effect: non-scaling-stroke; transition: stroke 0.2s, opacity 0.2s; }
+/* A link takes its nodes' life (graph/life.ts, LINK_ALPHA): faint from a
+   living node to a sleeping one, hardly there between two asleep; those
+   of a node open or held lit; hovering lights the hovered node's. */
+.gr-link { fill: none; stroke: var(--edge); stroke-width: 1; vector-effect: non-scaling-stroke; transition: stroke 0.2s, opacity 0.2s; opacity: var(--la); }
 :root { --edge: color-mix(in oklab, var(--fg) 24%, transparent); --edge-on: color-mix(in oklab, var(--fg) 55%, transparent); }
-.gr-viewport.hovering .gr-link:not(.near) { opacity: 0.12; }
-.gr-viewport.hovering .gr-link.near { stroke: var(--edge-on); }
+.gr-link { --la: 1; }
+.gr-link[data-life="1"] { --la: 0.2; }
+.gr-link[data-life="2"] { --la: 0.05; }
+.gr-link[data-lit] { --la: 1; stroke: var(--edge-on); }
+.gr-viewport.hovering .gr-link:not(.near) { opacity: calc(var(--la) * 0.12); }
+.gr-viewport.hovering .gr-link.near { opacity: 1; stroke: var(--edge-on); }
 /* The fade is an opacity on elements nothing else animates (a bubble's
    outer element, a page's document): composited, no filter to paint. */
 .gr-node { transition: opacity 0.2s; }
+/* A big graph (graph/lod.ts): its nodes are discs on a canvas under the
+   world, the bubbles only those big on screen; a bubble come in fades in
+   as its disc fades out (graph/paint.ts, FADE). A family's colour: soft,
+   low in saturation, away from the halo's violet; a disc and its bubble's
+   core share it (--f, the family's; mixed with the card at --fam-mix). */
+.gr-canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+.gr-viewport.over-disc { cursor: pointer; }
+.gr-viewport.lod .gr-node { animation: lod-in 0.18s ease-out; }
+@keyframes lod-in { from { opacity: 0; } }
+.gr-node.fam .gr-core, .gr-node.fam.d1 .gr-core, .gr-node.fam.d2 .gr-core { background: color-mix(in srgb, var(--f) var(--fam-mix), var(--card)); }
+:root { --fam-mix: 38%; --fam0: #5f9c8f; --fam1: #b08d57; --fam2: #b9786a; --fam3: #6f8fb3; --fam4: #8c9c5a; --fam5: #b07a95; --fam6: #9a8a78; --fam7: #6aa07a; }
+:root[data-theme="dark"] { --fam-mix: 34%; --fam0: #74b3a5; --fam1: #c7a46e; --fam2: #cf8e7f; --fam3: #87a6c9; --fam4: #a3b371; --fam5: #c791ab; --fam6: #b1a08e; --fam7: #81b791; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --fam-mix: 34%; --fam0: #74b3a5; --fam1: #c7a46e; --fam2: #cf8e7f; --fam3: #87a6c9; --fam4: #a3b371; --fam5: #c791ab; --fam6: #b1a08e; --fam7: #81b791; }
+}
 .gr-page > .pg { transition: border-color 0.3s, box-shadow 0.3s, opacity 0.2s; }
 .gr-viewport.hovering .gr-node:not(.near):not(.open) { opacity: 0.2; }
 .gr-viewport.hovering .gr-page:not(.near) > .pg { opacity: 0.4; }
@@ -568,14 +590,30 @@ button, input, select, textarea { font: inherit; }
 .forces-reset:disabled { opacity: 0.45; cursor: default; }
 
 /* A bubble: placed by its transform (Graph.tsx, place), its motion on the
-   element inside (.gr-bub), what it draws centred on its point. */
+   element inside (.gr-bub), what it draws centred on its point. Its
+   motion is CSS's, none run by script: born, it grows out of nothing;
+   held, it lifts (0.15 s); its page open, it fades. With less motion,
+   only its opacity moves. */
 .gr-node { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 2; }
-.gr-bub { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.gr-bub { position: absolute; left: 0; top: 0; width: 0; height: 0; transition: opacity 0.6s var(--bub-ease), scale 0.6s var(--bub-ease); }
+:root { --bub-ease: cubic-bezier(0.2, 0.7, 0.2, 1); }
+.gr-bub.fresh { animation: bub-in 0.6s var(--bub-ease); }
+@keyframes bub-in { from { opacity: 0; scale: 0.3; } }
+.gr-node.held > .gr-bub { opacity: 0.5; scale: 1.08; transition-duration: 0.15s; }
+.gr-node.open > .gr-bub { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .gr-bub { transition-property: opacity; }
+  .gr-bub.fresh { animation-name: bub-fade-in; }
+  @keyframes bub-fade-in { from { opacity: 0; } }
+}
 .gr-bub > * { position: absolute; left: 0; top: 0; translate: -50% -50%; }
 .gr-core { display: grid; place-items: center; border: 0; padding: 0; border-radius: 50%; cursor: pointer; touch-action: none; color: var(--fg2);
   background: radial-gradient(circle at 35% 30%, var(--card), var(--fill-strong) 75%);
   box-shadow: 0 0 0 1px var(--glass-line), 0 0 24px -4px color-mix(in oklab, var(--accent) 40%, transparent);
-  transition: transform 0.25s, box-shadow 0.3s, opacity 0.6s; }
+  transition: transform 0.25s, box-shadow 0.3s, opacity 0.6s, width var(--morph), height var(--morph), border-radius var(--morph); }
+/* The core's morph to a tile and back: the spring the bubble had (stiffness
+   170, damping 24), as a curve (glance.test.tsx); at once with less motion. */
+:root { --morph: 0.565s linear(0, 0.015, 0.054, 0.109, 0.174, 0.244, 0.315, 0.386, 0.454, 0.518, 0.577, 0.632, 0.681, 0.725, 0.765, 0.8, 0.83, 0.857, 0.88, 0.9, 0.917, 0.931, 0.944, 0.954, 0.963, 0.97, 0.976, 0.981, 0.985, 0.989, 0.991, 0.994, 0.995, 0.997, 0.998, 0.999, 0.999, 1, 1, 1, 1); }
 .gr-node:hover .gr-core { transform: scale(1.06); box-shadow: 0 0 0 1px var(--link-on), 0 0 30px -2px color-mix(in oklab, var(--accent) 55%, transparent); }
 .gr-node.d1 .gr-core, .gr-node.d2 .gr-core { background: var(--card); box-shadow: 0 0 0 1px var(--line-strong), 0 0 14px -6px var(--accent); }
 .gr-node.running .gr-core { box-shadow: 0 0 0 1px color-mix(in oklab, var(--run) 50%, transparent), 0 0 20px -4px var(--run); }
@@ -616,8 +654,16 @@ button, input, select, textarea { font: inherit; }
   animation: gl-ping 1.6s cubic-bezier(0.2, 0.7, 0.2, 1) 0.35s both; }
 @keyframes gl-ping { from { opacity: 0.9; scale: 1; } to { opacity: 0; scale: 1.18 1.45; } }
 @media (prefers-reduced-motion: reduce) { .gl-ping { display: none; } }
-/* The circle's face and the tile's, over each other as they cross-fade. */
+/* The circle's face and the tile's, over each other as they cross-fade
+   (Graph.tsx, Face): the one going out in 0.1 s, the one coming in after
+   it; with less motion, at once after it. */
 .gl-in { position: absolute; inset: 0; display: grid; place-items: center; }
+.gl-in.out { animation: gl-out 0.1s ease-in-out forwards; }
+.gl-in.in { animation: gl-in 0.25s ease-in-out 0.15s backwards; }
+.gl-in.in.tile { animation-delay: 0.12s; }
+@keyframes gl-out { to { opacity: 0; } }
+@keyframes gl-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .gl-in.in, .gl-in.in.tile { animation-delay: 0s; } }
 .gl-face { display: grid; align-content: center; gap: 4px; padding: 0 12px; width: 100%; height: 100%; text-align: left; }
 .gl-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; white-space: nowrap; }
 .gl-label { font-size: 11.5px; color: var(--fg2); letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -1071,3 +1117,17 @@ li:hover .a2-inline-no, .a2-inline-no:focus-visible { opacity: 1; }
 /* An event beside another: room for its time, its place left out. */
 .a2-clash > .a2-ev .a2-ev-sub .a2-ev-place { display: none; }
 @container (max-width: 560px) { .a2-clash > .a2-ev .a2-ev-sub .a2-ev-place { display: inline; } }
+
+/* The nodes asleep (graph/life.ts), at any size of graph: a pale bubble,
+   smaller, no family's colour; in a big graph a pale dot, its bubble as
+   pale (only when hovered, open, or seen very close). The zones of the
+   families where something waits (graph/paint.ts) breathe, softly: a
+   layer of their own, its opacity in CSS, no paint at rest. */
+.gr-node.sleeps .gr-core { background: color-mix(in srgb, var(--fg) 16%, var(--bg)); box-shadow: none; opacity: 0.9 !important; }
+/* Its label in the faint grey that still reads (--fg3, AA, as a done
+   node's), no short word in so small a core. */
+.gr-node.sleeps .gr-label b { color: var(--fg3); }
+.gr-node.sleeps .gr-code { display: none; }
+.gr-breath { animation: zone-breath 6s ease-in-out infinite; }
+@keyframes zone-breath { 0%, 100% { opacity: 0.15; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .gr-breath { animation: none; opacity: 0.6; } }

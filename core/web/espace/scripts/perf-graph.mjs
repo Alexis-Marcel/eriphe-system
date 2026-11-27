@@ -7,7 +7,11 @@
 //   - rest: the time the layout took to first come to rest (data-still);
 //   - pan: 3 s of a steady wheel pan out and back, at rest, the camera as
 //     it framed the graph; pan 1: the same at scale 1, as when reading;
+//   - sweep: 3 s of a zoom from the framed camera to scale 1.6 and back,
+//     at rest (across the scale where discs become bubbles);
 //   - zoom: 3 s of wheel pans and zooms in and out.
+// A size is a number of nodes, or a preset of ?leger by its name
+// (cerveau: a second brain, 1,100 notes and 4,000 links).
 // For each phase: the main thread's busy time as Chromium counts it
 // (Performance.getMetrics: all its tasks, and of them scripts, layout,
 // style) and how many layouts it ran, steadier than frames per second on a
@@ -17,7 +21,8 @@
 // before it. Options: --sizes 25,100,… --root <an espace folder> (another
 // checkout, to measure it with the same script) --json <file> --port <n>
 // --throttle <k> (Chromium's CPU slowed k times, as on a modest laptop)
-// --react dev (React's development build, several times slower).
+// --react dev (React's development build, several times slower)
+// --query <more of ?leger's query> (its knobs: knobs=life:0,sleep:0,zones:0).
 
 import { chromium } from "@playwright/test";
 import { writeFileSync } from "node:fs";
@@ -28,11 +33,16 @@ const arg = (name, def) => {
   const i = process.argv.indexOf(`--${name}`);
   return i > 0 ? process.argv[i + 1] : def;
 };
-const sizes = arg("sizes", "25,100,250,500,1000,2000,3000").split(",").map(Number);
+const sizes = arg("sizes", "25,100,250,500,cerveau,1000,2000,3000").split(",");
+const url = (n) => `http://127.0.0.1:${port}/?leger&${/^\d+$/.test(n) ? `n=${n}` : `preset=${n}`}${query ? `&${query}` : ""}`;
+const query = arg("query", "");
 const root = resolve(arg("root", "."));
 const port = Number(arg("port", "5310"));
 const json = arg("json", "");
 const throttle = Number(arg("throttle", "1"));
+// --gpu: Chromium with its GPU (a canvas rasterised there, as in a
+// browser on a desktop), not in software on the main thread.
+const gpu = process.argv.includes("--gpu");
 // React as in production (the dev server otherwise serves its development
 // build): the dev page stays on (import.meta.env.DEV).
 const prodReact = arg("react", "prod") !== "dev";
@@ -50,7 +60,7 @@ let browser;
 const rows = [];
 try {
   await server.listen();
-  browser = await chromium.launch();
+  browser = await chromium.launch(gpu ? { args: ["--enable-gpu", "--ignore-gpu-blocklist", "--use-angle=metal"] } : {});
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: "fr-FR", colorScheme: "light" });
   page.setDefaultTimeout(180_000);
   const cdp = await page.context().newCDPSession(page);
@@ -61,8 +71,12 @@ try {
   // says its frames and the main thread's work meanwhile.
   const play = async (move) => {
     const a = await metrics();
+    const p0 = await page.evaluate(() => window.leger.stats().paints);
     const f = await page.evaluate((m) => window.leger.sample(3000, m ? window.leger[m] : undefined), move);
     const b = await metrics();
+    const st = await page.evaluate(() => window.leger.stats());
+    f.paint = st.paint;
+    f.paints = st.paints - p0;
     const d = (k) => Math.round((b[k] - a[k]) * 1000);
     return { ...f, task: d("TaskDuration"), script: d("ScriptDuration"), layout: d("LayoutDuration"), style: d("RecalcStyleDuration"), layouts: b.LayoutCount - a.LayoutCount, dom: b.Nodes };
   };
@@ -71,23 +85,25 @@ try {
   await page.goto(`http://127.0.0.1:${port}/?leger&n=25`);
   await page.waitForFunction(() => window.leger, null, { timeout: 60_000 });
   for (const n of sizes) {
-    await page.goto(`http://127.0.0.1:${port}/?leger&n=${n}`);
+    await page.goto(url(n));
     await page.waitForFunction(() => window.leger, null, { polling: 100 });
     const settle = await play();
-    const cap = n >= 1000 ? 120_000 : 30_000;
+    const cap = !(Number(n) < 1000) ? 120_000 : 30_000;
     const rested = await page.waitForFunction(() => window.leger.stats().stable !== null, null, { timeout: cap, polling: 200 }).then(() => true, () => false);
     const at = await stats();
     const pan = await play("pan");
+    const sweep = await play("sweep");
+    await page.waitForTimeout(500);
     await page.evaluate(() => window.leger.zoomTo(1));
     await page.waitForTimeout(800);
     const at1 = await stats();
     const pan1 = await play("pan");
     const zoom = await play("panZoom");
-    const row = { n, stable: rested ? at.stable : null, drawn: at.drawn, k: at.k, bubbles: at.bubbles, bubbles1: at1.bubbles, settle, pan, pan1, zoom };
+    const row = { n, stable: rested ? at.stable : null, drawn: at.drawn, k: at.k, bubbles: at.bubbles, bubbles1: at1.bubbles, settle, pan, sweep, pan1, zoom };
     rows.push(row);
-    const ph = (p) => `${p.fps} fps (p95 ${p.p95}, worst ${p.worst} ms), busy ${p.task} ms (script ${p.script}, layout ${p.layout}, style ${p.style}, ${p.layouts} layouts)`;
+    const ph = (p) => `${p.fps} fps (p95 ${p.p95}, worst ${p.worst} ms), busy ${p.task} ms (script ${p.script}, layout ${p.layout}, style ${p.style}, ${p.layouts} layouts), canvas ${p.paints} paints of ~${p.paint} ms`;
     console.error(`${n}: drawn ${at.drawn} ms, rest ${rested ? `${at.stable} ms` : "not within " + cap / 1000 + " s"}, scale ${at.k}, ${at.bubbles} bubbles (${at1.bubbles} at 1), ${pan.dom} DOM nodes`);
-    for (const [name, p] of [["settle", settle], ["pan", pan], ["pan 1", pan1], ["zoom", zoom]]) console.error(`  ${name}: ${ph(p)}`);
+    for (const [name, p] of [["settle", settle], ["pan", pan], ["sweep", sweep], ["pan 1", pan1], ["zoom", zoom]]) console.error(`  ${name}: ${ph(p)}`);
   }
 } finally {
   await browser?.close();
@@ -97,8 +113,8 @@ try {
 const s = (x) => (x === null ? "no rest" : `${(x / 1000).toFixed(1)} s`);
 const cell = (p) => `${p.task} · ${(p.task / Math.max(1, p.frames)).toFixed(1)} · ${p.fps}`;
 console.log("Each phase (3 s): main-thread busy ms · busy ms per frame · frames per second.\n");
-console.log("| nodes | first frame | to rest | scale at rest | bubbles in DOM (at 1) | settle | pan | pan at scale 1 | zoom |");
-console.log("|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+console.log("| nodes | first frame | to rest | scale at rest | bubbles in DOM (at 1) | settle | pan | sweep | pan at scale 1 | zoom |");
+console.log("|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
 for (const r of rows)
-  console.log(`| ${r.n} | ${r.drawn} ms | ${s(r.stable)} | ${r.k} | ${r.bubbles} (${r.bubbles1}) | ${cell(r.settle)} | ${cell(r.pan)} | ${cell(r.pan1)} | ${cell(r.zoom)} |`);
+  console.log(`| ${r.n} | ${r.drawn} ms | ${s(r.stable)} | ${r.k} | ${r.bubbles} (${r.bubbles1}) | ${cell(r.settle)} | ${cell(r.pan)} | ${cell(r.sweep)} | ${cell(r.pan1)} | ${cell(r.zoom)} |`);
 if (json) writeFileSync(json, JSON.stringify(rows, null, 2));

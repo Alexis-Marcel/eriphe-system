@@ -113,11 +113,16 @@ export function frameAround(focus: Box, size: Size): Cam {
 }
 
 // frameAll frames the whole graph, the home's view: each body whole, a
-// bubble with its label under it.
-export function frameAll(boxes: Box[], size: Size): Cam {
+// bubble with its label under it; not below the scale least (a graph of
+// bubbles: 0.25, where they still read; one of discs, much less, MIN_K).
+export function frameAll(boxes: Box[], size: Size, least = 0.25): Cam {
   if (boxes.length === 0) return { k: 1, x: size.w / 2, y: size.h / 2 };
-  return fit(boxes, size, 1.05, 0.25);
+  return fit(boxes, size, 1.05, least);
 }
+
+// MIN_K is the smallest scale of a big graph's camera (lod.ts), framed or
+// by hand: the whole graph, its nodes as discs.
+export const MIN_K = 0.04;
 
 // EDGE is how far from the screen's edges an edge mark stays; FOOT, the
 // room the console takes at the foot.

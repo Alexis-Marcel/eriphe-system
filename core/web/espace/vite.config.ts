@@ -1,5 +1,5 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 
 // The workspace page /espace. eriphe-core embeds the built files
@@ -17,7 +17,15 @@ const csp =
   "connect-src 'self'; font-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; " +
   "base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
-export default defineConfig({
+// ?leger's real shape (src/dev-vault.ts) is read from a file outside the
+// repository, a folder the dev server is let to serve only when this
+// machine names it: LEGER_ALLOW in .env.local (never committed), e.g.
+// LEGER_ALLOW=/tmp/my-vault-shape, then ?leger&from=/@fs/tmp/my-vault-shape/vault.json.
+// The dev server's alone: the build and the preview serve nothing of it.
+const here = decodeURIComponent(new URL(".", import.meta.url).pathname);
+const legerAllow = (mode: string) => (loadEnv(mode, here, "LEGER_").LEGER_ALLOW ?? "").split(":").filter(Boolean);
+
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   // Relative: the stylesheet finds its fonts beside it, under /static/espace/.
   base: "./",
@@ -41,8 +49,8 @@ export default defineConfig({
   },
   // The tests read eriphe-core's fixture pages (core/nodefile/testdata):
   // the page reader is held to them (page/read.test.ts, page/body.test.tsx).
-  server: { port: 5300, strictPort: true, fs: { allow: [".", "../../nodefile/testdata"] } },
+  server: { port: 5300, strictPort: true, fs: { allow: [".", "../../nodefile/testdata", ...legerAllow(mode)] } },
   preview: { port: 5301, strictPort: true, headers: { "Content-Security-Policy": csp } },
   // css: the stylesheet read as text by a test (graph/contrast.test.ts).
   test: { environment: "node", include: ["src/**/*.test.ts", "src/**/*.test.tsx"], css: { include: [/espace\.css/] } },
-});
+}));
