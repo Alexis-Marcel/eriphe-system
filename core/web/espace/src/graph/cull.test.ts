@@ -86,6 +86,9 @@ describe("culling a big graph", () => {
     expect(covered(view(0), view(-MOUNT))).toBe(false);
     expect(covered(view(0), view(0, 0.98))).toBe(true);
     expect(covered(view(0), view(0, 0.5))).toBe(false);
+    // Zoomed in far: less to draw, looked at again.
+    expect(covered(view(0), view(0, 1.1))).toBe(true);
+    expect(covered(view(0), view(0, 1.5))).toBe(false);
     expect(covered(view(0), { ...view(0), w: 1600 })).toBe(false);
   });
 

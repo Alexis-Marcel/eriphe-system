@@ -10,8 +10,9 @@
 // after, and no frame waits for hundreds.
 
 export const CULL_FROM = 200;
-export const MOUNT = 400; // screen pixels around the screen
-export const UNMOUNT = 900;
+export const MOUNT = 200; // screen pixels around the screen
+export const UNMOUNT = 450;
+export const ZOOMED = 1.25; // a zoom in by this much draws less
 export const BUDGET = 80;
 
 // The least a body says of its size, as the layout has it.
@@ -40,8 +41,10 @@ function seen(b: Sized, p: readonly [number, number], a: Rect): boolean {
 }
 
 // covered tells whether what was drawn for the camera at was still covers
-// the camera now: the screen and half the margin within the area drawn.
+// the camera now: the screen and half the margin within the area drawn,
+// and not zoomed in so far that much of it is drawn for nothing.
 export function covered(was: View, now: View): boolean {
+  if (now.k > was.k * ZOOMED) return false;
   const a = area(was, MOUNT), b = area(now, MOUNT / 2);
   return b[0] >= a[0] && b[1] >= a[1] && b[2] <= a[2] && b[3] <= a[3];
 }

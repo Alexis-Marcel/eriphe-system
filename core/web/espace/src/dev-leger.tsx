@@ -68,7 +68,7 @@ export function legerGraph(n: number, seed = 7): GraphNode[] {
   return out;
 }
 
-type Stats = { fps: number; worst: number; p95: number; bubbles: number; stable: number | null; nodes: number };
+type Stats = { fps: number; worst: number; p95: number; bubbles: number; stable: number | null; drawn: number | null; nodes: number; k: number };
 
 // The frames as the page sees them: their times, for the overlay and the
 // script.
@@ -76,6 +76,8 @@ const frames: number[] = [];
 let loadedAt = 0;
 let stableAt: number | null = null;
 let stableIn: number | null = null;
+// drawnIn: from the graph given to the first frame with bubbles in it.
+let drawnIn: number | null = null;
 
 function viewport() {
   return document.querySelector(".gr-viewport");
@@ -91,7 +93,9 @@ function stats(): Stats {
     p95: gaps.length ? gaps[Math.floor(gaps.length * 0.95)] : 0,
     bubbles: document.querySelectorAll(".gr-node").length,
     stable: stableIn,
+    drawn: drawnIn,
     nodes: Object.keys(store.getState().nodes).length,
+    k: Math.round(scale() * 100) / 100,
   };
 }
 
@@ -167,40 +171,58 @@ function sample(ms: number, move?: (t: number) => void): Promise<{ fps: number; 
   });
 }
 
-// pan moves the camera across the graph through the wheel, steadily: what
-// comes into view is drawn as it comes.
+// pan moves the camera across the graph through the wheel, steadily, out
+// for 1.5 s and back: what comes into view is drawn as it comes.
 function pan(t: number) {
   const v = viewport();
   if (!v) return;
-  v.dispatchEvent(new WheelEvent("wheel", { deltaX: 12, deltaY: 4 * Math.sin(t / 400), clientX: innerWidth / 2, clientY: innerHeight / 2, bubbles: true, cancelable: true }));
+  const dir = t < 1500 ? 1 : -1;
+  v.dispatchEvent(new WheelEvent("wheel", { deltaX: 12 * dir, deltaY: 4 * Math.sin(t / 400), clientX: innerWidth / 2, clientY: innerHeight / 2, bubbles: true, cancelable: true }));
+}
+
+// zoomTo sets the camera's scale about the screen's middle, through the
+// wheel (ctrl), as a pinch would: the script measures a pan at scale 1.
+function zoomTo(k: number) {
+  const v = viewport();
+  const now = scale();
+  if (!v || !now) return;
+  v.dispatchEvent(new WheelEvent("wheel", { deltaY: -Math.log(k / now) / 0.006, ctrlKey: true, clientX: innerWidth / 2, clientY: innerHeight / 2, bubbles: true, cancelable: true }));
+}
+
+// scale is the camera's scale now, as drawn.
+function scale(): number {
+  const w = document.querySelector(".gr-world");
+  return w ? new DOMMatrix(getComputedStyle(w).transform).a : 0;
 }
 
 // panZoom moves the camera as a hand would, through the wheel: a pan, then
-// a zoom in and out, again.
+// a zoom in, a pan, a zoom out.
 function panZoom(t: number) {
   const v = viewport();
   if (!v) return;
   const phase = Math.floor(t / 500) % 2;
+  const out = Math.floor(t / 1000) % 2 ? 1 : -1;
   const cx = innerWidth / 2, cy = innerHeight / 2;
   const ev = phase === 0
     ? new WheelEvent("wheel", { deltaX: 14 * Math.cos(t / 300), deltaY: 10 * Math.sin(t / 300), clientX: cx, clientY: cy, bubbles: true, cancelable: true })
-    : new WheelEvent("wheel", { deltaY: 6 * Math.sin(t / 160), ctrlKey: true, clientX: cx, clientY: cy, bubbles: true, cancelable: true });
+    : new WheelEvent("wheel", { deltaY: out * 3, ctrlKey: true, clientX: cx, clientY: cy, bubbles: true, cancelable: true });
   v.dispatchEvent(ev);
 }
 
 declare global {
   interface Window {
-    leger?: { load(n: number): void; add(k: number): void; remove(k: number): void; resize(): void; stats(): Stats; sample: typeof sample; pan: typeof pan; panZoom: typeof panZoom };
+    leger?: { load(n: number): void; add(k: number): void; remove(k: number): void; resize(): void; stats(): Stats; sample: typeof sample; pan: typeof pan; panZoom: typeof panZoom; zoomTo: typeof zoomTo };
   }
 }
 
 export function startLeger() {
   const asked = Number(new URLSearchParams(location.search).get("n"));
-  window.leger = { load, add, remove, resize, stats, sample, pan, panZoom };
+  window.leger = { load, add, remove, resize, stats, sample, pan, panZoom, zoomTo };
   load(asked > 0 ? asked : 100);
   let raf = 0;
   const loop = (t: number) => {
     frames.push(t);
+    if (drawnIn === null && document.querySelector(".gr-node")) drawnIn = Math.round(t - loadedAt);
     while (frames.length && frames[0] < t - 2500) frames.shift();
     if (stableAt === null && t - loadedAt > 50 && viewport()?.hasAttribute("data-still")) {
       stableAt = t;
@@ -232,6 +254,7 @@ export function LegerPanel() {
           `pire     ${s.worst.toFixed(1)} ms (2 s)`,
           `p95      ${s.p95.toFixed(1)} ms`,
           `au repos ${s.stable === null ? "…" : `${s.stable} ms`}`,
+          `échelle  ${s.k}`,
         ].join("\n");
     }, 250);
     return () => clearInterval(id);
