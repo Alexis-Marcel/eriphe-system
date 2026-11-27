@@ -656,7 +656,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 18
 .tint-green, .nav-group > a[href="/settings/approve"] { --tint: #16a34a; }
 .tint-amber, .nav-group > a[href="/settings/folders"] { --tint: #d97706; }
 .tint-orange, .nav-group > a[href="/settings/skills"] { --tint: #ea580c; }
-.tint-pink { --tint: #db2777; }
+.tint-pink, .nav-group > a[href="/settings/voice"] { --tint: #db2777; }
 .tint-red, .nav-group > a[href="/settings/notifications"] { --tint: #dc2626; }
 .tint-slate, .nav-group > a[href="/settings/devices"], .nav-group > a[href="/settings/journal"] { --tint: #64748b; }
 
@@ -1500,3 +1500,9 @@ details.app-install > * + * { margin-top: 10px; }
 .subject-card-box h3 { font-size: 1rem; margin: 0 0 6px; }
 .subject-card { margin: 8px 0 0; padding: 12px 14px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem; }
 .subjects-list .is-current { background: var(--surface-2); }
+
+/* Settings → Voice (voice.html): the fields of the service chosen. */
+.voice-form:has(input[name=preset][value=off]:checked) .if-voice-on { display: none; }
+.voice-form:not(:has(input[name=preset][value=server]:checked)) .if-voice-server { display: none; }
+.voice-form:not(:has(input[name=preset][value=groq]:checked)) .if-voice-groq { display: none; }
+.voice-form:not(:has(input[name=preset][value=openai]:checked)) .if-voice-openai { display: none; }

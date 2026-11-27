@@ -2600,6 +2600,31 @@ and says each sentence on a speaker of its area; with each request it also says 
 someone is now (its presence sensors), where the voice line speaks (below). What the house has to
 tell (someone came home) goes from an automation to an incoming address, as any system's.
 
+## Voice (`voice.go`, `web_voice.go`)
+
+Settings → Voice sets who hears the user, so that they can dictate in the workspace. It is not a
+tool: the brain never calls it, the workspace does, as it would type; it has no access policy, and
+its key is not the key of a tool of the same service (ElevenLabs in the catalog is its MCP server,
+for the brain). It is set like the brain's provider: a service and its key, or a server of one's
+own.
+
+- **Services**: Groq, OpenAI, or a server of one's own on the network (Speaches,
+  faster-whisper-server…). The one adapter speaks the OpenAI audio API
+  (`POST <base>/audio/transcriptions`, multipart `file`, `model`, `language`, `prompt`); a service
+  that does not is put behind a server that does. The presets fill the address and the model; the
+  user may change the model, and gives the address of their own server, checked like a self-hosted
+  model server's (`checkBaseURL`: http(s), on the network, not localhost).
+- **Kept**: the setting in the kv table (`voice_listen`), the key in the vault (`voice.listen.key`,
+  outside the catalog's prefixes, so `dropOrphanSecrets` leaves it). A save without a key keeps the
+  one kept for the same service; another service, or off, removes it. « Tester » asks the service
+  for its models (`GET <base>/models`) with the key.
+- **Dictation**: the workspace sends what it records to `POST /api/voice/transcribe` (multipart
+  `audio`, and `type`, the recorder's MIME type: WebM from Chrome and Firefox, MP4 from Safari;
+  10 MiB at most), which answers `{"text"}` or `{"error"}` in the user's words (404 when nothing is
+  set). With the audio goes a vocabulary: the assistant's name and the titles of the nodes changed
+  last, so that the names come out right. A redirect is never followed (the key would go along);
+  neither the audio, the text nor the key is logged.
+
 ## Google accounts (Gmail, Calendar, Drive)
 
 One sign-in per Google account gives Eriphe any of Gmail, Google Calendar and Google Drive
