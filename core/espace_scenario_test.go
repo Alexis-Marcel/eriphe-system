@@ -898,6 +898,17 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 			b.self("node_set", map[string]any{"id": id, "props": map[string]any{"tags": []any{"vêtement"}, "couleur": "bleu", "photo": att}})
 		}
 		return "Je l'ajoute à ta garde-robe."
+	case strings.Contains(said, "Garde cette recette"):
+		// A PDF sent with the message, kept with its node: the page draws
+		// it (attach-pdf.spec.ts).
+		sc.mu.Lock()
+		att := attachmentRe.FindString(sc.given[len(sc.given)-1])
+		sc.mu.Unlock()
+		out := b.self("node_open", map[string]any{"goal": "Un but.", "title": "Pain de campagne", "body": "La recette du pain."})
+		if id, _ := out["id"].(string); id != "" && att != "" {
+			b.self("node_set", map[string]any{"id": id, "props": map[string]any{"recette": att}})
+		}
+		return "Je la garde avec le pain."
 	case strings.Contains(said, "Écris-moi un article"):
 		// Asked at the home: the main subject opens with its plan and its
 		// questions, their buttons below.

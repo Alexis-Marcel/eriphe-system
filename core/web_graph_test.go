@@ -62,12 +62,42 @@ func TestEspaceBundle(t *testing.T) {
 		}
 	}
 	chunks, _ := fs.Glob(webFS, "web/static/espace/espace-*.js")
-	if len(chunks) != 1 || !bytes.Contains(entry, []byte(strings.TrimPrefix(chunks[0], "web/static/espace/"))) {
+	if len(chunks) != 2 {
 		t.Fatalf("chunks: %v", chunks)
 	}
-	raw, _ := fs.ReadFile(webFS, chunks[0])
-	if regexp.MustCompile(`(from|import\s*\(?)\s*["'\x60]\./`).Match(raw) {
-		t.Errorf("%s imports a module", chunks[0])
+	for _, c := range chunks {
+		if !bytes.Contains(entry, []byte(strings.TrimPrefix(c, "web/static/espace/"))) {
+			t.Errorf("%s is not loaded by the entry", c)
+		}
+		raw, _ := fs.ReadFile(webFS, c)
+		if regexp.MustCompile(`(from|import\s*\(?)\s*["'\x60]\./`).Match(raw) {
+			t.Errorf("%s imports a module", c)
+		}
+	}
+}
+
+// pdf.js's worker (web/espace/src/doc/pdf.ts) is served from eriphe-core
+// itself, beside its chunk, as JavaScript (a module worker is refused as
+// anything else), and the workspace's CSP lets the page start it.
+func TestEspacePdfWorker(t *testing.T) {
+	tw := newTestWeb(t)
+	tw.setup()
+	workers, _ := fs.Glob(webFS, "web/static/espace/espace-pdf.worker.min-*.mjs")
+	pdf, _ := fs.Glob(webFS, "web/static/espace/espace-pdf-*.js")
+	if len(workers) != 1 || len(pdf) != 1 {
+		t.Fatalf("worker %v, chunk %v", workers, pdf)
+	}
+	name := strings.TrimPrefix(workers[0], "web/static/espace/")
+	if raw, _ := fs.ReadFile(webFS, pdf[0]); !bytes.Contains(raw, []byte(name)) {
+		t.Errorf("%s does not start %s", pdf[0], name)
+	}
+	code, _, h := tw.do("GET", "/static/espace/"+name, nil, nil)
+	if code != http.StatusOK || !strings.HasPrefix(h.Get("Content-Type"), "text/javascript") {
+		t.Errorf("%s: %d %s", name, code, h.Get("Content-Type"))
+	}
+	_, _, h = tw.do("GET", "/espace", nil, nil)
+	if csp := h.Get("Content-Security-Policy"); !strings.Contains(csp, "worker-src 'self'") || strings.Contains(csp, "unsafe-eval") {
+		t.Errorf("csp: %s", csp)
 	}
 }
 

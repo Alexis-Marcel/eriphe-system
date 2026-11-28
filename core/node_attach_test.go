@@ -87,8 +87,14 @@ func TestAttachmentToNodeLimits(t *testing.T) {
 	if len(p.Props) != 1 || len(p.Props[0].Media) != 1 || p.Props[0].Media[0].Image {
 		t.Fatalf("page: %s", fmtJSON(p.Props))
 	}
-	if code, _, h := tw.do("GET", p.Props[0].Media[0].Src, nil, nil); code != http.StatusOK || h.Get("Content-Type") != "application/pdf" || h.Get("Content-Disposition") != "attachment" {
-		t.Fatalf("pdf served %d %v", code, h)
+	// The page draws it itself (PdfView.tsx): the file is still served
+	// as a download, in a sandbox, never run in the workspace's origin.
+	code, _, h := tw.do("GET", p.Props[0].Media[0].Src, nil, nil)
+	for k, want := range map[string]string{"Content-Type": "application/pdf", "Content-Disposition": "attachment",
+		"Content-Security-Policy": "default-src 'none'; sandbox", "X-Content-Type-Options": "nosniff"} {
+		if code != http.StatusOK || h.Get(k) != want {
+			t.Fatalf("pdf served %d, %s %q, want %q", code, k, h.Get(k), want)
+		}
 	}
 
 	text := attach(t, c, "notes.txt", []byte("2 œufs"))

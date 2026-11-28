@@ -6,7 +6,8 @@ import react from "@vitejs/plugin-react";
 // (../static/espace) and serves them from its own HTML shell
 // (web/templates/espace.html), so the build has one entry, a script, and
 // fixed names: the shell adds ?v=<assetVersion> for the browser's cache;
-// the one chunk, CodeMirror (page/cm.ts), loads with the first .md tab.
+// the chunks load when first needed: CodeMirror (page/cm.ts) with the
+// first .md tab, pdf.js and its worker (doc/pdf.ts) with the first PDF.
 // No file may start with "_" or ".": go:embed would skip it.
 
 // The workspace's Content-Security-Policy (web.go, headers): the preview
@@ -42,8 +43,15 @@ export default defineConfig(({ mode }) => ({
         // entry's ?v= does not reach it, the name keeps the browser's
         // cache true.
         chunkFileNames: "espace-[name]-[hash].js",
-        // The stylesheet is espace.css; the fonts keep their names.
-        assetFileNames: (a) => (a.names.some((n) => n.endsWith(".css")) ? "espace[extname]" : "espace-[name][extname]"),
+        // The stylesheet is espace.css; the fonts keep their names; pdf.js's
+        // worker is named by its content, as a chunk, so it is never an
+        // older one than the pdf.js that starts it.
+        assetFileNames: (a) =>
+          a.names.some((n) => n.endsWith(".css"))
+            ? "espace[extname]"
+            : a.names.some((n) => n.endsWith(".mjs"))
+              ? "espace-[name]-[hash][extname]"
+              : "espace-[name][extname]",
       },
     },
   },

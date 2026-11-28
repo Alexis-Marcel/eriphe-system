@@ -4177,9 +4177,14 @@ node's media, as a task's image (`nodestore.PutFile`, by `brain`), and writes th
 - **Trust.** The user's own file does not taint the turn, as `read_attachment`; one from a channel
   the user did not trust taints it, and the node is marked external.
 - **Shown.** The node's page gives each property that names one of its files with its signed address
-  (`pageProp.media`: an image shows as the node's picture, a PDF as a link that downloads it:
-  `GET /espace/media` serves a node's non-image file as `Content-Disposition: attachment`). The
-  brain's `node_find` gives `media:<name>` as written.
+  (`pageProp.media`): an image shows as the node's picture; a PDF is drawn whole, its pages one
+  under the other the width of the page, under a link that downloads it (`PdfView.tsx`). The page
+  fetches the bytes and draws them itself with a bundled pdf.js (`doc/pdf.ts`: a chunk loaded with
+  the first PDF, its worker beside it, `worker-src 'self'`), to canvases only: no text, annotation
+  or form layer, no WebAssembly, and never the PDF's own JavaScript. `GET /espace/media` still serves
+  a node's non-image file as `Content-Disposition: attachment` in a sandbox, so nothing of a PDF
+  runs in the workspace's origin. A file that does not draw leaves the link alone. The brain's
+  `node_find` gives `media:<name>` as written.
 
 ### Proposals in the pages they concern (`card_moves.go`)
 
