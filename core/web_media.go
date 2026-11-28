@@ -25,7 +25,9 @@ import (
 //	GET /espace/media?u=media:<node>/<name>&s=<signature>
 //
 // with a session: handleMedia reads it from that node's files only, an
-// image (not SVG, which carries scripts) shown inline, a PDF downloaded.
+// image (not SVG, which carries scripts) shown inline, a PDF downloaded:
+// the page fetches a PDF's bytes and draws it itself (PdfView.tsx, with a
+// bundled pdf.js), so a PDF never runs in the workspace's origin.
 // Nothing is ever fetched from outside.
 //
 // A task's images. Most sites refuse being framed:

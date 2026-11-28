@@ -812,6 +812,11 @@ button, input, select, textarea { font: inherit; }
 .pg-media { margin: 0 0 var(--sp-4); display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-3); }
 .pg-picture { display: block; max-width: min(100%, 420px); max-height: 360px; object-fit: contain; border-radius: var(--r); border: 1px solid var(--line); background: var(--fill); }
 .pg-file { font-size: var(--fs-small); }
+/* A node's PDF (PdfView.tsx): its pages one under the other, the width of the page. */
+.pg-pdf { margin: 0 0 var(--sp-4); }
+.pg-pdf figcaption { margin: 0 0 var(--sp-2); }
+.pg-pdf-pages { display: flex; flex-direction: column; gap: var(--sp-3); }
+.pg-pdf-page { display: block; width: 100%; height: auto; border-radius: var(--r); border: 1px solid var(--line); background: #fff; }
 .pg-props { margin: 0 0 var(--sp-4); display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); font-size: var(--fs-small); color: var(--fg3); }
 .pg-tags { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); }
 .pg-tag { color: var(--fg2); }
