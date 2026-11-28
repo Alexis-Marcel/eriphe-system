@@ -1,7 +1,7 @@
 # Eriphe's tool servers
 
-`mail`, `calendar` and `files` are MCP servers that eriphe-core launches on a machine (a device)
-and configures. `signal` ([signal/README.md](signal/README.md)), Eriphe's own Signal account,
+`mail`, `calendar`, `files` and `printer` are MCP servers that eriphe-core launches on a machine (a
+device) and configures. `signal` ([signal/README.md](signal/README.md)), Eriphe's own Signal account,
 runs the same way, with setup tools only and no configuration. They follow one contract, so another image can take the place of one of them.
 
 ## Configuration
@@ -31,8 +31,8 @@ it out of the server's tools, so no task and not the brain ever get it.
 
 | Tool | Arguments | Answer |
 |---|---|---|
-| `test_account` | `account` (may be left out with one account) | `{ok, error}`: whether the account signs in as the server uses it, and why not; never the secret |
+| `test_account` | `account` (may be left out with one account) | `{ok, error, detail}`: whether the account signs in as the server uses it, and why not, never the secret; `detail` (optional) is what it is, in the server's words, shown when it works (a printer's model) |
 | `browse_places` (a server with places) | `account`, `parent` (none: the roots), `page_token` | `{places: [{id, name, link}], next_page_token}` |
 
 Each server's README gives its tools and its account fields: [mail](mail/README.md),
-[calendar](calendar/README.md), [files](files/README.md).
+[calendar](calendar/README.md), [files](files/README.md), [printer](printer/README.md).
