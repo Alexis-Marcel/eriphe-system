@@ -26,3 +26,4 @@ __pycache__/
 /core/web/espace/e2e-results/
 /core/web/espace/e2e-report/
 /core/web/espace/.env.local
+/servers/printer/printer

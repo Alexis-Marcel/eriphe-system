@@ -251,7 +251,7 @@ jobs:
   # Every test passes before any image is published (the publish job): a release tags
   # `latest`, and a workspace offers that version as soon as one image has it.
   tests:
-    needs: [scripts, device, cred, core, espace, espace-e2e, install, cli, mail, calendar, files, signal]
+    needs: [scripts, device, cred, core, espace, espace-e2e, install, cli, mail, calendar, files, signal, printer]
     runs-on: ubuntu-latest
     steps:
       - run: 'true'
@@ -476,12 +476,42 @@ jobs:
       version: ${{ needs.version.outputs.version }}
       version-arg: true
 
+  printer:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: servers/printer
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: servers/printer/go.mod
+          cache-dependency-path: servers/printer/go.sum
+      # pdftoppm draws a real PDF in TestPdftoppm, as in the image.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: test -z "$(gofmt -l .)"
+
+  printer-image:
+    needs: version
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml
+    with:
+      image: eriphe-printer
+      context: servers/printer
+      version: ${{ needs.version.outputs.version }}
+      version-arg: true
+
   # The images, built while the tests run and pushed by digest only on a push (image.yml),
   # published as one multi-arch manifest each under the build's tags once every test passed:
   # nothing is named, no version is published, before. One entry per image job above.
   publish:
     if: github.event_name == 'push'
-    needs: [version, tests, core-image, device-image, launcher-image, worker, mail-image, calendar-image, files-image, signal-image]
+    needs: [version, tests, core-image, device-image, launcher-image, worker, mail-image, calendar-image, files-image, signal-image, printer-image]
     strategy:
       fail-fast: false
       matrix:
@@ -501,6 +531,7 @@ jobs:
           - image: eriphe-calendar
           - image: eriphe-files
           - image: eriphe-signal
+          - image: eriphe-printer
     name: publish (${{ matrix.image }})
     runs-on: ubuntu-latest
     permissions:
