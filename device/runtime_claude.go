@@ -36,7 +36,7 @@ func (claudeCode) files(n *device, t *Task) map[string][]byte {
 		"headers": map[string]string{"Authorization": "Bearer " + t.secret}}
 	servers := map[string]any{}
 	for name, def := range spec.MCPServers {
-		servers[name] = def
+		servers[name] = stdioDef(def, n.egressEnv(t)) // one that runs in the task: its way out (mcpServersFor)
 	}
 	// Catalog servers point at the device, with the task's secret: never at
 	// the server itself, whose credential stays with eriphe-core.

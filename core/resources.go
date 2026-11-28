@@ -225,6 +225,15 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 			if _, err := c.conf().checkGrant([]string{e.Ref}); err != nil {
 				return nil, err
 			}
+			if name, _, _ := strings.Cut(e.Ref, "."); c.conf().Servers[name].inTask() {
+				// It runs in the task (TaskTool): given at launch or not at all.
+				if !c.conf().Servers[name].taskLent() {
+					return nil, fmt.Errorf("tool %s is set to Never (Settings → Tools): no task gets it", name)
+				}
+				if e.Hold {
+					return nil, fmt.Errorf("tool %s runs in the task: it is lent outright, never held back", name)
+				}
+			}
 			acts := len(c.actingGrant([]string{e.Ref})) > 0
 			switch {
 			case e.Access == "" && acts:

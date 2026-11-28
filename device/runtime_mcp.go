@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -24,13 +25,21 @@ type mcpServer struct {
 // server itself, whose credential stays with eriphe-core. Claude Code also
 // gets the device's eriphe_device, its --permission-prompt-tool: the other
 // runtimes ask through their own protocol.
-func mcpServersFor(callback string, t *Task) ([]mcpServer, error) {
+//
+// A server over stdio (one that runs in the task, eriphe-core's TaskTool) is
+// also given env, the task's way out (egressEnv), under its own variables:
+// some agents start it with a few variables of theirs only (Codex), and it
+// would have no route out of the container without them.
+func mcpServersFor(callback string, t *Task, env map[string]string) ([]mcpServer, error) {
 	spec := t.Spec
 	var out []mcpServer
 	for name, def := range spec.MCPServers {
 		s, err := parseMCPServer(name, def, spec.AgentEnv)
 		if err != nil {
 			return nil, err
+		}
+		if s.Command != "" {
+			s.Env = withEnv(s.Env, env)
 		}
 		out = append(out, s)
 	}
@@ -41,6 +50,37 @@ func mcpServersFor(callback string, t *Task) ([]mcpServer, error) {
 	}
 	slices.SortFunc(out, func(a, b mcpServer) int { return strings.Compare(a.Name, b.Name) })
 	return out, nil
+}
+
+// withEnv is a stdio server's own variables over base's.
+func withEnv(own, base map[string]string) map[string]string {
+	if len(base) == 0 {
+		return own
+	}
+	out := maps.Clone(base)
+	maps.Copy(out, own)
+	return out
+}
+
+// stdioDef is a spec's server as Claude Code's mcp.json takes it: a stdio
+// one (a command) with env under its own variables (mcpServersFor).
+func stdioDef(def any, env map[string]string) any {
+	m, ok := def.(map[string]any)
+	if !ok || m["command"] == nil || len(env) == 0 {
+		return def
+	}
+	out := maps.Clone(m)
+	own := map[string]string{}
+	if e, ok := m["env"].(map[string]any); ok {
+		for k, v := range e {
+			own[k] = fmt.Sprint(v)
+		}
+	}
+	if e, ok := m["env"].(map[string]string); ok {
+		maps.Copy(own, e)
+	}
+	out["env"] = withEnv(own, env)
+	return out
 }
 
 // parseMCPServer reads a server of the spec, in .mcp.json format. A

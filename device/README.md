@@ -445,6 +445,12 @@ A program that ignores them fails closed: no route, no DNS for outside names. Th
 it is also on the services' network, which has egress, and calls its MCP servers directly.
 `-egress-listen ""` turns the relay off (tasks then reach only the device).
 
+A stdio MCP server the agent starts in its container (eriphe-core's tools that run in the task,
+such as the browser) gets these variables too, under its own `env`, from every runtime: Claude
+Code's `mcp.json`, ACP's `session/new`, Codex's thread config (`mcpServersFor`, `stdioDef`). Some
+agents start such a server with a few variables of theirs only (Codex), which would leave it no
+route out of the container.
+
 Why networks and not a bearer per service: a local MCP server is a third-party image, which checks
 no token the device could inject; only keeping tasks off its network protects it.
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"slices"
 	"sort"
@@ -117,6 +118,17 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 			for _, s := range spec.Servers {
 				if c.conf().Servers[s].AlwaysLoad {
 					spec.AlwaysLoad = append(spec.AlwaysLoad, s)
+				}
+			}
+			// What runs in its container (TaskTool): started by its agent,
+			// allowed whole, as the rest of the container is.
+			if a.Kind == "worker" {
+				if tools := c.taskTools(&TaskRow{Kind: a.Kind, Tools: a.Tools}); len(tools) > 0 {
+					spec.MCPServers = tools
+					spec.AllowedTools = slices.Clone(spec.AllowedTools)
+					for _, name := range slices.Sorted(maps.Keys(tools)) {
+						spec.AllowedTools = append(spec.AllowedTools, "mcp__"+name)
+					}
 				}
 			}
 			// Its own node, written through its device (task_nodes.go).

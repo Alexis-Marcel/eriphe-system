@@ -77,7 +77,7 @@ const (
 var codexExtra []string
 
 func (codexRuntime) command(n *device, t *Task) ([]string, map[string]string) {
-	servers, err := mcpServersFor(n.callbackFor(t), t)
+	servers, err := mcpServersFor(n.callbackFor(t), t, n.egressEnv(t))
 	t.mu.Lock()
 	t.mcp, t.mcpErr = servers, err
 	t.mu.Unlock()

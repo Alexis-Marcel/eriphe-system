@@ -401,6 +401,7 @@ holds their credentials and is the only one to reach them: **a task never sees a
 | `url` | a remote server (streamable HTTP) |
 | `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"connection": "<id>"}` (a connection whose provider mints the tokens, refreshed before they end: Eriphe's GitHub App on one account's or organization's installation, see [GitHub in a task](#the-github-app)), `{"none": true}` |
 | `run` | instead of `url` and `auth`: a local server, a container a device runs as a service (see [Local MCP servers](#local-mcp-servers-services)) |
+| `task` | instead of `url`, `auth` and `run`: a server that runs in the task, `{"command", "args", "env", "off"}` (see [Tools that run in the task](#tools-that-run-in-the-task)) |
 | `use` | what it is for, for the brain: one sentence, 300 characters at most, shown under the heading of its page and edited there in place (its pencil, `POST /settings/tools/{name}/use`) |
 | `title` | the user's own name for it, shown on its card and as its page's heading (edited there in place: the pencil beside it, Enter saves, Escape cancels; `POST /settings/tools/{name}/title`); the key stays its technical name, in its tools' names, and a new title restarts nothing |
 | `access` | what Eriphe may do on it: `read-only`, `reads`, `free` or `ask` (see [access levels](#access-levels)); without it, `ask` |
@@ -435,6 +436,28 @@ prompts); a long call streams, within the server's `timeout`.
 user) for that task, that tool and that exact input, within 30 minutes, once. An agent
 that found its task's secret (in its process list, say) cannot call a tool behind its own
 permission prompt.
+
+### Tools that run in the task
+
+A catalog server with `task` is an MCP server over stdio that the agent of each task it is lent to
+starts **in its own container**, gone with the task: `{"command": "eriphe-browser"}`, with `args`
+and `env` if it needs them. The browser is the first one ([worker/README.md](../worker/README.md),
+`eriphe-browser`): it reaches the apps the task runs on its own `localhost`, which a service on the
+device (`run`) could not, and nothing of another task's (`servers.go`, `TaskTool`).
+
+- **No connection.** eriphe-core never connects to it, so the pool has no upstream for it and knows
+  none of its tools. `list_tools` shows it as `kind: task`, `ready`, so the brain can lend it.
+- **Free or Never, as a whole**, decided at launch: no grid, `access`, exceptions or accounts (the
+  check refuses them). `"off": true` is Never: no task is lent it, and a task lent it before no
+  longer gets it. A grant entry `server.tool` lends the whole server.
+- **In the task's spec**, not in `spec.servers` (the device relays nothing for it): it goes in
+  `spec.mcp_servers` as `{"type": "stdio", "command", "args", "env"}`, and `mcp__<name>` in
+  `allowed_tools`, so its agent runs its tools without asking (`taskTools`, `lifecycle.go`). A
+  worker only: the brain and the assistants never get one.
+- **Its calls are the container's**, as the shell's and `WebFetch`'s are: what leaves the container
+  goes through the device's egress relay, which the device hands it too (device/README.md). An
+  agent that asks all the same is answered yes by the policy, for the task that was lent it only
+  (`inTaskCall`, `policy.go`).
 
 `list_tools` shows the brain the catalog: each server, its status, `use`, its tools (name, a
 short description, read-only by the server's own annotation), and the command that connects it
@@ -1570,7 +1593,9 @@ of it, so that a prompt injection (a mail, a web page) cannot talk the brain int
    autoriser", [below](#access-levels)), then its **category's value** in the
    [grid](#access-grid) of the account the call names: On approval asks on a
    [card](#the-approval-card), Free is allowed;
-5. an MCP tool out of the catalog: refused at once, it is not lent. There is no built-in ask on a command: what a task reaches
+5. a tool that runs in the task, lent to it and not at Never ([Tools that run in the
+   task](#tools-that-run-in-the-task)): allowed, as the container's own; any other MCP tool out of
+   the catalog: refused at once, it is not lent. There is no built-in ask on a command: what a task reaches
    with a secret is what it was lent, decided at launch, and Free asks nothing;
 6. anything else that stays in the task's container (its shell, files and web tools: `Bash`,
    `Write`, `Edit`, `WebFetch`…) is allowed (`inContainer`). The container

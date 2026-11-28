@@ -1,0 +1,25 @@
+#!/bin/sh
+# eriphe-browser: the browser tool of a task, an MCP server over stdio
+# (Playwright MCP, baked in the image at a pinned version). eriphe-core lends
+# it as a catalog tool that runs in the task (core/README.md, Tools in the
+# task): the agent starts it in its own container, where it reaches the
+# task's own apps on localhost, and it goes with the task.
+#
+# Headless, a profile in memory (no cookie or sign-in kept), Debian's
+# Chromium (eriphe-chromium, installed on first use). Out of the container it
+# goes through the task's egress relay, whose credentials Playwright takes
+# in --proxy-server; localhost and the device stay direct (NO_PROXY).
+# Screenshots without a file name go to /tmp/eriphe-browser; a named one is
+# written in the task's workspace (eriphe-capture --file puts it in the
+# task's node). Arguments are passed on to Playwright MCP.
+set -eu
+set -- --headless --isolated --no-sandbox --browser chromium \
+  --executable-path /usr/local/bin/eriphe-chromium \
+  --output-dir /tmp/eriphe-browser "$@"
+proxy="${HTTPS_PROXY:-${https_proxy:-}}"
+if [ -n "$proxy" ]; then
+  # localhost in the list also keeps Playwright from sending the loopback to
+  # the proxy (its "<-loopback>"), which the relay refuses.
+  set -- "$@" --proxy-server "$proxy" --proxy-bypass "localhost,127.0.0.1${NO_PROXY:+,$NO_PROXY}"
+fi
+exec playwright-mcp "$@"

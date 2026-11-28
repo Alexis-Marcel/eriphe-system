@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log"
+	"maps"
 	"net/http"
 	"regexp"
 	"slices"
@@ -216,13 +217,38 @@ func (c *core) actingGrant(grant []string) []string {
 	return out
 }
 
-// specServers are the catalog servers a task's device must relay for it.
+// specServers are the catalog servers a task's device must relay for it:
+// not those that run in the task (taskTools).
 func (c *core) specServers(t *TaskRow) []string {
 	var out []string
 	for _, s := range grantServers(c.taskGrant(t)) {
-		if _, ok := c.conf().Servers[s]; ok || providedServer(s) {
+		if srv, ok := c.conf().Servers[s]; (ok && !srv.inTask()) || providedServer(s) {
 			out = append(out, s)
 		}
+	}
+	return out
+}
+
+// taskTools are the servers that run in a worker's task (TaskTool) its
+// grant lends, but those at Never: each as its agent starts it in its
+// container, an MCP server over stdio in .mcp.json's form (the device's
+// parseMCPServer). A grant entry server.tool lends the whole server: what
+// runs in the task is the container's, not one tool's.
+func (c *core) taskTools(t *TaskRow) map[string]any {
+	out := map[string]any{}
+	for _, name := range grantServers(c.taskGrant(t)) {
+		srv, ok := c.conf().Servers[name]
+		if !ok || !srv.taskLent() {
+			continue
+		}
+		def := map[string]any{"type": "stdio", "command": srv.Task.Command}
+		if len(srv.Task.Args) > 0 {
+			def["args"] = slices.Clone(srv.Task.Args)
+		}
+		if len(srv.Task.Env) > 0 {
+			def["env"] = maps.Clone(srv.Task.Env)
+		}
+		out[name] = def
 	}
 	return out
 }
@@ -395,7 +421,7 @@ type serverInfo struct {
 	Name   string `json:"name"`
 	Named  string `json:"title,omitempty"` // the user's title for it, if any
 	Use    string `json:"use"`
-	Kind   string `json:"kind"`   // remote or local
+	Kind   string `json:"kind"`   // remote, local or task (it runs in the task)
 	Source string `json:"source"` // config (the file) or workspace
 	URL    string `json:"url,omitempty"`
 	Auth   string `json:"auth"`   // bearer, oauth, none or local
@@ -441,6 +467,14 @@ func (c *core) listServers(only string, withTools bool) []serverInfo {
 		}
 		if s.local() {
 			info.Kind = "local"
+		}
+		if s.inTask() {
+			// Nothing to connect: it starts in each task it is lent to,
+			// Free or Never as a whole (TaskTool).
+			info.Kind, info.Status, info.Access = "task", statusReady, gridFree
+			if !s.taskLent() {
+				info.Access = gridNever
+			}
 		}
 		if o := oauthOf(s); o != nil {
 			info.RedirectURI = o.RedirectURI
