@@ -473,8 +473,15 @@ func (c *core) catalogCall(ctx context.Context, name, raw string, allowed func(m
 	if t == nil {
 		return "", "", callWhyGone, "cet outil n'est plus là"
 	}
+	// A node's file goes as its bytes; the card kept its reference
+	// (tool_files.go).
+	args, err := c.withNodeFiles(c.fileArgs(u, t), json.RawMessage(raw))
+	if err != nil {
+		log.Printf("access: %s: %v", name, err)
+		return "", "", callWhyGone, "le fichier du node n'est plus là"
+	}
 	allowed(input)
-	res, err := u.call(ctx, t.Name, json.RawMessage(raw))
+	res, err := u.call(ctx, t.Name, args)
 	switch {
 	case err != nil:
 		return "", "", callWhyError, err.Error()

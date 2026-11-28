@@ -31,6 +31,12 @@ import (
 //     the container: sessions survive a restart, and the tools and
 //     resources are listed again (list_changed) when it comes back.
 
+// serviceRequestMax is the largest request the bridge takes: a call may
+// carry one of a node's files (5 MiB, sent as base64 by eriphe-core), past
+// the SDK's 4 MiB default; the stdio line it becomes stays under the SDK's
+// 16 MiB.
+const serviceRequestMax = 12 << 20
+
 func (n *device) handleServiceMCP(w http.ResponseWriter, r *http.Request) {
 	s := n.getService(r.PathValue("name"))
 	if s == nil {
@@ -136,7 +142,7 @@ func (b *bridge) serve(ctx context.Context, r io.ReadCloser, w io.WriteCloser, r
 		}
 		b.server = mcp.NewServer(impl, opts)
 		b.handler = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return b.server },
-			&mcp.StreamableHTTPOptions{DisableLocalhostProtection: true, SessionTimeout: time.Hour})
+			&mcp.StreamableHTTPOptions{DisableLocalhostProtection: true, SessionTimeout: time.Hour, MaxRequestBodyBytes: serviceRequestMax})
 	}
 	b.cs = cs
 	b.mu.Unlock()

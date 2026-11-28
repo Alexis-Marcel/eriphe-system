@@ -1539,7 +1539,8 @@ directory) is shared by every session; tools and resources are relayed (the mail
 `mail://received`, which a monitor reads), not prompts, resource templates, its
 notifications (progress, logs) or its requests (sampling, elicitation). The bridge outlives the
 container: during a restart a call fails ("restarting"), and when it is back the same sessions go
-on, its tools and resources listed again (`list_changed` if they changed). Sessions idle for an hour, and
+on, its tools and resources listed again (`list_changed` if they changed). A request is 12 MiB at most (the SDK's default is 4 MiB): a call may carry one of a node's
+files, sent by eriphe-core as base64. Sessions idle for an hour, and
 all of them when the device restarts, are dropped: the client opens a new one.
 
 ### http: the proxy

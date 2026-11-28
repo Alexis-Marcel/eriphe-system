@@ -24,6 +24,16 @@ runs the same way, with setup tools only and no configuration. They follow one c
 The keys a server knows beyond these are its own (`timezone`, limits…); eriphe-core keeps them as
 they are when it rewrites the configuration.
 
+## A node's file
+
+A tool that takes a file declares which of its arguments do, in its `_meta`:
+`{"eriphe/files": ["document"]}`. Such an argument is a string. The caller names one of a node's
+files; eriphe-core sends the file itself in its place, as a data URI:
+`data:<type>;base64,<bytes>`, where the type is `application/pdf` or an image (`image/png`,
+`image/jpeg`, `image/gif`, `image/webp`), 5 MiB at most before base64. The server decodes it and
+never fetches a path or an address given there. Over HTTP, such a server takes requests of up to
+12 MiB (the go-sdk's `StreamableHTTPOptions.MaxRequestBodyBytes`; its default is 4 MiB).
+
 ## Setup tools
 
 A tool marked `_meta: {"eriphe/setup": true}` is kept for eriphe-core's workspace: the pool leaves

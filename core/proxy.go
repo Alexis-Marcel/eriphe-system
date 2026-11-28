@@ -241,6 +241,7 @@ func (c *core) taskServer(taskID string, grant []string, server string) *mcp.Ser
 			continue
 		}
 		cp := *tl
+		cp.InputSchema = withFileArgsNote(tl.InputSchema, c.fileArgs(u, tl))
 		name := tl.Name
 		s.AddTool(&cp, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return c.proxyCall(ctx, taskID, grant, u, name, req.Params.Arguments), nil
@@ -292,6 +293,12 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 		c.store.logDecision(taskID, "", claude, input, decideAllow, byPolicy, "lecture libre du cerveau")
 	default:
 		return toolError("this call was not allowed through Eriphe's permissions: ask for it as usual")
+	}
+	// A node's file goes as its bytes, once the call is allowed with its
+	// reference (tool_files.go).
+	args, err := c.withNodeFiles(c.fileArgs(u, u.tool(tool)), args)
+	if err != nil {
+		return toolError(err.Error())
 	}
 	brain := taskID == c.brainTaskID()
 	var took spent
