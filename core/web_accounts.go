@@ -236,7 +236,7 @@ func (w *web) saveAccount(rw http.ResponseWriter, r *http.Request, s *session, f
 		moved = !shape.same(p, f.Acct)
 	}
 	pw := accountPassword(r, f)
-	if strings.TrimSpace(pw) == "" && (prev == nil || moved || prev.signedIn()) {
+	if strings.TrimSpace(pw) == "" && !shape.NoSecret && (prev == nil || moved || prev.signedIn()) {
 		if moved {
 			fail(errors.New("form.newpassword"))
 		} else {

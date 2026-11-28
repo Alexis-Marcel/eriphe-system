@@ -3497,7 +3497,13 @@ form are built from the tool's card (`tool_cards.go`, `account_forms.go`): its k
 the fields each one asks, the provider guessed from the address and the server's options (the
 calendar's time zone); no code knows a mail or calendar form. Once saved, the row that follows the
 tool asks its server to sign the account in (its setup tool `test_account`,
-[servers](../servers/README.md)): a refused password shows on the row with the server's reason. "Gmail avec ton compte Google"
+[servers](../servers/README.md)): a refused password shows on the row with the server's reason, and what
+the server found when it works (its `detail`, a printer's model). Imprimante runs `eriphe-printer`
+([servers/printer](../servers/printer/README.md)): one kind of account, so its form opens on its
+fields, a name and the printer's address (an IP address alone, or a whole `ipp://` one, written
+`ipp://<address>/ipp/print`), and no password (`NoSecret` on its form: the account names no
+secret). Nothing discovers printers: mDNS does not cross the Docker network a service runs on. Its
+grid has Read (`printer_status`) and Send (`print`: paper leaves the house). "Gmail avec ton compte Google"
 (first, recommended) and Google Agenda lead to Google's connect page, one sign-in for Gmail,
 Calendar and Drive ([Google accounts](#google-accounts-gmail-calendar-drive)); the Google tiles of
 "Add a tool" too. Outlook, Microsoft 365 and Microsoft calendars are shown as coming soon. A vendor's OAuth service (Linear, Notion and the catalog's) opens a short page (name, use, access), then "Se

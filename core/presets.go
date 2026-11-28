@@ -77,6 +77,8 @@ var toolPresets = []toolPreset{
 	// tools are marked read-only, the others are not.
 	{ID: "mail", Form: "account", Card: toolMail, Name: "mail", Mark: "@", Kind: "local", Trust: true},
 	{ID: "calendar", Form: "account", Card: toolCalendar, Name: "agenda", Mark: "31", Kind: "local", Trust: true},
+	// servers/printer: a printer of the local network, by its address.
+	{ID: "printer", Form: "account", Card: toolPrinter, Name: "imprimante", Mark: "Im", Kind: "local", Trust: true},
 	// Accounts signed in at a provider (connection_tools.go): one sign-in
 	// for the tools ticked; a tool with places has them picked on its page.
 	{ID: "gdrive", Form: "connection", Provider: "google", Tools: []string{toolFiles}, Name: "fichiers", Mark: "GD", Kind: "local", Trust: true},

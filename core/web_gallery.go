@@ -47,6 +47,7 @@ var popularPresets = []string{"google", "mail", "calendar", "gdrive", "notion", 
 var presetKeywords = map[string]string{
 	"mail":           "email e-mail courriel gmail outlook icloud proton imap smtp",
 	"calendar":       "calendrier calendar rendez-vous google icloud caldav nextcloud",
+	"printer":        "imprimante printer imprimer print ipp airprint brother hp epson canon",
 	"gdrive":         "google docs sheets documents fichiers files",
 	"google":         "gmail agenda calendar calendrier drive docs workspace compte account",
 	"home-assistant": "domotique smart home lumieres lights",

@@ -51,6 +51,7 @@ const (
 	toolMail     = "mail"     // mailService
 	toolCalendar = "calendar" // calendarService
 	toolFiles    = "files"    // filesService
+	toolPrinter  = "printer"  // printerService: no connection serves it
 )
 
 // toolKinds are the kinds, in the order they are shown.
@@ -81,8 +82,14 @@ var (
 		// Nothing of a folder is sent anywhere: no Envoyer.
 		Places: &placeKeeper{Key: "places", Browse: "browse_places", Arg: "folder"}, Cases: []string{catRead, catChange, catDelete}}
 
+	// A printer of the local network over IPP: an account is a printer,
+	// its address typed by the user, with no secret. Printing leaves
+	// Eriphe (paper comes out): Send; its status is read.
+	printerService = toolCard{ID: toolPrinter, Base: "imprimante", Image: "ghcr.io/alexis-marcel/eriphe-printer", Preset: "printer",
+		OwnVersion: true, Cases: []string{catRead, catSend}, Account: &printerShape}
+
 	// toolCards are the cards, in the order their kinds are shown.
-	toolCards = []toolCard{mailService, calendarService, filesService}
+	toolCards = []toolCard{mailService, calendarService, filesService, printerService}
 )
 
 // The mail's account: a mailbox of eriphe-mail with a password. The user
@@ -153,4 +160,19 @@ var calendarShape = accountShape{
 	Guess:    map[string]string{"icloud.com": "icloud", "me.com": "icloud", "mac.com": "icloud", "fastmail.com": "fastmail", "fastmail.fm": "fastmail"},
 	Password: passwordWords{Label: "cal.password", Hint: "cal.passwordhint", AppLabel: "cal.password", AppHint: "cal.passwordhint"},
 	Server:   []accountField{{Name: "timezone", Key: "timezone", Kind: "zone", Label: "cal.tz", Hint: "cal.tzhint", Default: "Europe/Paris", Advanced: true}},
+}
+
+// The printer's account: a printer of the local network, by its address,
+// with no password (eriphe-printer, servers/printer). One kind of printer:
+// the form opens on its fields. Nothing discovers printers (mDNS does not
+// cross the Docker network): the user types the address, which the
+// server checks once saved (test_account answers the model).
+var printerShape = accountShape{
+	Words: "printp", Note: "printp.%s.desc", Steps: "printp.%s.steps", Howto: "printp.howtotitle",
+	ChoiceField: "printer_kind", NameBy: "printer_name", NoSecret: true,
+	Choices: []accountChoice{{ID: "ipp", Custom: true}},
+	Fields: []accountField{
+		{Name: "printer_name", Key: "name", Kind: "text", Label: "printp.name", Placeholder: "printp.nameplaceholder", Default: "imprimante"},
+		{Name: "printer_url", Key: "url", Kind: "ipp", Label: "printp.url", Example: "192.168.1.20", Hint: "printp.urlhint", Wide: true},
+	},
 }

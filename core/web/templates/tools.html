@@ -274,7 +274,7 @@
 
 {{define "tool-page"}}{{with .Data}}
 <header class="page-head">
-  <a class="back" href="{{.BackURL}}">{{template "i-back"}}{{if and (not .Edit) (not .Choose) .Picked}}{{t (printf "pick.%s.back" .PickKind)}}{{else if and .Choose .Edit}}{{tf "tools.editof" .Title}}{{else if .Edit}}{{t "settings.tools"}}{{else}}{{t "tools.add"}}{{end}}</a>
+  <a class="back" href="{{.BackURL}}">{{template "i-back"}}{{if and (not .Edit) (not .Choose) .Picked (not .OneChoice)}}{{t (printf "pick.%s.back" .PickKind)}}{{else if and .Choose .Edit}}{{tf "tools.editof" .Title}}{{else if .Edit}}{{t "settings.tools"}}{{else}}{{t "tools.add"}}{{end}}</a>
   <div class="form-title">
     {{if .Preset.ID}}<span class="mark preset-mark mark-{{.Preset.ID}}" aria-hidden="true">{{template "preset-icon" .Preset.ID}}</span>
     {{else}}<span class="mark tint-{{tint .Name}}" aria-hidden="true">{{initial .Name}}</span>{{end}}
@@ -675,12 +675,13 @@
      (account_forms.go). . is a toolForm. */}}
 {{define "account-fields"}}{{$s := .Shape}}{{$c := .Choice}}{{$id := $c.ID}}
   <input type="hidden" name="{{$s.ChoiceField}}" value="{{$id}}">
-  {{template "account-head" dict "ID" $id "Title" (t (printf "%s.%s" $s.Words $id)) "Note" (t (.Fill $s.Note $id)) "Change" (and .Edit (printf "%schoose" .PickURL)) "Hash" (.StepHash "choose")}}
+  {{template "account-head" dict "ID" $id "Title" (t (printf "%s.%s" $s.Words $id)) "Note" (t (.Fill $s.Note $id)) "Change" (and .Edit (not .OneChoice) (printf "%schoose" .PickURL)) "Hash" (.StepHash "choose")}}
   {{if and $c.Soon $s.Soon}}<p class="alert" role="alert">{{t (.Fill $s.Soon $id)}}</p>{{end}}
   {{if .Switched}}<p class="notice">{{t "form.switched"}}</p>{{end}}
   <div class="form-grid">
     {{range .Fields false}}{{template "account-field" dict "F" . "C" $id "Form" $}}{{end}}
-    {{if $c.AppPass}}{{template "secret-field" dict "Name" "password" "Label" (t $s.Password.AppLabel) "Hint" (t $s.Password.AppHint) "IsSet" .SecretSet "Keep" .Error}}
+    {{if $s.NoSecret}}
+    {{else if $c.AppPass}}{{template "secret-field" dict "Name" "password" "Label" (t $s.Password.AppLabel) "Hint" (t $s.Password.AppHint) "IsSet" .SecretSet "Keep" .Error}}
     {{else}}{{template "secret-field" dict "Name" "password" "Label" (t $s.Password.Label) "Hint" (tor (.Fill (or $s.Password.HintOf "-") $id) $s.Password.Hint) "IsSet" .SecretSet "Keep" .Error}}{{end}}
   </div>
   {{template "howto" dict "Title" (t (.Fill $s.Howto $id)) "Steps" (steps (.Fill $s.Steps $id)) "Link" $c.Link "Note" (and $c.AppPass $s.Password.HowtoNote (t $s.Password.HowtoNote))}}
@@ -691,7 +692,7 @@
 {{define "account-field"}}{{$f := .F}}{{$c := .C}}
   <label class="field{{if $f.Wide}} span-2{{end}}{{if eq $f.Kind "zone"}} narrow-2{{end}}"><span>{{t ($f.LabelKey $c)}}</span>
     <input type="text" name="{{$f.Name}}" value="{{.Form.Acct.Value $f.Name}}" spellcheck="false"{{if ne $f.Kind "email"}} autocapitalize="off"{{end}}
-      {{- if eq $f.Kind "email"}} inputmode="email" autocomplete="email"{{else if eq $f.Kind "url"}} inputmode="url" class="mono"{{else if eq $f.Kind "port"}} inputmode="numeric"{{else if eq $f.Kind "user"}} autocomplete="username"{{else if or (eq $f.Kind "host") (eq $f.Kind "zone")}} class="mono"{{end}}
+      {{- if eq $f.Kind "email"}} inputmode="email" autocomplete="email"{{else if eq $f.Kind "url"}} inputmode="url" class="mono"{{else if eq $f.Kind "port"}} inputmode="numeric"{{else if eq $f.Kind "user"}} autocomplete="username"{{else if or (eq $f.Kind "host") (eq $f.Kind "zone")}} class="mono"{{else if eq $f.Kind "ipp"}} inputmode="url" class="mono"{{end}}
       {{- if $f.Example}} placeholder="{{$f.Example}}"{{else if $f.Placeholder}} placeholder="{{tor ($f.PlaceholderKey $c) (or $f.Else ($f.PlaceholderKey $c))}}"{{end}}
       {{- if $f.Hint}} aria-describedby="{{$f.Name}}-h"{{end}}>
     {{- if $f.Hint}}<small id="{{$f.Name}}-h">{{t ($f.HintKey $c)}}</small>{{end}}</label>

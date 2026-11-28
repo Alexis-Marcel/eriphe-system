@@ -520,15 +520,18 @@ func (c *core) putAccount(svc toolCard, in accountPut) error {
 	if level == "" {
 		level = accessReads
 	}
+	noSecret := svc.Account != nil && svc.Account.NoSecret
 	stem := toolPasswordEnv
 	if in.Secret != nil {
 		stem = toolTokenEnv
 	}
 	env := accountEnv(stem, a.Name)
 	a.Auth = svcAuth{}
-	if in.Secret != nil {
+	switch {
+	case noSecret: // a printer: nothing to lend
+	case in.Secret != nil:
 		a.Auth.TokenEnv = env
-	} else {
+	default:
 		a.Auth.PasswordEnv = env
 	}
 	if svc.Scopes {
@@ -545,7 +548,7 @@ func (c *core) putAccount(svc toolCard, in accountPut) error {
 	case at >= 0 && old.Auth.PasswordEnv != "":
 		secret = st.Spec.Env[old.Auth.PasswordEnv]
 	}
-	if secret.File == "" && secret.Value == "" {
+	if secret.File == "" && secret.Value == "" && !noSecret {
 		return errors.New("form.nopassword")
 	}
 	if at >= 0 {
@@ -585,7 +588,11 @@ func (c *core) putAccount(svc toolCard, in accountPut) error {
 		srv.AccountGrids = withoutAccount(srv.AccountGrids, old.Name) // renamed: its grid goes with it
 		srv.AccountGrids[a.Name] = g
 	}
-	if err := c.writeService(svc, st, srv, cfg, map[string]EnvValue{env: secret}, creds, exists); err != nil {
+	secrets := map[string]EnvValue{env: secret}
+	if noSecret {
+		secrets = nil
+	}
+	if err := c.writeService(svc, st, srv, cfg, secrets, creds, exists); err != nil {
 		return err
 	}
 	if old.Name != "" && !strings.EqualFold(old.Name, a.Name) {
@@ -766,28 +773,36 @@ func (c *core) writeService(svc toolCard, st svcServer, srv Server, cfg svcConfi
 // it uses it (its setup tool test_account, servers/README.md): "" when it
 // works, else why not, in the server's words.
 func (c *core) testAccount(ctx context.Context, server, account string) (string, error) {
+	why, _, err := c.tryAccount(ctx, server, account)
+	return why, err
+}
+
+// tryAccount is testAccount with what the server says the account is
+// when it works (its detail: a printer's model).
+func (c *core) tryAccount(ctx context.Context, server, account string) (why, detail string, err error) {
 	u := c.pool.get(server)
 	if u == nil {
-		return "", errors.New(server + " does not run")
+		return "", "", errors.New(server + " does not run")
 	}
 	args, _ := json.Marshal(map[string]string{"account": account})
 	res, err := u.call(ctx, "test_account", args)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if res.IsError {
-		return "", errors.New(resultText(res))
+		return "", "", errors.New(resultText(res))
 	}
 	var out struct {
-		OK    bool   `json:"ok"`
-		Error string `json:"error"`
+		OK     bool   `json:"ok"`
+		Error  string `json:"error"`
+		Detail string `json:"detail"`
 	}
 	raw, _ := json.Marshal(res.StructuredContent)
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if out.OK {
-		return "", nil
+		return "", truncate(out.Detail, 120), nil
 	}
-	return cmpOr(out.Error, "refused"), nil
+	return cmpOr(out.Error, "refused"), "", nil
 }
