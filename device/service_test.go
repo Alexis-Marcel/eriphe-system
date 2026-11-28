@@ -270,6 +270,12 @@ func TestServiceStdioBridge(t *testing.T) {
 	if got, err := callText(t, b, "echo", map[string]any{"text": "hello"}); err != nil || got != "hello" {
 		t.Fatalf("echo = %q, %v", got, err)
 	}
+	// A call that carries a node's file (core sends its bytes, up to 5 MiB,
+	// as base64): past the SDK's 4 MiB default body.
+	big := strings.Repeat("A", 7<<20)
+	if got, err := callText(t, a, "echo", map[string]any{"text": big}); err != nil || len(got) != len(big) {
+		t.Fatalf("a 7 MiB call = %d bytes, %v", len(got), err)
+	}
 	pidA, _ := callText(t, a, "pid", nil)
 	pidB, _ := callText(t, b, "pid", nil)
 	if pidA == "" || pidA != pidB {

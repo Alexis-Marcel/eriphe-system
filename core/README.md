@@ -431,6 +431,18 @@ covers (their own input schemas; `tools/list` shows only them, any other call is
 forwards each call upstream with the real credential. Tools only for now (no resources or
 prompts); a long call streams, within the server's `timeout`.
 
+**A node's file as an argument** (`tool_files.go`). A tool that takes a file names the arguments
+that take one in its `_meta`, `"eriphe/files": ["document"]` (or its preset, in its place). The caller
+gives such an argument as one of a node's files, `media:<node id>/<name>` (the node's
+`media:<name>` with its id before the name); the schema a task sees says so in the argument's
+description. The permission request, its ticket, the card and the decision log keep that short
+reference: once the call is allowed (a ticket, a free read, or a card's yes), and right before it
+goes upstream, core swaps it for the file's bytes as a data URI (`data:application/pdf;base64,…`),
+read from that node's files with the media's own rules (an image or a PDF, sniffed). A value that
+names no node's file, and a `data:` value of the caller's own, are refused before anything goes
+upstream; an argument the tool did not declare is never read. A node's file is 5 MiB at most, so
+such a call is ~7 MB of JSON: the device's stdio bridge takes up to 12 MiB a request.
+
 **Tickets.** A call goes upstream only if its permission request was allowed (by the policy or the
 user) for that task, that tool and that exact input, within 30 minutes, once. An agent
 that found its task's secret (in its process list, say) cannot call a tool behind its own
