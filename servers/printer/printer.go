@@ -204,8 +204,13 @@ type Job struct {
 	Format  string `json:"format"`          // what was sent
 }
 
-// maxDocumentBytes is the most a document may weigh.
-const maxDocumentBytes = 20 << 20
+// maxDocumentBytes is the most a document may weigh: in base64 in one
+// call, it stays under the SDK's 16 MiB line over stdio (a node's file is
+// 5 MiB at most). maxRequestBytes is a call's body over HTTP.
+const (
+	maxDocumentBytes = 8 << 20
+	maxRequestBytes  = 12 << 20
+)
 
 // documentOf reads a data: URI, by its bytes and not what it says.
 func documentOf(uri string) ([]byte, string, error) {

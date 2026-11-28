@@ -70,7 +70,8 @@ func serveHTTP(ctx context.Context, addr, token string, server *mcp.Server) erro
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", auth(token, mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return server },
-		&mcp.StreamableHTTPOptions{Stateless: true, DisableLocalhostProtection: true},
+		// a document comes whole in its call, as a data: URI
+		&mcp.StreamableHTTPOptions{Stateless: true, DisableLocalhostProtection: true, MaxRequestBodyBytes: maxRequestBytes},
 	)))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "ok\n") })
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}

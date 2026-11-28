@@ -42,7 +42,7 @@ it draws the pages.
 
 `document` is one of a node's files. `_meta: {"eriphe/files": ["document"]}` declares it: the brain
 names the file (`media:<node id>/<name>`), and eriphe-core sends its bytes as a `data:` URI. The
-server takes a PDF, a JPEG or a PNG, recognised by its bytes, 20 MiB at most. It refuses anything
+server takes a PDF, a JPEG or a PNG, recognised by its bytes, 8 MiB at most (a node's file is 5 MiB at most); over HTTP a call's body may weigh 12 MiB. It refuses anything
 else, or a `document` that is not a `data:` URI.
 
 `print` refuses before sending anything when the printer is stopped (with its own message, such as
