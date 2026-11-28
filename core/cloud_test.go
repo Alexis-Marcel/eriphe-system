@@ -236,6 +236,9 @@ func filesCore(t *testing.T, mutate func(*Config)) (*testWeb, *catalogCore, stri
 				if in.Account == "bob@example.org" {
 					return nil, map[string]any{"ok": false, "error": "token revoked: reconnect"}, nil
 				}
+				if in.Account == "bureau" { // a printer: what it is
+					return nil, map[string]any{"ok": true, "detail": "Brother DCP-L2530DW series"}, nil
+				}
 				return nil, map[string]any{"ok": true}, nil
 			})
 		mcp.AddTool(s, &mcp.Tool{Name: "browse_places", Meta: mcp.Meta{"eriphe/setup": true}},

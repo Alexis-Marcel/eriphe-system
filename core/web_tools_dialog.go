@@ -71,7 +71,7 @@ func (f toolForm) BackURL() string {
 		return "/settings/tools/" + f.Name + "/edit" + accountQuery(f.Account)
 	case f.Edit:
 		return "/settings/tools"
-	case f.Picked() != "" && !f.Choose:
+	case f.Picked() != "" && !f.Choose && !f.OneChoice():
 		return "/settings/tools/new?preset=" + f.Preset.ID
 	}
 	return "/settings/tools/add"
@@ -165,15 +165,22 @@ func statusOf(lang string, sv serverView) toolStatus {
 
 // checkAccount asks a ready tool with accounts to sign one in, as it uses
 // it (its setup tool test_account): a refused password shows on the row
-// that follows the save. A tool without the setup tool stays as it is.
+// that follows the save, and what the server found when it works (a
+// printer's model). A tool without the setup tool stays as it is.
 func (w *web) checkAccount(ctx context.Context, lang string, st *toolStatus, server, account string) {
 	if !hasAccounts(w.c.conf().Servers[server]) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	why, err := w.c.testAccount(ctx, server, account)
-	if err != nil || why == "" {
+	why, detail, err := w.c.tryAccount(ctx, server, account)
+	if err != nil {
+		return
+	}
+	if why == "" {
+		if detail != "" { // what it is, as the server found it (a printer's model)
+			st.Hint = detail
+		}
 		return
 	}
 	st.State, st.Text, st.Hint, st.Detail, st.Edit = "err", tr(lang, "added.refused"), tr(lang, "added.refusedhint"), why, true

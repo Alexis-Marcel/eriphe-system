@@ -97,6 +97,7 @@ func TestWebPresetsAreValid(t *testing.T) {
 		"notion":         {},
 		"mail":           {"address": {"someone@gmail.com"}, "password": {"app-pw"}},
 		"calendar":       {"cal_provider": {"icloud"}, "cal_user": {"someone@icloud.com"}, "password": {"app-pw"}, "timezone": {"Europe/Paris"}},
+		"printer":        {"printer_url": {"192.0.2.10"}},
 		"remote":         {"url": {"https://mcp.example.com/mcp"}, "use": {"x"}},
 		"local":          {"image": {"mcp/sequentialthinking"}, "use": {"think"}, "transport": {"stdio"}, "egress": {"1"}},
 	}

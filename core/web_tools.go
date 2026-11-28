@@ -432,6 +432,9 @@ func (f toolForm) Shape() *accountShape {
 }
 
 // Choice is the kind of account picked, and Choices the ones offered.
+// OneChoice tells a form of one kind of account: no list to go back to.
+func (f toolForm) OneChoice() bool { return f.Shape() != nil && len(f.Shape().offered()) == 1 }
+
 func (f toolForm) Choice() accountChoice { c, _ := f.Shape().choice(f.Acct.Choice); return c }
 func (f toolForm) Choices() []accountChoice {
 	if s := f.Shape(); s != nil {
@@ -774,6 +777,9 @@ func pickAccount(f *toolForm, provider string) {
 	s := f.Shape()
 	if s == nil {
 		return
+	}
+	if one := s.offered(); len(one) == 1 && provider == "" && !f.Edit {
+		provider = one[0].ID // one kind of account: its form at once
 	}
 	c, ok := s.choice(provider)
 	switch {

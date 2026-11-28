@@ -41,6 +41,9 @@ type accountShape struct {
 	GuessFrom string
 	NoChoice  string
 	Password  passwordWords
+	// NoSecret: its accounts have no password (a printer of the local
+	// network): the form asks for none and the account names no secret.
+	NoSecret bool
 	// Server are options of the tool's server the form also sets (the
 	// calendar's time zone): kept in its configuration, not the account's.
 	Server []accountField
@@ -70,7 +73,7 @@ type accountChoice struct {
 type accountField struct {
 	Name string // the form's field
 	Key  string // where it goes: "address", "imap.host"
-	Kind string // email, host, port, url, text, zone
+	Kind string // email, host, port, url, user, text, zone, ipp
 	// Label, Placeholder and Hint are text keys; %s is the choice.
 	// Else is the placeholder's key when the choice has none; Example a
 	// placeholder as it is.
@@ -154,6 +157,9 @@ func readAccountForm(s *accountShape, v func(string) string) accountForm {
 		return accountForm{}
 	}
 	f := accountForm{Choice: v(s.ChoiceField), Values: map[string]string{}}
+	if one := s.offered(); f.Choice == "" && len(one) == 1 {
+		f.Choice = one[0].ID // one kind of account
+	}
 	for _, fl := range append(slices.Clone(s.Fields), s.Server...) {
 		if x := v(fl.Name); x != "" {
 			f.Values[fl.Name] = x
@@ -181,6 +187,9 @@ func (s *accountShape) guess(address string) string {
 func (s *accountShape) normalize(f *accountForm, old *svcAccount) error {
 	if f.Values == nil {
 		f.Values = map[string]string{}
+	}
+	if one := s.offered(); f.Choice == "" && len(one) == 1 {
+		f.Choice = one[0].ID // one kind of account
 	}
 	if f.Choice == "" { // automatic, for the API's sake
 		if f.Choice = s.guess(f.Values[s.GuessFrom]); f.Choice == "" {
@@ -273,8 +282,39 @@ func (fl accountField) check(v string) (string, error) {
 		if _, err := time.LoadLocation(v); err != nil {
 			return "", errors.New("presets.badtz")
 		}
+	case "text":
+		v = cmpOr(v, fl.Default)
+	case "ipp":
+		return ippAddress(v)
 	}
 	return v, nil
+}
+
+// ippAddress is a printer's IPP address from what the user typed: an
+// address alone (192.168.1.20, printer.local, with a port or not) or a
+// whole ipp:// or ipps:// address. The path is /ipp/print, where most
+// printers answer, unless one is given.
+func ippAddress(v string) (string, error) {
+	if v == "" {
+		return "", errors.New("presets.badprinter")
+	}
+	if !strings.Contains(v, "://") {
+		v = "ipp://" + v
+	}
+	u, err := url.Parse(v)
+	if err != nil || (u.Scheme != "ipp" && u.Scheme != "ipps") || u.Hostname() == "" || u.User != nil ||
+		u.RawQuery != "" || u.Fragment != "" || strings.ContainsAny(u.Hostname(), " /") {
+		return "", errors.New("presets.badprinter")
+	}
+	if p := u.Port(); p != "" {
+		if n, err := strconv.Atoi(p); err != nil || n <= 0 || n > 65535 {
+			return "", errors.New("presets.badprinter")
+		}
+	}
+	if u.Path == "" || u.Path == "/" {
+		u.Path = "/ipp/print"
+	}
+	return u.String(), nil
 }
 
 // account is the account the form makes, as the tool's server reads it;
